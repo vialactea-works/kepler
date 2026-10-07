@@ -30,6 +30,8 @@ Kepler stores global files under `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-wo
 
 See the **[Skills reference](docs/skills.md)** for what each skill does, its inputs, and its outputs,
 and the **[SDD framework](docs/sdd-framework.md)** for the design rationale.
+The **[Change state machine](docs/change-state-machine.md)** documents lifecycle states,
+skill ownership, and transition guards with their artifact-field inputs.
 
 ## Nest CLI migration
 

@@ -11,6 +11,8 @@ editor and a coding agent.
 
 For the design rationale behind the pipeline, see **[SDD framework](./sdd-framework.md)**. For how
 this layer is installed and what the CLI does, see **[modes](./modes.md)**.
+See the **[Change state machine](./change-state-machine.md)** for lifecycle states,
+skill-controlled transitions, and the artifact fields each gate reads.
 
 ## The pipeline
 

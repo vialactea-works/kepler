@@ -9,6 +9,9 @@ through a fixed sequence of steps, each captured as a **skill** and backed by du
 **artifacts**. The same skills are used by a person working in an editor or by a coding agent —
 a person authors the spec and hands execution to the agent.
 
+See the **[Change state machine](./change-state-machine.md)** for lifecycle states,
+skill ownership, and artifact-based transition guards.
+
 ## Philosophy
 
 AI coding agents are capable but unanchored. Left with a broad prompt they drift, skip
