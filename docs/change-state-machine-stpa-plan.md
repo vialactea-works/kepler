@@ -2,7 +2,7 @@
 
 ## 1. Scope, evidence, and decision criteria
 
-This is an analysis and future implementation plan, not an applied fix. The entry point is [the change-state-machine document](./change-state-machine.md). Repository behavior is evaluated at commit `ebfa4f53624f3ea9d6a201b2f69c9c262246ac83` on `fix/finish-work-gates`.
+This is an analysis and future implementation plan, not an applied fix. The entry point is [the change-state-machine document](./change-state-machine.md). Repository behavior was initially evaluated at commit `ebfa4f53624f3ea9d6a201b2f69c9c262246ac83` on `fix/finish-work-gates`. The task-sequencing follow-up uses report commit `f07473988631196efc408ea118d5a7c3f4894c54`; that commit changed only this report, not workflow behavior.
 
 The investigation covers the **entire documented change lifecycle**, not only the four reported examples: all 16 C transitions (including C1a/C2a/C4a/C6a), all 12 E predicates, initial and tactical entry, critique disposition, re-planning, optional route handoff, interruption, conflicting ownership, and recovery. The initial pass concentrated on code/review/finish; the expanded pass systematically examines upstream controllers and cross-stage interactions. Additional sources answer specific control/feedback questions; unrelated CLI operations and the internal Wayfinder ticket-resolution workflow remain outside this change-lifecycle boundary. No live `.kepler/` change artifacts exist in this checkout, so the user's historical failures establish observed incidents but do not establish which installed version or exact artifact produced each incident. Reproduction is not required from the user.
 
@@ -81,7 +81,7 @@ Sources: [scope and authority](./change-state-machine.md#scope-and-authority), [
 | Project readiness | Init, repository facts, preserved standards/workspace. | Existence of a directory or AGENTS.md alone does not establish verified commands or successful initialization. |
 | Approved intent and critique disposition | Requester; proposal/design/deltas; critique owner. | Approval is not lint validity. Critique settlement differs from independent code/branch clearance. |
 | Route entry and ownership | Compiled body, units metadata, dependency Git reachability, owning branch/change. | A branch-local in-progress marker is observable intent, not an exclusive distributed claim. |
-| Active task identity and acceptance | Plan body; planner owns changes. | Abandonment requires the exact terminal heading form. Zero active tasks means an all-abandoned declared plan, not a genuinely empty new plan; only task gates are skipped. |
+| Active task identity and acceptance | Plan body; planner owns changes. | Numeric IDs/paths are stable identities. Today physical ID order also governs orchestration; A18 proposes a separate serial execution sequence without changing identities. Abandonment retains its exact heading form; zero active tasks skips only task gates. |
 | Current task implementation state | Root `tasks[]` metadata and root body table; coder owns the assigned entry. | Root aggregate `status`, entry `status`, and task-local `status` are different fields. |
 | Implementation outcome | Physical latest task attempt plus task-local status; coder. | A transient agent answer or successful test command does not create a durable done attempt. |
 | Task approval | Physical latest task feedback, artifact-only commit, stable task range. | Approval is separate from implementation completion. |
@@ -128,21 +128,21 @@ This ledger records normal authorization, all four UCA categories, and containme
 | C0 | Init explores facts, preserves AGENTS/data, migrates before scaffolding, then confirms/records assumptions. The [core resolver](../packages/core/src/migration.ts#L769-L883) stages copy, records ownership, uses a migration lease, and dispatches existing-marker recovery. | Missing facts; guessed commands; readiness before migration/scaffold succeeds; stale standing standards after repository change. | Existing controls retained; U29; A10/A13/A14; T31. No live migration exercised. |
 | C1 | Propose owns intent, quality self-review and requester approval; tactical changes may skip it. | Approval omitted or inferred from defaults; early handoff; a prior approval reused after byte/content revision. | F12/F19; A11/A14/A16; T18/T22/T34. |
 | C1a | Critique reviews only; requester settles accepted/applied/rejected; skipped collects no decision. | Unresolved skipped verdict treated as settlement; next-stage selection before disposition; redundant critique after legitimate settlement. | F13; A11; T19. Preserve distinct critique protocol. |
-| C2 | Planner reads current standards/specs, confirms or auto-reflects authorized unattended work, isolates workspace, initializes identities. | Lint substituted for approval; wrong route unit; rename/history mismatch; interrupted scaffold reused as complete; competing claim. | F12/F14–F19; A11–A16; T18/T20–T27/T30/T34. |
+| C2 | Planner reads current standards/specs, confirms or auto-reflects authorized unattended work, isolates workspace, initializes identities. | Lint substituted for approval; wrong route unit; rename/history mismatch; interrupted scaffold reused as complete; competing claim. | F12/F14–F19/F21; A11–A16/A18; T18/T20–T27/T30/T34–T39. |
 | C2a | No active tasks remains only after declared tasks are abandoned with canonical reasons. | Empty ledger falsely treated as complete work; taskless state used to skip branch/spec/delivery obligations; repeated task dispatch despite no active task. | Existing parser/ledger guards retained; A10; T15/T32. |
-| C3 | One exact active Task N, scoped files, stable checkpoint, ordered verification, owned committed evidence. | Missing evidence; cropped checkpoint; execution against changed acceptance; concurrent overwrite; fabricated attempt after interruption. | F2/F5/F6/F16/F19/F20; A1/A2/A14/A16/A17; T1–T4/T22/T28–T29/T34. |
-| C4 | Independent task review reads acceptance and cumulative stable range; appends only owned feedback. | Omitted acceptance; wrong title/Base; premature/undurable approval; approval retained after relevant input change. | F4/F14/F16/F20; A5/A12/A14/A17; T10/T20/T22/T28. |
+| C3 | One exact active Task N, scoped files, stable checkpoint, ordered verification, owned committed evidence. | Missing evidence; cropped checkpoint; execution against changed acceptance; concurrent overwrite; fabricated attempt after interruption. | F2/F5/F6/F16/F19–F21; A1/A2/A14/A16–A18; T1–T4/T22/T28–T29/T34–T39. |
+| C4 | Independent task review reads acceptance and cumulative stable range; appends only owned feedback. | Omitted acceptance; wrong title/Base; premature/undurable approval; approval retained after relevant input change. | F4/F14/F16/F20/F21; A5/A12/A14/A17/A18; T10/T20/T22/T28/T39. |
 | C4a | Named unresolved diff-evidence risk receives bounded driver adjudication, then independent resolving pass. | Evidence question sent to code; advancement before resolution; unchanged indefinite retries. | F8; A3; T9. Existing canonical trigger preserved. |
-| C5 | Driver advances only after current done evidence and durable fresh task approval. | Skip a task; trust transient answer; advance before commit; reused approval for different title/contract. | F2/F6/F14/F16/F20; A1/A2/A12/A14/A17. |
+| C5 | Driver advances only after current done evidence and durable fresh task approval. | Skip a task; trust transient answer; advance before commit; reused approval for different title/contract. | F2/F6/F14/F16/F20/F21; A1/A2/A12/A14/A17/A18; T35–T39. |
 | C6 | Whole review covers complete branch and consumers against actual target merge base. | Omitted integration; arbitrary range; approval before task/intent readiness; repeated unbounded inspection. | F1/F3/F11; A3/A4/A9; T6–T8/T13. |
 | C6a | Latest valid durable approval can be reused with material freshness, separately from explicit finish waiver. | Fall back to old approval; confuse disposition/clearance; reuse after material/input change. | A4/A9/A14; T6–T8/T15/T22. |
-| C7 | Driver classifies implementation versus approved-intent defects; planner appends numbered remediation, freezes done definitions. | Missing invalidation; modifying frozen history; title change stranding feedback; resolving intent in code; unchanged remediation loops. | F3/F8/F14/F16; A3/A4/A12/A14; T7/T9/T20/T22. |
+| C7 | Driver classifies implementation versus approved-intent defects; planner appends numbered remediation, freezes done definitions. | Missing invalidation; modifying frozen history; title change stranding feedback; resolving intent in code; unchanged remediation loops. | F3/F8/F14/F16/F21; A3/A4/A12/A14/A18; T7/T9/T20/T22/T35–T39. |
 | C8 | History, CLI predicates, and semantic/user policy jointly admit finish. | Treat CLI open as complete authorization; missing user waiver; tested revision differs; ambiguous route hidden by context. | F7/F18/F20; A6/A11/A15/A17; T5/T18/T25/T28. |
 | C9 | Approved consistent deltas only; tactical behavior changes still require deltas. | Invent specs from diff; stale approval; sync before journal; detect missing obligation only after costly implementation/review. | F9/F12/F16; A7/A11/A14; T11/T18/T22/T30. |
 | C10 | Durable intent precedes effects; owned boundary and strategy qualification must hold. | Wrong unit; competing ownership; premature shipment; unexpected mutation or unauthorized shared-workspace cleanup. | F10/F18/F19; A7/A8/A15/A16; T12/T17/T25–T27/T33. |
 | C11 | Actual external/workspace state closes a numbered pair; dangling recovery precedes new intent. | False readback; repeated delivery; treating cancellation as rollback; holding abandoned claims indefinitely. | A7/A8/A16; T14/T16/T27/T33. Paired blocked records remain immutable. |
 
-**Admission coverage:** E0 (history/lint/recovery) maps to A7/T11/T14/T16; E1 (real target and supplied command) to preserved path guards/T31; E2/E4/E10 (entry/after/final cleanliness) to A6/T5; E3 (exit status versus full-suite semantics) to standards/A5/A6/T5/T10/T31; E5 (durable matching plan/root identities) to A1/A11/A12/T1/T18/T20; E6 (latest done implementation) to A2/A13/T3/T4/T21; E7 (task review identity, durability and scope) to A2/A12/A14/A17/T4/T20/T22/T28; E8 (whole review validity/scope) to A4/A9/T6–T8/T13/T15; E9 (material coverage and narrow authorized waiver) to A7/A9/A14/T8/T22; E11 (conjunction with semantic policy) to A11/A15/A17/T18/T25/T28. A boolean or exit code cannot authenticate an owner decision or prove semantic review quality.
+**Admission coverage:** E0 (history/lint/recovery) maps to A7/T11/T14/T16; E1 (real target and supplied command) to preserved path guards/T31; E2/E4/E10 (entry/after/final cleanliness) to A6/T5; E3 (exit status versus full-suite semantics) to standards/A5/A6/T5/T10/T31; E5 (durable matching plan/root identities) to A1/A11/A12/T1/T18/T20; E6 (latest done implementation) to A2/A13/T3/T4/T21; E7 (task review identity, durability and scope) to A2/A12/A14/A17/T4/T20/T22/T28; E8 (whole review validity/scope) to A4/A9/T6–T8/T13/T15; E9 (material coverage and narrow authorized waiver) to A7/A9/A14/T8/T22; E11 (conjunction with semantic policy) to A11/A15/A17/T18/T25/T28. A boolean or exit code cannot authenticate an owner decision or prove semantic review quality. A18 proposes execution validation at E0/E5/E11 while preserving E6/E7 for every active task; the current CLI does not prove historical chronological execution order.
 
 **Cross-boundary containment:** Ordinary paths realpath/bind change/task identity; material freshness includes plan/proposal/design/deltas/specs/standards, not only production files. A waiver does not authorize changed intent. Isolation proves workspace shape, not exclusive change ownership. Route status/body/dependency coherence and claim visibility require their own checks. Cancellation/transfer must inspect partial effects and preserve work rather than infer rollback from a status.
 
@@ -156,6 +156,7 @@ This ledger records normal authorization, all four UCA categories, and containme
 6. Do not introduce a second authoritative aggregate lifecycle field or depend on conversation memory for resume.
 7. Admit no new finish attempt before reconciling existing unmatched intent; prove actual effects before completion.
 8. Preserve standards and approved intent when using memory or a shorter remediation review.
+9. Separate stable task identity/storage order from an explicitly authorized serial execution order. A new prerequisite must not force renumbering, scope expansion, fabricated completion, or bypassed feedback.
 
 ### Open questions carried into the failure analysis
 
@@ -175,6 +176,12 @@ This ledger records normal authorization, all four UCA categories, and containme
 | Rubrics and agent memory were insufficiently applied during decisions/generation. | Plan has a substantive local rubric and Overview quality notes; task/branch reviewers have scoped rubrics. The coder reads one task and cited constraints, uses a shorter checklist, and does not read plan-wide quality notes. Core dispatches have no explicit relevant-memory retrieval/application step. | Carry applicable quality decisions into each task and its dispatch before code generation. Use memory as checked decision context, never as resume state or an override of approved intent. F4, A5. |
 
 Schema source: [`schemaProperties`](../packages/cli/src/workbench/artifact-schemas.ts#L87-L141). This table does not claim the installed version used in the historical incidents had today's schema or parser.
+
+### Subsequent reported observation: unforeseen prerequisites
+
+| Reported observation | What this checkout establishes | Remaining problem / recommended disposition |
+| --- | --- | --- |
+| Strict Task 1 → 2 → 3 execution prevents introducing an unforeseen prerequisite, causing deadlock or forcing an original task's scope to grow. | Planner appends IDs and freezes done definitions; lint rejects reordered numeric records; driver selects the earliest unresolved task. Depends on exists as prose but is not consumed by the task-ledger reader. | F21/S21 adds the control-composition failure. A18 separates identity from an authorized serial execution sequence; a new Task 4 can precede unresolved Task 2 without renaming or widening it. A genuine dependency cycle still requires owner adjudication. |
 
 ## 5. Unsafe control actions
 
@@ -219,8 +226,10 @@ U2, U10, U16, and U18 include actions that current written policy already prohib
 | U28 | Driver resets an abandoned claim or removes a shared workspace without inspecting partial effects and other ownership; or leaves a withdrawn reservation permanently blocking progress. | Unsafe provision / excessive duration | H2/H4/H6 | A16 defines owner-directed cancellation/retention; delivered effects use A7 repair. |
 | U29 | Driver declares ProjectReady from file existence while commands/migration remain unresolved, then keeps reusing stale standards. | Omission / early / excessive validity | H1/H5 | Retain init's no-guess/confirmation guards; A13/A14/T31. |
 | U30 | Generator treats isolated: yes as a change-source certificate and commits new work directly on the actual delivery target before finish admission. | Unsafe provision / too early | H4/H6 | A16 separates named source/target role from workspace isolation; A7 repair on the surviving base remains exempt from new-generation rules. |
+| U31 | Driver repeatedly selects unresolved Task 2 or withholds a new authorized prerequisite Task 4 solely because 4 has a higher numeric ID. | Omission / excessive repetition | H2 | A18 separates scheduling from identity, while A3 still forbids identical ineffective retries. |
+| U32 | Planner/generator escapes the ordering blockade by renumbering/reusing identities, absorbing new work into Task 2 without scope authorization, declaring it cleared, or acting on stale reordered dispatch. | Unsafe provision | H1/H3/H5/H6 | A18 preserves task contracts/history and requires every scheduled task's ordinary code/feedback clearance. |
 
-These include prohibited-policy and inferred-interaction scenarios, not nine additional reproduced incidents. Independent investigation found specific machine gaps and liveness ambiguities; the broad matrix also retains correctly controlled paths.
+These include prohibited-policy and inferred-interaction scenarios, not a claim that every listed scenario was reproduced. Independent investigation found specific machine gaps and liveness ambiguities; the broad matrix also retains correctly controlled paths.
 
 ## 6. Findings, causal scenarios, and existing protections
 
@@ -374,6 +383,18 @@ The root aggregate `status` is also independent: finish does not require `comple
 
 **S20 (inference):** A valid later ancestor in an ignored/cross-worktree checkpoint can crop earlier task work and still satisfy the generic feedback range predicate. The [code recovery rule](../skills/kepler-code/SKILL.md#L117-L130) already requires consensus of valid feedback Bases and the first parent of the earliest first-attempt commit; compliant skill execution prevents it. Whole review remains a backstop. Share that canonical derivation mechanically; do not start tracking .base or invent another checkpoint database. H1/H3; U27; A17; T28/T29.
 
+### F21. Append-only numeric identity is also used as an unchangeable execution queue
+
+**Reported observation:** Unforeseen prerequisite work cannot run before an earlier unresolved task; the workaround becomes deadlock or a scope change to that original task.
+
+**Source observation, high confidence:** [Re-plan](../skills/kepler-plan/SKILL.md#L249-L291) recognizes missing dependencies, freezes done definitions, forbids renumbering/reuse, and appends new tasks. [Ledger lint](../packages/cli/src/workbench/artifact-body.ts#L686-L842) requires plan IDs to be contiguous in numeric physical order and root rows to increase. [Selection](../skills/kepler-orchestrate/SKILL.md#L137-L177) uses the earliest unresolved task; [checkpoint advancement](../skills/kepler-orchestrate/SKILL.md#L219-L235) additionally requires the immediately preceding task's durable approval. The [plan template](../bundle/templates/plan.md#L75-L105) already distinguishes stable reference numbers, logical Depends on, and serial execution, but readTaskLedger returns empty task fields rather than consuming those dependencies.
+
+**Narrow current-reader probe:** validateArtifact accepted an in-memory plan with physical IDs 1,2,3,4 and Task 2 depending on Task 4; its parsed task fields were all empty. Moving the same headings to 1,4,2,3 failed with non-monotonic-record. The first fixture path was rejected until corrected to the required canonical string; no files were created. This proves a format/reader boundary, not execution of an orchestrator or a complete bypass.
+
+**S21 (source-supported mechanism; historical artifact unavailable):** Task 1 is gated; Task 2 needs an unanticipated engine/repair outside its Files and Acceptance; Task 3 remains pending. Planner correctly appends Task 4 for that prerequisite. Numeric selection stays at 2, but 2 cannot complete until 4 runs. The imposed queue creates the wait cycle even if the actual prerequisite graph (1 → 4 → 2 → 3) is acyclic. Moving headings fails lint; renumbering breaks paths/provenance; embedding Task 4 in Task 2 loses the intended task boundary. Repeating an unchanged blocked dispatch is already prohibited, so the normal result may be a safe halt requiring manual intervention rather than an infinite implemented loop.
+
+**Existing protections and limits:** Code correctly blocks out-of-scope work. [Exact-task code dispatch](../skills/kepler-code/SKILL.md#L99-L115) itself accepts one active positive ID, and finish inspects completion/feedback for all active tasks rather than proving historical chronological order. Thus the restriction is the documented driver/ledger composition, not a claim that every CLI operation mechanically forbids a direct Task 4 invocation. Manual out-of-order invocation has no sanctioned durable resume protocol today. A18 supplies it without a parallel scheduler or weakening all-task clearance. H1/H2/H3/H5; U31/U32; A18; T35–T39.
+
 ## 7. Prioritized implementation sequence
 
 All actions below are proposals. Snippets identify concrete edit locations and intended content; they have not been applied or compiled as an integrated patch. A snippet introducing a field/helper requires the accompanying reader, caller, template, and test changes listed with it.
@@ -399,6 +420,7 @@ All actions below are proposals. Snippets identify concrete edit locations and i
 | A15. Validate route relationships and reject conflicting bindings | P1 when route-backed: current shapes can conceal the wrong unit or impossible graph. | F17/F18 | None; consumed by A7/A8/A16 | Registry/context; route producer/consumers. |
 | A16. Make unit ownership, branch role, withdrawal and retention explicit | P1 source/target role before generation/cleanup; P2 claim/cancellation coordination | F19 | A15/A9; A7 for delivered effects | Propose/plan/finish; owner-directed claim protocol. |
 | A17. Verify one canonical historical task Base | P1 gate integrity: ancestry alone can approve cropped task coverage. | F20 | A2 for durable progress | Shared checkpoint helper; diff/precondition/driver. |
+| A18. Decouple immutable task IDs from serial execution order | P1 liveness/scope: unanticipated prerequisites need a safe path before the blocked task. | F21 | A1/A2 for evidence; A11/A14 for authorized impact; A17 for historical Base | Plan/template/schema/context; driver/code/feedback; semantic preflight. |
 | A10. Exercise workflow scenarios, not only wording | P1 regression work within each action; final adoption gate after all selected actions | All | Each action adds its own tests; final scenarios follow integration. | Repository tests and controlled agent evaluation. |
 
 Do not implement all of this as one task. Keep pure parser changes, admission changes, and skill-protocol changes separately verifiable. A4 needs a short design/approval step because it changes the public review-clearance protocol; its classification and invalidation rules must be agreed before code generation.
@@ -576,7 +598,7 @@ Before repeating this pass, identify the changed input that can resolve its conc
 3. Persist pass-local scope and provenance: full Base/Head, target, baseline pass number and Head, and resolution mapping for all original and subsequently introduced blockers. Keep the historical full pass immutable.
 4. Validate the baseline's durable semantic-evidence provenance, exact target/merge base, ancestry, reviewed intent, and correction boundaries. Bind a modern full baseline to its committed artifact revision and verify its unchanged pass text. A structural-only legacy prefix cannot be a baseline. For a legacy-global history, obtain a new full explicit pass once before using bounded clearance: the atomic transition removes globals and makes the old prefix structural. Existing supported legacy approvals remain usable through the ordinary full-clearance path; never fabricate a remediation baseline from their removed global fields.
 5. Require all active remediation tasks to pass normal code/feedback gates. Independently validate resolution of every outstanding blocking finding and integration effects of the delta. Approve only when the resulting composite branch coverage is complete.
-6. Full review is mandatory if the baseline is missing/invalid, reviewed commits were amended, Base/target changed, approved requirements/design changed, a material path is unclassified, or the correction's integration impact cannot be bounded. A change to plan.md is permitted only as the exact numbered-remediation amendment; preserve original task intent and definitions.
+6. Full review is mandatory if the baseline is missing/invalid, reviewed commits were amended, Base/target changed, approved requirements/design changed, a material path is unclassified, or the correction's integration impact cannot be bounded. A change to plan.md is permitted only as the exact numbered-remediation amendment; preserve original task intent and definitions. After A18's coordinated rollout, its exact authorized execution-only amendment may accompany that remediation without discarding the full baseline. Changed requirements/definitions or unbounded effects still require the full fallback.
 7. On a failed remediation check, append a changes-requested scoped pass with remaining/new blocker identities; do not edit the original review. Subsequent scoped attempts stay linked to the same full baseline, inspect the cumulative correction delta, and discharge every outstanding blocker from the suffix. Do not chain approvals through arbitrary older approvals.
 
 **Edit snippets:** Extend the root-review evidence protocol, not merely its status metadata. Proposed modern remediation pass:
@@ -1175,6 +1197,82 @@ In recordCheckpoint's existing-file branch and packageTask, invoke that same ver
 
 **Compatibility/rollout:** Keep .base ignored. Existing unambiguous feedback/attempt provenance is sufficient; do not retrofit fake checkpoint records. Imported/rewritten/ambiguous histories require owner diagnosis and explicit evidence before advance. Update runtime fixtures to model real first-attempt history and shared helper callers together.
 
+### A18. Keep IDs immutable; let the approved plan insert serial prerequisites
+
+**Targets:** plan template and planner Re-plan/confirmation/self-review; artifact-types/schemas/body/registry (one execution/dependency projection); context's task-order reporting; precondition plan validation; orchestrator task matrix, selection, predecessor/whole gates, todo mirroring and dispatch references; code task preflight; task-feedback range/ownership instructions; state-machine docs; artifact/context/precondition/execution/orchestrator tests.
+
+**Decision:** Use a single optional, versioned execution sequence in the existing plan, not new task numbers, a second status ledger, or a parallel/DAG scheduler. It directly reuses the serial driver. Physically moving Task 4 above Task 2 fails current lint; renumbering corrupts identity. A dependency-ready scheduler is viable but adds scheduling/selection behavior unnecessary for this insertion problem. Validate declared prerequisites against the chosen sequence; an acyclic graph can be serialized, but a real cycle cannot be waived by reordering.
+
+**Steps:**
+
+1. Keep plan headings and root metadata/table in existing numeric identity order, with new max+1 IDs, stable titles/paths and histories. Add optional execution metadata to the plan only. Absent means legacy numeric serial behavior; present must validate completely, never silently fall back. Its order contains every active ID once, including done tasks, and no abandoned/unknown ID. All-abandoned still skips only task gates; an empty new plan is still invalid.
+2. An authorized re-plan appends the prerequisite's complete scoped task/log/root row and puts its new ID before the affected unresolved task in execution order. Preserve the relative order of surviving old IDs and the already fully gated prefix. Record why, the affected blocker/obligations, previous/new order and approval reference in Overview. Neither the metadata flag nor template decision defaults create authorization (A11/A14). An actual approved-intent change must return to its owner first.
+3. Parse existing task Depends on from the same visible-Markdown/task boundaries used by lint, not raw hidden comments or another caller-specific regex. Return one typed projection reused by context, driver and admission. Validate known active IDs and earlier prerequisite positions; reject self/cyclic/unknown/abandoned or ambiguous declared prerequisites. Missing legacy declarations do not erase the surviving original sequence. Do not rewrite a frozen done task to normalize dependencies: an execution-only insertion may precede its unresolved correction/feedback while its definition remains immutable. A fully gated task keeps its original certification; new obligations use new tasks and A14 impact review.
+4. Before changing or acting on the order, quiesce any current implementer. Resolve in-progress work through its owner/interruption protocol, never run two task writers. A gracefully blocked task can leave partial production edits uncommitted: obtain explicit preservation/isolation authorization and a verifiable locator before the prerequisite runs. No automatic discard, broad stash, staging or pre-commit. If safe parking is unavailable, stop for owner intervention instead of repeating the impossible task. Restore/reconcile the preserved work through that task's owner after its prerequisite clears.
+5. Select the first not-fully-gated ID in the validated execution sequence; apply the existing task matrix to that ID. The predecessor is the previous execution slot, not N−1 or the immediately preceding numeric row. Require its durable fresh independent approval before the new checkpoint. A done-but-unapproved task is not a gated prefix. Complete Task 4's ordinary code/TDD/feedback loop, then return to Task 2; Task 4 never changes Task 2's row/history or declares it complete. Direct human/code dispatch obeys the same authorized selection contract; code retains one-task scope and verifies the committed plan revision supplied by the driver.
+6. Re-evaluate current evidence and committed plan revision before every handoff; a changed order/worker/HEAD invalidates stale dispatch authorization. Todo mirrors the sequence but is not its authority. Preserve Task 2's original checkpoint and blocked attempts on resume (A17); do not rebase it onto Task 4. Its later full cumulative range legitimately includes the prerequisite commits: give feedback the peer-approved commit/path context, inspect the complete unchanged range, and attribute changes by commits/evidence rather than excluding whole filenames. Overlapping files still require review; new Task 2 changes cannot hide behind Task 4's approval.
+7. All active tasks still need current done evidence and durable fresh feedback before whole review/finish. Sequence validity never substitutes for those gates. Shared context/admission reject malformed or unsupported execution metadata with an exact diagnostic. Keep A4's bounded-baseline conditions, A14's impact classification, and full-review fallback; do not reopen settled task history or treat the order as a material waiver.
+
+**Edit snippets:** Add this optional frontmatter to plan.md for the approved example; ordinary legacy plans omit it:
+
+```yaml
+execution:
+  version: 1
+  order: [1, 4, 2, 3]
+```
+
+Plan headings and both root representations remain 1,2,3,4. Task 1's frozen definition/evidence stays untouched; Task 4 has its own Files/Acceptance/Steps/Verify/Commit and initial pending log. The reason in Overview explicitly says Task 4 provides the prerequisite for Task 2, not an expanded Task 2 acceptance contract.
+
+After strict optional-metadata shape/version parsing, project active task identity and declared dependencies into the following shared types/helper (artifact-types and artifact-body, with .js imports). Caller retains the existing physical ledger checks:
+
+```ts
+export interface PlanExecutionContract {
+  readonly version: 1;
+  readonly order: readonly number[];
+}
+
+export interface TaskOrderEntry {
+  readonly id: number;
+  readonly dependsOn: readonly number[];
+}
+
+export const executionSequenceProblems = (
+  tasks: readonly TaskOrderEntry[],
+  execution: PlanExecutionContract,
+): readonly string[] => {
+  const active = new Set(tasks.map((task) => task.id));
+  const order = execution.order;
+  if (order.length !== active.size || new Set(order).size !== order.length ||
+    order.some((id) => !active.has(id)))
+    return ["Execution order must contain every active task exactly once"];
+  const positions = new Map(order.map((id, index) => [id, index]));
+  const problems: string[] = [];
+  for (const task of tasks) {
+    const position = positions.get(task.id);
+    for (const dependency of task.dependsOn) {
+      const before = positions.get(dependency);
+      if (position === undefined || before === undefined || before >= position)
+        problems.push(`Task ${task.id} requires active Task ${dependency} earlier in execution order`);
+    }
+  }
+  return problems;
+};
+```
+
+Dependency interpretation/ambiguity and valid positive IDs/version belong to the shared parser/schema before this typed helper; cycles necessarily violate earlier-position constraints. Re-plan separately compares the authorized previous sequence to preserve old relative order and gated prefix. Neither helper invents a dependency or authorizes an amendment.
+
+Replace numeric selection and predecessor text in the driver with the validated sequence contract:
+
+```ts
+const current = executionOrder.find((id) => !isFullyGated(id));
+```
+
+Here isFullyGated is the existing evidence-based predicate over root/local completion, physical latest feedback, Git durability/freshness and applicable current contract, not a status-only callback or caller boolean. No current ID means only that all task gates hold; whole review/finish still run. Extend supported readers first to resolve legacy versus explicit order, expose separate identityOrder/executionOrder in context, and reject invalid explicit metadata before dispatch/admission; update every numeric-earliest/predecessor instruction and prompt together.
+
+**Acceptance:** T35 demonstrates 1 → 4 → 2 → 3 with original scope/IDs and independent approval per slot. T36 preserves frozen done definitions and history during unresolved correction; T37 contains interruption/partial-work/changed-dispatch risk; T38 rejects invalid order or genuine dependency cycles and preserves legacy/all-abandoned behavior; T39 preserves cumulative checkpoints and complete review coverage. No parent task is marked cleared by its prerequisite, no fake TDD success, and no next task or whole review bypasses feedback.
+
+**Compatibility/rollout:** This is an opt-in public scheduling protocol requiring schema, CLI/context/admission, planner, driver, code/feedback and docs to roll out together. Old readers allow additional metadata and old drivers still choose numeric order: verify installed capability/version before emitting execution, do not assume old lint protects the new policy. Legacy plans remain numerical without mass rewriting; adoption is an authorized re-plan preserving definitions/history, not migration inferred from dependencies or memory. Unknown versions/malformed explicit order stop without legacy fallback. Keep one writer and one plan authority, and validate ordering scenarios with controlled agent runs before declaring the new behavior proven.
+
 ## 8. Cross-component regression matrix
 
 These are future implementation acceptance cases, not checks performed by this investigation.
@@ -1229,6 +1327,11 @@ bun run build
 | T32 | Genuinely empty new plan, all-abandoned declared plan, and active task with empty ledger. | Empty new plan/active mismatch reject; all-abandoned skips only task gates, never whole-review/spec/delivery checks. | A1/A10; H1/H3; retained protection. |
 | T33 | Isolated non-default/linked workspace contains another active change or changed ownership/input state before cleanup. | Isolation is not sole ownership; agree retention before effects or stop; no shared-data deletion and no manufactured successful cleanup. | A7/A16; U28; S19; H4/H6. |
 | T34 | Actual non-default map target, linked default-target or detached checkout reports isolated; control is the owned feature branch initially sharing the target commit, plus historical A7 repair on base. | New-generation role check stops before writes; correct named source proceeds; empty whole-change package remains rejected; historical repair still follows its separate admission and cannot start new code. | A7/A16; U30; S19; H4/H6. |
+| T35 | Task 1 gated, Task 2 blocked on unforeseen work, Task 3 pending; new Task 4 provides it; serial sequence becomes 1,4,2,3. | Numeric headings/paths/root rows stay 1,2,3,4; Task 4 gets its own code/TDD/fresh approval before Task 2 resumes; Task 2 Acceptance/Files do not absorb extra scope; neither 2 nor 3 is skipped. | A18; U31/U32; S21; H1/H2/H3/H5. |
+| T36 | Task 2 has root done but fresh changes-requested/uncleared feedback; separately a fully gated original prefix. | Execution-only insertion can precede unresolved correction without editing its frozen definition/attempts/title; a fully gated prefix and old relative order remain fixed, with new obligations separately reviewed. | A12/A14/A18; U31/U32; S21; H1/H2/H3. |
+| T37 | In-progress worker or blocked Task 2 leaves partial edits; order changes during Task 4 dispatch; then a safely parked/restored control. | Quiesce and obtain scoped owner preservation before any other writer; no discard/broad stash/fake commit; stale dispatch stops; safe restoration uses original Task 2 checkpoint/history. | A6/A17/A18; U31/U32; S21; H1/H2/H3/H6. |
+| T38 | Duplicate/missing/unknown/abandoned IDs, unknown version, forward/cyclic or ambiguous prerequisites; controls omit execution or have all tasks abandoned. | Invalid explicit sequence never falls back or bypasses lint/gates; real cycle goes to owner; absent metadata preserves numeric behavior; all-abandoned still requires whole review/finish. | A1/A18; U31/U32; S21; H1/H2/H3. |
+| T39 | Task 2 blocked then Task 4 committed/approved then Task 2 correction overlaps a prerequisite file. | Preserve Task 2 Base/old attempts; review complete cumulative range with peer context and commit-level ownership, not filename hiding; all active approvals and whole/integration clearance remain mandatory. | A2/A4/A14/A17/A18; U32; S21; H1/H3/H5. |
 
 ## 9. Adoption, containment, and rollback
 
@@ -1305,12 +1408,27 @@ The user clarified that the four incidents were examples. The expansion adds exp
 | A15 | H1/H3/H4; SC1/SC3/SC4 | U24/U25 | S17/S18 | T24/T25 |
 | A16 | H2/H4/H6; SC2/SC4/SC6 | U26/U28/U30 | S19 | T26/T27/T33/T34 |
 | A17 | H1/H3; SC1/SC3 | U27 | S20 | T28/T29 |
+| A18 | H1/H2/H3/H5/H6; SC1/SC2/SC3/SC5/SC6 | U31/U32 | S21 | T35–T39 |
 
-A10 now spans T1–T34 and all documented C/E controls, including protected cases. Existing A1–A9 traceability remains unchanged; the expansion does not weaken their clearance, verification, shipment, or finalization-repair requirements.
+A10 now spans T1–T39 and all documented C/E controls, including protected cases. Existing A1–A9 traceability remains unchanged; the expansion does not weaken their clearance, verification, shipment, or finalization-repair requirements.
 
-### Final expanded-deliverable checks
+### Prior expanded-deliverable checks (before report commit)
 
 - Matched the coverage ledger to all 16 documented C transitions and all 12 E predicates. Verified unique complete F1–F20, A1–A17, U1–U30 and T1–T34 entries, with targets/steps/acceptance/compatibility contracts for every action.
 - Validated 64 local references, line ranges and heading anchors; balanced code fences and clean whitespace. Parsed all 17 TypeScript blocks in their appropriate object/method/interface/function contexts. This proves syntax only, not types, integration, or proposed behavior.
 - Confirmed branch fix/finish-work-gates and HEAD ebfa4f53624f3ea9d6a201b2f69c9c262246ac83 remain unchanged; tracked/staged diffs are empty. This report remains the only changed non-runtime repository file; .pi/ state is preserved.
-- Independent static review and its bounded delta challenge accepted the expanded analysis. Two current-helper probes ran; no future acceptance workflow, implementation fix, full suite/build, or delivery operation ran. The report is a remediation plan, not runtime assurance.
+- Independent static review and its bounded delta challenge accepted the expanded analysis. Two current-helper probes ran at that pass; no future acceptance workflow, implementation fix, full suite/build, or delivery operation ran. The report is a remediation plan, not runtime assurance.
+
+### Task-sequencing follow-up
+
+The user supplied another observed workflow problem after committing the earlier report. F21/S21, U31–U32, A18 and T35–T39 address it without narrowing the prior lifecycle coverage. The proposed execution order remains separate from numeric storage/identity order and uses the existing serial approval/checkpoint loop.
+
+- Parent traced plan/template, driver selection/predecessor, code scope/blocked partial-work, ledger/context and finish readers. The third narrow probe family executed the actual validateArtifact reader on in-memory ordering fixtures: ascending IDs with forward Depends on were valid and produced empty task fields; physically reordered stable IDs failed non-monotonic-record. Initial path-mismatch diagnostics were corrected by using a canonical fixture path string; no live artifacts were written.
+- Focused fresh-context review `7e194fde-5f18-426a-b152-82505b3d315d` (workflow `a20502a6-395e-4645-ac93-606b855e75e4`): no issues found; verdict OK for this report addition. It source-checked identity/order composition, frozen root-done correction, partial-work ownership, dependency/version validation, cumulative Base/range and A4/A14 integration. No tests, edits or Git effects occurred.
+- Proposed execution metadata/helper/selection have not been implemented or behaviorally tested. Prior expanded-pass validation counts above describe that earlier snapshot, not this addition. Final follow-up artifact checks are recorded below.
+
+### Final task-sequencing deliverable checks
+
+- Coverage remains all 16 documented transitions and 12 admission predicates. Verified complete unique F1–F21, A1–A18, U1–U32 and T1–T39 entries and full action contracts.
+- Validated 70 local references/line ranges/anchors, balanced fences and clean whitespace. All 19 TypeScript blocks parse in their declared syntactic contexts; this is not type checking, integration or scheduling-behavior proof.
+- HEAD remains report commit f07473988631196efc408ea118d5a7c3f4894c54 on fix/finish-work-gates. The only tracked diff is this report; staged diffs are empty and .pi/ runtime state is preserved. No new commit, implementation fix, live change artifact or delivery operation was created in this follow-up.
