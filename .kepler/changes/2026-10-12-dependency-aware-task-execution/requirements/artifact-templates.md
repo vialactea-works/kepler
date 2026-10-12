@@ -2,10 +2,10 @@
 artifact: requirements-change
 capability: artifact-templates
 change: 2026-10-12-dependency-aware-task-execution
-status: draft
+status: approved
 created: 2026-10-12
 author: Caio Ferreira <caiorcferreira@gmail.com>
-decision: skipped
+decision: accepted
 ---
 
 # Capability: artifact-templates
