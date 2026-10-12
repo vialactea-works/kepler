@@ -12,6 +12,7 @@ const TEMPLATE_FILES = [
   "design.md",
   "feedback.md",
   "finish.md",
+  "glossary.md",
   "plan.md",
   "progress.md",
   "proposal.md",
@@ -201,6 +202,7 @@ describe("SetupService filesystem integration", () => {
     expect(result.templates).toContain("task-progress.md");
     expect(result.templates).toContain("feedback.md");
     expect(result.templates).toContain("finish.md");
+    expect(result.templates).toContain("glossary.md");
     expect(result.templates).toContain("wayfinder/map.md");
     expect(result.templates.length).toBeGreaterThan(0);
   });

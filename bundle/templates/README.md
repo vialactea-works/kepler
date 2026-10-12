@@ -17,7 +17,8 @@ taken in spirit (right-sized), not by conformance.
 
 | Template | Document | Owns | Instance path | Produced or updated by |
 | --- | --- | --- | --- | --- |
-| `proposal.md` | PRD | Why | `<change>/proposal.md` | kepler-propose |
+| `glossary.md` | Canonical glossary | Context-scoped language | `.kepler/specs/glossary.md` | kepler-init / domain modeling / Wayfinder closing act |
+| `proposal.md` | PRD | Why, domain scope and boundary impact | `<change>/proposal.md` | kepler-propose |
 | `requirements-change.md` | SRS (delta) | What | `<change>/requirements/<capability>.md` | kepler-propose |
 | `requirements-spec.md` | SRS (canonical) | What | `.kepler/specs/<capability>.md` | kepler-finish-work |
 | `design.md` | SDD | How | `<change>/design.md` | kepler-propose |
@@ -30,6 +31,10 @@ taken in spirit (right-sized), not by conformance.
 
 The two SRS forms are the same content in two states: `requirements-change.md` is the
 delta a change proposes; `requirements-spec.md` is the consolidated truth it folds into.
+
+`glossary.md` reuses requirements-spec metadata and the five canonical sections for lint compatibility, with vocabulary entries under Contract. It is language support, not an automatic application capability. Preserve an existing glossary rather than regenerating it from the new template.
+
+New full-path proposals add Domain Context (scoped language and involved subdomains/contexts) and Affected Boundaries under Impact. Capability entries identify their domain, subdomain or bounded-context scope, including infrastructure responsibilities with a durable contract. Scope remains prose; slugs and delta-to-spec mappings stay unchanged. These authoring rules do not retroactively invalidate historical lint-valid proposals or require a proposal on the tactical path.
 
 ## Required vs optional
 
@@ -71,9 +76,10 @@ read the installed copy at `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/ke
 
 Per-project, under the project's `.kepler/` directory (created by `kepler-init`):
 
-```
+```text
 .kepler/
   specs/
+    glossary.md
     <capability>.md
   changes/
     <YYYY-MM-DD-change-title>/

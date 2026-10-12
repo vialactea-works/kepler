@@ -31,7 +31,7 @@ In `.kepler/changes/<YYYY-MM-DD-title>/`, using the templates at `${XDG_CONFIG_H
 
 The full path produces:
 
-- `proposal.md` — the PRD: why, what changes, and the capabilities affected.
+- `proposal.md` — the PRD: why, what changes, the sourced domain language, involved subdomains and bounded contexts, capability scope, and affected boundaries.
 - `requirements/<capability>.md` — the SRS (delta form) for each capability.
 - `design.md` — the SDD: how it will be built.
 
@@ -45,11 +45,23 @@ not create `proposal.md` or `design.md`.
 - The project's canonical specs (`.kepler/specs/`) — the current requirement truth for each
   capability. Read them to tell new capabilities from modified ones, and to keep the proposal
   and requirements consistent with the conventions and decisions already committed.
-- The project's glossary (`.kepler/specs/glossary.md`), when present — the committed
-  ubiquitous language; use its terms in every artifact.
+- The canonical glossary (`.kepler/specs/glossary.md`) — the main source of context-scoped project language, created by `kepler-init`. Read it when present; for older projects without it, use established project documentation with explicit source references.
+- Relevant domain and architecture documentation — supplementary definitions, responsibilities and context boundaries.
 - Project standards (`AGENTS.md`).
 - For requirements-only mode, an explicit `kepler-plan` handoff naming the exact change directory,
   touched existing capabilities, requested behavior, and any selected route/source-revision context.
+
+## Domain language and capability scope
+
+The canonical glossary takes precedence for established meanings. Use established project documentation to supplement missing definitions, recording each source. If the glossary is absent, disclose that gap and use documented language rather than inventing a replacement glossary. Define the problem, goals and proposed change with those terms, and carry the same meanings into requirements and design. The same word may have different meanings in different bounded contexts; name the context and any translation instead of imposing one global definition.
+
+Surface any terminology conflict to the requester; do not silently redefine canonical terms or modify the glossary during proposal drafting. Record proposed additions or meaning changes in Open Questions for explicit resolution through domain modeling. A material unresolved meaning or boundary blocks approval; unattended work remains draft rather than inventing a decision.
+
+A capability is a cohesive, durable area of responsibility with a clear boundary and an observable contract. It can represent a domain, subdomain or bounded context, including infrastructure responsibilities. A domain is the overall subject area, a subdomain is a problem area within it, and a bounded context defines where a particular model and language apply. Capability is Kepler's specification unit, not a synonym for those concepts. Identify the chosen scope and the related subdomains and contexts; their relationship is not necessarily one-to-one.
+
+For example, `rest-api` can represent an infrastructure bounded context with its own external request/response model, vocabulary, translation into domain operations, and compatibility obligations. State which domain contexts retain business rules and data ownership. REST alone does not establish a bounded context: an HTTP adapter may belong to an existing context. A package, deployment unit or endpoint is not automatically a context or capability. Do not create overlapping parent and child capabilities that duplicate the same contracts.
+
+Preserve existing capability slugs, frontmatter metadata and the file mapping from `requirements/<capability>.md` to `.kepler/specs/<capability>.md`. Record scope in prose, not new mandatory metadata. Historical proposals and specs remain valid under their existing lint contract; do not rewrite approved history to add these sections or classifications. New full-path proposals use the expanded authoring contract below. The glossary is shared vocabulary support, not automatically a capability requiring a new delta.
 
 ## Tactical requirements-only approval
 
@@ -61,7 +73,7 @@ not narrow it to fit this shortcut.
 
 1. Confirm the exact change directory, affected capability/spec names, request, and any route
    binding or source revision supplied by `kepler-plan`. Read the current canonical specs, glossary
-   when present, and `AGENTS.md`. Preserve existing authors, approved artifacts, task history, and
+   when present, and `AGENTS.md`. Apply the language-source rules above without creating a proposal or a domain-context artifact. Preserve existing authors, approved artifacts, task history, and
    change identity. Do not create or suffix a change to evade ownership.
 2. Draft or revise only the required `requirements/<capability>.md` files from the installed
    requirements-change template. State the whole changed behavior in normative requirements with
@@ -184,7 +196,7 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    either changed, discard the stale selection and re-evaluate the route before writing any artifact.
 4. **Set up the change.** Create `.kepler/changes/<YYYY-MM-DD-title>/`.
 5. **Explore context (read-only).** Project structure, docs, recent commits, and the canonical
-   specs (`.kepler/specs/`). Read the specs before drafting: they hold the conventions and
+   specs (`.kepler/specs/`). Read the canonical glossary and relevant domain and architecture documentation before drafting goals. Identify established subdomains, bounded contexts, their responsibilities and interactions; distinguish evidence from inferred boundaries and resolve material ambiguity with the requester. Read the specs before drafting: they hold the conventions and
    prior decisions the change inherits, so a MODIFIED capability builds on the behavior its
    canonical spec already documents (human-readable prose — Overview / Contract / Behavior /
    Invariants / Decisions) rather than contradicting it. When step 1 entered map-aware mode,
@@ -195,15 +207,12 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    reasoning or rejected alternatives need their evidence; they are not a substitute for the
    synthesized route body. If the selected unit has no `backed_by` entry, proceed from the
    route body alone.
-   If the request spans several independent subsystems, stop and help decompose it first —
-   one change per spec.
+   A coherent change may affect several related contexts and capability specs. If the request bundles independent goals or subsystems, stop and help decompose it rather than forcing them into one capability.
 6. **Ask clarifying questions.** Draw out purpose, constraints, and success criteria from
    the requester (a person, or the calling agent). Attended, invoke `kepler-grilling`
    with those questions as content and "intent is clear" as the exit condition.
-   Unattended, record a reasonable choice as an assumption.
-7. **Write the proposal (why).** Draft `proposal.md`: problem, goals/non-goals, what
-   changes, and the Capabilities list (new vs modified — check `.kepler/specs/` for
-   existing names). The Capabilities list is the contract into the requirements. In
+   Unattended, record only non-blocking assumptions; leave material language or boundary questions unresolved and keep formal inputs draft.
+7. **Write the proposal (why).** Draft `proposal.md`: problem, goals/non-goals and proposed change in the sourced project language. Add Domain Context with Ubiquitous Language (term, scoped meaning, context and source) and Subdomains and Bounded Contexts (responsibility and involvement). List affected contexts even when they do not become separate capability files. In Capabilities, distinguish new, modified and removed names, retain existing slugs, and identify each capability's scope kind and name, responsibility and relation to Domain Context. This list is the contract into the requirements. Add Affected Boundaries under Impact: current and proposed responsibility, data ownership, interactions, contracts, trust boundaries, and compatibility or coordination obligations. If no boundary changes, explain which existing boundaries remain intact and why. Keep classes, ports and adapters in `design.md`. In
    map-aware mode, revalidate the selected unit, named source branch, actual delivery target,
    owner, and selected route-source revision before writing. Fill `route_unit` with the canonical
    route path and unit number. In the existing proposal Overview, record the owning change and
@@ -229,23 +238,13 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    `kepler workbench lint --change-dir <change-dir>` and resolve every warning or error before
    the next mutation or handoff.
 
-   **Right-size the capabilities — coarse, durable domains, not per-aspect shards.** Each
-   capability becomes one `requirements/<capability>.md` and, downstream, one spec file, so
-   over-splitting here multiplies files through the whole pipeline. A capability is a
-   coherent area of behavior a reader would recognize as a top-level concern of the system —
-   not a mechanism, a config surface, an integration point, a single module, or a wiring/
-   startup step. Aim for the fewest capabilities that cover the change without overlap. You
-   have over-split when names are adjective+noun sub-aspects of one domain
-   (`structured-logging`, `distributed-tracing` are both just logging/tracing), name a single
-   file or bootstrap step (`server-startup`), or describe a detail shared by two others
-   (`trace-log-correlation` folds into logging + tracing). Prefer the durable domain noun and
-   let its requirement cover the aspects.
+   **Right-size capabilities by responsibility and contract.** Each named capability maps to one delta file when requirements are needed and one canonical spec downstream. Choose the fewest cohesive scopes without hiding distinct models or duplicating contract ownership. Infrastructure and integration responsibilities qualify when they have a durable boundary and contract. An endpoint, implementation file or wiring step alone does not justify a separate capability. Do not merge unrelated contexts merely because they use the same technology.
 
-   | Over-split (bad) | Right-sized (good) |
-   | ------------------ | -------------------- |
-   | `application-metrics.md`, `distributed-tracing.md`, `structured-logging.md`, `trace-log-correlation.md`, `http-clients.md`, `aws-config.md`, `server-startup.md` | `metrics.md`, `tracing.md`, `logging.md`, `http-client.md`, `aws.md` |
-   | `login-endpoint.md`, `password-reset.md`, `jwt-refresh.md`, `oauth-google.md`, `oauth-github.md`, `role-check-middleware.md` | `authentication.md`, `authorization.md` |
-   | `stripe-integration.md`, `payment-webhooks.md`, `refund-processing.md`, `invoice-generation.md`, `dunning-emails.md` | `payments.md`, `billing.md` |
+   | Fragments sharing one responsibility | Possible cohesive scope |
+   | --- | --- |
+   | `login-endpoint.md`, `password-reset-endpoint.md`, `jwt-refresh-handler.md` | `authentication.md`, when these share the authentication model and contract |
+   | `api-error-mapping.md`, `api-version-routing.md`, `command-translation.md` | `rest-api.md`, when it owns the external model and translation boundary |
+   | `structured-logging.md`, `trace-log-correlation.md` | `logging.md`, when correlation belongs to the same logging contract |
 
 8. **Write the requirements (what).** For each capability named in the proposal, write
    `requirements/<capability>.md` in delta form (ADDED / MODIFIED / REMOVED / RENAMED), with
@@ -273,7 +272,7 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 11. **Self-review each artifact.** First confirm the workspace: `git rev-parse --show-toplevel`
     ends in `.worktrees/<title>` (or you were legitimately working in place per step 3) and every
     artifact was written under that root, not the default checkout. Then scan for placeholders,
-    contradictions, scope creep, and ambiguity; fix in place. Then run `design.md` against
+    contradictions, scope creep, and ambiguity; fix in place. For a new full-path proposal, verify every goal uses sourced, context-scoped terms, every capability has a supported scope and responsibility, and affected contexts and boundaries are covered without duplicate contracts. Missing material domain context is a failed semantic gate even when structural lint passes. Then run `design.md` against
     `references/code-quality.md`.
     **Blocking:** for a non-trivial change — one that adds or restructures units, not a
     mechanical or single-file edit — an unresolved structural smell (a unit with more than one

@@ -5,7 +5,7 @@ description: Build and sharpen a project's domain model. Use when the user wants
 
 # Domain Modeling
 
-Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. Before writing or updating the glossary, first read the canonical `.kepler/specs/glossary.md` for the project's committed language, then read the current map's working `glossary.md` for the effort's in-progress terms. Reading both is fundamental — you cannot sharpen a model you haven't read. This skill is for when you're changing the model, not just consuming it.
+Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. Before writing or updating the glossary, first read the canonical `.kepler/specs/glossary.md` for the project's committed language, then, when working within a map, read that map's working `glossary.md` for the effort's in-progress terms. Reading the applicable language is fundamental — you cannot sharpen a model you haven't read. This skill is for when you're changing the model, not just consuming it.
 
 ## File structure
 
@@ -39,7 +39,7 @@ When several efforts are worked against a single canonical glossary:
         └── tickets/
 ```
 
-Create files lazily — only when you have something to write. The canonical `.kepler/specs/glossary.md` is the source of truth; each map's working `glossary.md` holds that effort's working language. A decision is written into the resolving ticket's `## Answer` — there is no separate directory to create.
+`kepler-init` creates or preserves the canonical glossary at `.kepler/specs/glossary.md`. Create working glossaries and tickets lazily, only when there is resolved language or a decision to record. The canonical glossary is the main source of context-scoped language; each map's working glossary holds only that effort's proposed meanings. Read only the current effort's working language, never another effort's glossary. Outside a map, update the canonical glossary only after explicit requester resolution; do not create a map merely to record a term. A map decision belongs in the resolving ticket's `## Answer`.
 
 ## Artifact validation
 
@@ -60,7 +60,7 @@ existing canonical glossary.
 
 ### Challenge against the glossary
 
-When the user uses a term that conflicts with the existing language in the canonical `.kepler/specs/glossary.md` or the map's working `glossary.md`, call it out immediately. "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
+Compare meanings within the named bounded context. The same word may legitimately mean different things in different contexts; identify the scope and any translation first. When a meaning conflicts with canonical or current-effort language in that context, surface it immediately and obtain explicit requester resolution rather than silently replacing the established definition.
 
 ### Sharpen fuzzy language
 
@@ -76,13 +76,15 @@ When the user states how something works, check whether the artifact of record �
 
 ### Update the glossary inline
 
-When a term is resolved, update the map's `glossary.md` right there. Don't batch these up — capture them as they happen. Use the format in [GLOSSARY-FORMAT.md](references/GLOSSARY-FORMAT.md).
+When a term is resolved in a map, update that map's working glossary immediately, including its context, source and relevant aliases. Use [GLOSSARY-FORMAT.md](references/GLOSSARY-FORMAT.md). The Wayfinder closing act promotes confirmed meanings into the canonical glossary; a newer working term cannot silently supersede committed language. Outside a map, record requester-confirmed meanings directly in the canonical glossary, preserve author attribution and run file-scoped lint. Leave unresolved or conflicting proposals outside canonical entries.
 
-The glossary should be totally devoid of implementation details. Do not treat the glossary as a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
+The glossary contains vocabulary only. Its requirements-spec metadata is a lint envelope, not an invitation to add application behavior, code or implementation decisions. Keep definitions and their sources distinct from unresolved working questions and architectural decisions.
 
 ### Record decisions
 
-Every decision is captured in the resolving ticket's `## Answer`. Record the full *why* — context, alternatives considered, and the reason for the choice — when **any** of these holds:
+Within a map, every decision is captured in the resolving ticket's `## Answer`. Outside a map, record confirmed naming decisions in the canonical glossary's `## Decisions`, including context, requester resolution and source; link the affected term's Source field to that record. Keep architectural decisions in the existing project decision location, not in the glossary. If that location or its owner is unknown, ask before writing; do not manufacture a map or ticket merely to record terminology. Glossary and recognized ticket mutations use the same scoped lint and attribution rules; other project decision records follow project standards.
+
+Record the full reason, context and alternatives in the applicable decision record when any of these holds:
 
 1. **Hard to reverse** — the cost of changing your mind later is meaningful
 2. **Surprising without context** — a future reader will wonder "why did they do it this way?"
@@ -102,7 +104,11 @@ digraph kepler_wayfinder_domain_modeling {
     "Stress-test with concrete scenarios" [shape=box];
     "Cross-reference with source of truth" [shape=box];
     "Resolved?" [shape=diamond];
-    "Update glossary inline\n+ record decision in ticket ## Answer" [shape=doublecircle];
+    "Working within a map?" [shape=diamond];
+    "Naming decision?" [shape=diamond];
+    "Record architecture decision\nin existing project location" [shape=doublecircle];
+    "Update working glossary\n+ record decision in ticket ## Answer" [shape=doublecircle];
+    "Update canonical glossary\n+ naming decision, source and lint" [shape=doublecircle];
 
     "Encounter term / relationship" -> "Conflicts with glossary?";
     "Conflicts with glossary?" -> "Challenge the conflict" [label="yes"];
@@ -113,7 +119,11 @@ digraph kepler_wayfinder_domain_modeling {
     "Propose precise canonical term" -> "Stress-test with concrete scenarios";
     "Stress-test with concrete scenarios" -> "Cross-reference with source of truth";
     "Cross-reference with source of truth" -> "Resolved?";
-    "Resolved?" -> "Update glossary inline\n+ record decision in ticket ## Answer" [label="yes"];
+    "Resolved?" -> "Working within a map?" [label="yes"];
+    "Working within a map?" -> "Update working glossary\n+ record decision in ticket ## Answer" [label="yes"];
+    "Working within a map?" -> "Naming decision?" [label="no"];
+    "Naming decision?" -> "Update canonical glossary\n+ naming decision, source and lint" [label="yes"];
+    "Naming decision?" -> "Record architecture decision\nin existing project location" [label="no"];
     "Resolved?" -> "Stress-test with concrete scenarios" [label="no"];
 }
 ```

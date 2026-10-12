@@ -34,8 +34,7 @@ dispositions and do not work them again unless the user requests a new critique 
 - The change's `route_unit` frontmatter field (in the proposal), if present — follow it to the
   route unit's `backed_by` tickets; their Answers are committed decisions the artifacts
   must honor.
-- The project's glossary (`.kepler/specs/glossary.md`), when present — the committed
-  ubiquitous language the artifacts must use.
+- The canonical glossary (`.kepler/specs/glossary.md`), when present, is the main source of context-scoped project language. Read established domain and architecture documentation for supplementary definitions, boundaries and the sources cited by the proposal. For an older project without a glossary, verify the documented fallback meanings.
 - Project standards (`AGENTS.md`): idioms, ubiquitous language, boundaries.
 
 ## References
@@ -109,11 +108,9 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 - **Logical consistency:** No artifact contradicts another or itself. Every described flow
   is complete — each step's inputs exist and line up with the previous step's outputs, and
   no step depends on a branch the design says can't happen.
-- **Semantic coherence:** One term per concept across all artifacts (ubiquitous language).
-  Names match the domain and the codebase; a struct, table, model, and file that refer to
-  the same thing agree on how it is spelled and pluralized. Check terms against the canonical
-  glossary (`.kepler/specs/glossary.md`) when present — a term that conflicts with the
-  glossary is a located finding.
+- **Semantic coherence:** One term per concept within each bounded context, used consistently across artifacts. Verify definitions and sources against the canonical glossary and supplementary project documentation. The same word may have distinct meanings across contexts; check explicit translations rather than demanding a global definition. Verify mappings to code names, including documented legacy aliases. An unsupported meaning or conflict with canonical language is a located finding.
+- **Domain scope:** For new full-path proposals, check Domain Context names the involved subdomains and bounded contexts, their responsibilities, involvement and language sources. Each capability must identify a cohesive scope (domain, subdomain or bounded context), responsibility and relation to that context. Infrastructure responsibilities qualify when their model, boundary and contract support the claim; REST alone does not establish a context. A package or endpoint name is insufficient evidence. Flag overlapping parent/child contracts and independent goals bundled into one capability. Existing lint-valid historical proposals missing Domain Context are not invalid for that omission alone; do not demand retroactive backfill of approved history. Requirements-only changes need no proposal.
+- **Boundary impact:** Verify ownership and contract changes across the named contexts, including data ownership, translation, trust, compatibility, migration and coordination obligations. Check that business rules remain with their stated owner rather than leaking into an infrastructure context. If the proposal says no boundary changes, verify its explanation against the stated change. A material unresolved ownership or meaning blocks approval; structural lint cannot establish semantic completeness.
 - **Code-reference validity:** Every referenced type/function/file/example exists in the
   codebase with the claimed signature and shape. No phantom references; no example that
   contradicts the real API it stands on.

@@ -126,8 +126,8 @@ Prepares an existing repository for the pipeline.
 - **Inputs:** an existing git repository; anything you want emphasized in the standards.
 - **Produces:** `AGENTS.md` at the project root (the standing standards every later step reads,
   covering commands, testing, structure, code style, git workflow, and boundaries) and the
-  `.kepler/` workspace (`specs/`, `changes/`).
-- **Notes:** read-only exploration first; idempotent; never clobbers an existing `AGENTS.md`.
+  `.kepler/` workspace (`specs/`, `changes/`) and canonical `.kepler/specs/glossary.md`.
+- **Notes:** read-only exploration first; idempotent; preserves existing standards and glossary content, including migrated language. Init seeds sourced, context-scoped terms, lints the glossary and holds readiness on material ambiguity.
 - Source: [`skills/kepler-init/SKILL.md`](../skills/kepler-init/SKILL.md)
 
 ### `kepler-wayfinder` — chart the route before a change *(optional pre-change planning stage)*
@@ -161,9 +161,8 @@ requirements-only approval path with no proposal or design, then returns the com
 planning for revalidation.
 
 - **When:** for a change that warrants a spec; skip it for a tactical change.
-- **Inputs:** a change idea; the project's existing specs (`.kepler/specs/`); `AGENTS.md`.
-- **Produces**, in `.kepler/changes/<YYYY-MM-DD-title>/`: `proposal.md` (why), `requirements/<capability>.md`
-  (what, in delta form), `design.md` (how).
+- **Inputs:** a change idea; the canonical glossary and existing specs (`.kepler/specs/`); relevant domain and architecture documentation; `AGENTS.md`.
+- **Produces**, in `.kepler/changes/<YYYY-MM-DD-title>/`: `proposal.md` (why, sourced language, domain scope and boundary impact), `requirements/<capability>.md` (what, in delta form), `design.md` (how). New full-path proposals name involved subdomains and bounded contexts and identify each capability's represented scope. Older projects may use sourced project documentation when the glossary is absent.
 - **Notes:** one question at a time; proposes 2–3 approaches with trade-offs; the design must clear a
   code-quality self-review before the gate opens. On handoff it discloses the worktree it created
   and, when working with a person, asks before proceeding to `kepler-plan`.
@@ -181,7 +180,7 @@ design-phase counterpart to `kepler-review`. Returns a numbered findings report 
   codebase (to ground every reference); the canonical specs (`.kepler/specs/`); `AGENTS.md`.
 - **Produces:** a verdict (`approved` / `changes-requested`) and a numbered, located findings list —
   printed to chat and persisted to `critique.md` in the change directory.
-- **Notes:** checks logical consistency, semantic coherence (ubiquitous language), and — the load-
+- **Notes:** checks scoped terminology and sources, capability responsibilities, domain coverage and boundary ownership alongside logical consistency and — the load-
   bearing step — that every referenced type/function/file/example actually exists in the codebase
   and nothing is planned against code the change removes. Applies the same `references/code-quality.md`
   rubric `kepler-propose` self-reviews against, capturing a Quality Lens. Its single `decision`
@@ -342,7 +341,7 @@ Drives an entire `plan.md` through task implementation, task feedback, and one w
 Writes or rewrites `.kepler/specs/<capability>.md` outside the change pipeline, in two modes:
 **reformat** (an existing spec → the human-readable skeleton) and **from-code** (explore the
 application read-only and write specs from what it does). The front door for canonical specs — every
-other path creates a spec only when `kepler-finish-work` distills a completed change.
+other capability-behavior path creates a spec when `kepler-finish-work` distills a completed change. Init establishes the separate canonical glossary.
 
 - **When:** adopting Kepler on an existing codebase (bootstrap specs from code), or migrating specs
   written in the older `Requirement:` / `Scenario:` form into the current shape.
@@ -355,15 +354,26 @@ other path creates a spec only when `kepler-finish-work` distills a completed ch
   flagging inferred behavior rather than inventing guarantees.
 - Source: [`skills/kepler-compose-spec/SKILL.md`](../skills/kepler-compose-spec/SKILL.md)
 
+## Domain language and capability scope
+
+`.kepler/specs/glossary.md` is the main source of project language, established by init. Terms have definitions, context scope, aliases or terms to avoid, and source references. Established project documentation supplements missing meanings; a conflict requires requester resolution, not a silent rewrite. Working map glossaries remain effort-local and are created lazily. Closing an effort promotes confirmed language by context without replacing a committed meaning merely because a working term is newer.
+
+A capability is a cohesive, durable responsibility with a clear boundary and observable contract. It may represent a domain, subdomain or bounded context, including infrastructure responsibilities. A subdomain describes a problem area; a bounded context delimits a model and language. Capability is the specification unit, not a synonym for either. Name the represented scope and avoid duplicate parent/child contracts.
+
+For example, `rest-api` may represent an infrastructure context that owns the external model and translation into domain operations while domain contexts retain business rules. REST alone does not establish a bounded context; an HTTP adapter may belong within an existing one. A package or endpoint is not automatically a context or capability.
+
+New proposals add Domain Context (Ubiquitous Language; Subdomains and Bounded Contexts) and Affected Boundaries under Impact. Goals use the sourced meanings, capability entries identify scope and responsibility, and Impact explains ownership, contract, trust and coordination changes. Detailed implementation remains in design. These are new authoring requirements, not retroactive schema gates: historical lint-valid proposals and specs remain valid and unchanged. Capability slugs, metadata and `requirements/<capability>.md` → `specs/<capability>.md` mappings stay stable. The requirements-only path still creates no proposal.
+
 ## Artifacts and layout
 
 Templates are global; artifacts are per-project. The canonical templates ship in the repository's
 `bundle/templates/` and are installed to `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/` by `kepler setup`. Every change's
 artifacts live under the project's `.kepler/` directory:
 
-```
+```text
 .kepler/
-  specs/                              # canonical capability truth (living, no delta markers)
+  specs/                              # canonical capability truth and project language
+    glossary.md                       # context-scoped ubiquitous language, established by init
     <capability>.md
   changes/
     <YYYY-MM-DD-title>/

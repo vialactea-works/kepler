@@ -89,9 +89,10 @@ around those operations.
 
 The skills produce durable, per-project artifacts under `.kepler/`:
 
-```
+```text
 .kepler/
-  specs/                              # canonical capability truth (living)
+  specs/                              # canonical capability truth and project language
+    glossary.md                       # context-scoped ubiquitous language
     <capability>.md
   changes/
     <YYYY-MM-DD-title>/
@@ -109,7 +110,10 @@ The skills produce durable, per-project artifacts under `.kepler/`:
 ```
 
 Changes are ephemeral; specs are durable. When a change finishes, its requirement deltas fold into
-`specs/`, the project's always-current requirements truth.
+`specs/`, the project's always-current requirements truth. Init establishes the canonical glossary;
+new proposals use its scoped language and describe involved contexts and boundary impact. A capability
+may represent a domain, subdomain or bounded context, including infrastructure responsibilities.
+See [domain language and capability scope](docs/skills.md#domain-language-and-capability-scope).
 
 When upgrading this workflow, first finish any active change with the Kepler generation that
 created it. Between changes, update the CLI and the agent-loaded skills together from one Kepler
@@ -145,7 +149,7 @@ kepler setup                 # install bundle/{templates,guidelines}/ → ${XDG_
 #    the agent at the SKILL.md paths.
 
 # 3. In your project, run the skills through your agent, in order:
-#    kepler-init         → scaffold .kepler/ and write AGENTS.md (once)
+#    kepler-init         → standards + canonical glossary + .kepler/ workspace (once)
 #    kepler-propose      → proposal + requirements + design (optional)
 #    kepler-plan         → plan.md + root task ledger + task progress files
 #    kepler-code         → implement one task and record its attempt

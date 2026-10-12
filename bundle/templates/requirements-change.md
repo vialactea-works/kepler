@@ -31,7 +31,11 @@ decision: skipped
 
 # Capability: <capability-name>
 
-<!-- One-line statement of what this capability is responsible for. -->
+<!-- State the capability's responsibility, represented scope (domain, subdomain or bounded
+     context) and relevant context boundary in prose. Infrastructure scopes qualify when they
+     own a durable contract; a transport or endpoint alone does not establish a context.
+     Use canonical glossary meanings and sourced project language. Preserve capability slugs
+     and the delta-to-spec mapping; do not add mandatory scope metadata. -->
 
 ## ADDED Requirements
 

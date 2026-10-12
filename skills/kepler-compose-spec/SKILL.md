@@ -7,8 +7,7 @@ description: "Author canonical capability specs directly, outside the change pip
 
 Write or rewrite the project's canonical specs (`.kepler/specs/<capability>.md`) directly,
 without running a change through the pipeline. This is the **front door for canonical specs**:
-everywhere else, a spec is born only when `kepler-finish-work` distills a completed change, so a
-project adopting Kepler — or one whose specs have drifted from the current format — has no way
+capability behavior specs otherwise emerge when `kepler-finish-work` distills a completed change, while init establishes the separate canonical glossary. A project adopting Kepler — or one whose specs have drifted from the current format — has no way
 to get well-formed specs. This skill fills that gap.
 
 It has **two modes**:
@@ -35,8 +34,7 @@ creates a change directory — this skill operates only on `.kepler/specs/`.
   - reformat → one or more existing spec files, or the whole `.kepler/specs/` directory.
   - from-code → the application (optionally scoped to a subsystem or a named capability).
 - The project's existing `.kepler/specs/` — to avoid duplication and reuse capability names.
-- The project's glossary (`.kepler/specs/glossary.md`), when present — the committed
-  ubiquitous language; name capabilities and concepts in its terms.
+- The canonical glossary (`.kepler/specs/glossary.md`), when present, is the main source of context-scoped project language. Supplement missing definitions from established project documentation with source references; surface conflicts rather than silently redefining terms.
 - Project standards (`AGENTS.md`) — for the git workflow and any domain vocabulary.
 
 If the mode is not given, infer it: an existing off-format spec as the target means reformat; a
@@ -64,10 +62,8 @@ skill's own directory — they are co-located with this SKILL.md, **not** at `${
 - **Document what is true (from-code).** Describe the behavior the code actually exhibits, not
   what it should do. Where the code is ambiguous or you are inferring intent, say so rather than
   inventing a guarantee. Do not treat a bug as a contract.
-- **Right-size capabilities.** One spec per coarse, durable domain a reader would recognize as a
-  top-level concern — not a mechanism, a config surface, a single module, or a wiring step. Aim
-  for the fewest capabilities that cover the system without overlap. (Same sizing as
-  `kepler-propose`: prefer `logging.md` over `structured-logging.md` + `trace-log-correlation.md`.)
+- **Capability scope.** A capability is a cohesive, durable area of responsibility with a clear boundary and an observable contract. It can represent a domain, subdomain or bounded context, including infrastructure responsibilities. A domain names the overall subject area, a subdomain names a problem area, and a bounded context delimits a model and language. Capability is the specification unit; identify its represented scope without treating these concepts as synonyms.
+- **Right-size capabilities.** Use one spec per cohesive responsibility and contract, with the fewest scopes that cover the system without overlap. Infrastructure or integration scopes qualify: `rest-api` may own an external model, command/result translation and compatibility while domain contexts retain business rules. REST alone does not establish a bounded context; an HTTP adapter may belong to its owning context. An endpoint, file or wiring step alone is not a capability. Do not create overlapping parent and child capabilities that duplicate the same contracts, or merge unrelated contexts because they share technology. Preserve existing slugs, metadata and delta-to-spec paths; do not reclassify historical specs merely to fit new wording.
 - **Right-size content.** Keep all five sections required by lint; keep a section concise when
   there are no applicable facts, and omit optional subsections. A tiny capability can be brief
   without inventing guarantees. Lint, not this writing rubric, decides existing format validity.
@@ -77,8 +73,7 @@ skill's own directory — they are co-located with this SKILL.md, **not** at `${
 1. **Determine mode and scope.** Establish which mode you are in and its exact target (which
    files, or which part of the codebase). Read `references/spec-altitude.md` before writing
    anything.
-2. **Survey existing specs.** List `.kepler/specs/` so you reuse existing capability names and
-   do not create an overlapping or duplicate spec.
+2. **Survey existing specs.** List `.kepler/specs/` so you reuse existing capability names and do not create an overlapping or duplicate spec. Read the glossary as language support, not as an automatic behavior capability. When reformatting a whole directory, preserve the glossary's vocabulary and canonical artifact contract; do not turn its entries into application behavior.
 3. **Gather the source material.**
    - **reformat:** read each target spec in full. Inventory the durable facts it holds — every
      contract, behavior, invariant, and decision — separating them from the mechanism and
@@ -90,7 +85,7 @@ skill's own directory — they are co-located with this SKILL.md, **not** at `${
    the register→section mapping: consumer-facing shapes (schemas, payloads, endpoints, config
    keys, field names and types) → `## Contract`; observable input→output → `## Behavior` plus an
    **Examples** bullet; properties that always hold → `## Invariants`; reusable rules → `## Decisions`;
-   a one-paragraph orientation → `## Overview`.
+   a one-paragraph orientation → `## Overview`. In Overview, identify the supported scope kind and name, responsibility, related contexts and boundary ownership. When an existing spec's scope is uncertain, flag that uncertainty instead of inventing a domain model or forcing a historical reclassification.
 5. **Write the spec.** For a new author-bearing canonical spec, read `git config user.name` and
    `git config user.email` and record the configured identity as `author: Name <email>` in the
    requirements-spec frontmatter. If either value is missing, stop and report the missing identity;

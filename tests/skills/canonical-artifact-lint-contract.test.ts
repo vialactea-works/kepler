@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { readSkill } from "./helpers.js"
 
 const writers = [
+  "kepler-init",
   "kepler-compose-spec",
   "kepler-wayfinder",
   "kepler-wayfinder-domain-modeling",
@@ -31,6 +32,9 @@ const expectOrdered = (
 describe("canonical and Wayfinder artifact lint contract", () => {
   it("maps each writer to its recognized and unrelated outputs", () => {
     const skills = readWriters()
+
+    expect(skills["kepler-init"]).toContain(".kepler/specs/glossary.md")
+    expect(skills["kepler-init"]).toContain("kepler workbench lint --file .kepler/specs/glossary.md")
 
     expect(skills["kepler-compose-spec"]).toContain(
       ".kepler/specs/<capability>.md",
@@ -109,6 +113,11 @@ describe("canonical and Wayfinder artifact lint contract", () => {
   it("runs scoped lint after recognized mutations and before handoff", () => {
     const skills = readWriters()
 
+    expectOrdered(
+      skills["kepler-init"],
+      "After creating the canonical glossary",
+      "kepler workbench lint --file .kepler/specs/glossary.md",
+    )
     expectOrdered(
       skills["kepler-compose-spec"],
       "After writing or editing each canonical spec",

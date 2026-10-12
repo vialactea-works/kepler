@@ -79,6 +79,7 @@ describe("split execution artifact templates", () => {
       "design.md",
       "plan.md",
       "requirements-spec.md",
+      "glossary.md",
     ]) {
       const template = readTemplate(name)
       const instructions = Array.from(

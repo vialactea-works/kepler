@@ -37,8 +37,12 @@ decision: accepted | rejected | skipped
 
 ## Overview
 
-<!-- One paragraph, plain prose: what this capability is responsible for and where it
-     sits. Orient a reader who has never seen it. -->
+<!-- One paragraph, plain prose: the capability's responsibility, represented scope
+     (domain, subdomain or bounded context), related contexts and boundary ownership.
+     Infrastructure scopes qualify when they own an observable contract, such as an external
+     model and translation into domain operations. Use scoped glossary meanings; distinguish
+     evidenced boundaries from inferences. Keep scope in prose, preserve existing slugs and
+     metadata, and do not force historical reclassification. Orient a new reader. -->
 
 ## Contract
 

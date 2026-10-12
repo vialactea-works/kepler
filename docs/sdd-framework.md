@@ -102,7 +102,7 @@ artifacts; code and finish-work build and ship them.
 
 | Step | Skill | Role |
 | ------ | ------- | ------ |
-| 0 | `kepler-init` | Set up the project: write `AGENTS.md`, scaffold `.kepler/` |
+| 0 | `kepler-init` | Set up the project: standards, canonical glossary and `.kepler/` workspace |
 | 1 | `kepler-propose` | Idea → proposal, requirements, and design; or requirements-only approval for a bounded tactical behavior delta |
 | 2 | `kepler-plan` | Design → `plan.md`: small, TDD-sized, independently verifiable tasks |
 | 3 | `kepler-code` | Implement one task, then enter its `code` ↔ `code-feedback` loop |
@@ -117,14 +117,12 @@ init ──▶ [ propose ] ──▶ plan ──▶ ( code ◀──▶ code-fee
 ```
 
 **kepler-init** explores the project read-only and writes `AGENTS.md` across the six
-standing areas — the project's standards that every later step reads. It scaffolds
-`.kepler/specs/` and `.kepler/changes/`. It is idempotent and never clobbers an existing
-`AGENTS.md`.
+standing areas, scaffolds `.kepler/specs/` and `.kepler/changes/`, and establishes `.kepler/specs/glossary.md` from sourced project terminology. Legacy migration precedes glossary creation. Init preserves existing standards and glossaries, lints the canonical glossary and holds readiness while material language or required project facts remain unresolved.
 
 **kepler-propose** is the optional front door. Through dialogue — clarifying questions one
 at a time, then two or three alternative approaches with trade-offs — it produces the
 proposal, the per-capability requirements, and the design, and gates on approval before any
-implementation. A change that does not warrant this depth starts at planning. When planning finds
+implementation. New proposals use context-scoped project language, identify involved subdomains and bounded contexts, and describe affected ownership and contract boundaries. A change that does not warrant this depth starts at planning. When planning finds
 a bounded tactical behavior change that needs a requirements delta, propose has a requirements-only
 approval path: it creates no proposal or design and returns the exact committed delta to planning
 for revalidation.
@@ -186,7 +184,19 @@ delta into the section it belongs to rather than copying requirement blocks by n
 directly, in two modes: *reformat* an existing spec into the current skeleton, or write specs
 *from the application code*. It is the front door for canonical specs — every pipeline path
 produces a spec only as a by-product of finishing a change — and the tool a project uses to
-bootstrap specs on adoption or migrate an older spec format.
+bootstrap capability behavior specs on adoption or migrate an older spec format. Init establishes the separate canonical glossary.
+
+## Domain language and capability scope
+
+The canonical `.kepler/specs/glossary.md` is the main source of ubiquitous language. Entries identify the term, definition, bounded context, aliases or terms to avoid, and source. The same word may have distinct meanings in different contexts. Established project documentation supplements missing meanings, including in older projects without a glossary; contradictions require explicit requester resolution. Proposals consume language rather than silently changing canonical definitions.
+
+A capability is a cohesive, durable area of responsibility with a clear boundary and an observable contract. It can represent a domain, subdomain or bounded context, including infrastructure responsibilities. A domain is the overall subject area, a subdomain is a problem area, and a bounded context defines where a particular model and language apply. Capability is Kepler's specification unit; these concepts need not map one-to-one.
+
+An infrastructure capability such as `rest-api` may own an external model, command/result translation and compatibility obligations. Its specification names the domain contexts that retain business rules and data ownership. REST alone does not establish a bounded context; a transport adapter may belong to an existing context. Avoid endpoint/file fragments and duplicate parent/child contracts, without rejecting infrastructure responsibilities as a category.
+
+New full-path proposals add Domain Context with Ubiquitous Language and Subdomains and Bounded Contexts, identify each capability's scope, and add Affected Boundaries under Impact. Boundary descriptions cover responsibility, data ownership, interactions, contracts, trust and coordination; detailed classes, ports and adapters remain in design. A material unresolved meaning or owner blocks approval. Lint checks artifact structure, not domain correctness.
+
+These authoring requirements leave historical lint-valid artifacts unchanged. Scope stays in prose: existing capability slugs, metadata and delta-to-spec mappings remain stable. The tactical requirements-only path consumes the same language without creating a proposal or domain-context artifact. The canonical glossary retains the requirements-spec envelope and five required sections; it is vocabulary support, not an automatic application capability or implementation specification.
 
 ## Artifacts and layout
 
@@ -196,9 +206,10 @@ installed copy, so there is one definition of each artifact's shape.
 
 **Artifacts are per-project**, under the project's `.kepler/` directory:
 
-```
+```text
 .kepler/
-  specs/                              # canonical capability truth (living)
+  specs/                              # canonical capability truth and project language
+    glossary.md                       # canonical context-scoped terminology
     <capability>.md                   # no delta markers — current behavior
   changes/
     <YYYY-MM-DD-title>/
@@ -219,7 +230,8 @@ The document set and the standards it borrows from:
 
 | Artifact | Document | Owns | Inspiration |
 | ---------- | ---------- | ------ | ------------- |
-| `proposal.md` | PRD | Why | — |
+| `specs/glossary.md` | Canonical glossary | Context-scoped language | Canonical artifact envelope |
+| `proposal.md` | PRD | Why, domain scope and boundary impact | — |
 | `requirements/<capability>.md` | SRS (delta) | What | ISO/IEC/IEEE 29148 |
 | `specs/<capability>.md` | SRS (canonical) | What | ISO/IEC/IEEE 29148 |
 | `design.md` | SDD | How | IEEE 1016 |

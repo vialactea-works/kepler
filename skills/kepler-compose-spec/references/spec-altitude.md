@@ -24,6 +24,12 @@ like documentation a human wrote**, not like a compliance form. A canonical spec
 mechanism becomes false on the next refactor and stops being usable as shared knowledge; a
 canonical spec buried in `SHALL`/`WHEN`/`THEN` scaffolding stops being read at all.
 
+## Capability scope
+
+A capability is a cohesive, durable responsibility with a clear boundary and observable contract. It may represent a domain, subdomain or bounded context, including infrastructure responsibilities. Identify its scope, related contexts and ownership in Overview, using the canonical glossary and documented language. An external API model and its translation contract may qualify; a transport, endpoint or implementation file alone does not establish a bounded context. Avoid duplicate parent/child contracts and preserve existing capability slugs and artifact mappings. Do not invent a classification or rewrite historical specs solely to adopt this terminology.
+
+The canonical glossary uses the requirements-spec envelope for lint compatibility, but holds vocabulary rather than application behavior. Its dedicated template keeps the five sections concise and language-focused; do not distill implementation decisions into glossary entries.
+
 ## The shape: a light universal skeleton
 
 Every canonical spec uses the five sections required by `kepler workbench lint`: Overview,
