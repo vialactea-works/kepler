@@ -114,7 +114,10 @@ units:
 -->
 
 - Merge-back branch: `<branch from map>`
+- Qualification: <merge | request-open | no-op>
 - <standing shipping rule>
+
+<!-- Choose one canonical Qualification token. Automated recovery binds that exact line to the recorded route condition. Other shipping rules remain owner requirements. -->
 
 ## Units
 

@@ -228,7 +228,11 @@ artifact-only review commit, original explicit material-waiver reference or null
 input paths/blob IDs. Source identity records the canonical absolute Git common directory, original
 root, full source ref and absolute Git worktree identity. Route identity is null or records the exact
 route/map/unit/source blob, previous in-progress state, owner/change/source/target/base and the resolved
-shipping condition. Use canonical strategy tokens, not prose synonyms, in every new Strategy field.
+shipping condition. For automated recovery, the committed route's Shipping rules must contain exactly
+one `- Qualification: merge`, `- Qualification: request-open`, or `- Qualification: no-op` line matching
+the recorded condition. Keep any additional owner rules and check them independently. Missing,
+ambiguous or conflicting qualification requires owner adjudication; do not rewrite admitted route
+history to manufacture it. Use canonical strategy tokens, not prose synonyms, in every new Strategy field.
 These are recovery provenance, not authenticated owner approval. Append its matching outcome only
 after reading back the effect, recording the completed or blocked result together with verified
 external, workspace, route, and partial-state evidence. The installed template remains the exact
@@ -274,7 +278,11 @@ kepler workbench precondition --change-dir <change-dir> \
 ```
 
 Require `admission: finalization-repair`, current `verified-head`, exact `remaining-effects`, and
-`gate: repair-open`. This authorization cannot enter the ordinary synchronization/delivery path.
+`gate: repair-open`. When a failed repair already exists, also require `retry-evidence`; copy that
+JSON into the new Attempt's `Retry evidence` field without editing it. It binds the latest failed
+repair commit and entry HEAD to changed remaining paths or the original request's observed merge.
+Unchanged inputs or an external condition the reader cannot verify require owner adjudication.
+This authorization cannot enter the ordinary synchronization/delivery path.
 The CLI rereads immutable original task/review evidence at admitted HEAD, recomputes historical Base
 against the original target commit rather than today's merged target, verifies the recorded review
 artifact-only revision and original narrow waiver, reobserves delivery, and binds current clean
@@ -296,7 +304,9 @@ lint or commit. Report the paths and ask the owner to authorize preservation/res
 commit. Do not discard, stage, pre-commit or normalize them to manufacture cleanliness. Rerun
 admission afterward. Missing/forged historical provenance, rewritten merge content, changed intent or
 ambiguous delivery requires owner adjudication; legacy records remain immutable and do not receive
-invented modern provenance.
+invented modern provenance. Legacy pairs may form a historical prefix, never a suffix after modern
+records. A physical latest pair without delivery provenance cannot authorize an ordinary retry.
+Attempt and Outcome must enter through separate artifact-only commits in that order.
 
 ## Post-gate mutation boundary
 

@@ -30,6 +30,11 @@ decision: accepted | rejected | skipped
   - Delivery identity: <original observed delivery object>
   - Remaining effects: [{"kind":"canonical-spec | route | map | history","path":"<exact allowed path>"}]
   previousRepairCommit binds the latest failed-repair Outcome when one exists. Preserve original pairs.
+  For a later failed repair, copy precondition's retry-evidence JSON without editing it:
+  - Retry evidence: {"previousRepairCommit":"<latest failed repair Outcome SHA>","head":"<verified entry SHA>","changedPaths":["<changed remaining non-history path>"],"delivery":null}
+  delivery holds the reobserved original request identity only for an open-to-merged change.
+  Unchanged paths and delivery cannot justify another repair. Unverifiable conditions need owner adjudication.
+  Commit each Attempt and its Outcome separately. Legacy pairs may occur only before modern history.
   Each modern Outcome records Result: completed | blocked and these single-line JSON fields:
   - Specification synchronization result: {"paths":[".kepler/specs/<capability>.md"],"commit":"<observed full SHA>"}
   Use {"paths":[],"commit":null} for verified no change.

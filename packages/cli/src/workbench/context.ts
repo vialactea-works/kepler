@@ -802,6 +802,8 @@ const inspectInitialScaffoldRecovery = async (
   let initialPlanCommit: string | undefined;
   const planPath = `${changePath}/plan.md`;
   for (const path of baselineArtifacts) {
+    if (!successful(await runtime.git.stagedDiff(root, path)))
+      reasons.push(`staged scaffold state requires owner reconciliation: ${path}`);
     if (successful(await runtime.git.blobIdAt(root, proof.base, path)))
       reasons.push(`initialization revision already contains ${path}`);
     const pathHistory = await runtime.git.pathHistory(root, path);
@@ -912,7 +914,8 @@ const inspectInitialScaffoldRecovery = async (
       !successful(currentBlob) ||
       !successful(workingBlob) ||
       text(committedBlob) !== text(currentBlob) ||
-      text(committedBlob) !== text(workingBlob)
+      text(committedBlob) !== text(workingBlob) ||
+      !successful(await runtime.git.stagedDiff(root, repositoryPath))
     )
       reasons.push(`formal intent reference is not a current committed approval: ${reference.path}`);
   }
@@ -1030,7 +1033,8 @@ const inspectInitialScaffoldRecovery = async (
           !successful(committedBlob) ||
           text(committedBlob) !== input.blob ||
           !successful(currentBlob) ||
-          text(currentBlob) !== input.blob
+          text(currentBlob) !== input.blob ||
+          !successful(await runtime.git.stagedDiff(root, input.path))
         )
           reasons.push(`Task ${task.id} input changed since handoff: ${input.path}`);
       }
@@ -1049,7 +1053,8 @@ const inspectInitialScaffoldRecovery = async (
       const currentBlob = await runtime.git.worktreeBlob(root, sourcePath);
       if (
         successful(baselineBlob) !== successful(currentBlob) ||
-        (successful(baselineBlob) && text(baselineBlob) !== text(currentBlob))
+        (successful(baselineBlob) && text(baselineBlob) !== text(currentBlob)) ||
+        !successful(await runtime.git.stagedDiff(root, sourcePath))
       )
         reasons.push(`Task ${task.id} has partial work in ${sourcePath}`);
     }
@@ -1090,7 +1095,8 @@ const inspectInitialScaffoldRecovery = async (
     if (
       (await runtime.fileSystem.pathExists(checkpointPath)) ||
       !successful(checkpointHistory) ||
-      text(checkpointHistory) !== ""
+      text(checkpointHistory) !== "" ||
+      !successful(await runtime.git.stagedDiff(root, relative(root, checkpointPath)))
     )
       reasons.push(`Task ${task.id} has a task checkpoint or unverifiable checkpoint history`);
     const taskProgressRelative = relative(root, taskProgressPath);
@@ -1957,6 +1963,7 @@ const latestFeedback = async (
   dir: string,
   task: string,
   implementation: string | undefined,
+  status: string,
 ): Promise<ContextStanding | string> => {
   const path = Path.join(dir, "tasks", `task-${task}`, "feedback.md");
   if (!(await runtime.fileSystem.pathExists(path))) return "absent";
@@ -1988,7 +1995,25 @@ const latestFeedback = async (
   )
     return `${String(verdict)} (uncommitted)`;
   const standing = await validRange(runtime, root, base, head, implementation);
-  return `${String(verdict)} (${standing})`;
+  if (standing !== "fresh") return `${String(verdict)} (${standing})`;
+  const progressPath = Path.join(dir, "tasks", `task-${task}`, "progress.md");
+  const progress = await readArtifact(runtime, progressPath);
+  const progressContract = "exitCode" in progress ? undefined : metadataContract(progress.artifact);
+  if (progressContract?._tag !== "valid" || progressContract.artifact !== "task-progress" ||
+      progressContract.metadata.task !== Number(task) || progressContract.metadata.change !== Path.basename(dir) ||
+      !await durableArtifact(runtime, root, progressPath)) return `${String(verdict)} (stale)`;
+  const latestAttempt = progressContract.body.workflow.records.filter((record) => record.kind === "attempt").at(-1);
+  if (verdict === "approved" && (status !== "done" || progressContract.metadata.status !== "done" || latestAttempt?.fields.Outcome !== "done"))
+    return "approved (stale)";
+  const resolvedImplementation = implementation ? await runtime.git.resolveCommit(root, implementation) : undefined;
+  if (!resolvedImplementation || !successful(resolvedImplementation) || text(resolvedImplementation) !== implementation)
+    return `${String(verdict)} (stale)`;
+  const ranges = await readTaskFeedbackRanges(path, readResult.source, Path.basename(dir), Number(task));
+  const current = text(await runtime.git.currentHead(root));
+  if (ranges.kind !== "valid" || !fullCommit(current)) return `${String(verdict)} (malformed)`;
+  const checkpoint = await resolveTaskCheckpoint(contextTaskCheckpointGit(runtime), root, relative(root, progressPath), Number(task), Path.basename(dir), current, ranges.ranges);
+  if (checkpoint.kind !== "verified" || checkpoint.base !== base) return `${String(verdict)} (stale)`;
+  return `${String(verdict)} (fresh)`;
 };
 
 const latestReview = async (
@@ -2043,7 +2068,7 @@ const latestReview = async (
       ),
     );
   const standing = await validRange(runtime, root, base, head, required);
-  return `${String(verdict)} (${standing})`;
+  return `${String(verdict)} (${standing === "fresh" ? "range-fresh; clearance-unverified" : standing})`;
 };
 
 const enrichSplit = async (
@@ -2089,6 +2114,7 @@ const enrichSplit = async (
             ),
           ),
         ),
+        row.status,
       ),
     });
   const plan = await readArtifact(runtime, Path.join(change.path, "plan.md"));

@@ -604,6 +604,38 @@ describe("change context", () => {
 
   });
 
+  it.each(["source", "plan", "checkpoint"])("blocks initial recovery with staged-only %s state", async (kind) => {
+    const scaffold = createInitialContextScaffold();
+    const path = kind === "source" ? "src/new.ts" : kind === "plan" ? ".kepler/changes/scaffold/plan.md" : ".kepler/changes/scaffold/tasks/task-1/.base";
+    if (kind !== "plan") write(scaffold.repository, path, kind === "source" ? "export const partial = true;\n" : scaffold.base + "\n");
+    git(scaffold.repository, "add", "--", path);
+    if (kind === "plan") {
+      const source = Fs.readFileSync(Path.join(scaffold.repository, path), "utf8");
+      write(scaffold.repository, path, source);
+    } else Fs.unlinkSync(Path.join(scaffold.repository, path));
+    const result = await runContext({ changeDir: scaffold.directory });
+    expect(result.stdout).toContain("scaffold-recovery: blocked");
+    expect(result.stdout).not.toContain("scaffold-recovery: eligible");
+    expect(result.stdout).toContain(kind === "source" ? "partial work" : kind === "plan" ? "staged scaffold state" : "checkpoint");
+  });
+
+  it("reports fresh feedback only for durable progress at its canonical checkpoint", async () => {
+    const repository = makeRepo();
+    const slug = "checkpoint-context";
+    const progressSource = `---\nartifact: task-progress\nchange: ${slug}\ntask: 1\nstatus: done\nupdated: 2026-09-12\ndecision: accepted\n---\n${taskProgress(1, "Add the auth | session")}`;
+    const planSource = `---\nartifact: plan\nchange: ${slug}\nstatus: approved\ncreated: 2026-09-12\nauthor: Test\ndecision: accepted\nroute_unit: null\n---\n# Plan: Checkpoint Context\n\n## Overview\n\n## Tasks\n\n### Task 1: Add the auth | session\n\n## Done when\n`;
+    const rootSource = `---\nartifact: progress\nchange: ${slug}\nstatus: complete\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n  - id: 1\n    title: Add the auth | session\n    status: done\n    progress: tasks/task-1/progress.md\n---\n# Progress: Checkpoint Context\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Add the auth \\| session | done | [details](tasks/task-1/progress.md) |\n`;
+    const directory = seed(repository, slug, { "plan.md": planSource, "progress.md": rootSource, "tasks/task-1/progress.md": progressSource });
+    const head = commitAll(repository, "record task implementation");
+    const base = git(repository, "rev-parse", `${head}^1`);
+    const feedback = feedbackEvidence(slug, reviewPass(1, "2026-09-13", base, head, "approved"));
+    write(directory, "tasks/task-1/feedback.md", feedback);
+    commitPaths(repository, "record feedback", ".kepler/changes/checkpoint-context/tasks/task-1/feedback.md");
+    expect((await runContext({ changeDir: directory })).stdout).toContain("Task 1: done, feedback: approved (fresh)");
+    write(directory, "tasks/task-1/progress.md", progressSource + "\n## Attempt 2 — 2026-09-14\n\n- Outcome: done\n");
+    expect((await runContext({ changeDir: directory })).stdout).toContain("Task 1: done, feedback: approved (stale)");
+  });
+
   it("blocks initial recovery when task work already exists", async () => {
     const partial = createInitialContextScaffold();
     write(partial.repository, "src/new.ts", "export const partial = true;\n");
@@ -1033,10 +1065,10 @@ decision: accepted
 
     expect(result.exitCode).toBe(0);
     expect(result.status).toBe("success");
-    expect(result.stdout).toContain("Task 1: done, feedback: approved (fresh)");
-    expect(result.stdout).toContain("whole change: approved (fresh)");
+    expect(result.stdout).toContain("Task 1: done, feedback: approved (stale)");
+    expect(result.stdout).toContain("whole change: approved (range-fresh; clearance-unverified)");
     expect(result.lastLine).toBe(
-      "summary: multi-pass — 1/2 tasks done, whole change: approved (fresh)",
+      "summary: multi-pass — 1/2 tasks done, whole change: approved (range-fresh; clearance-unverified)",
     );
   });
 
@@ -1079,9 +1111,9 @@ decision: accepted
     expect(result.exitCode).toBe(0);
     expect(result.status).toBe("success");
     expect(result.stdout).toContain(
-      "Task 1: done, feedback: approved (fresh)",
+      "Task 1: done, feedback: approved (stale)",
     );
-    expect(result.stdout).toContain("whole change: approved (fresh)");
+    expect(result.stdout).toContain("whole change: approved (range-fresh; clearance-unverified)");
     expect(result.stdout).not.toContain("changes-requested (fresh)");
   });
 
@@ -1121,8 +1153,8 @@ decision: accepted
 
     expect(result.exitCode).toBe(0);
     expect(result.status).toBe("success");
-    expect(result.stdout).toContain("Task 1: done, feedback: approved (fresh)");
-    expect(result.stdout).toContain("whole change: approved (fresh)");
+    expect(result.stdout).toContain("Task 1: done, feedback: approved (stale)");
+    expect(result.stdout).toContain("whole change: approved (range-fresh; clearance-unverified)");
     expect(result.stdout).not.toContain("changes-requested (fresh)");
   });
 
@@ -1161,8 +1193,8 @@ decision: accepted
 
     expect(result.exitCode).toBe(0);
     expect(result.status).toBe("success");
-    expect(result.stdout).toContain("Task 1: done, feedback: approved (fresh)");
-    expect(result.stdout).toContain("whole change: approved (fresh)");
+    expect(result.stdout).toContain("Task 1: done, feedback: approved (stale)");
+    expect(result.stdout).toContain("whole change: approved (range-fresh; clearance-unverified)");
     expect(result.stdout).not.toContain("changes-requested (fresh)");
   });
 
@@ -1224,8 +1256,8 @@ decision: accepted
 
     expect(result.exitCode).toBe(0);
     expect(result.status).toBe("success");
-    expect(result.stdout).toContain("Task 1: done, feedback: approved (fresh)");
-    expect(result.stdout).toContain("whole change: approved (fresh)");
+    expect(result.stdout).toContain("Task 1: done, feedback: approved (stale)");
+    expect(result.stdout).toContain("whole change: approved (range-fresh; clearance-unverified)");
   });
 
   it("rejects malformed recognized inventory artifacts before format discovery", async () => {

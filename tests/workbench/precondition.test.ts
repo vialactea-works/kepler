@@ -3258,7 +3258,7 @@ const makeDeliveredFinish = async (linked = false, routeBacked = false) => {
       "---", "artifact: route", "effort: effort", "status: shipping", "created: 2026-10-12", "updated: 2026-10-12", "decision: accepted",
       "units:", "  - id: 1", "    name: First", "    status: in-progress", "    depends_on: []", "    backed_by: []",
       "  - id: 2", "    name: Second", "    status: pending", "    depends_on: [1]", "    backed_by: []", "---",
-      "# Route — Effort", "## Point of departure", "## Destination", "## Path chosen", "## Shipping rules", "Merge into main.",
+      "# Route — Effort", "## Point of departure", "## Destination", "## Path chosen", "## Shipping rules", "- Qualification: merge", "Merge into main.",
       "## Units", "### 1. First", "### 2. Second",
     ].join("\n"));
     write(source, mapPath, [

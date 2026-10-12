@@ -316,6 +316,12 @@ export interface FinishRecordProjection {
   readonly admission: FinishAdmissionIdentity;
   readonly route: FinishRouteIdentity | null;
   readonly recovery?: FinishRecoveryReference;
+  readonly retryEvidence?: {
+    readonly previousRepairCommit: string;
+    readonly head: string;
+    readonly changedPaths: readonly string[];
+    readonly delivery: FinishDeliveryIdentity | null;
+  };
   readonly delivery?: FinishDeliveryIdentity | null;
   readonly remaining?: readonly FinishRemainingEffect[];
   readonly outcome?: {

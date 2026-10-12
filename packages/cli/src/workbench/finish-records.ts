@@ -44,6 +44,7 @@ const schemas = {
   "Recovery of": object({
     attempt: { type: "integer", minimum: 1 }, outcomeCommit: sha, previousRepairCommit: nullable(sha),
   }),
+  "Retry evidence": object({ previousRepairCommit: sha, head: sha, changedPaths: { type: "array", uniqueItems: true, items: path }, delivery }),
   "Delivery identity": delivery,
   "Remaining effects": effects,
   "Specification synchronization result": object({
@@ -58,6 +59,7 @@ interface FinishJsonFields {
   readonly "Admission identity": FinishRecordProjection["admission"];
   readonly "Route identity": FinishRecordProjection["route"];
   readonly "Recovery of": NonNullable<FinishRecordProjection["recovery"]>;
+  readonly "Retry evidence": NonNullable<FinishRecordProjection["retryEvidence"]>;
   readonly "Delivery identity": NonNullable<FinishRecordProjection["outcome"]>["delivery"];
   readonly "Remaining effects": NonNullable<FinishRecordProjection["remaining"]>;
   readonly "Specification synchronization result": NonNullable<FinishRecordProjection["outcome"]>["synchronization"];
@@ -111,6 +113,7 @@ export const parseFinishRecords = (
     const modern = record.fields["Admission identity"] !== undefined;
     const repair = record.fields.Strategy === "reconcile-delivery";
     if (!modern) {
+      if (projected.length !== 0) fail(record, "legacy records are permitted only before modern finish provenance");
       if (repair || Object.keys(schemas).some((field) => record.fields[field] !== undefined))
         fail(record, "explicit recovery metadata requires Admission identity; legacy provenance cannot be invented");
       continue;
@@ -136,14 +139,15 @@ export const parseFinishRecords = (
           !isFullTargetBranchReference(route.targetRef) || route.sourceRef === route.targetRef ||
           route.targetRef !== admission?.targetRef || !route.path.match(/^\.kepler\/maps\/[^/]+\/route\.md$/) ||
           route.mapPath !== route.path.replace(/route\.md$/, "map.md")) fail(record, "route identity is inconsistent");
-      if (!repair && records[index + 1]?.kind !== "outcome" && (route.shipping === "merge" && strategy !== "local-merge" ||
-          route.shipping === "request-open" && strategy === "no-op" || route.shipping === "no-op" && strategy !== "no-op"))
+      if (!repair && (route.shipping !== "no-op" && strategy === "no-op" || route.shipping === "no-op" && strategy !== "no-op" ||
+          route.shipping === "merge" && strategy !== "local-merge" && records[index + 1]?.kind !== "outcome"))
         fail(record, "strategy cannot satisfy the route shipping condition");
     }
     const recovery = repair ? json(record, "Recovery of") : undefined;
+    const retryEvidence = repair && (recovery?.previousRepairCommit !== null || record.fields["Retry evidence"] !== undefined) ? json(record, "Retry evidence") : undefined;
     const repairDelivery = repair ? json(record, "Delivery identity") : undefined;
     const remaining = repair ? json(record, "Remaining effects") : undefined;
-    if (!repair && record.fields["Recovery of"] !== undefined) fail(record, "ordinary attempt cannot claim recovery authority");
+    if (!repair && (record.fields["Recovery of"] !== undefined || record.fields["Retry evidence"] !== undefined)) fail(record, "ordinary attempt cannot claim recovery authority");
     const next = records[index + 1];
     let outcome: FinishRecordProjection["outcome"];
     if (next?.kind === "outcome") {
@@ -154,6 +158,10 @@ export const parseFinishRecords = (
       const observedRemaining = json(next, "Remaining effects");
       if (synchronization && observedDelivery !== undefined && observedRemaining && (result === "completed" || result === "blocked")) {
         if (result === "completed" && (observedDelivery === null || observedRemaining.length !== 0)) fail(next, "completed requires verified delivery and no remaining effects");
+        if (result === "completed" && route && observedDelivery &&
+            (route.shipping === "no-op" ? observedDelivery.strategy !== "no-op" :
+              observedDelivery.strategy === "no-op" || route.shipping === "merge" && observedDelivery.strategy === "pull-request" && observedDelivery.state !== "merged"))
+          fail(next, "completed delivery does not satisfy the recorded shipping qualification");
         if (observedDelivery && observedDelivery.strategy !== (repair ? repairDelivery?.strategy : strategy)) fail(next, "delivery strategy does not match intent");
         if (repair && observedDelivery && repairDelivery) {
           const same = observedDelivery.strategy === "pull-request" && repairDelivery.strategy === "pull-request"
@@ -194,6 +202,19 @@ export const parseFinishRecords = (
           JSON.stringify(original.outcome.delivery) !== JSON.stringify(repairDelivery))
         fail(record, "repair must reference this change's earlier blocked, delivered pair and exact original identities");
       const previous = projected.filter((candidate) => candidate.recovery?.attempt === recovery?.attempt).at(-1) ?? original;
+      if (retryEvidence?.delivery) {
+        const prior = previous?.outcome?.delivery;
+        const observed = retryEvidence.delivery;
+        if (prior?.strategy !== "pull-request" || observed.strategy !== "pull-request" || prior.state !== "open" || observed.state !== "merged" || observed.mergeCommit === null ||
+            JSON.stringify({ ...observed, state: prior.state, mergeCommit: prior.mergeCommit }) !== JSON.stringify(prior))
+          fail(record, "retry delivery evidence must establish the original request's observed open-to-merged transition");
+        if (outcome && JSON.stringify(outcome.delivery) !== JSON.stringify(observed))
+          fail(record, "paired retry Outcome must retain its observed entry delivery evidence");
+      }
+      if (retryEvidence && (retryEvidence.previousRepairCommit !== recovery?.previousRepairCommit ||
+          retryEvidence.changedPaths.some((path) => !previous?.outcome?.remaining.some((effect) => effect.kind !== "history" && effect.path === path)) ||
+          retryEvidence.changedPaths.length === 0 && (retryEvidence.delivery === null || JSON.stringify(retryEvidence.delivery) === JSON.stringify(previous?.outcome?.delivery))))
+        fail(record, "retry evidence must name a changed remaining effect or delivery condition since the latest failed repair");
       if (remaining?.some((effect) => !previous?.outcome?.remaining.some((allowed) => allowed.kind === effect.kind && allowed.path === effect.path)))
         fail(record, "repair cannot add an effect absent from the latest blocked boundary");
       if (projected.some((candidate) => candidate.recovery?.attempt === recovery?.attempt && candidate.outcome?.result === "completed"))
@@ -201,7 +222,7 @@ export const parseFinishRecords = (
     }
     if (admission && source && route !== undefined && strategy && ["local-merge", "pull-request", "no-op", "reconcile-delivery"].includes(strategy))
       projected.push({ number: record.number!, strategy: strategy as FinishRecordProjection["strategy"], admission, source, route,
-        ...(recovery ? { recovery } : {}), ...(repairDelivery !== undefined ? { delivery: repairDelivery } : {}),
+        ...(recovery ? { recovery } : {}), ...(retryEvidence ? { retryEvidence } : {}), ...(repairDelivery !== undefined ? { delivery: repairDelivery } : {}),
         ...(remaining ? { remaining } : {}), ...(outcome ? { outcome } : {}),
       });
   }

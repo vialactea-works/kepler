@@ -16,12 +16,21 @@ export interface FinishInspection {
   readonly passed: boolean;
   readonly output: string;
   readonly remaining?: NonNullable<FinishRecordProjection["remaining"]>;
+  readonly retryEvidence?: FinishRecordProjection["retryEvidence"];
 }
-const inspection = (problems: readonly string[], remaining?: FinishInspection["remaining"]): FinishInspection => ({
+const inspection = (problems: readonly string[], remaining?: FinishInspection["remaining"], retryEvidence?: FinishInspection["retryEvidence"]): FinishInspection => ({
   passed: problems.length === 0,
   output: problems.length === 0 ? "[PASS] Finish history and finalization boundary\n" : `[FAIL] Finish history (${problems.join("; ")})\n`,
   ...(remaining === undefined ? {} : { remaining }),
+  ...(retryEvidence === undefined ? {} : { retryEvidence }),
 });
+
+const changedEffects = async (runtime: PreconditionRuntime, root: string, before: string, head: string, effects: NonNullable<FinishRecordProjection["remaining"]>) => {
+  const paths = effects.filter((effect) => effect.kind !== "history").map((effect) => effect.path);
+  if (paths.length === 0) return [];
+  const changed = await gitCommand(runtime, ["diff", "--name-only", before, head, "--", ...paths], root);
+  return successful(changed) ? text(changed).split(/\r?\n/).filter(Boolean).sort() : undefined;
+};
 
 const historyAt = async (runtime: PreconditionRuntime, root: string, revision: string, path: string) => {
   const blob = await gitBlobAt(runtime, root, revision, path);
@@ -43,22 +52,40 @@ export const inspectFinishHistory = async (
   changeDir: string,
 ): Promise<FinishInspection> => {
   const path = Path.join(changeDir, "finish.md");
-  if (!(await runtime.fileSystem.pathExists(path))) return inspection([]);
+  if (!(await runtime.fileSystem.pathExists(path))) {
+    const history = await gitPathHistory(runtime, root, relativePath(root, path));
+    if (!successful(history)) return inspection(["finish history absence cannot be verified"]);
+    return inspection(text(history) === "" ? [] : ["existing finish history was deleted; restore it through its owner before admission"]);
+  }
   const read = await readContract(runtime, path, "finish");
   if (!read.artifact) return inspection([`history is ${read.reason ?? "unreadable"}`]);
   if (!await durableArtifact(runtime, root, path)) return inspection(["existing finish history is not committed exactly at HEAD"]);
   const records = read.artifact.body.workflow.records;
   if (records.at(-1)?.kind === "attempt") return inspection(["dangling Attempt must be reconciled before ordinary admission"]);
   const latest = read.artifact.body.workflow.finish?.at(-1);
+  if (records.length !== 0 && latest?.number !== records.at(-1)?.number)
+    return inspection(["latest physical finish pair has no modern delivery provenance; owner adjudication required"]);
   if (latest?.outcome?.delivery) return inspection([latest.outcome.result === "blocked" ? "verified delivery requires finalization-repair admission; do not deliver again" : "delivery is already completed; do not deliver again"]);
   const relative = relativePath(root, path);
   const current = await historyAt(runtime, root, text(await gitCurrentHead(runtime, root)), relative);
   const commits = await gitPathHistory(runtime, root, relative);
   if (!current || !successful(commits)) return inspection(["existing finish history provenance is unavailable"]);
-  for (const revision of text(commits).split(/\r?\n/).filter(Boolean)) {
+  const introductions = new Map<string, string>();
+  for (const revision of text(commits).split(/\r?\n/).filter(Boolean).reverse()) {
     const previous = await historyAt(runtime, root, revision, relative);
     if (!previous || previous.records.some((record) => current.records.find((item) => item.key === record.key)?.body !== record.body))
       return inspection(["immutable finish history was erased, rewritten or downgraded to legacy provenance"]);
+    for (const record of previous.records) if (!introductions.has(record.key)) introductions.set(record.key, revision);
+  }
+  for (const record of read.artifact.body.workflow.finish ?? []) {
+    const intent = introductions.get(`attempt:${record.number}`);
+    const observed = introductions.get(`outcome:${record.number}`);
+    if (!intent || !observed || intent === observed || !await contains(runtime, root, intent, observed))
+      return inspection(["finish intent must precede its separately committed Outcome"]);
+    for (const commit of [intent, observed]) {
+      const paths = await gitCommitFiles(runtime, root, commit);
+      if (!successful(paths) || text(paths) !== relative) return inspection(["finish pair introduction must use artifact-only commits"]);
+    }
   }
   return inspection([]);
 };
@@ -76,7 +103,7 @@ const targetMatches = async (runtime: PreconditionRuntime, root: string, actual:
 };
 
 const observeRequest = async (
-  runtime: PreconditionRuntime, root: string, delivery: Extract<FinishDeliveryIdentity, { strategy: "pull-request" }>, sourceRef: string,
+  runtime: PreconditionRuntime, root: string, delivery: Extract<FinishDeliveryIdentity, { strategy: "pull-request" }>, sourceRef: string, allowedPaths: readonly string[],
 ): Promise<{ readonly passed: boolean; readonly merged: boolean; readonly mergeCommit?: string }> => {
   let url: URL;
   try {
@@ -103,9 +130,11 @@ const observeRequest = async (
     const target = github ? data.baseRefName : data.target_branch;
     const state = github ? data.state : data.state === "opened" ? "OPEN" : typeof data.state === "string" ? data.state.toUpperCase() : "";
     const merge = github && data.mergeCommit && typeof data.mergeCommit === "object" ? (data.mergeCommit as { oid?: string }).oid : data.merge_commit_sha;
+    const changes = fullCommit(head) ? await gitCommand(runtime, ["diff", "--name-only", delivery.head, head], root) : undefined;
     const passed = observedUrl === delivery.url && fullCommit(head) && sourceRef === `refs/heads/${source}` &&
       delivery.targetRef === `refs/heads/${target}` && (state === "OPEN" || state === "MERGED") &&
-      await contains(runtime, root, delivery.head, head);
+      await contains(runtime, root, delivery.head, head) && await contains(runtime, root, head, text(await gitCurrentHead(runtime, root))) &&
+      changes !== undefined && successful(changes) && text(changes).split(/\r?\n/).filter(Boolean).every((path) => allowedPaths.includes(path));
     return { passed, merged: state === "MERGED", ...(fullCommit(merge) ? { mergeCommit: merge } : {}) };
   } catch {
     return { passed: false, merged: false };
@@ -153,14 +182,31 @@ export const inspectFinishRepair = async (
   const attemptCommit = introductions.get(`attempt:${original.number}`);
   const outcomeCommit = introductions.get(`outcome:${original.number}`);
   if (!attemptCommit || !outcomeCommit) return inspection(["original delivery pair provenance is missing"]);
-  const latestOutcomeCommit = introductions.get(`outcome:${latest.number}`);
   for (const record of all.filter((entry) => entry.recovery?.attempt === original.number)) {
     const previous = all.filter((entry) => entry.number < record.number && entry.recovery?.attempt === original.number).at(-1);
     if (record.recovery!.outcomeCommit !== outcomeCommit ||
         record.recovery!.previousRepairCommit !== (previous ? introductions.get(`outcome:${previous.number}`) : null))
       problems.push(`repair ${record.number} does not bind the original outcome and latest failed repair commit`);
+    if (previous && record.retryEvidence) {
+      const intent = introductions.get(`attempt:${record.number}`);
+      const previousCommit = introductions.get(`outcome:${previous.number}`);
+      const evidence = record.retryEvidence;
+      const changed = previousCommit ? await changedEffects(runtime, root, previousCommit, evidence.head, previous.outcome!.remaining) : undefined;
+      if (!intent || evidence.head !== text(await gitFirstParent(runtime, root, intent)) ||
+          evidence.previousRepairCommit !== previousCommit || !await contains(runtime, root, previousCommit!, evidence.head) ||
+          changed === undefined || JSON.stringify(changed) !== JSON.stringify([...evidence.changedPaths].sort()))
+        problems.push(`repair ${record.number} retry evidence does not match its committed entry state`);
+    }
   }
-  for (const commit of [attemptCommit, outcomeCommit, latestOutcomeCommit]) {
+  const linkedPairs = all.filter((record) => record.number === original.number || record.recovery?.attempt === original.number);
+  for (const record of linkedPairs) {
+    const intent = introductions.get(`attempt:${record.number}`);
+    const observed = introductions.get(`outcome:${record.number}`);
+    if (!intent || !observed || intent === observed || !await contains(runtime, root, intent, observed))
+      problems.push(`finish pair ${record.number} must introduce intent before its separately committed outcome`);
+  }
+  const pairCommits = linkedPairs.flatMap((record) => [introductions.get(`attempt:${record.number}`), introductions.get(`outcome:${record.number}`)]);
+  for (const commit of pairCommits) {
     if (!commit || !fullCommit(commit)) { problems.push("finish pair introduction is unverifiable"); continue; }
     const files = await gitCommitFiles(runtime, root, commit);
     if (!successful(files) || text(files) !== path) problems.push(`finish intent/outcome ${commit} is not an artifact-only commit`);
@@ -186,7 +232,12 @@ export const inspectFinishRepair = async (
   if (text(reviewCommit) !== admission.reviewCommit || reviews.review?.base !== admission.reviewBase || reviews.review.head !== admission.reviewHead)
     problems.push("recorded review artifact revision or range differs from original admission");
   const changePaths = await gitCommand(runtime, ["ls-tree", "-r", "--name-only", admission.verifiedHead, "--", relativePath(root, changeDir)], root);
-  for (const file of text(changePaths).split(/\r?\n/).filter(Boolean).filter((file) => file !== path)) {
+  const currentPaths = await gitCommand(runtime, ["ls-tree", "-r", "--name-only", head, "--", relativePath(root, changeDir)], root);
+  const originalPaths = text(changePaths).split(/\r?\n/).filter(Boolean).filter((file) => file !== path).sort();
+  const survivingPaths = text(currentPaths).split(/\r?\n/).filter(Boolean).filter((file) => file !== path).sort();
+  if (!successful(changePaths) || !successful(currentPaths) || JSON.stringify(originalPaths) !== JSON.stringify(survivingPaths))
+    problems.push("repair cannot add or remove original task/intent/review evidence");
+  for (const file of originalPaths) {
     const before = await gitBlobIdAt(runtime, root, admission.verifiedHead, file);
     const now = await gitBlobIdAt(runtime, root, head, file);
     if (!successful(before) || !successful(now) || text(before) !== text(now)) problems.push(`repair cannot change original task/intent/review evidence: ${file}`);
@@ -205,6 +256,8 @@ export const inspectFinishRepair = async (
   }
   const delivery = original.outcome.delivery;
   const effectHead = delivery.strategy === "pull-request" ? delivery.head : delivery.commit;
+  if (!await contains(runtime, root, effectHead, outcomeCommit))
+    problems.push("original Outcome does not follow the recorded delivery content/effect");
   const ownedSpecs = admission.inputs.flatMap((input) => {
     const capability = /^\.kepler\/changes\/[^/]+\/requirements\/([^/]+)\.md$/.exec(input.path)?.[1];
     return capability === undefined ? [] : [`.kepler/specs/${capability}.md`];
@@ -223,16 +276,21 @@ export const inspectFinishRepair = async (
       problems.push("synchronization commit is missing, outside the Attempt, or changes unowned paths");
   }
   let survivingRef = original.source.sourceRef;
+  let observedDelivery: FinishDeliveryIdentity = delivery;
   if (delivery.strategy === "local-merge") {
     survivingRef = delivery.targetRef;
     if (!await targetMatches(runtime, root, delivery.targetRef, admission.targetRef) ||
         !await contains(runtime, root, attemptCommit, delivery.commit) || !await contains(runtime, root, delivery.commit, head))
       problems.push("recorded local merge is absent or does not preserve the admitted Attempt on its target");
   } else if (delivery.strategy === "pull-request") {
-    const observed = await observeRequest(runtime, root, delivery, original.source.sourceRef);
+    const observed = await observeRequest(runtime, root, delivery, original.source.sourceRef,
+      [path, ...ownedSpecs, ...(original.route ? [original.route.path, original.route.mapPath] : [])]);
     if (!observed.passed || !await contains(runtime, root, attemptCommit, delivery.head)) problems.push("request provider/repository/URL/head/base or reviewed-content provenance cannot be verified");
     if (original.route?.shipping === "merge" && !observed.merged) problems.push("request has not satisfied merge-required shipping qualification");
+    if (latest.outcome.delivery?.strategy === "pull-request" && latest.outcome.delivery.state === "merged" && !observed.merged)
+      problems.push("observed request regressed from its recorded merged state");
     if (observed.merged) {
+      observedDelivery = { ...delivery, state: "merged", mergeCommit: observed.mergeCommit ?? null };
       survivingRef = delivery.targetRef;
       if (!observed.mergeCommit || !await contains(runtime, root, attemptCommit, observed.mergeCommit) || !await contains(runtime, root, observed.mergeCommit, head))
         problems.push("merged request provenance is missing or rewritten; owner adjudication required");
@@ -245,7 +303,21 @@ export const inspectFinishRepair = async (
   }
   const branch = await gitCommand(runtime, ["symbolic-ref", "--quiet", "HEAD"], root);
   if (!successful(branch) || text(branch) !== survivingRef) problems.push("repair is not on the recorded surviving branch/base");
-  problems.push(...await inspectFinishRoute(runtime, root, changeDir, original));
-  const remaining = latest.outcome.remaining;
-  return inspection(problems, remaining);
+  const route = await inspectFinishRoute(runtime, root, changeDir, original, latest.outcome.remaining);
+  problems.push(...route.problems);
+  const remaining = latest.outcome.remaining.filter((effect) =>
+    !route.completed.some((completed) => completed.kind === effect.kind && completed.path === effect.path),
+  );
+  if (!remaining.some((effect) => effect.kind === "history" && effect.path === path))
+    problems.push("remaining effects omit the linked finalization history");
+  let retryEvidence: FinishInspection["retryEvidence"];
+  if (latest.strategy === "reconcile-delivery") {
+    const previousRepairCommit = introductions.get(`outcome:${latest.number}`);
+    const changedPaths = previousRepairCommit ? await changedEffects(runtime, root, previousRepairCommit, head, latest.outcome.remaining) : undefined;
+    const deliveryChanged = JSON.stringify(latest.outcome.delivery) !== JSON.stringify(observedDelivery);
+    if (!previousRepairCommit || changedPaths === undefined || changedPaths.length === 0 && !deliveryChanged)
+      problems.push("later repair requires changed observed effects or delivery evidence; unverifiable external conditions require owner adjudication");
+    else retryEvidence = { previousRepairCommit, head, changedPaths, delivery: deliveryChanged ? observedDelivery : null };
+  }
+  return inspection(problems, remaining, retryEvidence);
 };

@@ -1,5 +1,79 @@
 # Change-state-machine implementation handoff
 
+## Current implementation continuation
+
+The remaining A1–A18 source and resource work is implemented on top of checkpoint
+`8de197a97609` on `fix/finish-work-gates`. This continuation preserves the earlier implementation
+and the historical STPA plan. It does not complete the paused persistent goal or claim native
+workflow acceptance. The older checkpoint observations and limits below remain historical evidence;
+the current inventory supersedes their missing-implementation and current-checkout-only claims.
+
+### Action inventory
+
+| Action | Current implementation |
+| --- | --- |
+| A1 | Shared root metadata/table consistency, phase-sensitive handoff checks and coder-owned repair. |
+| A2 | Unique terminal Outcome, durable task evidence and resolvable implementation; context now uses the same durability/checkpoint boundary. |
+| A3 | Typed finding classification before freshness, useful-input retry rules and owner routing; removed unconditional feedback redispatch. |
+| A4 | Modern full baseline, retained bounded history and complete resolution/correction coverage; context explicitly reports range freshness without claiming clearance. |
+| A5 | Applicable quality, repository and optional-memory decisions in planner/code/reviewer handoffs. |
+| A6 | Admission rechecks captured HEAD, branch and worktree; finish consumes the verified identity. |
+| A7 | Journaled Attempt before effects, separate artifact-only pairs, immutable history, original admission revalidation, linked repair and changed retry evidence. |
+| A8 | Historical canonical shipping qualification, paired-delivery compatibility, exact named route/map effects and sibling preservation. |
+| A9 | Required full target ref and actual merge-base scope in ordinary admission; historical target for repair. |
+| A10 | Focused mechanical regressions and the opt-in T1–T39 checklist at `tests/skills/change-state-machine-scenarios.md`; execution remains deliberately deferred. |
+| A11 | Revision-bound formal approval and critique disposition; tactical absence does not invent formal approval. |
+| A12 | Feedback-bearing identity freeze, immutable done history and abandon-plus-new-ID planning rules. |
+| A13 | Original pending/history-free initialization proof and missing-path-only recovery; staged scaffold/input/source/checkpoint state now holds for its owner. |
+| A14 | Explicit current-input classification, retained obligations and reviewed impact amendments. |
+| A15 | Route metadata/body graph coherence, canonical binding and owner-controlled dependency/causal checks. |
+| A16 | Named source/target role, claims on visible local/remote refs and linked worktrees, and owner-controlled transfer/retention/cleanup. |
+| A17 | Shared historical Base verification across diff, admission and context; no cropped or invented checkpoint. |
+| A18 | Immutable IDs with validated serial execution order, gated prefix and prerequisite/partial-work handoffs. |
+
+### Continuation changes and compatibility
+
+- Finish admission refuses deleted or downgraded history, untyped modern suffixes, same-commit
+  Attempt/Outcome pairs, and additions/removals of original task/intent/review evidence.
+- Repair requires current route/map bytes to match their committed artifacts, observes already-persisted
+  effects, rejects omitted pending route/map/history effects, and preserves sibling state. Visible claim discovery covers committed local/remote refs
+  and linked worktree bytes. Same-change copies require admitted ref/worktree identities.
+- The historical route must contain one matching `- Qualification: merge`,
+  `- Qualification: request-open` or `- Qualification: no-op` line. Missing old provenance requires
+  owner adjudication, not rewriting admitted history. Additional owner rules remain required.
+- Later failed repairs require `Retry evidence`, copied from CLI `retry-evidence`: latest failed
+  Outcome commit, entry HEAD, changed remaining paths and/or the original request's observed merge.
+  The paired Outcome must retain that delivery evidence. Unverifiable external conditions hold.
+- Request readback checks actual Head containment and its exact finish-owned mutation boundary;
+  ancestry alone cannot admit added application work.
+- Skills, templates and state-machine wording carry these predicates together. No dependency,
+  installation, deployment, commit, push, real provider effect or real-user data change was made.
+
+### Narrow checks performed in this continuation
+
+| Check | Observed result |
+| --- | --- |
+| Finish records, route and visible-claim unit files | 39 passed |
+| Context units selected by `initial recovery\|pending .*during initial\|physical\|feedback\|hybrid` | 21 passed, 28 skipped |
+| Precondition units selected by `repair` | 17 passed, 163 skipped |
+| `bun run build` | Core and CLI TypeScript builds passed |
+| `git diff --check` | Passed |
+| Protected historical prefix | First 174211 bytes retain SHA-256 `0772ea0009cc49ca5b41ab0a92d6f70a87ed23998b80804049a10a98a2c6e63a` |
+
+The retry-evidence regression first reproduced acceptance of a regressed Outcome, then passed with
+the fix and a matching merged control. Two new positive fixtures initially violated existing route
+heading/current-format status contracts; the fixtures were corrected without weakening validation.
+Active LSP probing reported no diagnostics but could not confirm five push-only files; the successful
+TypeScript build supplies the compilation check.
+
+No broad smoke/full suite, skill contract/behavior evaluation, native lifecycle scenario, compiled
+repair replay or end-to-end provider delivery was run, as requested. T1–T39 remain `not-run` at the
+actor/provider layer. Authentication, semantic adjudication, real preservation/transfer and native
+dispatch behavior are not inferred from source, unit fixtures or inspection reports. No known
+implementation action is intentionally omitted; those acceptance activities remain unperformed
+because the current request excludes them. Earlier `.pi/verification/mv2elq7d-jczez0` outputs were
+not available here and were not counted as current verification.
+
 ## Checkpoint and status
 
 This is an unfinished implementation checkpoint, recorded on 2026-10-12. It accompanies [the STPA plan](change-state-machine-stpa-plan.md); it does not replace that plan or certify its acceptance criteria.

@@ -466,7 +466,9 @@ digest/task IDs and owner authority in `plan.md` initialization proof. If interr
 initial root or task file missing, distinguish recovery from re-plan and code. Run read-only
 `kepler workbench context <change-dir>` and proceed only when `scaffold-recovery: eligible`.
 Before writing, inspect that exact original revision, complete task definitions and IDs, and every
-present file. Confirm all present state is pending and history-free, no attempt/feedback/checkpoint
+present file. Inspect staged state as well as committed and working bytes. A staged scaffold, input, source or
+checkpoint path requires owner reconciliation; do not unstage it or overwrite it to obtain eligibility.
+Confirm all present state is pending and history-free, no attempt/feedback/checkpoint
 or task-owned work exists since the base, and no missing path has earlier execution-bearing history.
 Fill only missing files from the proven original task list; preserve every present byte, author and
 identity. If proof or a locator is unavailable, any task has begun, or deleted history is found,

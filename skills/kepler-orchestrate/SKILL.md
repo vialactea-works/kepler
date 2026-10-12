@@ -369,8 +369,10 @@ review merely because conversation history was compacted or lost.
     the same Base and Head. If no relevant evidence or external condition changed, stop repeated
     dispatches and ask the owner to adjudicate.
 12. **Enter the whole-branch gate.** Before entering the whole-branch gate, re-evaluate
-    **Durable task approval** for every active task. Any failed predicate routes that task to
-    `kepler-code-feedback` and prohibits whole-branch packaging. Only when all active tasks are
+    **Durable task approval** for every active task. Any failed predicate prohibits whole-branch
+    packaging. Apply the task matrix: route state disagreement to the coder, classified findings
+    to their owner, and changed reviewable evidence to feedback. Do not repeat an identical feedback
+    dispatch merely because a predicate failed. Only when all active tasks are
     fully gated may the driver apply **Whole-branch resume matrix**. For a required full or bounded
     review, run `kepler workbench diff --whole-change --target-branch <target-branch>`, then fill
     `references/whole-branch-review-prompt.md` with the actual merge base, current Head, complete
@@ -424,8 +426,12 @@ read its canonical rows instead of reconstructing task status from attempt histo
 progress remains append-only evidence and is opened only for the current task.
 
 Combine each root row with the task's physical latest feedback verdict and freshness. Resolve the
-latest implementation commit as the latest commit touching `tasks/task-N/progress.md`. Use lint
-for the last pass's format, then check its full Base and Head, ancestry, and containment. Before
+latest implementation commit as the latest commit touching `tasks/task-N/progress.md`, and require
+that task artifact to be committed exactly at HEAD with consistent terminal evidence. Context
+reports task feedback freshness through the shared historical checkpoint verifier. Its whole-review
+`range-fresh; clearance-unverified` label proves range coverage only; independently check target,
+clearance scope, outstanding findings and retained evidence before handoff. Use lint for the last
+pass's format, then check its full Base and Head, ancestry, and containment. Before
 every code attempt, validate `tasks/task-N/.base` as the original pre-implementation commit. If it is missing or
 malformed after historical evidence exists, apply **Checkpoint establishment and recovery**;
 never replace it with the resume-time `HEAD`. A task is selectable as complete only when the row

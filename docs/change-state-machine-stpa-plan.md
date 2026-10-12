@@ -1741,3 +1741,39 @@ The earlier planning CLI snapshots predate later `artifact-body.ts` and `context
 | Latest-attempt diagnostic CLI | 2 | Frozen completed definition rejection through admission and context |
 
 All 169 harness cases passed their expected source-CLI assertions. Fixture commits verified `G`; each harness reported `sourceSnapshotUnchanged: true` and removed its temporary repositories. The input-impact and other precondition cases intentionally remained closed when task/review evidence was absent; the case count does not mean every CLI process exited zero. Current detailed outputs are the matching `*-current.log`/`*-results-current.log` files under `.pi/verification/mv2elq7d-jczez0/`; each `*-current-run.log` records its runner summary. The previous resource/docs suite passed244 tests; the latest skills/templates/docs suite passed245 tests across19 files (`parent-t30-requirements-only-resources.log`), and the focused planning-resource plus docs contracts passed41/41 across3 files (`parent-t30-requirements-only-graph-docs-focused.log`). The required default full suite passed874/874 across50 files in297.50s and the core/CLI build passed (`parent-t30-requirements-only-bare-full.log`, `parent-t30-requirements-only-build.log`); the earlier243/244-test and 307.96-second full-suite results remain separately recorded. Fixture approval/review references remain consistency assertions, not authentication or semantic review. These reruns verify current-source CLI mechanics only; native approval, independent semantic classification, interruption actors, and T10/T18–T23/T30–T31/T35–T39 acceptance remain open.
+
+### A1–A18 implementation continuation from checkpoint 8de197a
+
+The continuation preserves all earlier implementation and historical §§1–10. The current action
+inventory and exact changed predicates are recorded in
+[the implementation handoff](change-state-machine-implementation-handoff.md#current-implementation-continuation).
+All eighteen implementation paths are present; source/resource completeness is separate from native
+acceptance and the paused goal's milestone ledger.
+
+New fixes close finish-history deletion/downgrade and same-commit journaling, original-evidence set
+changes, paired shipping incompatibility, historical Qualification ambiguity, sibling route changes,
+omitted pending effects, visible ref/worktree claim gaps and unchanged failed-repair retries.
+Typed retry evidence binds the latest failed Outcome and entry HEAD to changed remaining paths or
+observed request merge; the paired Outcome must preserve that observation. Request Head readback
+permits only the exact finish-owned mutation boundary. Context now validates durable task/checkpoint
+evidence and labels whole-review range freshness as clearance-unverified. Initial-scaffold recovery
+also refuses staged evidence. Copyedited planning, orchestration, finish and template wording matches
+these boundaries.
+
+A10 now has [an opt-in T1–T39 checklist](../tests/skills/change-state-machine-scenarios.md), including
+fixture isolation, retained signing, resource/model/harness identity, dispatch and artifact observations,
+negative controls, provider evidence and cleanup ownership. Its rows remain `not-run`.
+At the user's direction, no broad smoke/full suite, skill behavior/contract validation, native
+lifecycle evaluation, compiled repair replay or provider scenario was executed.
+
+Current narrow checks: 39 finish parser/route/claim units; 21 selected context units (28 skipped);
+17 selected precondition repair units (163 skipped); core/CLI TypeScript build; and Git diff integrity
+passed. These 77 unit assertions are mechanical evidence, not authenticated or semantic approval.
+A retry-evidence negative first reproduced acceptance of a regressed Outcome and then passed after
+repair. Historical fixture/harness claims above were not rerun or promoted to current evidence.
+
+Legacy history remains immutable. Missing modern delivery/Qualification provenance and older
+successive repairs without retry evidence require owner adjudication. This continuation introduces
+no dependency, production orchestrator, installation, commit, push, real-user data mutation or
+real provider delivery. Keep CLI and resources together; do not use an older reader to guess recovery
+authority from the new records.

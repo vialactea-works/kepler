@@ -200,6 +200,7 @@ export class PreconditionService {
         output += "admission: finalization-repair\n";
         output += `repair-of: ${resolvedArgs.recoverFinish}\n`;
         output += `remaining-effects: ${JSON.stringify(finish.remaining)}\n`;
+        if (finish.retryEvidence) output += `retry-evidence: ${JSON.stringify(finish.retryEvidence)}\n`;
       }
       output += `verified-head: ${verifiedHead}\n`;
       output += resolvedArgs.recoverFinish === undefined ? "gate: open\n" : "gate: repair-open\n";
