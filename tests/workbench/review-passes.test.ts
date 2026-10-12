@@ -60,7 +60,65 @@ ${suggestions}`;
 const history = (...passes: readonly string[]): string =>
   `# Whole-branch Review: Demo\n\n${passes.join("\n\n")}`;
 
+const scopedHistory = history(
+  `## Pass 1 — 2026-09-12\n\nBase: ${sha}\nHead: ${head}\nVerdict: changes-requested\nScope: full\nTarget: refs/remotes/origin/main\n\n### Blocking\n- [src/main.ts:12] Fix the regression (violates: behavior)\n\n### Suggestions\n- None.`,
+  `## Pass 2 — 2026-09-13\n\nBase: ${sha}\nHead: ${head}\nVerdict: approved-remediation\nScope: remediation\nTarget: refs/remotes/origin/main\nParent pass: 1\nParent commit: ${sha}\nDelta base: ${head}\nResolutions: [{"finding":"pass-1-blocking-1","evidence":["src/main.ts correction at ${head}"],"verification":"focused test passed"}]\n\n### Blocking\n- None.\n\n### Suggestions\n- Resolved the retained blocker.`,
+);
+
 describe("review pass parser", () => {
+  it.each([false, true])("rejects duplicate implicit identities after first-occurrence normalization (carried=%s)", (carried) => {
+    const finding = "- [src/main.ts:12] kind: code-defect; Fix the regression (violates: behavior)";
+    const repeated = `${finding}\n${finding}`;
+    const result = parseReviewPasses(recognized(
+      { artifact: "review" },
+      carried
+        ? history(pass(1, "2026-09-12", "changes-requested", finding), pass(2, "2026-09-13", "changes-requested", repeated))
+        : history(pass(1, "2026-09-12", "changes-requested", repeated)),
+    ));
+
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      message: "Blocking findings must have unique identities after first-occurrence normalization",
+    }));
+    expect(result.latest).toBeUndefined();
+  });
+
+  it.each(["legacy-global", "migrated", "migrated-explicit"])("retains first physical finding identity across %s structural history", (mode) => {
+    const original = "- [src/main.ts:12] Fix the regression (violates: behavior)";
+    const carried = mode === "migrated-explicit"
+      ? "- [src/main.ts:12] id: pass-1-blocking-1; kind: code-defect; Fix the regression (violates: behavior)"
+      : original;
+    const result = parseReviewPasses(recognized(
+      { artifact: "review", ...(mode === "legacy-global" ? { base: sha, head, verdict: "changes-requested" } : {}) },
+      history(
+        fieldlessPass(1, "2026-09-12", original),
+        mode === "legacy-global"
+          ? fieldlessPass(2, "2026-09-13", carried)
+          : pass(2, "2026-09-13", "changes-requested", carried),
+      ),
+    ));
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.passes[0]).toMatchObject({ provenance: "structural", blocking: [original.slice(2)] });
+    expect(result.passes[0]).not.toHaveProperty("base");
+    expect(result.passes[0]).not.toHaveProperty("head");
+    expect(result.latest?.findings[0]?.id).toBe("pass-1-blocking-1");
+  });
+
+  it("rejects assigning a migrated carried finding a new identity", () => {
+    const result = parseReviewPasses(recognized(
+      { artifact: "review" },
+      history(
+        fieldlessPass(1, "2026-09-12", "- [src/main.ts:12] Fix the regression (violates: behavior)"),
+        pass(2, "2026-09-13", "changes-requested", "- [src/main.ts:12] id: pass-2-blocking-1; kind: code-defect; Fix the regression (violates: behavior)"),
+      ),
+    ));
+
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      message: "A carried finding must retain its first-occurrence identity",
+    }));
+    expect(result.latest).toBeUndefined();
+  });
+
   it("parses complete multi-pass history including changes-requested then approved", () => {
     const result = parseReviewPasses(
       recognized(
@@ -90,6 +148,12 @@ describe("review pass parser", () => {
         blocking: [
           "[src/main.ts:12] Fix the regression (violates: behavior)",
         ],
+        findings: [
+          {
+            id: "pass-1-blocking-1",
+            text: "[src/main.ts:12] Fix the regression (violates: behavior)",
+          },
+        ],
         suggestions: ["Explain the edge case."],
         line: 9,
       },
@@ -101,6 +165,7 @@ describe("review pass parser", () => {
         head,
         verdict: "approved",
         blocking: [],
+        findings: [],
         suggestions: [],
         line: 21,
       },
@@ -528,5 +593,79 @@ Head: ${head}
       expect.objectContaining({ code: "invalid-record" }),
     );
     expect(result.latest).toBeUndefined();
+  });
+
+  it("parses explicit full and bounded remediation provenance with immutable finding identity", () => {
+    const result = parseReviewPasses(recognized({ artifact: "review" }, scopedHistory));
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.passes[0]?.clearance).toEqual({
+      scope: "full",
+      target: "refs/remotes/origin/main",
+    });
+    expect(result.passes[0]?.findings).toEqual([
+      {
+        id: "pass-1-blocking-1",
+        text: "[src/main.ts:12] Fix the regression (violates: behavior)",
+      },
+    ]);
+    expect(result.latest).toMatchObject({
+      verdict: "approved-remediation",
+      clearance: {
+        scope: "remediation",
+        target: "refs/remotes/origin/main",
+        parentPass: 1,
+        parentCommit: sha,
+        deltaBase: head,
+        resolutions: [
+          {
+            finding: "pass-1-blocking-1",
+            evidence: [`src/main.ts correction at ${head}`],
+            verification: "focused test passed",
+          },
+        ],
+      },
+    });
+  });
+
+  it("retains a synthesized finding identity when a later pass adds typed classification", () => {
+    const result = parseReviewPasses(
+      recognized(
+        { artifact: "review" },
+        history(
+          pass(1, "2026-09-12", "changes-requested", "- [src/main.ts:12] Fix the regression"),
+          pass(2, "2026-09-13", "changes-requested", "- [src/main.ts:12] id: pass-1-blocking-1; kind: code-defect; Fix the regression"),
+        ),
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.passes[0]?.findings[0]?.id).toBe("pass-1-blocking-1");
+    expect(result.passes[1]?.findings[0]).toMatchObject({
+      id: "pass-1-blocking-1",
+      kind: "code-defect",
+    });
+  });
+
+  it("rejects remediation clearance in task feedback and malformed resolution JSON", () => {
+    const review = recognized({ artifact: "review" }, scopedHistory);
+    const invalidJson = parseReviewPasses(
+      recognized(
+        { artifact: "review" },
+        scopedHistory.replace(/^Resolutions: .*$/m, "Resolutions: not-json"),
+      ),
+    );
+    const feedback = parseReviewPasses(
+      recognized({ artifact: "feedback" }, scopedHistory),
+    );
+
+    expect(parseReviewPasses(review).diagnostics).toEqual([]);
+    expect(invalidJson.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "invalid-value" }),
+    );
+    expect(feedback.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "invalid-value" }),
+    );
+    expect(feedback.latest).toBeUndefined();
   });
 });

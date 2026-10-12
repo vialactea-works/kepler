@@ -49,7 +49,7 @@ const addTask = (changeDir: string, task: number, status = "pending") => {
   write(
     changeDir,
     `tasks/task-${task}/progress.md`,
-    `# Task Progress: Task ${task} — Test task\n`,
+    `---\nartifact: task-progress\nchange: ${Path.basename(changeDir)}\ntask: ${task}\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task ${task} — Test task\n`,
   );
 };
 
@@ -60,6 +60,20 @@ const prepareTask = (repo: string, changeDir: string, task: number) => {
 
 const basePath = (changeDir: string, task: number) =>
   Path.join(changeDir, "tasks", `task-${task}`, ".base");
+
+const commitFirstAttempt = (
+  repository: string,
+  changeDir: string,
+  task: number,
+) => {
+  write(
+    changeDir,
+    `tasks/task-${task}/progress.md`,
+    `---\nartifact: task-progress\nchange: ${Path.basename(changeDir)}\ntask: ${task}\nstatus: done\nupdated: 2026-09-13\ndecision: accepted\n---\n# Task Progress: Task ${task} — Test task\n\n## Attempt 1 — 2026-09-13\n\n- Outcome: done\n`,
+  );
+  write(repository, "src/task.ts", "export const task = true\n");
+  return commitAll(repository, "implement Task 2");
+};
 
 const failingGit = (
   repository: string,
@@ -136,6 +150,146 @@ describe("diff checkpoint recording", () => {
     expect(recorded.exitCode).toBe(0);
     expect(retry.exitCode).toBe(0);
     expect(Fs.readFileSync(basePath(changeDir, 2), "utf8").trim()).toBe(base);
+  });
+
+  it("reconstructs a missing checkpoint from the first committed attempt", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    const expectedBase = git(repo, "rev-parse", "HEAD");
+    commitFirstAttempt(repo, changeDir, 2);
+
+    const result = await executeDiff({ mode: "record", task: "2", changeDir });
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`base: ${expectedBase}`);
+    expect(Fs.readFileSync(basePath(changeDir, 2), "utf8")).toBe(`${expectedBase}\n`);
+  });
+
+  it("recovers and packages the original Base after correcting historical duplicate Outcomes", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    const expectedBase = git(repo, "rev-parse", "HEAD");
+    commitFirstAttempt(repo, changeDir, 2);
+    const path = Path.join(changeDir, "tasks/task-2/progress.md");
+    const old = Fs.readFileSync(path, "utf8").replace(
+      "- Outcome: done",
+      "- Outcome: blocked\n- Outcome: done",
+    );
+    Fs.writeFileSync(path, old);
+    commitAll(repo, "preserve legacy duplicate terminal fields");
+    Fs.writeFileSync(path, old + "\n## Attempt 2 — 2026-09-14\n\n- Outcome: done\n");
+    commitAll(repo, "append current unambiguous correction");
+
+    const recorded = await executeDiff({ mode: "record", task: "2", changeDir });
+    expect(recorded.exitCode, recorded.stderr).toBe(0);
+    expect(Fs.readFileSync(basePath(changeDir, 2), "utf8")).toBe(`${expectedBase}\n`);
+    Fs.unlinkSync(basePath(changeDir, 2));
+    const output = Path.join(repo, "task.diff");
+    const packaged = await executeDiff({ mode: "task", task: "2", changeDir, out: output });
+    expect(packaged.exitCode, packaged.stderr).toBe(0);
+    expect(packaged.stdout).toContain(`Base: ${expectedBase}`);
+    expect(Fs.readFileSync(path, "utf8")).toBe(old + "\n## Attempt 2 — 2026-09-14\n\n- Outcome: done\n");
+    expect(Fs.existsSync(basePath(changeDir, 2))).toBe(false);
+  });
+
+  it("still rejects structurally invalid historical attempt numbering", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    commitFirstAttempt(repo, changeDir, 2);
+    const path = Path.join(changeDir, "tasks/task-2/progress.md");
+    const valid = Fs.readFileSync(path, "utf8");
+    Fs.writeFileSync(path, valid.replace("## Attempt 1", "## Attempt 2"));
+    commitAll(repo, "record malformed historical numbering");
+    Fs.writeFileSync(path, valid);
+    commitAll(repo, "current grammar alone cannot repair malformed history");
+
+    const result = await executeDiff({ mode: "record", task: "2", changeDir });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("history");
+    expect(Fs.existsSync(basePath(changeDir, 2))).toBe(false);
+  });
+
+  it("packages the canonical historical range when the ignored cache is missing", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    const expectedBase = git(repo, "rev-parse", "HEAD");
+    commitFirstAttempt(repo, changeDir, 2);
+    const output = Path.join(repo, "task.diff");
+
+    const result = await executeDiff({
+      mode: "task",
+      task: "2",
+      changeDir,
+      out: output,
+    });
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`Base: ${expectedBase}`);
+    expect(Fs.readFileSync(output, "utf8")).toContain("src/task.ts");
+    expect(Fs.existsSync(basePath(changeDir, 2))).toBe(false);
+  });
+
+  it("rejects a conflicting checkpoint before writing a task package", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    const expectedBase = git(repo, "rev-parse", "HEAD");
+    await executeDiff({ mode: "record", task: "2", changeDir });
+    const conflictingBase = git(repo, "rev-parse", "HEAD^1");
+    write(changeDir, "tasks/task-2/.base", `${conflictingBase}\n`);
+    commitFirstAttempt(repo, changeDir, 2);
+    const output = Path.join(repo, "task.diff");
+
+    const result = await executeDiff({
+      mode: "task",
+      task: "2",
+      changeDir,
+      out: output,
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain(`historical Base ${expectedBase}`);
+    expect(Fs.readFileSync(basePath(changeDir, 2), "utf8")).toBe(
+      `${conflictingBase}\n`,
+    );
+    expect(Fs.existsSync(output)).toBe(false);
+  });
+
+  it("derives the same historical Base in independent worktrees", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    const expectedBase = git(repo, "rev-parse", "HEAD");
+    commitFirstAttempt(repo, changeDir, 2);
+    const temporaryParent = Fs.mkdtempSync(
+      Path.join(Fs.realpathSync(Os.tmpdir()), "kepler-checkpoint-worktree-"),
+    );
+    const peer = Path.join(temporaryParent, "peer");
+    git(repo, "worktree", "add", "--detach", peer, "HEAD");
+    try {
+      const first = await executeDiff({ mode: "record", task: "2", changeDir });
+      const peerChange = Path.join(peer, Path.relative(repo, changeDir));
+      const second = await executeDiff(
+        { mode: "record", task: "2", changeDir: peerChange },
+        createDiffRuntime({ cwd: () => peer }),
+      );
+
+      expect(first.exitCode, first.stderr).toBe(0);
+      expect(second.exitCode, second.stderr).toBe(0);
+      expect(Fs.readFileSync(basePath(changeDir, 2), "utf8")).toBe(
+        `${expectedBase}\n`,
+      );
+      expect(Fs.readFileSync(basePath(peerChange, 2), "utf8")).toBe(
+        `${expectedBase}\n`,
+      );
+    } finally {
+      git(repo, "worktree", "remove", "--force", peer);
+      Fs.rmSync(temporaryParent, { recursive: true, force: true });
+    }
   });
 
   it.each(["done", "blocked", "in-progress"])(
@@ -257,10 +411,13 @@ describe("diff package ranges", () => {
     write(repo, "src/auth.ts", "export const auth = true\n");
     const head = commitAll(repo, "add auth");
 
-    const result = await executeDiff({ mode: "whole-change" });
+    const result = await executeDiff({
+      mode: "whole-change",
+      targetBranch: "refs/remotes/origin/main",
+    });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("default-branch: main");
+    expect(result.stdout).toContain("target-branch: refs/remotes/origin/main");
     expect(result.stdout).toContain(`Base: ${base}`);
     expect(result.stdout).toContain(`Head: ${head}`);
     Fs.rmSync(result.lastLine);
@@ -347,12 +504,22 @@ describe("diff validation", () => {
     });
     const invalidWhole = await executeDiff({
       mode: "whole-change",
+      targetBranch: "refs/remotes/origin/main",
       changeDir,
     } as never);
+    const malformedTarget = await executeDiff(
+      {
+        mode: "whole-change",
+        targetBranch: "refs/remotes/origin/main~1",
+      },
+      createDiffRuntime({ cwd: () => repo }),
+    );
 
     expect(invalid.exitCode).toBe(2);
     expect(invalid.stderr).toContain("not a commit");
     expect(invalidWhole.exitCode).toBe(2);
+    expect(malformedTarget.exitCode).toBe(2);
+    expect(malformedTarget.stderr).toContain("explicit full --target-branch reference");
   });
 
   it("returns an environment error outside a repository", async () => {
@@ -361,7 +528,7 @@ describe("diff validation", () => {
     );
     try {
       const result = await executeDiff(
-        { mode: "whole-change" },
+        { mode: "whole-change", targetBranch: "refs/remotes/origin/main" },
         createDiffRuntime({ cwd: () => directory }),
       );
       expect(result.exitCode).toBe(2);

@@ -40,9 +40,93 @@ Each invocation also receives:
 - The change directory path (`.kepler/changes/<change>/`), always present.
 - If the task cites `design.md` or `requirements/`, those cited sections supply its acceptance
   criteria. Reference them; do not re-derive them.
-- Project standards from `AGENTS.md`.
+- Task-local Quality constraints and Decision context, verified by `kepler-plan`, plus current
+  project standards from `AGENTS.md`.
+- The selected task's input standing from `kepler workbench context`: `current`,
+  `impact-reviewed-unaffected`, or `legacy-current-confirmed`. For a legacy confirmation, receive the
+  exact task-scoped record and its current input blobs with `historicalInputs: "unknown"`; treat that
+  as current scope only, not as a reconstructed historical snapshot or authorization. Missing, stale,
+  or `legacy-confirmation-stale` evidence returns to the owner.
+- For an explicit execution sequence, the dispatch's validated sequence, selected slot, prior-slot
+  gate result and full committed plan revision. Direct invocations require the same selection
+  evidence; task identity alone does not authorize an out-of-sequence task.
+- The admitted dispatch identity: full `HEAD`, full named source branch ref, fully resolved
+  delivery-target ref, canonical repository root, canonical absolute Git directory for this worktree,
+  and exact assigned worker/run/session identity. Route-backed tasks also receive the owner/change,
+  canonical route/unit, route-source revision, and base/input revision. Obtain the observed worker
+  identity independently from the execution harness, not by copying the expected dispatch value.
+  Direct invocations require the same owner-admitted binding.
 - Optional feedback for this same task from a prior pass. Never read a sibling task's feedback
   or progress file.
+
+## Legacy task quality context
+
+For legacy tasks lacking task-local quality fields, accept dispatch-supplied task-scoped quality
+and decision context verified against the unchanged task, current approved intent, project standards,
+and this skill's self-review rubric. Name its sources and explain unavailable or rejected memory.
+Preserve the task definition, Notes, and history; record the criterion and observed implementation
+check in the new attempt. This context does not add acceptance criteria or change the task's Files.
+A conflict or new obligation returns to planning/intent ownership rather than editing a frozen task.
+New tasks must carry these constraints in the task block; this compatibility path never excuses
+missing quality context or invents historical review or approval.
+
+## Dispatch identity readback
+
+Immediately before checkpoint recording or any task/root/production mutation, and again on resume,
+execute this read-only shell gate from the admitted worktree. Pass seven separately quoted arguments:
+expected full HEAD, full named source branch ref, full resolved delivery-target ref, canonical
+repository root, canonical absolute Git directory, expected exact worker identity, and independently
+harness-observed current worker identity. The driver resolves the target from the route Shipping
+rules and `branch:` or the project's explicit target rules; stop if that target cannot be resolved.
+Read the actual run/session identity through your harness's supported interface; if either identity
+is unavailable, hold without mutation. A worker name, model name, role, self-asserted reference, or copied
+expected value is insufficient. If a harness allocates the identity only at startup, keep the child
+read-only until the driver supplies its bound admission. No new workflow-state file is required.
+
+```sh
+set -eu
+if [ "$#" -ne 7 ]; then
+  printf '%s\n' 'dispatch-identity: stale (missing binding)' >&2
+  exit 1
+fi
+case "$1" in ''|*[!0-9a-f]*) exit 1 ;; esac
+case "$2" in refs/heads/*) ;; *) exit 1 ;; esac
+case "$3" in refs/heads/*|refs/remotes/*) ;; *) exit 1 ;; esac
+git show-ref --verify --quiet "$2" || exit 1
+git show-ref --verify --quiet "$3" || exit 1
+source_upstream="$(git for-each-ref --format='%(upstream)' "$2")"
+target_upstream="$(git for-each-ref --format='%(upstream)' "$3")"
+source_identity="${source_upstream:-$2}"
+target_identity="${target_upstream:-$3}"
+if [ "$2" = "$(git symbolic-ref --quiet HEAD)" ] &&
+   [ "$source_identity" != "$target_identity" ] &&
+   [ -n "$6" ] && [ -n "$7" ] && [ "$6" = "$7" ] &&
+   [ "$(git rev-parse HEAD)" = "$1" ] &&
+   [ "$(cd "$(git rev-parse --show-toplevel)" && pwd -P)" = "$4" ] &&
+   [ "$(cd "$(git rev-parse --absolute-git-dir)" && pwd -P)" = "$5" ]; then
+  case "$2:$3" in
+    refs/heads/*:refs/remotes/*)
+      source_name="${2#refs/heads/}"
+      target_name="${3#refs/remotes/}"
+      target_name="${target_name#*/}"
+      if [ "$source_name" = "$target_name" ] && [ -z "$source_upstream" ]; then
+        printf '%s\n' 'dispatch-identity: stale (source/target mapping unresolved)' >&2
+        exit 1
+      fi
+      ;;
+  esac
+  printf '%s\n' 'dispatch-identity: current'
+else
+  printf '%s\n' 'dispatch-identity: stale' >&2
+  exit 1
+fi
+```
+
+The gate compares the source and target by full refs and configured upstream mapping, not tip
+SHAs; identical or unresolved identities fail. An unchanged plan commit or sequence cannot excuse
+a changed HEAD, source/target branch, worktree, or worker. Failure forbids checkpoint writes,
+status updates, code edits, and attempted restoration; return to fresh driver admission. Success
+verifies identity only, never task selection, approval, or quality.
 
 ## Principles
 
@@ -109,36 +193,75 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
    content, or independently classify a layout as `legacy-unsupported`. Require `plan.md`, the
    assigned task's root ledger status, and the existing linked
    `<change-dir>/tasks/task-N/progress.md` as inputs. If evidence is missing, stop and name the
-   missing input; lint does not check absent files. Check that the selected task identity agrees
-   with its evidence, not that its artifact matches a second format specification. Read the
+   missing input; lint does not check absent files. Check root metadata and body-row parity
+   through lint. Check that the selected task identity agrees with its evidence, not that its
+   artifact matches a second format specification. Read the
    existing task log's latest attempt for the checkpoint and lifecycle decisions. A newly
    initialized log has `status: pending` with no attempt; a previously finalized task log may
    be accepted for correction without changing its local status to `in-progress`.
-4. **Record the stable task checkpoint.** Immediately before the first implementation attempt,
-   first inspect the task's durable state. Run
-   `kepler workbench diff --record --task N --change-dir <change-dir>` only
-   when the row is `pending`, the task log has no attempt, feedback is absent, and the working tree
-   and task history contain no task-owned implementation changes. It writes the full commit identifier
-   to `<change-dir>/tasks/task-N/.base` and excludes that path from git tracking. If the
-   checkpoint already exists, require one full commit identifier that resolves, precedes the first
-   attempt, is an ancestor of current `HEAD` and every valid feedback `Head:`, and matches every
-   recovery candidate; then reuse it and never overwrite it on a blocked retry or a correction
-   after changes-requested feedback. When the checkpoint is missing or malformed after
-   durable evidence exists, reconstruct the historical checkpoint only from unambiguous durable
-   git and task evidence: every valid feedback `Base:` and the first parent of the earliest commit
-   that added the first task attempt must identify the same full commit, which must precede that
-   attempt and be an ancestor of every valid feedback `Head:` and current `HEAD`. Restore and
-   validate only that identifier. Stop and request intervention if candidates are absent,
-   conflicting, ambiguous, or fail ancestry validation. Never invoke `--record` at current `HEAD`
-   after historical evidence exists, and never substitute `HEAD~1` or another guessed base.
+   Before production edits, pass the **Task quality and decision pre-generation gate**. Confirm
+   that the assigned block carries applicable quality constraints and their source, a verified
+   current decision or an explained non-applicability, and project standards. For a legacy task,
+   use the verified dispatch-supplied record under **Legacy task quality context** without changing
+   its frozen block. Cross-check them
+   against the task Steps and current approved intent. Memory can inform a choice, but cannot
+   authorize a deviation or replace committed context. If a required principle conflicts with the
+   task contract, stop for planning/design correction instead of silently redesigning the task.
+   Record the criterion/decision that shaped implementation and its observed code/test evidence,
+   or why it did not apply, in the finalized attempt.
+
+   Run **Dispatch identity readback** before checkpoint validation or any mutation, including on
+   interrupted/resumed work. Compare the admitted full HEAD, named source branch, resolved target,
+   repository/worktree and exact worker identity against independent current readback; the source
+   must differ from the target after configured local/remote mapping, never merely by tip SHA. For a
+   route-backed change, run current context, require its canonical route/unit and source revision to
+   match the dispatch binding, and scan visible proposals/plans, local and visible remote branches,
+   and worktrees for another claim on that unit. Resume only the same owner/change/branch; stop on a
+   competing or ambiguous claim. The scan is local evidence, not distributed exclusivity. An
+   unchanged plan revision is insufficient.
+   For an explicit execution sequence, before checkpoint validation or any mutation, rerun
+   `kepler workbench lint --change-dir <change-dir>` and `kepler workbench context <change-dir>`.
+   Require the task ID to occupy the dispatch's selected slot in the current validated order, the
+   full supplied plan revision to equal the latest commit touching `plan.md`, and the transition
+   history to be `verified`. A changed plan, order, HEAD, worker, branch or repository/worktree identity invalidates
+   the dispatch; stop without writing or recording a checkpoint and ask the driver to recalculate.
+   The driver must supply the previous execution slot and prove its durable fresh task approval
+   before dispatch. A direct human/code call must supply the same selected-slot and predecessor-gate
+   evidence; otherwise route it through `kepler-orchestrate`. Legacy plans without execution
+   metadata retain numeric serial order. The code skill still reads only the assigned task and
+   never inspects sibling feedback or progress.
+
+4. **Validate the stable task checkpoint.** Before any first-attempt `--record`, inspect the
+   exact task's Files and Acceptance, working tree, and attributable Git history for task-owned
+   committed and uncommitted implementation changes. The CLI's mechanical eligibility does not
+   prove the absence of task-owned work. A clean tree, pending row, or empty log cannot establish
+   that absence. If task-owned work already exists or its attribution is ambiguous, stop for owner
+   diagnosis and never record current `HEAD` as a new Base; preserve existing work and evidence.
+   For a standalone invocation, run
+   `kepler workbench diff --record --task N --change-dir <change-dir>` and require successful checkpoint validation before implementation.
+   In a driver-managed invocation, verify the driver established that semantic first-attempt
+   condition or supplied the successful historical checkpoint validation; do not rely on its
+   claim alone. The driver runs the same command before every code dispatch, after the applicable
+   inspection. The CLI records current `HEAD` only for a clean, committed pending task with no
+   attempt or feedback. With durable task history, it derives the canonical Base from the first
+   parent of the earliest committed task-progress revision that adds the first attempt; every
+   valid feedback `Base:` must agree, and the Base must precede the attempt and remain an ancestor
+   of every valid feedback `Head:` and current `HEAD`. The ignored `.base` file is a no-overwrite
+   cache, not authority. The CLI validates an existing cache or reconstructs it only when missing
+   and history proves the value. Stop for a malformed or conflicting cache, missing or ambiguous
+   history, or invalid ancestry. The initial pending-log commit is not first-attempt provenance;
+   never substitute current `HEAD`, `HEAD~1`, or another guessed base.
 5. **Begin the attempt.** Update only the assigned task's root frontmatter metadata entry and
    Markdown row together to `in-progress` before executing implementation steps. A `pending`,
    `blocked`, or `done` task may enter `in-progress`; `done` means only that the latest
    implementation attempt completed. Preserve every sibling metadata entry, row, and file
-   unchanged. At this supported staged boundary, run
-   `kepler workbench lint --change-dir <change-dir>` and stop on any nonzero result before
-   implementation. The empty local task log remains `status: pending` with no attempt at
-   this boundary; do not set its local status to `in-progress` before an attempt exists. Do not
+   unchanged. The root artifact's aggregate `status: complete` means all active implementation
+   rows are done; it never means feedback, whole-branch review, or finish-work passed, and is not
+   a gate. At the initial boundary, the empty local task log remains `status: pending` without an
+   attempt; during correction, preserve its prior finalized status and attempts. At this supported
+   staged boundary, run `kepler workbench lint --change-dir <change-dir>` and stop on any nonzero
+   result before implementation. Do not set the local status to `in-progress` before an attempt
+   exists. Do not
    append an attempt yet: if the process terminates unexpectedly, `in-progress` remains the
    interruption signal.
 6. **Execute the task Steps in order.** Touch only the task's listed files. For ordinary
@@ -155,18 +278,25 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
    against the code-quality checklist. Resolve issues by repeating the relevant specified step and
    its TDD cycle, or finish as blocked when a specified step or criterion cannot be completed.
 9. **Finalize synchronized evidence.** Append exactly one next-numbered dated attempt at the
-   physical end of `<change-dir>/tasks/task-N/progress.md`, preserving every prior attempt. Populate
-   the installed-template lifecycle record completely with the final done or blocked outcome,
+   physical end of `<change-dir>/tasks/task-N/progress.md`, preserving every prior attempt. Give
+   each attempt exactly one terminal `- Outcome: done` or `- Outcome: blocked`; append a new attempt
+   for a correction instead of adding a second Outcome to existing history. Populate the
+   installed-template lifecycle record completely with the final done or blocked outcome,
    created, modified, and deleted paths, every verification command and observed result, the
    Red/Green/Refactor commands and observed results (or the exceptional Red reason and repeatable
    alternative verification), and notes for deviations, decisions, corrections, or concerns.
+   Record the task-local quality constraint and decision that shaped implementation with observed
+   code/test evidence, or its justified non-applicability. Input hashes identify revisions; they do
+   not establish semantic approval.
    Then set the assigned task log frontmatter status: for a done attempt, its local `status` is
    `done`; for a blocked attempt, its local `status` is `blocked`. Preserve prior attempts and
    sibling files unchanged, including every sibling metadata entry and row.
    Then update the same root frontmatter metadata entry
    and Markdown row together from `in-progress` to the matching `done` or `blocked` status.
-   After the synchronized task-progress attempt and root-row transition, run
-   `kepler workbench lint --change-dir <change-dir>` before the outcome-specific commit. A nonzero
+   After the synchronized task-progress attempt and root metadata/row transition, run
+   `kepler workbench lint --change-dir <change-dir>` before the outcome-specific commit. Keep the
+   root aggregate status as an implementation summary only; `complete` is not a review or
+   finish-work result. A nonzero
    lint result is a failed gate: correct the artifacts and rerun lint, or report the exact blocker
    without committing or claiming compliance. Do not change another row or append
    review, feedback, or finish summaries anywhere in progress.

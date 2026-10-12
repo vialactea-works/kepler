@@ -1,5 +1,8 @@
 import type { ArtifactReadResult, RecognizedArtifact } from "./artifact-reader.js";
-import { validateArtifactBody } from "./artifact-body.js";
+import {
+  routeRelationProblems,
+  validateArtifactBody,
+} from "./artifact-body.js";
 import { validateArtifactMetadataSchema } from "./artifact-schemas.js";
 import {
   requiredFields,
@@ -7,6 +10,7 @@ import {
   type ArtifactContract,
   type ArtifactContractDiagnostic,
   type ArtifactContractResult,
+  type RouteUnitContract,
   type SupportedArtifact,
 } from "./artifact-types.js";
 
@@ -265,6 +269,16 @@ export const validateArtifact = (
   const contract = artifactContracts[artifact as SupportedArtifact];
   const body = contract.validateBody(result);
   const diagnostics = [...contract.validate(result), ...body.diagnostics];
+  if (artifact === "route" && diagnostics.length === 0) {
+    const units = result.metadata.units as RouteUnitContract[];
+    for (const problem of routeRelationProblems(units, body.workflow.records))
+      diagnostics.push(
+        diagnostic(result, "invalid-value", problem, {
+          field: "units",
+          expected: "unique, body-aligned acyclic route dependencies",
+        }),
+      );
+  }
   return diagnostics.length === 0
     ? {
         _tag: "valid",

@@ -57,8 +57,8 @@ The code and skills live in:
 The distributed workbench is the supported workflow-mechanics surface. Its operations are:
 
 - `kepler workbench isolate` — check, create, or verify an isolated workspace.
-- `kepler workbench diff` — record checkpoints and package task or change diffs.
-- `kepler workbench precondition` — evaluate finish-work gates.
+- `kepler workbench diff` — record checkpoints and package task or change diffs. Whole-change packaging requires `--target-branch refs/remotes/<remote>/<branch>` or `refs/heads/<branch>`; it never infers a default.
+- `kepler workbench precondition` — evaluate finish-work gates against an explicit `--target-branch` reference.
 - `kepler workbench context` — inspect change artifacts and lifecycle state.
 - `kepler workbench prototype` — create, resume, or verify prototype branches.
 - `kepler workbench lint` — validate one file or one change directory.

@@ -1,8 +1,13 @@
 # Whole-branch code-quality rubric
 
-Use this rubric after reading the complete merge-base-to-head diff. The diff is starting evidence,
-not an inspection boundary: whole-branch quality is visible only when changed causes are traced to
-unchanged consumers, composed behavior, and material work that is absent from the diff.
+In `full` mode, use this rubric after reading the complete merge-base-to-head diff. The diff is
+starting evidence, not an inspection boundary: trace changed causes to unchanged consumers,
+composed behavior and required material work absent from the diff.
+
+In `remediation` mode, validate retained full-review coverage and apply these dimensions to the
+cumulative correction delta, every baseline/suffix blocker and affected consumers/invariants;
+do not repeat a full inspection or reopen unrelated preferences. Invalid provenance, changed intent,
+unclassified material corrections or unbounded integration impact requires full fallback.
 
 For every blocking finding, name the changed cause and affected repository location when they
 differ, explain the present failure, specify the correction, and cite the violated requirement,
@@ -32,8 +37,9 @@ sites, parsers, writers, validators, templates, fixtures, documentation, and ope
 that encode its old shape or semantics. State the assumption each consumer makes and whether the
 new branch preserves it.
 
-Continue beyond the first unaffected consumer. Whole-branch review must account for the broader
-repository surface rather than treating one spot-check as proof of universal compatibility.
+Continue beyond the first unaffected consumer. Full review must account for the broader repository
+surface rather than treating one spot-check as universal compatibility. Remediation review accounts
+for all consumers affected by the cumulative corrections and validates the retained coverage boundary.
 
 ## Requirement and design completeness
 

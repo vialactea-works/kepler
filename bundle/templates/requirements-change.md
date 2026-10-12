@@ -5,7 +5,7 @@ change: <YYYY-MM-DD-change-title>
 status: draft
 created: <YYYY-MM-DD>
 author: <Name <email>>
-decision: accepted | rejected | skipped
+decision: skipped
 ---
 
 <!--
@@ -21,6 +21,7 @@ decision: accepted | rejected | skipped
   Scenarios (WHEN/THEN) are proto-conformance tests — write them so a test could be
   derived directly. OPTIONAL artifact — skip when a change needs no formal requirements.
   Delete this comment block and inline hints before finalizing.
+  A draft or a template decision default is never requester approval. Show the requester the exact final candidate bytes, including status: approved and decision: accepted, and wait for explicit approval of that revision before writing it. Commit exactly those approved bytes; any later intent edit needs new approval.
   Before creating this artifact, read the configured Git identity with `git config user.name` and
   `git config user.email`, then write `author: Name <email>` using both configured values. If either
   configured value is missing, ask the user or stop with a blocker rather than inventing an identity.

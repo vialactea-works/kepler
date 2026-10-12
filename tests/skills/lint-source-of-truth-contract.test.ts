@@ -42,7 +42,8 @@ describe("lint is the artifact-format authority for pipeline skills", () => {
     const review = readSkill("kepler-review")
     const finish = readSkill("kepler-finish-work")
 
-    expect(feedback).toMatch(/base.*checkpoint.*ancestor of head/is)
+    expect(feedback).toContain("valid feedback Bases against the first parent")
+    expect(feedback).toContain("Base-to-Head and Head-to-current-`HEAD` ancestry")
     expect(review).toMatch(/durable approved feedback.*branch inspection/is)
     expect(finish).toMatch(/precondition command.*completion readiness.*not.*artifact-format/is)
   })

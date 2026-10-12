@@ -26,11 +26,13 @@ describe("kepler-finish-work contract", () => {
     expect(preconditions).toMatch(/exact root task ledger/i)
     expect(preconditions).toMatch(/physically last\s+task\s+attempt.*(?:`done`|`Outcome: done`)/is)
     expect(preconditions).toMatch(/physically last task feedback pass.*valid.*fresh.*`approved`/is)
+    expect(preconditions).toMatch(/task-progress artifact is tracked and committed at `HEAD`.*latest\s+implementation commit resolves/is)
     expect(preconditions).toMatch(/physically last whole-branch review pass.*valid.*`approved`/is)
     expect(preconditions).toMatch(/no blocking findings/i)
     expect(preconditions).toMatch(/full test suite.*build/is)
     expect(preconditions).toMatch(/output verbatim/i)
     expect(preconditions).toMatch(/do not.*(?:create|change|write).*`finish\.md`/is)
+    expect(preconditions).toMatch(/`verified-head: <full-commit>`.*compare it with current\s+`HEAD`/is)
   })
 
   it("limits the explicit waiver to material-change ancestry", () => {
@@ -58,10 +60,13 @@ describe("kepler-finish-work contract", () => {
     expect(skill).not.toMatch(/append(?:s|ing)? (?:a )?finish (?:entry|section) to `?progress\.md`?/i)
   })
 
-  it("commits the attempt after gates and spec synchronization but before effects", () => {
+  it("commits the attempt after read-only gates and before specs or delivery", () => {
     const process = section(readFinishWork(), "## Process")
 
-    expect(process).toMatch(/preconditions.*synchroniz.*specification.*commit/is)
+    expect(process.indexOf("**Validate synchronization read-only.**")).toBeLessThan(process.indexOf("**Commit intent.**"))
+    expect(process.indexOf("**Commit intent.**")).toBeLessThan(process.indexOf("**Synchronize inside the Attempt.**"))
+    expect(process.indexOf("**Synchronize inside the Attempt.**")).toBeLessThan(process.indexOf("**Execute then qualify the strategy.**"))
+    expect(process).toContain("before canonical specifications or any external finish action")
     expect(process).toMatch(/append.*`Attempt N`.*commit.*change branch/is)
     expect(process).toMatch(/before.*external.*finish\s+action/is)
     expect(process).toMatch(/template-defined.*attempt.*durable.*intent/is)
@@ -80,7 +85,9 @@ describe("kepler-finish-work contract", () => {
   it("allows only finish-owned post-gate mutations for the same attempt", () => {
     const boundary = section(readFinishWork(), "## Post-gate mutation boundary")
 
-    expect(boundary).toMatch(/capture.*gate-entry.*HEAD/is)
+    expect(boundary).toMatch(/gate's `verified-head` as gate-entry `HEAD`/is)
+    expect(boundary).toMatch(/recheck.*branch.*worktree identity.*target repository/is)
+    expect(boundary).toMatch(/branch change keeps the same\s+commit SHA/is)
     expect(boundary).toMatch(/canonical.*specs.*route.*map.*numbered.*finish/is)
     expect(boundary).toMatch(/finish-owned.*do not stale.*same attempt/is)
     expect(boundary).toMatch(/unrelated material edit.*abort/is)
@@ -137,6 +144,25 @@ describe("kepler-finish-work contract", () => {
     expect(failures).toMatch(/surviving branch or base/i)
     expect(failures).toMatch(/push.*read\s+back.*remote/is)
     expect(failures).toMatch(/never.*report.*completed/is)
+  })
+
+  it("separates linked repair from delivery and qualifies routes on the surviving branch", () => {
+    const skill = readFinishWork()
+    const recovery = section(skill, "## Resume and recovery")
+    const process = section(skill, "## Process")
+    const flow = section(skill, "## Process flow")
+    expect(recovery).toContain("--recover-finish <original-delivery-attempt>")
+    expect(recovery).toContain("gate: repair-open")
+    expect(recovery).toMatch(/cannot enter the ordinary synchronization\/delivery path/)
+    expect(recovery).toMatch(/Never repeat merge,.*request creation, or branch\/worktree cleanup/is)
+    expect(recovery).toMatch(/dirty surviving tree.*closes automated repair.*Do not discard, stage, pre-commit/is)
+    expect(process).toMatch(/Require the strategy to satisfy.*before any Attempt or effects/is)
+    expect(process).toMatch(/merge-required route.*request-open strategy stops.*do not create.*request or spec write/is)
+    expect(process).toMatch(/Read back.*qualifying.*effect before route mutation/is)
+    expect(flow).toContain('"Append and commit Attempt N" -> "Synchronize specs + commit inside Attempt"')
+    expect(flow).toContain('"Observed shipping qualification?" -> "Apply route intent + verify on surviving branch" [label="yes"]')
+    expect(flow).not.toContain('"Synchronize specs + commit" -> "Resolve strategy + route intent"')
+    expect(flow).toContain('"Gate repair-open?" -> "Commit linked reconcile-delivery Attempt"')
   })
 
   it("reports only verified effects and persisted history", () => {

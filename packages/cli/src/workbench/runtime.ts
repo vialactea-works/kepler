@@ -68,11 +68,11 @@ export interface IsolationRuntime {
   readonly git: IsolationGitPort;
 }
 
-const environment = {
+const environment = Object.freeze({
   ...process.env,
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
-};
+});
 
 const productionProcess: ProcessPort = {
   run: (command, args, cwd) => {
@@ -88,6 +88,13 @@ const productionProcess: ProcessPort = {
     };
   },
 };
+
+const productionRun = productionProcess.run;
+
+export const nativeProcessEnvironment = (
+  port: ProcessPort,
+): Readonly<Record<string, string | undefined>> | undefined =>
+  port === productionProcess && port.run === productionRun ? environment : undefined;
 
 const productionFileSystem: IsolationFileSystemPort = {
   pathExists: async (sourcePath) => {

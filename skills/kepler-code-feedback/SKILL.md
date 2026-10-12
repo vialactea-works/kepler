@@ -27,8 +27,15 @@ for genuine justification and sufficiency; it is not approved automatically.
 
 Every invocation supplies exactly one existing active `Task N` from the change's `plan.md` and:
 
-- The task block, including its acceptance criteria and cited constraints.
-- The implementation context from the code attempt, including the implementation's red/green/refactor
+- The task block, including its acceptance criteria, task-local quality constraints and source,
+  verified decision context or non-applicability, and cited requirements/design constraints.
+  For a legacy task lacking quality fields, receive the same verified dispatch-supplied quality
+  and decision context used by code, plus its latest attempt's criterion/check evidence. Verify it
+  against the unchanged task, current approved intent, cited repository standards and local rubric;
+  never require rewriting the frozen block or adding Acceptance/Files. New tasks carry the context
+  in their own block, and legacy compatibility never waives the quality review.
+- The implementation context from the code attempt, including the implementation's quality/decision
+  evidence plus red/green/refactor
   or exception evidence and task-local verification results.
 - A stable task diff package from the task's unchanged
   `<change-dir>/tasks/task-N/.base` checkpoint through the implementation head. The package must
@@ -36,12 +43,22 @@ Every invocation supplies exactly one existing active `Task N` from the change's
 - The task's latest implementation evidence from
   `<change-dir>/tasks/task-N/progress.md`. This is the detailed claim source; no separate
   implementer report is required.
+- The current task input standing from `kepler workbench context`. For
+  `legacy-current-confirmed`, receive the scoped current confirmation and its exact current input
+  blobs; `historicalInputs: "unknown"` means those blobs are not historical evidence. Judge the
+  implementation against the current approved contract and located code, not reference strings or
+  hashes alone.
+- For a cumulative range containing prerequisites or peer work, bounded peer-approved commit/path
+  context: peer task ID, full reviewed Base/Head, exact feedback commit/path and approval boundary,
+  and each covered production commit with its changed paths. `none` means no peer context, never
+  permission to omit unattributed changes. This evidence does not authorize new task obligations.
 - The binding requirements and design constraints cited by the task.
 - The change directory path.
 - Project standards from `AGENTS.md` or its repository equivalent.
 
 The numeric identity controls every task path. Never infer identity from a title, accept multiple
-tasks, or read a sibling task's evidence.
+tasks, or crawl a sibling task's evidence. The only peer-evidence exception is independent readback
+of the exact committed approval artifact and commit/path context supplied for this cumulative range.
 
 ## References
 
@@ -84,6 +101,19 @@ The stable task diff package is the inspection boundary. Judge the changed lines
 task's acceptance criteria, cited requirements and design constraints, latest task-local
 implementation claims, project standards, and this skill's quality rubric.
 
+Retain the original Base and full cumulative range on resume, including prerequisite/peer commits.
+Use commit-attributed review: enumerate `git log --reverse --format=%H <Base>..<Head>`, read each
+commit's changed paths and diff, and independently verify supplied peer approval by reading
+`git show <feedback-commit>:<feedback-path>` and that artifact-only commit's path list. Its recorded
+reviewed Base/Head must cover the claimed peer commits and be valid at the named approval boundary.
+Missing, stale-at-boundary, forged, or incomplete peer context supplies no exemption. Do not demand
+that old peer certification cover later Task N work: inspect those new commits yourself.
+Never exclude whole filenames, crop the range, or rebase onto the prerequisite. In overlapping
+files, distinguish certified peer changes from unapproved Task N changes by their actual commits;
+inspect both their diffs and the resulting code against Task N's unchanged contract. Unknown or
+out-of-scope changes require a located blocking finding or bounded adjudication, never assumed
+approval. A peer approval cannot clear a new Task N defect or replace this task's feedback.
+
 Do not crawl the broader repository. When changed code raises one concrete, named risk in an
 unchanged consumer or contract, inspect only that named location and no unrelated repository
 area. Identify the causal changed location and the exact outside location inspected. If that
@@ -94,15 +124,22 @@ search.
 
 1. Run the generation preflight and stop without inspection or writes unless it succeeds.
 2. Validate the exact task identity and reject wrong-scope input before inspection or writes.
-3. Validate the diff package and checkpoint. Require full commit identifiers, require the package
-   base to equal the task's recorded checkpoint, and require base to be an ancestor of head and
-   head to be an ancestor of current `HEAD`. Stop on a missing, malformed, inverted, unreachable,
-   or mismatched range.
+3. Validate the diff package and checkpoint. Require full commit identifiers and require the
+   package Base to equal the CLI-verified historical task checkpoint, not only the ignored `.base`
+   cache. The CLI checks all valid feedback Bases against the first parent of the earliest
+   committed task attempt, then validates Base-to-Head and Head-to-current-`HEAD` ancestry. Stop
+   on a missing, malformed, inverted, unreachable, or mismatched range.
 4. Read only the assigned task block, its cited binding constraints, project standards, the latest
-   physical attempt in that task's progress file, the supplied diff package, and this skill's
-   local rubric. Confirm every nested task identity equals the requested `Task N`.
+   physical attempt in that task's progress file, the supplied diff package, this skill's
+   local rubric, and explicitly supplied peer commit/path context. Independently verify each peer
+   feedback artifact-only commit, covered range and changed paths at its approval boundary.
+   The assigned artifact identities must equal `Task N`; explicitly labelled peer IDs identify
+   contextual evidence only, never a second task to review or mutate.
 5. Inspect the complete task diff for correctness, meaningful tests, security, project idioms,
-   structural quality, scope, hygiene, and boundary compliance. Follow the bounded-inspection rule
+   structural quality, scope, hygiene, and boundary compliance. Verify the attempt's quality/decision
+   evidence against the task-local constraint (or verified legacy dispatch-supplied record), its
+   cited source, current approved intent, and located implementation/tests; hashes or a reported
+   decision do not substitute for semantic review. Follow the bounded-inspection rule
    for any concrete outside risk.
 6. Check every acceptance criterion and every latest implementation claim against located diff or
    permitted-risk evidence. Claims never substitute for the diff.
@@ -113,8 +150,9 @@ search.
     preservation of the pre-existing staged state before handoff.
 
 An approved pass completes the refactor gate and returns control to the driver. Requested changes
-remain append-only and return the same task to a new correction cycle. After a finding is addressed,
-the correction cycle must include relevant verification before a new verdict. The reviewer never
+remain append-only and follow kind-specific routing before freshness checks. Confirmed code defects
+return the same task to a new correction cycle with relevant verification before a new verdict; evidence
+gaps require located-evidence adjudication and intent defects return upstream. The reviewer never
 edits implementation or progress artifacts.
 
 ## Review dimensions
@@ -127,13 +165,20 @@ edits implementation or progress artifacts.
 - **Idioms and standards:** Naming, structure, error handling, and style follow project standards.
 - **Structural quality:** The changed code satisfies the local task-diff quality rubric without
   speculative redesign.
-- **Scope and hygiene:** Every changed path belongs to the assigned task; there are no stubs, dead
-  code, debug output, TODOs, commented-out blocks, or unrelated edits.
+- **Scope and hygiene:** Attribute changes by commit and located evidence. A cumulative range may
+  contain independently certified prerequisite/peer changes, including in the assigned task's files;
+  do not hide overlapping new task changes or accept unrelated edits through a filename exemption.
+  There are no stubs, dead code, debug output, TODOs, or commented-out blocks.
 - **Boundaries:** The implementation does not cross a boundary forbidden by the plan or design.
 
-Every finding names the exact file and location, explains the defect and required correction, and
-cites the violated criterion or standard. Suggestions are optional improvements and never disguise
-an unresolved requirement.
+Every Blocking finding names the exact file and location, explains the defect and required
+correction, cites the violated criterion or standard, and records `id: pass-N-blocking-M` plus one
+kind: `code-defect`, `evidence-gap`, or `intent-defect`. Preserve the first-occurrence identity and
+kind when carrying a finding forward; the kind guides routing but does not alter the verdict. For a
+legacy untyped finding, synthesize identity from its first physical pass without rewriting history.
+Keep `cannot verify from diff` as the legacy evidence-gap fallback, and adjudicate ambiguous kinds
+rather than inventing a code defect. Suggestions are optional improvements and never disguise an
+unresolved requirement.
 
 ## Verdicts
 
@@ -232,11 +277,14 @@ Return the task identity, full reviewed Base and Head, verdict, blocking count, 
 and feedback commit identifier. Do not create a separate detailed report.
 
 For `approved`, return control to the driver so it can select the next task for `kepler-code` or,
-after every task is approved, enter whole-branch `kepler-review`. For ordinary
-`changes-requested`, the driver returns the same task to code. For an unresolved
-`cannot verify from diff` blocker, the driver adjudicates only the named risk and then supplies
-located evidence for another feedback pass or sends a confirmed gap to code. Never invoke another
-pipeline skill yourself.
+after every task is approved, enter whole-branch `kepler-review`. For `changes-requested`, preserve
+and classify every blocker before freshness routing. A confirmed `code-defect` returns the same
+task to code with relevant verification; an `evidence-gap` needs independent located-evidence
+adjudication on the unchanged Base and Head; an `intent-defect` returns to the owning proposal/design
+stage for revision and approval. Adjudicate ambiguous legacy kinds rather than inventing defects.
+Retain `cannot verify from diff` as the legacy evidence-gap fallback and inspect only its named risk.
+New located evidence may justify another same-range feedback pass without a code change; unchanged
+useful inputs do not justify an identical retry. Never invoke another pipeline skill yourself.
 
 ## Process flow
 

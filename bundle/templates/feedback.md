@@ -36,7 +36,7 @@ Verdict: approved | changes-requested | skipped
 ### Blocking
 
 <!-- hint: use "- None." when approval has no blocking findings -->
-- [<file>:<loc>] <what is wrong> — <what to change> (violates: <criterion / standard>)
+- [<file>:<loc>] id: pass-N-blocking-M; kind: code-defect | evidence-gap | intent-defect; <what is wrong> — <what to change> (violates: <criterion / standard>)
 
 ### Suggestions
 

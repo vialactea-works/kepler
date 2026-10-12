@@ -11,8 +11,8 @@ describe("kepler-plan TDD handoff", () => {
   it("plans distinct red, green, and behavior-preserving refactor steps before verification", () => {
     const phases = ["**Red:**", "**Green:**", "**Refactor:**"].map((phase) => contract.indexOf(phase))
     const taskSpecification = section(skill, "## Process")
-      .split("7. **Specify each task.**")[1]
-      ?.split("8. **Confirm or auto-reflect.**")[0] ?? ""
+      .split("8. **Specify each task.**")[1]
+      ?.split("9. **Confirm or auto-reflect.**")[0] ?? ""
 
     expect(phases.every((index) => index >= 0)).toBe(true)
     expect(phases[0]).toBeLessThan(phases[1])
@@ -40,8 +40,8 @@ describe("kepler-plan TDD handoff", () => {
     expect(contract).toMatch(/changes-requested.*same task.*correction.*verification/is)
     expect(section(skill, "## Self-review")).toMatch(/fresh committed.*approved.*whole-branch review/is)
     const decomposition = section(skill, "## Process")
-      .split("6. **Decompose.**")[1]
-      ?.split("7. **Specify each task.**")[0] ?? ""
+      .split("7. **Decompose.**")[1]
+      ?.split("8. **Specify each task.**")[0] ?? ""
     expect(decomposition).toMatch(/one task lane|serial execution/is)
     expect(decomposition).not.toMatch(/run in parallel/i)
   })

@@ -53,6 +53,7 @@ export function makeRepo(options?: { defaultBranch?: string }): string {
   write(directory, "README.md", "# fixture\n");
   git(directory, "add", "-A");
   git(directory, "commit", "-q", "-m", "initial");
+  git(directory, "update-ref", `refs/remotes/origin/${options?.defaultBranch ?? "main"}`, "HEAD");
   return directory;
 }
 

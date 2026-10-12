@@ -132,7 +132,7 @@ describe("Kepler skill workbench contract", () => {
       "kepler workbench context <change-dir>",
     );
     expect(skills["kepler-finish-work"]).toContain(
-      "kepler workbench precondition \\\n  --change-dir <change-dir> --test-cmd '<full test suite && build/typecheck>'",
+      "kepler workbench precondition \\\n  --change-dir <change-dir> --test-cmd '<full test suite && build/typecheck>' \\\n  --target-branch <full-target-reference>",
     );
     expect(skills["kepler-finish-work"]).toContain("--whole-change-waived");
   });

@@ -11,6 +11,14 @@ import { validateArtifact } from "./artifact-contracts.js";
 import { spawnSync } from "node:child_process";
 import type { ProcessPort, ProcessResult } from "./runtime.js";
 import { resolveProjectDataPath } from "./project-data-path.js";
+import { isFullTargetBranchReference } from "./git-reference.js";
+import {
+  readTaskFeedbackRanges,
+  resolveTaskCheckpoint,
+  type TaskCheckpointGit,
+  type TaskCheckpointResult,
+  type TaskFeedbackRange,
+} from "./task-checkpoint.js";
 
 export interface RecordDiffArguments {
   readonly mode: "record";
@@ -34,6 +42,7 @@ export interface BaseDiffArguments {
 
 export interface WholeChangeDiffArguments {
   readonly mode: "whole-change";
+  readonly targetBranch: string;
   readonly out?: string;
   readonly changeDir?: string;
 }
@@ -117,6 +126,22 @@ export interface DiffGitPort {
     cwd: string,
     base: string,
     head: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly statusPorcelain?: (
+    cwd: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly pathHistory?: (
+    cwd: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly blobAt?: (
+    cwd: string,
+    commit: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly firstParent?: (
+    cwd: string,
+    commit: string,
   ) => ProcessResult | Promise<ProcessResult>;
 }
 
@@ -211,6 +236,14 @@ const createGitPort = (processPort: ProcessPort): DiffGitPort => ({
     processPort.run("git", ["diff", "-U10", `${base}..${head}`], cwd),
   changedFiles: (cwd, base, head) =>
     processPort.run("git", ["diff", "--name-only", `${base}..${head}`], cwd),
+  statusPorcelain: (cwd) =>
+    processPort.run("git", ["status", "--porcelain", "--untracked-files=all"], cwd),
+  pathHistory: (cwd, sourcePath) =>
+    processPort.run("git", ["log", "--format=%H", "HEAD", "--", sourcePath], cwd),
+  blobAt: (cwd, commit, sourcePath) =>
+    processPort.run("git", ["show", `${commit}:${sourcePath}`], cwd),
+  firstParent: (cwd, commit) =>
+    processPort.run("git", ["rev-parse", "--verify", `${commit}^1`], cwd),
 });
 
 export const createDiffRuntime = (
@@ -351,6 +384,84 @@ const resolveTask = async (
 const taskBaseFile = (changeDir: string, task: string): string =>
   Path.join(changeDir, "tasks", `task-${task}`, ".base");
 
+const checkpointGit = (runtime: DiffRuntime): TaskCheckpointGit => ({
+  pathHistory: (root, sourcePath) =>
+    runtime.git.pathHistory?.(root, sourcePath) ?? {
+      status: 2,
+      stdout: "",
+      stderr: "task progress history is unavailable",
+    },
+  blobAt: (root, commit, sourcePath) =>
+    runtime.git.blobAt?.(root, commit, sourcePath) ?? {
+      status: 2,
+      stdout: "",
+      stderr: "task progress history is unavailable",
+    },
+  firstParent: (root, commit) =>
+    runtime.git.firstParent?.(root, commit) ?? {
+      status: 2,
+      stdout: "",
+      stderr: "task attempt parent is unavailable",
+    },
+  resolveCommit: (root, reference) => runtime.git.resolveCommit(root, reference),
+  isAncestor: (root, base, head) =>
+    runtime.git.isAncestor(root, base, head),
+});
+
+const historicalTaskCheckpoint = async (
+  runtime: DiffRuntime,
+  operation: DiffOperation,
+  root: string,
+  changeDir: string,
+  task: string,
+): Promise<TaskCheckpointResult | DiffResult> => {
+  const currentHead = await fullCommit(
+    runtime,
+    operation,
+    root,
+    "HEAD",
+    "cannot resolve HEAD",
+  );
+  if (typeof currentHead !== "string") return currentHead;
+  const feedbackPath = Path.join(
+    changeDir,
+    "tasks",
+    `task-${task}`,
+    "feedback.md",
+  );
+  let feedbackRanges: readonly TaskFeedbackRange[] = [];
+  if (await runtime.fileSystem.pathExists(feedbackPath)) {
+    const source = await readText(runtime, feedbackPath);
+    if (typeof source !== "string") return { ...source, operation };
+    const parsed = await readTaskFeedbackRanges(
+      feedbackPath,
+      source,
+      Path.basename(changeDir),
+      Number(task),
+    );
+    if (parsed.kind === "unverified")
+      return failure(
+        operation,
+        `task feedback checkpoint evidence is unverified: ${parsed.reason}`,
+      );
+    feedbackRanges = parsed.ranges;
+  }
+  return resolveTaskCheckpoint(
+    checkpointGit(runtime),
+    root,
+    Path.relative(
+      root,
+      Path.join(changeDir, "tasks", `task-${task}`, "progress.md"),
+    )
+      .split(Path.sep)
+      .join("/"),
+    Number(task),
+    Path.basename(changeDir),
+    currentHead,
+    feedbackRanges,
+  );
+};
+
 const taskRowStatus = async (
   runtime: DiffRuntime,
   changeDir: string,
@@ -378,6 +489,7 @@ const hasAttempt = (source: string): boolean =>
 
 const canRecordFirst = async (
   runtime: DiffRuntime,
+  root: string,
   changeDir: string,
   task: string,
 ): Promise<DiffResult | undefined> => {
@@ -415,6 +527,35 @@ const canRecordFirst = async (
     return failure(
       "record",
       `cannot create missing checkpoint for Task ${task} after durable task evidence; historical recovery requires unambiguous durable git and task evidence or intervention`,
+    );
+  if (!runtime.git.statusPorcelain || !runtime.git.blobAt)
+    return failure("record", "cannot verify a clean initial task checkpoint");
+  const statusResult = await runtime.git.statusPorcelain(root);
+  if (!successful(statusResult) || statusResult.stdout.trim() !== "")
+    return failure(
+      "record",
+      "cannot create a first task checkpoint with an uncommitted worktree",
+    );
+  const currentHead = await fullCommit(
+    runtime,
+    "record",
+    root,
+    "HEAD",
+    "cannot resolve HEAD",
+  );
+  if (typeof currentHead !== "string") return currentHead;
+  const committedProgress = await runtime.git.blobAt(
+    root,
+    currentHead,
+    Path.relative(root, taskProgress).split(Path.sep).join("/"),
+  );
+  if (
+    !successful(committedProgress) ||
+    committedProgress.stdout !== progressSource
+  )
+    return failure(
+      "record",
+      `Task ${task} progress must be tracked and unchanged at HEAD before the first checkpoint`,
     );
   return undefined;
 };
@@ -597,12 +738,28 @@ const recordCheckpoint = async (
   const taskValidation = await resolveTask(runtime, operation, change, task);
   if (typeof taskValidation !== "string") return taskValidation;
   const checkpoint = taskBaseFile(change, task);
+  const checkpointExists = await runtime.fileSystem.pathExists(checkpoint);
+  const historical = await historicalTaskCheckpoint(
+    runtime,
+    operation,
+    root,
+    change,
+    task,
+  );
+  if ("exitCode" in historical) return historical;
+  if (historical.kind === "unverified")
+    return failure(operation, `task checkpoint is unverified: ${historical.reason}`);
   let base: string;
   const outputs: string[] = [];
-  if (await runtime.fileSystem.pathExists(checkpoint)) {
+  if (checkpointExists) {
     const checked = await readCheckpoint(runtime, operation, checkpoint, root);
     if (typeof checked !== "string") return checked;
-    base = checked;
+    if (historical.kind === "verified" && checked !== historical.base)
+      return failure(
+        operation,
+        `task checkpoint conflicts with historical Base ${historical.base}; preserving existing checkpoint`,
+      );
+    base = historical.kind === "verified" ? historical.base : checked;
     const head = await fullCommit(
       runtime,
       operation,
@@ -618,17 +775,22 @@ const recordCheckpoint = async (
         `task checkpoint is not an ancestor of HEAD: ${base}`,
         ancestor,
       );
+  } else if (historical.kind === "verified") {
+    base = historical.base;
   } else {
-    const first = await canRecordFirst(runtime, change, task);
+    const first = await canRecordFirst(runtime, root, change, task);
     if (first) return first;
-    base = (await fullCommit(
+    const currentHead = await fullCommit(
       runtime,
       operation,
       root,
       "HEAD",
       "cannot resolve HEAD",
-    )) as string;
-    if (typeof base !== "string") return base;
+    );
+    if (typeof currentHead !== "string") return currentHead;
+    base = currentHead;
+  }
+  if (!checkpointExists) {
     try {
       await runtime.fileSystem.mkdir(Path.dirname(checkpoint));
       await runtime.fileSystem.writeFile(checkpoint, `${base}\n`);
@@ -703,24 +865,35 @@ const packageTask = async (
   const validation = await resolveTask(runtime, operation, change, task);
   if (typeof validation !== "string") return validation;
   const checkpoint = taskBaseFile(change, task);
-  if (!(await runtime.fileSystem.pathExists(checkpoint)))
+  const checkpointExists = await runtime.fileSystem.pathExists(checkpoint);
+  const historical = await historicalTaskCheckpoint(
+    runtime,
+    operation,
+    root,
+    change,
+    task,
+  );
+  if ("exitCode" in historical) return historical;
+  if (historical.kind === "unverified")
+    return failure(operation, `task checkpoint is unverified: ${historical.reason}`);
+  let base: string;
+  if (checkpointExists) {
+    const checked = await readCheckpoint(runtime, operation, checkpoint, root);
+    if (typeof checked !== "string") return checked;
+    if (historical.kind === "verified" && checked !== historical.base)
+      return failure(
+        operation,
+        `task checkpoint conflicts with historical Base ${historical.base}; preserving existing checkpoint`,
+      );
+    base = historical.kind === "verified" ? historical.base : checked;
+  } else if (historical.kind === "verified") {
+    base = historical.base;
+  } else {
     return negative(
       operation,
       `no BASE recorded for Task ${task} — run --record before dispatching an implementer`,
     );
-  let content: string;
-  try {
-    content = await runtime.fileSystem.readFile(checkpoint);
-  } catch (error) {
-    return negative(
-      operation,
-      `${checkpoint} is unreadable — re-run --record: ${String(error)}`,
-    );
   }
-  if (content.trim() === "")
-    return negative(operation, `${checkpoint} is empty — re-run --record`);
-  const base = await readCheckpoint(runtime, operation, checkpoint, root);
-  if (typeof base !== "string") return base;
   const head = await fullCommit(
     runtime,
     operation,
@@ -810,44 +983,23 @@ const packageBase = async (
   );
 };
 
-const defaultBranch = async (
-  runtime: DiffRuntime,
-  root: string,
-): Promise<string | DiffResult> => {
-  const remoteHead = await runtime.git.remoteDefaultBranch(root);
-  if (successful(remoteHead)) {
-    const ref = text(remoteHead).replace(/^refs\/remotes\//, "");
-    if (
-      ref !== "" &&
-      typeof (await fullCommit(
-        runtime,
-        "whole-change",
-        root,
-        ref,
-        "default branch",
-      )) === "string"
-    )
-      return ref;
-  }
-  for (const candidate of ["origin/main", "origin/master", "main", "master"]) {
-    const commit = await runtime.git.resolveCommit(root, candidate);
-    if (successful(commit) && /^[0-9a-f]{40}$/.test(text(commit)))
-      return candidate;
-  }
-  return failure(
-    "whole-change",
-    "cannot determine the default branch (no origin/HEAD, main, or master)",
-  );
-};
-
 const packageWholeChange = async (
   args: WholeChangeDiffArguments,
   runtime: DiffRuntime,
 ): Promise<DiffResult> => {
   const root = await repositoryRoot(runtime, args.mode, runtime.cwd());
   if (typeof root !== "string") return root;
-  const ref = await defaultBranch(runtime, root);
-  if (typeof ref !== "string") return ref;
+  const ref = args.targetBranch;
+  if (!isFullTargetBranchReference(ref))
+    return failure("whole-change", "requires an explicit full --target-branch reference");
+  const targetCommit = await fullCommit(
+    runtime,
+    args.mode,
+    root,
+    ref,
+    "target branch",
+  );
+  if (typeof targetCommit !== "string") return targetCommit;
   const head = await fullCommit(
     runtime,
     args.mode,
@@ -856,7 +1008,7 @@ const packageWholeChange = async (
     "cannot resolve HEAD",
   );
   if (typeof head !== "string") return head;
-  const merge = await runtime.git.mergeBase(root, ref, head);
+  const merge = await runtime.git.mergeBase(root, targetCommit, head);
   if (!successful(merge))
     return commandError(
       args.mode,
@@ -885,7 +1037,7 @@ const packageWholeChange = async (
     args.mode,
     "success",
     0,
-    `default-branch: ${ref}\n${packaged.stdout}`,
+    `target-branch: ${ref}\n${packaged.stdout}`,
   );
 };
 

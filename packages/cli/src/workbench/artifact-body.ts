@@ -1,6 +1,9 @@
+import { createHash } from "node:crypto";
 import { marked, type Token } from "marked";
+import { validateTaskInputContextSchema } from "./artifact-schemas.js";
 import type { RecognizedArtifact } from "./artifact-reader.js";
 import { parseReviewPasses } from "./review-passes.js";
+import { parseFinishRecords } from "./finish-records.js";
 import type {
   ArtifactBodyValidation,
   ArtifactContractDiagnostic,
@@ -9,8 +12,20 @@ import type {
   ArtifactWorkflowRecord,
   ArtifactWorkflowRecordKind,
   ArtifactWorkflowState,
+  CritiqueDisposition,
+  InitialScaffoldProof,
+  IntentApprovalReference,
+  LegacyInputConfirmation,
+  PlanContractProjection,
+  PlanExecutionContract,
+  PlanExecutionTransitionContract,
+  PlanInputImpactContract,
+  PlanTaskContract,
   ReviewPassEvidence,
+  RouteUnitContract,
   SupportedArtifact,
+  TaskInputContext,
+  TaskOrderEntry,
 } from "./artifact-types.js";
 
 interface BodyContract {
@@ -130,6 +145,30 @@ export const createArtifactBodyView = (body: string): ArtifactBodyView => {
 const bodyLines = (artifact: RecognizedArtifact): readonly string[] =>
   createArtifactBodyView(artifact.body).lines;
 
+const visibleTaskFieldLines = (lines: readonly string[]): readonly string[] => {
+  let fence: { readonly marker: string; readonly length: number } | undefined;
+  return lines.map((line) => {
+    const opening = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (!fence) {
+      if (!opening) return line;
+      const marker = opening[1] ?? "";
+      if (marker.startsWith("`") && (opening[2] ?? "").includes("`"))
+        return line;
+      fence = { marker: marker[0] ?? "", length: marker.length };
+      return "";
+    }
+    const rest = line.slice(line.match(/^ {0,3}/)?.[0].length ?? 0);
+    let closingLength = 0;
+    while (rest[closingLength] === fence.marker) closingLength += 1;
+    if (closingLength >= fence.length && rest.slice(closingLength).trim() === "")
+      fence = undefined;
+    return "";
+  });
+};
+
+export const visibleMarkdownLines = (source: string): readonly string[] =>
+  visibleTaskFieldLines(createArtifactBodyView(source).lines);
+
 const lineAtOffset = (source: string, offset: number): number =>
   source.slice(0, offset).split(/\r\n|\n|\r/).length;
 
@@ -164,16 +203,40 @@ const markdownHeadings = (source: string): readonly ParsedHeading[] => {
   return headings;
 };
 
+const parsePlanTaskHeading = (
+  text: string,
+): { readonly id: number; readonly title: string } | undefined => {
+  const match = /^Task ([1-9][0-9]*):[ \t]+(.+)$/.exec(text);
+  return match ? { id: Number(match[1]), title: match[2] ?? "" } : undefined;
+};
+
+export const readVisiblePlanTaskHeadings = (
+  source: string,
+): readonly { readonly id: number; readonly title: string }[] | undefined => {
+  const taskHeadings = markdownHeadings(createArtifactBodyView(source).source).filter(
+    (heading) => heading.level === 3 && heading.text.startsWith("Task "),
+  );
+  const seen = new Set<number>();
+  const tasks: { id: number; title: string }[] = [];
+  for (const heading of taskHeadings) {
+    const task = parsePlanTaskHeading(heading.text);
+    if (!task || seen.has(task.id)) return undefined;
+    seen.add(task.id);
+    tasks.push(task);
+  }
+  return tasks;
+};
+
 const readBodyHeadings = (
   artifact: RecognizedArtifact,
 ): readonly ArtifactHeading[] => {
-  const view = createArtifactBodyView(artifact.body);
-  return markdownHeadings(view.source).map((heading) => ({
+  const source = createArtifactBodyView(artifact.body).source.replace(/\r\n|\r/g, "\n");
+  return markdownHeadings(source).map((heading) => ({
     level: heading.level,
     text: heading.text,
     line:
       artifact.locations.body.startLine +
-      lineAtOffset(view.source, heading.offset) -
+      lineAtOffset(source, heading.offset) -
       1,
   }));
 };
@@ -243,7 +306,9 @@ const commentedRecordHeadings = (
   while ((match = comments.exec(artifact.body)) !== null) {
     const comment = match[0];
     const inner = comment.replace(/^<!--/, "").replace(/-->$/, "");
-    for (const heading of markdownHeadings(inner)) {
+    const normalized = inner.replace(/\r\n|\r/g, "\n");
+    const precedingLines = lineAtOffset(artifact.body, match.index) - 1;
+    for (const heading of markdownHeadings(normalized)) {
       const text = heading.text;
       if (kinds.some((kind) => recordHeadingMatches(kind, text)))
         headings.push({
@@ -251,10 +316,8 @@ const commentedRecordHeadings = (
           text,
           line:
             artifact.locations.body.startLine +
-            lineAtOffset(
-              artifact.body.slice(0, match.index) + inner,
-              match.index + heading.offset,
-            ) -
+            precedingLines +
+            lineAtOffset(normalized, heading.offset) -
             1,
         });
     }
@@ -288,6 +351,7 @@ const readWorkflow = (
   headings: readonly ArtifactHeading[],
   allowEmpty = false,
   allowEmptyKinds: readonly GenericWorkflowRecordKind[] = [],
+  validateLatestTaskOutcome = true,
 ): {
   readonly state: ArtifactWorkflowState;
   readonly diagnostics: readonly ArtifactContractDiagnostic[];
@@ -382,6 +446,39 @@ const readWorkflow = (
       next === null
         ? lines.length
         : next.line - artifact.locations.body.startLine;
+    if (
+      validateLatestTaskOutcome &&
+      artifact.metadata.artifact === "task-progress" &&
+      matchingKind === "attempt" &&
+      !candidates.some(
+        (candidate) =>
+          candidate.line > heading.line &&
+          recordHeadingMatches("attempt", candidate.text),
+      )
+    ) {
+      const outcomes = lines
+        .slice(start + 1, end)
+        .flatMap((line) => {
+          const field = /^(?:-[ \t]+)?Outcome[ \t]*:(.*)$/.exec(line);
+          if (field === null) return [];
+          const supported =
+            /^- Outcome:[ \t]*(.*)$/.exec(line) ??
+            /^Outcome:[ \t]+(.*)$/.exec(line);
+          return [supported?.[1]?.trim() ?? ""];
+        });
+      if (
+        outcomes.length !== 1 ||
+        !["done", "blocked"].includes(outcomes[0] ?? "")
+      )
+        diagnostics.push(
+          bodyDiagnostic(
+            artifact,
+            "invalid-record",
+            "Latest task attempt must declare exactly one done or blocked Outcome",
+            heading.line,
+          ),
+        );
+    }
     records.push({
       kind: matchingKind,
       number: parsed.number,
@@ -617,6 +714,18 @@ const readReviewWorkflow = (
         Base: pass.base,
         Head: pass.head,
         Verdict: pass.verdict,
+        ...(pass.clearance === undefined
+          ? {}
+          : pass.clearance.scope === "full"
+            ? { Scope: "full", Target: pass.clearance.target }
+            : {
+                Scope: "remediation",
+                Target: pass.clearance.target,
+                "Parent pass": String(pass.clearance.parentPass),
+                "Parent commit": pass.clearance.parentCommit,
+                "Delta base": pass.clearance.deltaBase,
+                Resolutions: JSON.stringify(pass.clearance.resolutions),
+              }),
       },
     };
   });
@@ -710,8 +819,8 @@ const readTaskLedger = (
       );
     }
     for (const heading of taskHeadings) {
-      const match = /^Task ([1-9][0-9]*):[ \t]+(.+)$/.exec(heading.text);
-      if (match === null) {
+      const task = parsePlanTaskHeading(heading.text);
+      if (!task) {
         diagnostics.push(
           bodyDiagnostic(
             artifact,
@@ -726,8 +835,8 @@ const readTaskLedger = (
       }
       records.push({
         kind: "task",
-        number: Number(match[1]),
-        title: match[2] ?? "",
+        number: task.id,
+        title: task.title,
         line: heading.line,
         fields: {},
       });
@@ -841,9 +950,690 @@ const readTaskLedger = (
   return { records, diagnostics };
 };
 
+export const resolveRouteReferences = (
+  proposal: string | null | undefined,
+  plan: { readonly present: boolean; readonly reference?: string | null },
+) => {
+  if (plan.present && proposal && proposal !== plan.reference)
+    return {
+      kind: "conflict" as const,
+      references: [proposal, plan.reference ?? null] as const,
+    };
+  return plan.present
+    ? {
+        kind: "resolved" as const,
+        reference: plan.reference ?? undefined,
+        source: "plan" as const,
+      }
+    : {
+        kind: "resolved" as const,
+        reference: proposal ?? undefined,
+        source: "proposal" as const,
+      };
+};
+
+export const routeRelationProblems = (
+  units: readonly RouteUnitContract[],
+  records: readonly ArtifactWorkflowRecord[],
+): readonly string[] => {
+  const problems: string[] = [];
+  const ids = new Set(units.map((unit) => unit.id));
+  if (ids.size !== units.length) problems.push("Route unit IDs must be unique");
+  const unitRecords = records.filter((record) => record.kind === "unit");
+  if (
+    units.length !== unitRecords.length ||
+    units.some(
+      (unit, index) =>
+        unit.id !== unitRecords[index]?.number ||
+        unit.name !== unitRecords[index]?.title,
+    )
+  )
+    problems.push("Route metadata and body unit identities/order must match");
+  for (const unit of units) {
+    if (new Set(unit.depends_on).size !== unit.depends_on.length)
+      problems.push(`Unit ${unit.id} repeats a dependency`);
+    for (const dependency of unit.depends_on) {
+      if (!ids.has(dependency))
+        problems.push(`Unit ${unit.id} has unknown dependency ${dependency}`);
+      if (dependency === unit.id)
+        problems.push(`Unit ${unit.id} depends on itself`);
+    }
+  }
+  if (ids.size === units.length) {
+    const indegree = new Map(units.map((unit) => [unit.id, 0]));
+    const dependents = new Map<number, number[]>();
+    for (const unit of units) {
+      for (const dependency of new Set(unit.depends_on)) {
+        if (!ids.has(dependency)) continue;
+        indegree.set(unit.id, (indegree.get(unit.id) ?? 0) + 1);
+        const list = dependents.get(dependency);
+        if (list) list.push(unit.id);
+        else dependents.set(dependency, [unit.id]);
+      }
+    }
+    const ready = [...indegree]
+      .filter(([, count]) => count === 0)
+      .map(([id]) => id);
+    for (let index = 0; index < ready.length; index += 1) {
+      for (const id of dependents.get(ready[index]!) ?? []) {
+        const next = (indegree.get(id) ?? 0) - 1;
+        indegree.set(id, next);
+        if (next === 0) ready.push(id);
+      }
+    }
+    if (ready.length !== ids.size)
+      problems.push("Route dependencies must be acyclic");
+  }
+  return problems;
+};
+
+export const progressLedgerMatches = (
+  metadata: unknown,
+  records: readonly ArtifactWorkflowRecord[],
+): boolean => {
+  if (!Array.isArray(metadata) || metadata.length !== records.length) return false;
+  return metadata.every((value, index) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+      return false;
+    const entry = value as Record<string, unknown>;
+    const record = records[index];
+    return (
+      entry.id === record?.number &&
+      entry.title === record?.title &&
+      entry.status === record?.fields.Status &&
+      entry.progress === `tasks/task-${String(entry.id)}/progress.md` &&
+      `[details](${entry.progress})` === record?.fields.Progress
+    );
+  });
+};
+
+const hashText = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
+
+export const taskDefinitionDigest = (taskBlock: string): string => {
+  const lines = taskBlock.split(/\r\n|\n|\r/);
+  const visibleLines = visibleTaskFieldLines(lines);
+  return hashText(
+    lines
+      .filter(
+        (line, index) =>
+          visibleLines[index] !== line ||
+          !/^\s*[-*]\s+Notes:[ \t]*\{.*\}\s*$/.test(line),
+      )
+      .join("\n")
+      .trimEnd(),
+  );
+};
+
+export const taskBreakdownDigestFromDefinitions = (
+  taskIds: readonly number[],
+  tasks: readonly { readonly id: number; readonly definitionDigest: string }[],
+): string => {
+  const byId = new Map(tasks.map((task) => [task.id, task.definitionDigest]));
+  return hashText(
+    taskIds
+      .map((id) => `${id}:${byId.get(id) ?? taskDefinitionDigest("")}`)
+      .join("\n"),
+  );
+};
+
+export const taskBreakdownDigest = (
+  taskIds: readonly number[],
+  tasks: readonly { readonly id: number; readonly source: string }[],
+): string =>
+  taskBreakdownDigestFromDefinitions(
+    taskIds,
+    tasks.map((task) => ({ id: task.id, definitionDigest: taskDefinitionDigest(task.source) })),
+  );
+
+export const executionSequenceProblems = (
+  tasks: readonly TaskOrderEntry[],
+  execution: PlanExecutionContract,
+): readonly string[] => {
+  const ids = tasks.map((task) => task.id);
+  const active = new Set(ids);
+  const order = execution.order;
+  const problems: string[] = [];
+  if (
+    order.length !== active.size ||
+    new Set(order).size !== order.length ||
+    order.some((id) => !active.has(id))
+  )
+    problems.push("Execution order must contain every active task exactly once");
+  for (const task of tasks) {
+    const unique = new Set(task.dependsOn);
+    if (unique.size !== task.dependsOn.length)
+      problems.push(`Task ${task.id} repeats a prerequisite`);
+    for (const dependency of task.dependsOn) {
+      if (!active.has(dependency)) {
+        problems.push(`Task ${task.id} declares unknown or abandoned prerequisite ${dependency}`);
+        continue;
+      }
+      if (dependency === task.id)
+        problems.push(`Task ${task.id} cannot depend on itself`);
+    }
+  }
+  const indegree = new Map(tasks.map((task) => [task.id, task.dependsOn.length]));
+  const dependents = new Map<number, number[]>();
+  for (const task of tasks)
+    for (const dependency of task.dependsOn) {
+      const list = dependents.get(dependency) ?? [];
+      list.push(task.id);
+      dependents.set(dependency, list);
+    }
+  const ready = tasks.filter((task) => task.dependsOn.length === 0).map((task) => task.id);
+  let visited = 0;
+  for (let index = 0; index < ready.length; index += 1) {
+    const id = ready[index];
+    visited += 1;
+    for (const dependent of dependents.get(id) ?? []) {
+      const remaining = (indegree.get(dependent) ?? 0) - 1;
+      indegree.set(dependent, remaining);
+      if (remaining === 0) ready.push(dependent);
+    }
+  }
+  if (visited !== tasks.length) problems.push("Task prerequisites contain a cycle");
+  const positions = new Map(order.map((id, index) => [id, index]));
+  for (const task of tasks) {
+    const position = positions.get(task.id);
+    for (const dependency of task.dependsOn) {
+      const before = positions.get(dependency);
+      if (position === undefined || before === undefined || before >= position)
+        problems.push(
+          `Task ${task.id} requires active Task ${dependency} earlier in execution order`,
+        );
+    }
+  }
+  return [...new Set(problems)];
+};
+
+export const executionTransitionProblems = (
+  previousOrder: readonly number[],
+  nextOrder: readonly number[],
+  fullyGatedPrefix: readonly number[],
+): readonly string[] => {
+  const problems: string[] = [];
+  if (new Set(previousOrder).size !== previousOrder.length)
+    problems.push("Previous execution order contains duplicate task IDs");
+  if (new Set(nextOrder).size !== nextOrder.length)
+    problems.push("New execution order contains duplicate task IDs");
+  if (
+    fullyGatedPrefix.some((id, index) => previousOrder[index] !== id) ||
+    fullyGatedPrefix.some((id, index) => nextOrder[index] !== id)
+  )
+    problems.push("Previously fully gated prefix must remain unchanged");
+  const nextPositions = new Map(nextOrder.map((id, index) => [id, index]));
+  const survivors = previousOrder.filter((id) => nextPositions.has(id));
+  for (let index = 1; index < survivors.length; index += 1) {
+    const prior = nextPositions.get(survivors[index - 1] ?? -1) ?? -1;
+    const current = nextPositions.get(survivors[index] ?? -1) ?? -1;
+    if (current <= prior) {
+      problems.push("Surviving tasks must retain their prior relative execution order");
+      break;
+    }
+  }
+  return problems;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isFullSha = (value: unknown): value is string =>
+  typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
+
+const isSha256 = (value: unknown): value is string =>
+  typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+
+const parseTaskDependencies = (
+  lines: readonly string[],
+): { readonly dependsOn: readonly number[]; readonly problem?: string } => {
+  const declarations = lines.flatMap((line) => {
+    const match = /^[ \t]*[-*][ \t]+Depends on:[ \t]*(.*?)[ \t]*$/.exec(line);
+    return match === null ? [] : [match[1] ?? ""];
+  });
+  if (declarations.length === 0) return { dependsOn: [] };
+  if (declarations.length !== 1)
+    return { dependsOn: [], problem: "has ambiguous Depends on declarations" };
+  const value = declarations[0] ?? "";
+  if (value === "none") return { dependsOn: [] };
+  if (!/^Task [1-9][0-9]*(?:, Task [1-9][0-9]*)*$/.test(value))
+    return { dependsOn: [], problem: "Depends on must be none or a comma-separated list of Task N IDs" };
+  const dependsOn = value.split(", ").map((item) => Number(item.slice(5)));
+  if (new Set(dependsOn).size !== dependsOn.length)
+    return { dependsOn: [], problem: "repeats a Depends on prerequisite" };
+  return { dependsOn };
+};
+
+const safeRepositoryPath = (value: string): boolean =>
+  value !== "" &&
+  !value.startsWith("/") &&
+  !value.includes("\\") &&
+  value.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+
+const isTaskInputContext = (value: unknown): value is TaskInputContext =>
+  isRecord(value) &&
+  value.version === 1 &&
+  typeof value.repository === "string" &&
+  typeof value.intentCommit === "string" &&
+  isSha256(value.taskDefinition) &&
+  Array.isArray(value.inputs) &&
+  value.inputs.every(
+    (input) =>
+      isRecord(input) &&
+      typeof input.path === "string" &&
+      isFullSha(input.blob),
+  ) &&
+  (value.impactPlanCommit === undefined || isFullSha(value.impactPlanCommit));
+
+const isLegacyInputConfirmation = (
+  value: unknown,
+): value is LegacyInputConfirmation =>
+  isRecord(value) &&
+  value.version === 1 &&
+  Number.isInteger(value.task) &&
+  Number(value.task) > 0 &&
+  typeof value.repository === "string" &&
+  isSha256(value.taskDefinition) &&
+  typeof value.intentCommit === "string" &&
+  Array.isArray(value.inputs) &&
+  value.inputs.length > 0 &&
+  value.inputs.every(
+    (input) =>
+      isRecord(input) &&
+      typeof input.path === "string" &&
+      isFullSha(input.blob),
+  ) &&
+  value.historicalInputs === "unknown" &&
+  typeof value.owner === "string" &&
+  typeof value.ownerReference === "string" &&
+  typeof value.reviewer === "string" &&
+  typeof value.reviewReference === "string" &&
+  typeof value.rationale === "string";
+
+const parseTaskInputContext = (
+  artifact: RecognizedArtifact,
+  task: number,
+  note: string,
+  digest: string,
+  line: number,
+): { readonly value?: TaskInputContext; readonly diagnostics: readonly ArtifactContractDiagnostic[] } => {
+  const diagnostics: ArtifactContractDiagnostic[] = [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(note);
+  } catch {
+    diagnostics.push(
+      bodyDiagnostic(artifact, "invalid-record", `Task ${task} Notes input context is not valid JSON`, line),
+    );
+    return { diagnostics };
+  }
+  const shapeProblems = validateTaskInputContextSchema(parsed);
+  for (const problem of shapeProblems)
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Task ${task} ${problem}`, line));
+  if (!isRecord(parsed) || shapeProblems.length > 0) return { diagnostics };
+  if (!isTaskInputContext(parsed)) return { diagnostics };
+  const value = parsed;
+  if (value.taskDefinition !== digest)
+    diagnostics.push(
+      bodyDiagnostic(artifact, "invalid-record", `Task ${task} input context does not match its task definition`, line, digest, value.taskDefinition),
+    );
+  const inputPaths = new Set<string>();
+  for (const input of value.inputs) {
+    if (!safeRepositoryPath(input.path))
+      diagnostics.push(
+        bodyDiagnostic(artifact, "invalid-record", `Task ${task} input path must be a repository-relative path`, line, "relative path without dot segments", input.path),
+      );
+    if (inputPaths.has(input.path))
+      diagnostics.push(
+        bodyDiagnostic(artifact, "invalid-record", `Task ${task} repeats input path ${input.path}`, line),
+      );
+    inputPaths.add(input.path);
+  }
+  if (value.impactPlanCommit !== undefined && !isFullSha(value.impactPlanCommit))
+    diagnostics.push(
+      bodyDiagnostic(artifact, "invalid-record", `Task ${task} impact plan commit must be a full lowercase commit identifier`, line),
+    );
+  return diagnostics.length === 0 ? { value, diagnostics } : { diagnostics };
+};
+
+const recordIsAbandoned = (record: ArtifactWorkflowRecord): boolean =>
+  /\(abandoned — .+\)$/.test(record.title ?? "");
+
+const parseTaskFiles = (
+  lines: readonly string[],
+): { readonly declared: boolean; readonly files: readonly string[] } => {
+  const start = lines.findIndex((line) => /^[ \t]*-[ \t]+Files:/.test(line));
+  if (start < 0) return { declared: false, files: [] };
+  const first = (lines[start] ?? "").replace(/^[ \t]*-[ \t]+Files:[ \t]*/, "").trim();
+  if (first.toLowerCase() === "none") return { declared: true, files: [] };
+  const files: string[] = [];
+  const add = (value: string) => {
+    const path = value.trim().replace(/^`|`$/g, "");
+    if (path !== "" && !/^<.*>$/.test(path)) files.push(path);
+  };
+  if (first !== "") add(first);
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (/^[ \t]*-[ \t]+(?:Depends on|Files|Acceptance|Steps|Verify|Commit):/.test(line))
+      break;
+    const item = /^[ \t]+-[ \t]+(.+)$/.exec(line)?.[1]?.trim();
+    if (!item || /^(Created|Modified|Deleted):$/.test(item)) continue;
+    add(item);
+  }
+  return { declared: files.length > 0, files: [...new Set(files)] };
+};
+
+const readPlanProjection = (
+  artifact: RecognizedArtifact,
+  headings: readonly ArtifactHeading[],
+  records: readonly ArtifactWorkflowRecord[],
+): { readonly plan: PlanContractProjection; readonly diagnostics: readonly ArtifactContractDiagnostic[] } => {
+  const diagnostics: ArtifactContractDiagnostic[] = [];
+  const lines = bodyLines(artifact);
+  const taskRecords = records.filter((record) => record.kind === "task");
+  const taskHeadings = headings.filter(
+    (heading) => heading.level === 3 && /^Task [1-9][0-9]*:/.test(heading.text),
+  );
+  const tasks: Array<PlanTaskContract & { readonly source: string }> = [];
+  for (let index = 0; index < taskRecords.length; index += 1) {
+    const record = taskRecords[index];
+    const heading = taskHeadings.find((candidate) => candidate.line === record?.line);
+    if (record?.number === undefined || !heading) continue;
+    const start = heading.line - artifact.locations.body.startLine;
+    const nextTaskLine = taskHeadings.find((candidate) => candidate.line > heading.line)?.line;
+    const doneHeadingLine = headings.find(
+      (candidate) => candidate.level === 2 && candidate.text === "Done when" && candidate.line > heading.line,
+    )?.line;
+    const endLine = Math.min(
+      nextTaskLine ?? Number.POSITIVE_INFINITY,
+      doneHeadingLine ?? Number.POSITIVE_INFINITY,
+      lines.length + artifact.locations.body.startLine,
+    );
+    const blockLines = lines.slice(start, endLine - artifact.locations.body.startLine);
+    const source = blockLines.join("\n").trimEnd();
+    const digest = taskDefinitionDigest(source);
+    const visibleFieldLines = visibleTaskFieldLines(blockLines);
+    const parsedDependencies = parseTaskDependencies(visibleFieldLines);
+    const parsedFiles = parseTaskFiles(visibleFieldLines);
+    if (parsedDependencies.problem)
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Task ${record.number} ${parsedDependencies.problem}`, record.line));
+    const notes = visibleFieldLines.flatMap((line, offset) => {
+      const match = /^[ \t]*[-*][ \t]+Notes:[ \t]*(.*?)[ \t]*$/.exec(line);
+      return match === null ? [] : [{ value: match[1] ?? "", line: record.line + offset }];
+    });
+    const dataNotes = notes.filter((entry) => entry.value.startsWith("{"));
+    let inputContext: TaskInputContext | undefined;
+    if (dataNotes.length > 1)
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Task ${record.number} has ambiguous versioned Notes entries`, dataNotes[1]?.line ?? record.line));
+    else if (dataNotes[0]) {
+      const parsed = parseTaskInputContext(artifact, record.number, dataNotes[0].value, digest, dataNotes[0].line);
+      diagnostics.push(...parsed.diagnostics);
+      inputContext = parsed.value;
+    }
+    tasks.push({
+      id: record.number,
+      title: record.title ?? "",
+      dependsOn: parsedDependencies.dependsOn,
+      filesDeclared: parsedFiles.declared,
+      files: parsedFiles.files,
+      definitionDigest: digest,
+      ...(inputContext === undefined ? {} : { inputContext }),
+      source,
+    });
+  }
+  const allTasks: PlanTaskContract[] = tasks.map(({ source: _source, ...task }) => task);
+  const activeTasks = allTasks.filter((task) => {
+    const record = taskRecords.find((candidate) => candidate.number === task.id);
+    return record !== undefined && !recordIsAbandoned(record);
+  });
+  const rawExecution = artifact.metadata.execution;
+  const hasExecution = Object.hasOwn(artifact.metadata, "execution");
+  const execution = isRecord(rawExecution) && rawExecution.version === 1 && Array.isArray(rawExecution.order) && rawExecution.order.every((id) => Number.isInteger(id) && Number(id) > 0)
+    ? { version: 1 as const, order: rawExecution.order as number[] }
+    : undefined;
+  if (hasExecution && execution === undefined)
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Explicit execution metadata is malformed; legacy numeric order is not used", artifact.locations.metadata.startLine));
+  const identityOrder = taskRecords.flatMap((record) => record.number === undefined ? [] : [record.number]);
+  const executionOrder = execution?.order ?? (hasExecution ? [] : activeTasks.map((task) => task.id));
+  if (execution !== undefined) {
+    diagnostics.push(...executionSequenceProblems(
+      activeTasks.map((task) => ({ id: task.id, dependsOn: task.dependsOn })),
+      execution,
+    ).map((message) => bodyDiagnostic(artifact, "invalid-record", message, artifact.locations.metadata.startLine)));
+  } else if (!hasExecution) {
+    const legacy = { version: 1 as const, order: executionOrder };
+    diagnostics.push(...executionSequenceProblems(
+      activeTasks.map((task) => ({ id: task.id, dependsOn: task.dependsOn })),
+      legacy,
+    ).map((message) => bodyDiagnostic(artifact, "invalid-record", message, artifact.locations.metadata.startLine)));
+  }
+  const overviewStart = lines.findIndex((line) => /^##[ \t]+Overview[ \t]*$/.test(line));
+  const overviewEnd =
+    overviewStart < 0
+      ? -1
+      : lines.findIndex(
+          (line, index) => index > overviewStart && /^##[ \t]+/.test(line),
+        );
+  const overview =
+    overviewStart < 0
+      ? []
+      : lines.slice(overviewStart + 1, overviewEnd < 0 ? lines.length : overviewEnd);
+  const overviewFields = new Map<string, string[]>();
+  for (const line of visibleTaskFieldLines(overview)) {
+    const match = /^[ \t]*-[ \t]+(Execution approval|Previous execution order|New execution order|Fully gated prefix|Reason|Affected obligations|Input impact review|Input impact previous plan):[ \t]*(.+?)[ \t]*$/.exec(line);
+    if (!match) continue;
+    const values = overviewFields.get(match[1] ?? "") ?? [];
+    values.push(match[2] ?? "");
+    overviewFields.set(match[1] ?? "", values);
+  }
+  const overviewField = (label: string): string | undefined => {
+    const values = overviewFields.get(label) ?? [];
+    return values.length === 1 ? values[0] : undefined;
+  };
+  const rawTransition = artifact.metadata.execution_transition;
+  const transition: PlanExecutionTransitionContract | undefined =
+    isRecord(rawTransition) &&
+    rawTransition.version === 1 &&
+    isFullSha(rawTransition.previousPlanCommit) &&
+    Array.isArray(rawTransition.previousOrder) &&
+    rawTransition.previousOrder.every((id) => Number.isInteger(id) && Number(id) > 0) &&
+    Array.isArray(rawTransition.fullyGatedPrefix) &&
+    rawTransition.fullyGatedPrefix.every((id) => Number.isInteger(id) && Number(id) > 0) &&
+    typeof rawTransition.approval === "string" &&
+    rawTransition.approval.trim() !== "" &&
+    typeof rawTransition.reason === "string" &&
+    rawTransition.reason.trim() !== "" &&
+    typeof rawTransition.affected === "string" &&
+    rawTransition.affected.trim() !== ""
+      ? {
+          version: 1,
+          previousPlanCommit: rawTransition.previousPlanCommit,
+          previousOrder: rawTransition.previousOrder as number[],
+          fullyGatedPrefix: rawTransition.fullyGatedPrefix as number[],
+          approval: rawTransition.approval,
+          reason: rawTransition.reason,
+          affected: rawTransition.affected,
+        }
+      : undefined;
+  const hasTransition = Object.hasOwn(artifact.metadata, "execution_transition");
+  if (hasTransition && transition === undefined)
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Explicit execution transition metadata is malformed", artifact.locations.metadata.startLine));
+  if (transition !== undefined) {
+    if (["approved", "accepted", "yes", "true", "done"].includes(transition.approval.toLowerCase()))
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Execution approval must be an explicit reference, not a decision value", artifact.locations.metadata.startLine));
+    if (execution === undefined)
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Execution transition requires explicit execution metadata", artifact.locations.metadata.startLine));
+    else
+      diagnostics.push(...executionTransitionProblems(
+        transition.previousOrder,
+        execution.order,
+        transition.fullyGatedPrefix,
+      ).map((message) => bodyDiagnostic(artifact, "invalid-record", message, artifact.locations.metadata.startLine)));
+    const previousOrder = overviewField("Previous execution order");
+    const nextOrder = overviewField("New execution order");
+    const prefix = overviewField("Fully gated prefix");
+    const overviewApproval = overviewField("Execution approval");
+    if (
+      previousOrder !== transition.previousOrder.join(", ") ||
+      nextOrder !== execution?.order.join(", ") ||
+      prefix !== (transition.fullyGatedPrefix.length === 0 ? "none" : transition.fullyGatedPrefix.join(", ")) ||
+      overviewApproval !== transition.approval ||
+      overviewField("Reason") !== transition.reason ||
+      overviewField("Affected obligations") !== transition.affected
+    )
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Overview must record the execution transition reference, old/new orders, gated prefix, reason, and affected obligations", artifact.locations.body.startLine));
+  }
+  const rawApprovals = artifact.metadata.intent_approvals;
+  const intentApprovals: IntentApprovalReference[] = Array.isArray(rawApprovals)
+    ? rawApprovals.filter((item): item is IntentApprovalReference =>
+        isRecord(item) && typeof item.path === "string" && typeof item.reference === "string" && isFullSha(item.commit),
+      )
+    : [];
+  const approvalPaths = new Set<string>();
+  for (const approval of intentApprovals) {
+    if (!safeRepositoryPath(approval.path) || !/^(proposal\.md|design\.md|requirements\/[A-Za-z0-9][A-Za-z0-9._-]*\.md)$/.test(approval.path))
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Intent approval path is outside formal change inputs: ${approval.path}`, artifact.locations.metadata.startLine));
+    if (approvalPaths.has(approval.path))
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Intent approval path is repeated: ${approval.path}`, artifact.locations.metadata.startLine));
+    approvalPaths.add(approval.path);
+  }
+  const rawImpact = artifact.metadata.input_impact;
+  const inputImpact: PlanInputImpactContract | undefined =
+    isRecord(rawImpact) &&
+    rawImpact.version === 1 &&
+    isFullSha(rawImpact.previousPlanCommit) &&
+    typeof rawImpact.reviewReference === "string" &&
+    rawImpact.reviewReference.trim() !== "" &&
+    Array.isArray(rawImpact.changes) &&
+    rawImpact.changes.every(
+      (change) =>
+        isRecord(change) &&
+        typeof change.path === "string" &&
+        (change.previousBlob === null || isFullSha(change.previousBlob)) &&
+        (change.currentBlob === null || isFullSha(change.currentBlob)) &&
+        Array.isArray(change.affectedTasks) &&
+        change.affectedTasks.every((id) => Number.isInteger(id) && Number(id) > 0) &&
+        Array.isArray(change.unaffectedTasks) &&
+        change.unaffectedTasks.every((id) => Number.isInteger(id) && Number(id) > 0) &&
+        Array.isArray(change.newTasks) &&
+        change.newTasks.every((id) => Number.isInteger(id) && Number(id) > 0) &&
+        typeof change.unresolvedIntent === "boolean" &&
+        typeof change.rationale === "string" &&
+        change.rationale.trim() !== "",
+    )
+      ? {
+          version: 1,
+          previousPlanCommit: rawImpact.previousPlanCommit,
+          reviewReference: rawImpact.reviewReference,
+          changes: rawImpact.changes as PlanInputImpactContract["changes"],
+        }
+      : undefined;
+  if (Object.hasOwn(artifact.metadata, "input_impact") && inputImpact === undefined)
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Explicit input impact metadata is malformed", artifact.locations.metadata.startLine));
+  if (inputImpact !== undefined) {
+    const changedPaths = new Set<string>();
+    for (const change of inputImpact.changes) {
+      if (!safeRepositoryPath(change.path) || changedPaths.has(change.path) || change.previousBlob === change.currentBlob)
+        diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Input impact path is unsafe, repeated, or unchanged: ${change.path}`, artifact.locations.metadata.startLine));
+      changedPaths.add(change.path);
+      const taskClasses = [...change.affectedTasks, ...change.unaffectedTasks, ...change.newTasks];
+      if (new Set(taskClasses).size !== taskClasses.length)
+        diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Input impact task classification overlaps for ${change.path}`, artifact.locations.metadata.startLine));
+    }
+    const impactReview = overviewField("Input impact review");
+    const impactPrevious = overviewField("Input impact previous plan");
+    if (
+      impactReview !== inputImpact.reviewReference ||
+      impactPrevious !== inputImpact.previousPlanCommit
+    )
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Overview must record the input-impact review reference and previous plan revision", artifact.locations.body.startLine));
+  }
+  const hasInputImpact = Object.hasOwn(artifact.metadata, "input_impact");
+  if (
+    hasInputImpact &&
+    inputImpact !== undefined &&
+    inputImpact.changes.some((change) => change.unresolvedIntent)
+  )
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Input impact contains unresolved intent and must return to its owner", artifact.locations.metadata.startLine));
+  const rawLegacyConfirmations = artifact.metadata.legacy_input_confirmations;
+  const legacyInputConfirmations: LegacyInputConfirmation[] = Array.isArray(rawLegacyConfirmations)
+    ? rawLegacyConfirmations.filter(isLegacyInputConfirmation)
+    : [];
+  if (Object.hasOwn(artifact.metadata, "legacy_input_confirmations") && (
+    !Array.isArray(rawLegacyConfirmations) ||
+    legacyInputConfirmations.length !== rawLegacyConfirmations.length
+  ))
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Legacy input confirmation metadata is malformed", artifact.locations.metadata.startLine));
+  const confirmedTasks = new Set<number>();
+  for (const confirmation of legacyInputConfirmations) {
+    const task = tasks.find((entry) => entry.id === confirmation.task);
+    const taskRecord = taskRecords.find((entry) => entry.number === confirmation.task);
+    const inputPaths = new Set<string>();
+    for (const input of confirmation.inputs) {
+      if (!safeRepositoryPath(input.path) || inputPaths.has(input.path))
+        diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Legacy input confirmation for Task ${confirmation.task} has an unsafe or repeated input path: ${input.path}`, artifact.locations.metadata.startLine));
+      inputPaths.add(input.path);
+    }
+    if (confirmedTasks.has(confirmation.task))
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Legacy input confirmation repeats Task ${confirmation.task}`, artifact.locations.metadata.startLine));
+    confirmedTasks.add(confirmation.task);
+    if (!task || !taskRecord || recordIsAbandoned(taskRecord) || task.inputContext !== undefined)
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Legacy input confirmation for Task ${confirmation.task} requires an existing active task with missing input provenance`, artifact.locations.metadata.startLine));
+    if (confirmation.owner.trim().toLowerCase() === confirmation.reviewer.trim().toLowerCase())
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Legacy input confirmation for Task ${confirmation.task} requires a distinct reviewer`, artifact.locations.metadata.startLine));
+  }
+  if (Object.hasOwn(artifact.metadata, "legacy_input_confirmations") && legacyInputConfirmations.length === 0)
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Legacy input confirmation metadata must contain at least one record", artifact.locations.metadata.startLine));
+  const rawInitialization = artifact.metadata.initialization;
+  const initialization: InitialScaffoldProof | undefined = isRecord(rawInitialization) && rawInitialization.version === 1 && isFullSha(rawInitialization.base) && typeof rawInitialization.authority === "string" && isSha256(rawInitialization.breakdown) && Array.isArray(rawInitialization.taskIds) && rawInitialization.taskIds.every((id) => Number.isInteger(id) && Number(id) > 0)
+    ? {
+        version: 1,
+        base: rawInitialization.base,
+        authority: rawInitialization.authority,
+        breakdown: rawInitialization.breakdown,
+        taskIds: rawInitialization.taskIds as number[],
+      }
+    : undefined;
+  if (Object.hasOwn(artifact.metadata, "initialization") && initialization === undefined)
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Initial scaffold proof is malformed", artifact.locations.metadata.startLine));
+  if (initialization !== undefined) {
+    const hasContiguousInitialIds = initialization.taskIds.every(
+      (id, index) => id === index + 1,
+    );
+    const currentInitialIds = identityOrder.slice(0, initialization.taskIds.length);
+    if (
+      !hasContiguousInitialIds ||
+      currentInitialIds.length !== initialization.taskIds.length ||
+      initialization.taskIds.some((id, index) => currentInitialIds[index] !== id)
+    )
+      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Initial scaffold proof task IDs must match its contiguous initial task list", artifact.locations.metadata.startLine));
+  }
+  return {
+    plan: { identityOrder, executionOrder, ...(execution ? { execution } : {}), ...(transition ? { executionTransition: transition } : {}), ...(inputImpact ? { inputImpact } : {}), legacyInputConfirmations, ...(initialization ? { initialization } : {}), intentApprovals, tasks: allTasks },
+    diagnostics,
+  };
+};
+
+export const critiqueDisposition = (
+  verdict: unknown,
+  decision: unknown,
+): CritiqueDisposition => {
+  if (verdict === "skipped") return "no-clearance";
+  if (decision === "skipped") return "owner-decision-required";
+  if (verdict === "changes-requested" && decision === "accepted")
+    return "application-required";
+  if (
+    (verdict === "approved" && ["accepted", "applied", "rejected"].includes(String(decision))) ||
+    (verdict === "changes-requested" && ["applied", "rejected"].includes(String(decision)))
+  )
+    return "settled";
+  return "no-clearance";
+};
+
 export const validateArtifactBody = (
   artifact: RecognizedArtifact,
   kind: SupportedArtifact,
+  taskProgressSnapshot: "current" | "historical" = "current",
 ): ArtifactBodyValidation => {
   const headings = readBodyHeadings(artifact);
   const contract = bodyContracts[kind];
@@ -915,24 +1705,54 @@ export const validateArtifactBody = (
           headings,
           allowEmptyTaskProgress,
           allowEmptyFinishOutcome,
+          taskProgressSnapshot === "current",
         );
   diagnostics.push(...workflow.diagnostics);
   if (kind === "finish")
     diagnostics.push(
       ...finishWorkflowDiagnostics(artifact, workflow.state.records),
     );
+  const finish = kind === "finish" ? parseFinishRecords(artifact, workflow.state.records, visibleMarkdownLines(artifact.body)) : undefined;
+  if (finish) diagnostics.push(...finish.diagnostics);
   const workflowRecords = [...workflow.state.records];
+  let plan: PlanContractProjection | undefined;
+  let critique: CritiqueDisposition | undefined;
   if (contract.ledger) {
     const ledger = readTaskLedger(artifact, contract.ledger, headings);
     diagnostics.push(...ledger.diagnostics);
     workflowRecords.push(...ledger.records);
+    if (
+      kind === "progress" &&
+      !progressLedgerMatches(artifact.metadata.tasks, ledger.records)
+    )
+      diagnostics.push(
+        bodyDiagnostic(
+          artifact,
+          "invalid-record",
+          "progress metadata ledger does not match",
+          title?.line ?? artifact.locations.body.startLine,
+        ),
+      );
+    if (kind === "plan") {
+      const projection = readPlanProjection(artifact, headings, ledger.records);
+      plan = projection.plan;
+      diagnostics.push(...projection.diagnostics);
+    }
   }
+  if (kind === "critique")
+    critique = critiqueDisposition(artifact.metadata.verdict, artifact.metadata.decision);
   return {
     headings,
     sections: headings
       .filter((heading) => heading.level === 2)
       .map((heading) => heading.text),
-    workflow: { ...workflow.state, records: workflowRecords },
+    workflow: {
+      ...workflow.state,
+      records: workflowRecords,
+      ...(plan === undefined ? {} : { plan }),
+      ...(finish === undefined ? {} : { finish: finish.records }),
+      ...(critique === undefined ? {} : { critiqueDisposition: critique }),
+    },
     diagnostics,
   };
 };

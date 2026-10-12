@@ -45,8 +45,10 @@ the agent's instructions.
 
 **Start at planning when appropriate.** `plan.md` is the required declarative artifact. Planning
 also initializes the required root task ledger and task progress files. The heavyweight front door
-— proposal, requirements, design — is optional; a tactical change starts at the plan step, which
-uses richer upstream artifacts when present and otherwise works from the raw request.
+(proposal, requirements, and design) is optional; a tactical change starts at the plan step, which
+uses richer upstream artifacts when present and otherwise works from the raw request. If planning
+finds a bounded behavior change that requires a requirements delta, it returns to `kepler-propose`
+for requirements-only requester approval, then revalidates the committed delta before planning.
 
 **The orchestrator owns the loops.** Steps are linear on paper, but task feedback sends one task
 back to code and whole-branch findings send the change back to planning. The person or workflow
@@ -101,7 +103,7 @@ artifacts; code and finish-work build and ship them.
 | Step | Skill | Role |
 | ------ | ------- | ------ |
 | 0 | `kepler-init` | Set up the project: write `AGENTS.md`, scaffold `.kepler/` |
-| 1 | `kepler-propose` | Idea → proposal (why), requirements (what), design (how) |
+| 1 | `kepler-propose` | Idea → proposal, requirements, and design; or requirements-only approval for a bounded tactical behavior delta |
 | 2 | `kepler-plan` | Design → `plan.md`: small, TDD-sized, independently verifiable tasks |
 | 3 | `kepler-code` | Implement one task, then enter its `code` ↔ `code-feedback` loop |
 | 4 | `kepler-code-feedback` | Judge that task's stable diff; approve it or loop back to `code` |
@@ -122,7 +124,10 @@ standing areas — the project's standards that every later step reads. It scaff
 **kepler-propose** is the optional front door. Through dialogue — clarifying questions one
 at a time, then two or three alternative approaches with trade-offs — it produces the
 proposal, the per-capability requirements, and the design, and gates on approval before any
-implementation. A change that does not warrant this depth skips it.
+implementation. A change that does not warrant this depth starts at planning. When planning finds
+a bounded tactical behavior change that needs a requirements delta, propose has a requirements-only
+approval path: it creates no proposal or design and returns the exact committed delta to planning
+for revalidation.
 
 **kepler-plan** produces the required declarative `plan.md` handoff contract. It explores the code
 read-only, then decomposes the work into TDD-sized tasks, each with its files, acceptance criteria,

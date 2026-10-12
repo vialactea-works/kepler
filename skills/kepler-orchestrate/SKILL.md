@@ -62,8 +62,9 @@ review have different evidence, inspection boundaries, artifact destinations, an
 
 - **Read state, then dispatch.** Before every action, recompute the applicable matrix from the
   root row, the physically last verdict, and reviewed-range freshness.
-- **One active task lane.** Never dispatch task implementers in parallel. Resolve the earliest
-  active task that has not reached `done` plus fresh approval before selecting another.
+- **One active task lane.** Never dispatch task implementers in parallel. Select from the
+  validated `execution.order` when explicit, otherwise numeric legacy identity order. Resolve the
+  earliest active task that has not reached `done` plus fresh approval before selecting another.
 - **One task, one checkpoint.** Create `<change-dir>/tasks/task-N/.base` from current `HEAD` only
   before a genuine first attempt. Every later dispatch validates the historical checkpoint or
   recovers that same commit from unambiguous durable evidence; it never rebases the task range.
@@ -80,35 +81,27 @@ review have different evidence, inspection boundaries, artifact destinations, an
 
 ## Checkpoint establishment and recovery
 
-Create a new checkpoint only when every first-attempt condition holds: the root row is `pending`,
-the task log has no `## Attempt` section, task feedback is absent, and the working tree and task
-history show no task-owned implementation changes. Only in that state run
-`kepler workbench diff --record --task N --change-dir <change-dir>` to
-record current `HEAD` as the checkpoint. Confirm the resulting file contains exactly one full
-commit identifier and that git resolves it.
+Before any first-attempt `--record`, inspect the exact task's Files and Acceptance, working tree,
+and attributable Git history for task-owned committed and uncommitted implementation changes.
+The CLI's mechanical eligibility does not prove the absence of task-owned work. A clean tree,
+pending row, or empty log cannot establish that absence. If task-owned work already exists or its
+attribution is ambiguous, stop for owner diagnosis and never record current `HEAD` as a new Base;
+preserve existing work and evidence. Do not dispatch code with an unresolved checkpoint.
 
-For every other dispatch, first validate the existing checkpoint without changing it. Historical
-evidence exists when the root status is anything other than `pending`, the task log contains an
-`## Attempt` section, task feedback exists, or task-owned implementation work is present. A valid
-checkpoint must contain one full commit identifier, resolve in the repository, and be an ancestor
-of current `HEAD` and every valid recorded feedback Head. An existing checkpoint for a task with
-historical evidence must also match every available recovery candidate and precede the first
-implementation attempt; a commit is not valid merely because it resolves or equals current
-`HEAD`.
+After that inspection, before every code dispatch, run `kepler workbench diff --record --task N --change-dir <change-dir>`.
+With no task attempt or feedback history, the CLI records current `HEAD` only when the root row is
+`pending`, the committed task log has no attempt, and the worktree is clean. The initial pending-log
+creation commit is not an implementation attempt and does not define the historical Base.
 
-If the checkpoint is missing or malformed after historical evidence exists, reconstruct it only
-from unambiguous durable git, task, and feedback evidence. Candidate sources are every valid
-feedback `Base:` value and the first parent of the earliest commit that added the first task
-attempt to `tasks/task-N/progress.md`. Validate every candidate as a full commit, require every available
-candidate to identify the same full commit, and require that commit to precede the first
-implementation attempt and be an ancestor of every valid feedback Head and current `HEAD`. Restore
-that identifier to `tasks/task-N/.base`, keep the path ignored, and validate it again before
-dispatch.
-
-Otherwise stop and request intervention. Missing candidates, conflicting candidates, ambiguous
-git history, invalid ancestry, or evidence that cannot distinguish the original pre-implementation
-commit is not recoverable automatically. Never record current `HEAD` when historical evidence
-exists, and never continue code with an unresolved checkpoint.
+When durable task history exists, the CLI derives the canonical Base from the first parent of the
+earliest committed task-progress revision that adds the first attempt. Every valid feedback `Base:`
+must agree; the Base must resolve, precede the attempt, and remain an ancestor of every valid
+feedback `Head:` and current `HEAD`. The existing ignored `tasks/task-N/.base` is a no-overwrite
+cache: the CLI validates it against this result, restores it only when it is missing and history
+proves the value, and never treats it as authority. A malformed or conflicting existing cache,
+missing or ambiguous historical evidence, imported/rewritten history, or invalid ancestry stops
+before dispatch and requires owner diagnosis. Never substitute current `HEAD`, `HEAD~1`, or a
+planner's pending-log commit for the canonical historical Base.
 
 ## Durable task approval
 
@@ -133,6 +126,27 @@ later task checkpoint or whole-branch review. Evaluate the index and worktree co
 independently: a staged feedback blob that differs while the worktree matches `HEAD` must fail the
 index condition.
 
+## Task handoff consistency
+
+Before applying the task resume matrix, require `kepler workbench lint` to accept the root
+progress ledger. Its frontmatter task list and Markdown rows must match exactly by ordered task
+id, title, status, and progress link. The root artifact's aggregate `status: complete` means all
+active implementation rows are done; it is only an implementation summary, never a substitute
+for per-task feedback or whole-branch approval and never a finish-work gate.
+
+Interpret task-local evidence by phase. Root `in-progress` with an initialized local `status:
+pending` log and no attempt is the supported first-attempt boundary. A correction may also have a
+prior finalized local status and attempt while its root row is `in-progress`; preserve that history.
+For root `done` or `blocked`, require matching root frontmatter/row status and matching local
+status/latest terminal Outcome. Lint rejects a latest attempt with duplicate Outcomes before its
+value is used.
+
+If a task's root or local evidence contradicts its claimed terminal state, stop before selection
+or advancement and diagnose the exact evidence with the owning coder. The coder may repair a
+proven recording omission while preserving sibling rows, metadata, and history. Feedback does not
+change implementation status, and the driver never invents a done attempt. If completion evidence
+is insufficient, resume normal verification rather than making a bookkeeping-only repair.
+
 ## Task resume matrix
 
 Apply this matrix to the earliest active task that is not fully gated. `Feedback state` means the
@@ -147,21 +161,25 @@ touched that task's progress file.
 | `done` | absent | Dispatch `kepler-code-feedback` for the stable Task N range. |
 | `done` | feedback untracked or changed from `HEAD` | Dispatch `kepler-code-feedback` for the stable Task N range. |
 | `done` | latest feedback-touching commit is mixed | Dispatch `kepler-code-feedback` for the stable Task N range. |
-| `done` | stale or lint-invalid | Dispatch `kepler-code-feedback` for the stable Task N range. |
+| `done` | stale or lint-invalid, after any valid latest requested-change findings have been classified | Route to the owner of the invalid or stale evidence; do not issue an identical retry. |
 | `done` | fresh `skipped` | Dispatch `kepler-code-feedback` for a new pass; the artifact is valid but does not approve the task. |
-| `done` | fresh `changes-requested` with no canonical unresolved `cannot verify from diff` Blocking item | Dispatch `kepler-code` with `tasks/task-N/feedback.md`. |
-| `done` | fresh `changes-requested` with a canonical unresolved `cannot verify from diff` Blocking item | Driver adjudicates the concrete named risk before code or advancement. |
+| `done` | `changes-requested`, fresh or stale | Preserve and classify every outstanding finding before freshness routing. Route code defects to `kepler-code`, evidence gaps through bounded located-evidence adjudication, and intent defects to the owning proposal/design stage. |
 | `done` | durable, fresh `approved` with no blocking findings | Advance to the next active task or the whole-branch gate. |
 
 A task feedback pass is fresh only when its full Base and Head are valid commits, Base is an
 ancestor of Head, Head is an ancestor of current `HEAD`, and Head contains the latest commit that
-touched `tasks/task-N/progress.md`. A later code attempt therefore makes every earlier pass stale,
-including a prior `changes-requested` pass: the corrected task goes to code feedback, not directly
-back to another correction.
+touched `tasks/task-N/progress.md`. Establish range validity, material coverage, and unresolved
+findings separately. A stale `changes-requested` pass retains its blocker set for classification;
+staleness does not erase obligations or authorize the old verdict. Before any repeated dispatch,
+name the changed code, located evidence, external condition, or corrected protocol input that could
+change the result. If none changed, stop automated retries and ask the finding's owner to adjudicate.
 
-An unresolved evidence item is canonical only when a finding under the physical last pass's
-`### Blocking` section contains the exact text `cannot verify from diff`. Other
-`changes-requested` passes are ordinary code findings and return directly to `kepler-code`.
+Classify each new Blocking finding as `code-defect`, `evidence-gap`, or `intent-defect`, and retain
+its stable `pass-N-blocking-M` identity when carried forward. A kind guides routing, not approval.
+For legacy untyped task findings, retain the canonical `cannot verify from diff` fallback; adjudicate
+ambiguous kinds rather than inventing a code defect. A located evidence gap may return to feedback
+on the same Base and Head only after the driver supplies the exact newly checked evidence; do not
+create a code commit or move the reviewed Head for evidence-only re-feedback.
 
 For `in-progress`, inspect only that task's working tree, commits, checkpoint, and physical latest
 attempt. Determine whether an interrupted implementer is still running, whether its work can be
@@ -179,9 +197,12 @@ A green implementation is not an advancement point. The existing `kepler-code-fe
 dispatch is the task's refactor-phase review: it receives the task-local red/green/refactor
 evidence and judges whether the implementation is behavior-preserving.
 
-A `changes-requested` refactor-phase review returns the same Task N to `kepler-code`; relevant
-verification is required before a fresh `kepler-code-feedback` pass. Only a fresh durable
-`approved` feedback pass permits advancement to another task or the whole-branch gate.
+A `changes-requested` refactor-phase review with a confirmed `code-defect` returns the same Task N
+to `kepler-code`; relevant verification is required before a fresh `kepler-code-feedback` pass.
+An `evidence-gap` requires independent located-evidence adjudication, not an invented code change;
+an `intent-defect` returns to the owning proposal/design stage. Preserve and classify all blockers
+before freshness routing. Only a fresh durable `approved` feedback pass permits advancement
+to another task or the whole-branch gate.
 
 ## Whole-branch resume matrix
 
@@ -191,15 +212,26 @@ against the current branch and latest material change commit.
 
 | Review state | Action |
 | --- | --- |
-| absent | Dispatch `kepler-review` on the complete branch. |
-| stale or lint-invalid | Dispatch `kepler-review` on the complete branch. |
-| fresh `skipped` | Dispatch `kepler-review` for a new pass; the artifact is valid but does not approve the branch. |
-| fresh `changes-requested` | Classify the complete finding set for re-plan or the upstream-defect stop. |
-| fresh `approved` with no blocking findings | Hand off to `kepler-finish-work`. |
+| absent | Obtain a full whole-branch review with explicit target and actual merge base. |
+| lint-invalid, undurable, or off-branch | Diagnose the exact invalid evidence with its owner; do not grant clearance or repeat an identical dispatch. |
+| valid latest `changes-requested` | Preserve and classify all blockers before choosing remediation scope, even when material coverage is stale. |
+| `approved`, valid range, material stale | Require new coverage; choose full review unless A4's bounded remediation conditions hold. |
+| valid `skipped` | Obtain a non-skipped review with a stated review purpose. |
+| valid full `approved` or `approved-remediation`, with current clearance | Hand off to `kepler-finish-work`. |
 
-Whole-branch freshness follows `kepler-review`'s material-path and ancestry rules. The
-physically last pass governs; never scan backward to an earlier approval. Do not rerun approved
-current tasks or review merely because conversation history was compacted or lost.
+Whole-branch validity, actual target merge base, current material coverage, and outstanding
+findings are separate checks. The physically last pass governs; never scan backward to an earlier
+approval. After a full `changes-requested` pass, preserve and classify all findings before routing.
+For code defects, append numbered remediation tasks and pass ordinary gates. An evidence-gap-only
+case may use independently checked new located evidence on the unchanged material/plan range without
+inventing tasks. Use bounded review only when the modern full baseline, immutable artifact commit,
+retained scoped history, unchanged approved intent, exact target/Base, cumulative Head bounds and
+correction-path classification all validate. Plan amendments may append tasks or carry an approved
+execution-only transition with a fully gated prefix; original definitions, Notes and initialization
+remain frozen. Otherwise require a new full inspection.
+Repeated review dispatches must name the evidence change that could alter the result; with no such
+change, stop and ask the responsible owner to adjudicate. Do not rerun approved current tasks or
+review merely because conversation history was compacted or lost.
 
 ## Process
 
@@ -209,37 +241,92 @@ current tasks or review merely because conversation history was compacted or los
    change directory is under the repository root and the branch is not the default branch. Otherwise
    stop before dispatching.
 2. **Load durable state.** Run `kepler workbench lint --change-dir <change-dir>` first and
-   stop with its findings on nonzero exit. Then run `kepler workbench context <change-dir>` and
-   read `plan.md` for active task identity and shared constraints and root `progress.md` for
-   current status. Require stage inputs, without independently validating artifact layout.
+   stop with its findings on nonzero exit. This lint includes exact consistency between root
+   progress metadata and body rows. Then run `kepler workbench context <change-dir>` and read
+   `plan.md` for active task identity and shared constraints and root `progress.md` for current
+   per-task status. Treat its aggregate `status` as an implementation summary only. Require stage
+   inputs, without independently validating artifact layout.
    Read detailed task evidence only for the task currently being diagnosed, implemented, or
    reviewed. Determine verdicts from the physically last lint-valid pass and check its Base and
    Head against Git rather than trusting a summary. During this load, evaluate **Durable task
    approval** for every apparent approval before marking any task fully gated.
-3. **Mirror the plan in the todo tool.** Create one visible entry per active task, in plan order,
+3. **Mirror the plan in the todo tool.** Create one visible entry per active task, in validated
+   execution order (numeric identity order for legacy plans),
    and one trailing whole-branch review entry. Reflect root status and fresh approval, but never
    use the todo tool as a resume source.
-4. **Run the pre-flight scan once.** Before the first task attempt, scan the plan for internal
-   conflicts or a mandate that its own feedback gate would reject. Batch genuine conflicts for
-   user adjudication. If the scan is clean, continue without pausing.
-5. **Select the current task.** Apply **Task resume matrix** to active tasks in plan order. Mark
+4. **Run the pre-flight scan once.** Before the first task attempt, require `formal-intent:
+   tactical` or `formal-intent: approved-reference`; `approval-required` and `stale` return to
+   `kepler-propose`. If `critique-disposition` is present, require `settled`; `owner-decision-required`,
+   `application-required`, and `no-clearance` hold at the artifact owner. An absent optional critique
+   is not a hold. If `input-impact-history` or `execution-history` is present, require `verified`;
+   uncommitted or blocked history stops before selection. For the selected task, require input
+   standing `current`, `impact-reviewed-unaffected`, or `legacy-current-confirmed`; missing, stale,
+   or `legacy-confirmation-stale` returns to the owner for scoped diagnosis. A legacy confirmation
+   records current inputs with historical provenance explicitly unknown, not an old snapshot, and
+   does not authenticate or replace any task or review gate. Scan the plan for internal conflicts or
+   mandates that its own task feedback gate would reject. Batch genuine conflicts for user
+   adjudication. If every gate is clean, continue without pausing. For a route-backed change,
+   require context to resolve one canonical route/unit and its exact committed route-source
+   revision. Resolve the actual delivery target from the route Shipping rules and map `branch:`;
+   stop if source/target identity cannot be verified. Before any new task checkpoint or code write,
+   scan known proposals/plans, local and visible remote branches, and worktrees for another owner
+   of that unit. Resume only this same owner/change/source branch; send a competing or ambiguous
+   claim to the designated controller for explicit resume/transfer or a stop. This local scan shows
+   visible claims only and cannot prove cross-clone exclusivity; concurrent cross-clone claims/
+   shipping are unsupported.
+5. **Select the current task.** Apply **Task resume matrix** to active tasks in the validated
+   execution order (numeric identity order for legacy plans). Mark
    only its todo entry active. A fully gated task stays complete; a root `done` row alone does not
    authorize advancement. Before selecting a later task and recording its checkpoint, re-evaluate
    **Durable task approval** for the immediately preceding task. On failure, route that task to
    `kepler-code-feedback` and do not record the next task checkpoint.
-6. **Resolve and validate the task checkpoint before code.** Apply **Checkpoint establishment and
-   recovery**. A genuine pending first attempt with no implementation evidence may run
-   `kepler workbench diff --record --task N --change-dir <change-dir>`.
-   Every retry, correction, resumed task, or evidence-bearing task must validate its existing
-   `<change-dir>/tasks/task-N/.base` or reconstruct the original commit unambiguously and validate
-   it. Stop for intervention when recovery is ambiguous. Complete checkpoint validation before
-   every code dispatch.
+   Bind admitted dispatch identity to the full `HEAD`, full named source branch ref, resolved full
+   delivery-target ref, canonical repository root, canonical worktree Git directory, and exact
+   assigned worker/run/session identity. For route-backed work, also bind owner/change, canonical
+   route/unit, route-source revision, and base/input revision. Recheck that the source branch differs
+   from its target by normalized refs/configured local/remote mapping, never by tip SHA. Obtain
+   current worker identity independently through the execution harness. If identity is allocated only at
+   startup, keep that child read-only until its binding is admitted; unavailable identity holds.
+   This binding is handoff evidence, not another workflow ledger or approval.
+6. **Resolve and validate the task checkpoint before code.** Execute kepler-code's read-only
+   **Dispatch identity readback** against the admitted binding before checkpoint writes and again
+   before handing off code; this includes the source/target role check. For route-backed work,
+   recheck current context's binding/revision and the visible claim scan before dispatch. Then apply
+   **Checkpoint establishment and recovery** and run
+   `kepler workbench diff --record --task N --change-dir <change-dir>` before
+   every code dispatch. The CLI records a new checkpoint only for a clean, committed, pending
+   task with no attempt or feedback; otherwise it validates or reconstructs the original Base from
+   durable first-attempt and feedback history. Stop for intervention when recovery is ambiguous.
+   Recheck the selected task's input standing before dispatch. A legacy task without versioned input
+   provenance may use only a committed, task-scoped `legacy_input_confirmations` entry reported as
+   `legacy-current-confirmed`; never convert its current input list into historical evidence. For
+   explicit execution metadata, re-run context and scoped lint, require `execution-history:
+   verified`, and confirm the order has not changed since selection. Dispatch only its first slot
+   that is not fully gated, with the current full plan commit, slot number, previous sequence-slot
+   task ID and that task's durable fresh approval evidence. A newly inserted prerequisite cannot
+   dispatch until the required quiescence and exact partial-work preservation/restoration authority
+   are documented and verified; otherwise stop for owner intervention. After any plan/order/HEAD/worker/
+   branch/repository/worktree-identity change, discard selection and recalculate. An unchanged plan
+   commit cannot authorize a different HEAD. Legacy plans use numeric
+   order and the same one-task-plus-fresh-approval gate.
 7. **Dispatch `kepler-code`.** Populate `references/implementer-prompt.md` with one exact Task N,
-   its root row, task log, minimal prior interfaces, and either first-attempt context or its fresh
-   `changes-requested` feedback path. Require the task-local report to carry the red/green/refactor
-   evidence or a justified exception and repeatable alternative verification. Do not provide a
-   second detailed reporting destination. When the subagent returns, read the root row and
-   physical latest task attempt instead of trusting its concise response. A `blocked` or
+   its matching root metadata entry and row, task log, either its task-local version-1 input/context
+   handoff or the task's scoped `legacy-current-confirmed` record with `historicalInputs: "unknown"`,
+   and cited source blobs, verified quality/decision constraints, the current full plan commit,
+   admitted dispatch HEAD/source-branch/target/repository/worktree/worker binding, route ownership
+   and source-revision binding when applicable, and independent worker identity readback source. For legacy tasks missing task-local quality fields, supply a task-scoped current
+   quality/decision record checked against the unchanged contract and repository sources; preserve
+   frozen task definitions and do not add Acceptance or Files. New tasks carry the record in their
+   block. Include explicit sequence/slot/predecessor approval evidence when applicable, minimal prior
+   interfaces and either
+   first-attempt context or its fresh `changes-requested` feedback path. Require the task-local
+   report to carry the red/green/refactor evidence or a justified exception and repeatable
+   alternative verification. Do not provide a
+   second detailed reporting destination. When the subagent returns, rerun
+   `kepler workbench lint --change-dir <change-dir>` and stop on nonzero exit before further
+   dispatch. Then independently read the committed root metadata entry and row, task-local status,
+   and physical latest attempt/Outcome instead of trusting its concise response. Diagnose any disagreement with the coder before
+   applying the task matrix; do not advance or ask feedback to manufacture status. A `blocked` or
    interrupted result returns to the task matrix.
 8. **Package the task diff after code marks the task `done`, or when re-reviewing a done task.** Run
    `kepler workbench diff --task N --change-dir <change-dir>`. Capture the
@@ -248,64 +335,87 @@ current tasks or review merely because conversation history was compacted or los
 9. **Dispatch `kepler-code-feedback`.** Fill `references/code-feedback-prompt.md` with the exact
    task, full Base and Head, diff package, task-local progress path, feedback destination,
    task-local TDD evidence, project standards, verbatim task acceptance and cited constraints,
-   and the bounded located-risk context. Use `none` for an ordinary pass. The reviewer performs
-   the task's refactor-phase review, judges only that stable task range and supplied bounded
-   evidence, and persists the supplied range in `tasks/task-N/feedback.md`.
+   the same verified quality/decision context used by code (dispatch-supplied for legacy tasks
+   lacking these fields), its latest attempt's criterion/check evidence, and bounded located-risk
+   context. Preserve the frozen contract; quality context cannot expand Acceptance/Files or waive
+   review. Use `none` for an ordinary located-risk pass.
+   Separately supply peer-approved commit/path context when the cumulative range contains a
+   prerequisite or peer task: exact task IDs, reviewed Base/Head, approval feedback commit/path,
+   approval boundary, and covered production commits with their changed paths. Use `none` only
+   when there is no peer context; never invent approval for an unattributed commit. Verify each
+   approval against its committed artifact and artifact-only commit at that boundary. Retain the
+   original Task N Base and full cumulative package, including overlapping files. The reviewer
+   performs the task's refactor-phase review with commit-attributed inspection of the complete
+   range; never exclude whole filenames or
+   conceal later unapproved Task N changes behind peer approval. It persists the supplied full
+   range in `tasks/task-N/feedback.md`.
 10. **Confirm the feedback artifact-only commit.** Require the feedback subagent to commit only
     `tasks/task-N/feedback.md`, verify the commit's path list, and re-read the physical last pass.
-    Re-evaluate **Durable task approval** immediately after the feedback handoff and complete this
-    check before proceeding to **Select the next active task**. If the predicate fails, route the
-    task back to `kepler-code-feedback` rather than advancing. A `changes-requested`
-    refactor-phase review returns the same Task N to `kepler-code`; relevant verification is
-    required before a fresh `kepler-code-feedback` pass. Apply the task matrix again: only a
-    fresh durable `approved` feedback pass may advance, an ordinary fresh requested change returns
-    to code, a canonical unresolved item enters bounded adjudication, and stale or skipped feedback
-    returns to feedback.
-11. **Adjudicate a bounded unresolved risk.** When a fresh `changes-requested` pass has a finding
-    under `### Blocking` containing the exact text `cannot verify from diff`, inspect only its
-    concrete named risk with cross-task context. For a confirmed code gap, dispatch
-    `kepler-code` with the feedback path and exact located gap. If located evidence resolves the
-    concern without a code change, preserve the unresolved pass's same Base and Head, populate the
-    dispatch template's located-evidence input with the exact named cross-task evidence, and
-    re-dispatch `kepler-code-feedback` against that same Base and Head. Do not create a code
-    commit or move the reviewed Head for evidence-only re-feedback. Only a new physical pass that
-    independently resolves the item may approve.
+    Verify its format and durability separately from approval. Preserve and classify every valid
+    latest requested-change blocker before freshness routing, whether its material coverage is
+    fresh or stale. A `changes-requested` refactor-phase review with a confirmed `code-defect`
+    returns the same Task N to `kepler-code`; relevant verification is required before fresh feedback.
+    Route an `evidence-gap` through independent located-evidence adjudication on the same Base/Head
+    and an `intent-defect` to the owning proposal/design stage. Invalid or stale evidence needs
+    owner diagnosis; do not issue an identical retry without changed useful input.
+    Re-evaluate **Durable task approval** immediately after the handoff and complete this check
+    before proceeding to **Select the next active task**. Apply the task matrix again: only a
+    fresh durable `approved` feedback pass may advance.
+11. **Adjudicate a bounded evidence gap.** For a typed `evidence-gap`, or a legacy finding with
+    canonical `cannot verify from diff` wording, the driver adjudicates only its concrete named risk.
+    For a confirmed code gap, dispatch `kepler-code` for the correction and then
+    `kepler-code-feedback` with the located gap. If located evidence resolves the concern without a
+    code change, re-dispatch the reviewer with the exact evidence and require a new physical pass on
+    the same Base and Head. If no relevant evidence or external condition changed, stop repeated
+    dispatches and ask the owner to adjudicate.
 12. **Enter the whole-branch gate.** Before entering the whole-branch gate, re-evaluate
     **Durable task approval** for every active task. Any failed predicate routes that task to
     `kepler-code-feedback` and prohibits whole-branch packaging. Only when all active tasks are
-    fully gated may the driver apply **Whole-branch resume matrix**. For an absent, lint-invalid,
-    stale, or skipped pass, run `kepler workbench diff --whole-change`, then fill
+    fully gated may the driver apply **Whole-branch resume matrix**. For a required full or bounded
+    review, run `kepler workbench diff --whole-change --target-branch <target-branch>`, then fill
     `references/whole-branch-review-prompt.md` with the actual merge base, current Head, complete
     package, approved change intent, root ledger, and linked task evidence.
 13. **Confirm the review artifact-only commit.** Require `kepler-review` to commit only root
     `review.md`, verify the commit's path list, and re-read its physical last pass. Apply the
     whole-branch matrix again rather than trusting transient output.
-14. **Route whole-branch findings.** Apply **Whole-branch findings** to a fresh
-    `changes-requested` pass. Remediation returns through the ordinary task loop; an upstream
-    artifact defect stops the run.
-15. **Hand off after fresh approval.** When the physical last whole-branch pass is valid, fresh,
-    `approved`, and has no blocking findings, confirm the worktree and change directory are clean
-    and hand off to `kepler-finish-work`. Do not merge or open a pull request here.
+14. **Route whole-branch findings.** Apply **Whole-branch findings** to every valid latest
+    `changes-requested` pass, fresh or stale. Preserve and classify all blockers before scope or
+    freshness routing. Code corrections return through numbered tasks and ordinary gates;
+    evidence-only adjudication preserves the material/plan range, and an intent defect returns
+    to approved proposal revision. No changed useful input means no identical automated retry.
+15. **Hand off after current clearance.** When the physical last whole-branch pass is valid,
+    durable, fresh, and either full `approved` or validated `approved-remediation`, with no blocking
+    findings, confirm the worktree and change directory are clean and hand off to
+    `kepler-finish-work`. Do not merge or open a pull request here.
 
 Transient subagent output or parseable worktree text never substitutes for committed evidence and
 never authorizes the driver to advance.
 
 ## Whole-branch findings
 
-For implementation findings consistent with approved requirements and design, send the complete
-finding set to `kepler-plan` in re-plan mode. Re-plan must append one or more appropriately sized
-numbered remediation tasks, initialize their root rows and task progress files, and commit its
-artifacts. Each new task then runs through the ordinary `kepler-code` and
-`kepler-code-feedback` loop. After all remediation tasks have fresh approval, repeat the
-whole-branch review gate.
+Preserve the complete finding set before choosing a route. For confirmed `code-defect` findings
+consistent with approved requirements and design, send those classified obligations to `kepler-plan`
+in re-plan mode. Re-plan must append one or more appropriately sized numbered remediation tasks,
+initialize their root rows and task progress files, and commit its
+artifacts. Each new task runs through the ordinary `kepler-code` and `kepler-code-feedback` loop.
+After those gates, repeat the whole-branch review gate in the selected full or bounded mode under
+the resume matrix. For `evidence-gap` only,
+independently adjudicate new located evidence on the unchanged material/plan range without invented
+code or tasks. Preserve the complete finding set throughout either route.
 
-When any finding requires changing an approved requirement or design decision, stop and return
-the affected artifacts and finding to `kepler-propose` for revision and approval. Do not ask
-re-plan or code to work around an upstream defect.
+Classify every whole-review blocker by its typed kind and stable identity before routing. Route
+`code-defect` findings consistent with approved intent to numbered remediation tasks; route
+`evidence-gap` findings through bounded located-evidence adjudication and stop identical retries;
+route `intent-defect` findings to the owning proposal/design stage. When any finding requires changing
+an approved requirement or design decision, stop and return the affected artifacts and finding to
+`kepler-propose` for revision and approval. Do not ask re-plan or code to work around an upstream defect.
 
 All whole-branch implementation corrections enter re-plan. Frozen completed tasks remain
 unchanged, and every correction becomes a numbered active task present in `plan.md` with its own
-ordinary implementation and feedback ownership.
+ordinary implementation and feedback ownership. After those gates, select a bounded review against
+the retained modern full changes-requested baseline only when A4's provenance, intent, target,
+plan-amendment, range, and coverage checks pass. Otherwise dispatch a new full review. An approved
+intent defect returns to `kepler-propose` and always requires full review after re-approval.
 
 ## Durable resume
 
@@ -353,9 +463,11 @@ Specify a model on every dispatch.
 - **Task verdict:** `<change-dir>/tasks/task-N/feedback.md` is append-only and is committed alone
   before the driver selects another task or dispatches a correction. Its fresh durable `approved`
   pass is the only advancement authorization.
-- **Whole-branch range:** `kepler workbench diff --whole-change` packages
-  the actual default-branch merge base through current `HEAD`. Pass the complete package and
-  approved change intent to the whole-branch prompt.
+- **Whole-branch range:** `kepler workbench diff --whole-change --target-branch <target-branch>`
+  packages the actual merge base with the explicitly selected full target reference through current
+  `HEAD`. Bounded remediation also receives a cumulative `kepler workbench diff --base <delta-base>`
+  package from its retained full-review Head. Pass the complete package, approved intent, and
+  baseline provenance to the whole-branch prompt.
 - **Whole-branch verdict:** `<change-dir>/review.md` is append-only and is committed alone before
   the driver re-plans or hands off to finish-work.
 - **Constraints:** task feedback receives only the task's acceptance criteria and cited binding
@@ -378,8 +490,8 @@ Specify a model on every dispatch.
 
 Every active plan task is committed with root status `done`, canonical task progress, and a
 physically last task-feedback pass that is valid, fresh, `approved`, and free of blocking findings.
-The complete branch has a committed root review pass that is valid, fresh, `approved`, and free of
-blocking findings. The worktree and change directory are clean, and control is handed to
+The complete branch has a committed root review pass that is valid, fresh, and either `approved` or
+fully validated `approved-remediation`, free of blocking findings. The worktree and change directory are clean, and control is handed to
 `kepler-finish-work`. If an unresolved blocker or upstream artifact defect remains, report it
 plainly and stop in its owning stage.
 
@@ -391,6 +503,9 @@ digraph kepler_orchestrate {
     "All tasks done + fresh approved feedback?" [shape=diamond];
     "Read earliest task row + physical feedback pass" [shape=box];
     "Task state?" [shape=diamond];
+    "Classify task findings before freshness" [shape=diamond];
+    "Adjudicate new task evidence + same Base/Head" [shape=box];
+    "Stop for owner diagnosis or unchanged input" [shape=octagon];
     "Inspect interrupted task state" [shape=box];
     "Resolve checkpoint state" [shape=box];
     "Valid task-N/.base?" [shape=diamond];
@@ -403,7 +518,10 @@ digraph kepler_orchestrate {
     "Confirm feedback-only commit" [shape=box];
     "Read physical whole-branch review pass" [shape=box];
     "Whole-review state?" [shape=diamond];
+    "Select full or validated bounded review" [shape=diamond];
+    "Adjudicate new whole-review located evidence" [shape=box];
     "Package merge-base..HEAD" [shape=box];
+    "Package whole range + original full Head delta" [shape=box];
     "Dispatch kepler-review" [shape=box];
     "Confirm review-only commit" [shape=box];
     "Classify complete findings" [shape=diamond];
@@ -416,7 +534,14 @@ digraph kepler_orchestrate {
     "Read earliest task row + physical feedback pass" -> "Task state?";
     "Task state?" -> "Inspect interrupted task state" [label="in-progress"];
     "Inspect interrupted task state" -> "Resolve checkpoint state" [label="resume"];
-    "Task state?" -> "Resolve checkpoint state" [label="pending / blocked / fresh changes-requested"];
+    "Task state?" -> "Resolve checkpoint state" [label="pending / blocked with changed resolution"];
+    "Task state?" -> "Classify task findings before freshness" [label="changes-requested, fresh or stale"];
+    "Classify task findings before freshness" -> "Resolve checkpoint state" [label="code-defect"];
+    "Classify task findings before freshness" -> "Adjudicate new task evidence + same Base/Head" [label="evidence-gap"];
+    "Classify task findings before freshness" -> "Stop at kepler-propose\n(upstream artifact defect)" [label="intent-defect"];
+    "Adjudicate new task evidence + same Base/Head" -> "Dispatch kepler-code-feedback" [label="changed useful evidence"];
+    "Adjudicate new task evidence + same Base/Head" -> "Stop for owner diagnosis or unchanged input" [label="no changed useful input"];
+    "Task state?" -> "Stop for owner diagnosis or unchanged input" [label="invalid evidence / unchanged blocked input"];
     "Resolve checkpoint state" -> "Valid task-N/.base?";
     "Valid task-N/.base?" -> "Validate task-N/.base" [label="yes"];
     "Valid task-N/.base?" -> "Create at HEAD\n(pending + no evidence only)" [label="genuine first attempt"];
@@ -425,21 +550,28 @@ digraph kepler_orchestrate {
     "Recover original base\n(or stop for intervention)" -> "Validate task-N/.base" [label="unambiguous"];
     "Validate task-N/.base" -> "Dispatch kepler-code";
     "Dispatch kepler-code" -> "Read earliest task row + physical feedback pass";
-    "Task state?" -> "Package task .base..HEAD" [label="done + absent/stale feedback"];
+    "Task state?" -> "Package task .base..HEAD" [label="done + absent feedback / valid stale approval with changed coverage input"];
     "Package task .base..HEAD" -> "Dispatch kepler-code-feedback";
     "Dispatch kepler-code-feedback" -> "Confirm feedback-only commit";
     "Confirm feedback-only commit" -> "Read earliest task row + physical feedback pass";
     "Task state?" -> "All tasks done + fresh approved feedback?" [label="done + fresh approved"];
     "All tasks done + fresh approved feedback?" -> "Read physical whole-branch review pass" [label="yes"];
     "Read physical whole-branch review pass" -> "Whole-review state?";
-    "Whole-review state?" -> "Package merge-base..HEAD" [label="absent / lint-invalid / stale"];
+    "Whole-review state?" -> "Select full or validated bounded review" [label="absent / valid stale approval / skipped with new purpose"];
+    "Whole-review state?" -> "Stop for owner diagnosis or unchanged input" [label="lint-invalid / undurable / off-branch"];
+    "Select full or validated bounded review" -> "Package merge-base..HEAD" [label="full"];
+    "Select full or validated bounded review" -> "Package whole range + original full Head delta" [label="remediation"];
     "Package merge-base..HEAD" -> "Dispatch kepler-review";
+    "Package whole range + original full Head delta" -> "Dispatch kepler-review";
     "Dispatch kepler-review" -> "Confirm review-only commit";
     "Confirm review-only commit" -> "Read physical whole-branch review pass";
-    "Whole-review state?" -> "Classify complete findings" [label="fresh changes-requested"];
-    "Classify complete findings" -> "Dispatch kepler-plan re-plan\n(numbered remediation tasks)" [label="implementation"];
+    "Whole-review state?" -> "Classify complete findings" [label="changes-requested, fresh or stale"];
+    "Classify complete findings" -> "Dispatch kepler-plan re-plan\n(numbered remediation tasks)" [label="code-defect"];
     "Dispatch kepler-plan re-plan\n(numbered remediation tasks)" -> "All tasks done + fresh approved feedback?";
-    "Classify complete findings" -> "Stop at kepler-propose\n(upstream artifact defect)" [label="approved artifact"];
-    "Whole-review state?" -> "Hand off to kepler-finish-work" [label="fresh approved"];
+    "Classify complete findings" -> "Adjudicate new whole-review located evidence" [label="evidence-gap"];
+    "Adjudicate new whole-review located evidence" -> "Select full or validated bounded review" [label="changed useful evidence, unchanged material/plan range"];
+    "Adjudicate new whole-review located evidence" -> "Stop for owner diagnosis or unchanged input" [label="no changed useful input"];
+    "Classify complete findings" -> "Stop at kepler-propose\n(upstream artifact defect)" [label="intent-defect"];
+    "Whole-review state?" -> "Hand off to kepler-finish-work" [label="approved / approved-remediation, current"];
 }
 ```

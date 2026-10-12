@@ -9,6 +9,11 @@ import {
   type ContextRuntime,
 } from "../../packages/cli/src/workbench/context.js";
 import {
+  taskBreakdownDigest,
+  taskBreakdownDigestFromDefinitions,
+  taskDefinitionDigest,
+} from "../../packages/cli/src/workbench/artifact-body.js";
+import {
   cleanupRepos,
   commitAll,
   commitPaths,
@@ -24,11 +29,21 @@ const proposal = `# Proposal: Add auth
 `;
 const plan = `# Plan: add auth
 
+| Route unit | .kepler/maps/auth/route.md — unit 2 |
+
+## Overview
+
+Implement the selected route unit.
+
 ## Tasks
 
 ### Task 1: Add the auth | session
 
 ### Task 2: Wire it into the router
+
+## Done when
+
+The selected route unit is complete.
 `;
 const progress = `# Progress: add auth
 
@@ -145,6 +160,42 @@ ${global ? `base: ${global.base}\nhead: ${global.head}\nverdict: ${global.verdic
 
 ${passes}`;
 
+const authRoute = `---
+artifact: route
+effort: auth
+status: shipping
+created: 2026-09-12
+updated: 2026-09-12
+decision: accepted
+units:
+  - id: 1
+    name: Foundation
+    status: shipped
+    depends_on: []
+    backed_by: [tickets/01-foundation.md]
+  - id: 2
+    name: Add auth
+    status: pending
+    depends_on: [1]
+    backed_by: [tickets/02-auth.md]
+---
+# Route — Auth
+
+## Point of departure
+
+## Destination
+
+## Path chosen
+
+## Shipping rules
+
+## Units
+
+### 1. Foundation
+
+### 2. Add auth
+`;
+
 const seed = (
   repository: string,
   slug: string,
@@ -153,7 +204,55 @@ const seed = (
   const directory = makeChangeDir(repository, slug);
   for (const [file, content] of Object.entries(files))
     write(directory, file, content);
+  if (Object.values(files).some((content) => content.includes(".kepler/maps/auth/route.md"))) {
+    const routePath = Path.join(repository, ".kepler/maps/auth/route.md");
+    const routeExists = Fs.existsSync(routePath);
+    const routeMatches = routeExists && Fs.readFileSync(routePath, "utf8") === authRoute;
+    if (!routeMatches) {
+      write(repository, ".kepler/maps/auth/route.md", authRoute);
+      commitPaths(repository, "route fixture", ".kepler/maps/auth/route.md");
+    }
+  }
   return directory;
+};
+
+const createInitialContextScaffold = (priorDeletedProgress = false) => {
+  const repository = makeRepo();
+  const directory = makeChangeDir(repository, "scaffold");
+  const base = git(repository, "rev-parse", "HEAD");
+  if (priorDeletedProgress) {
+    const progressPath = ".kepler/changes/scaffold/progress.md";
+    write(repository, progressPath, "prior pending ledger\n");
+    commitPaths(repository, "write initial ledger", progressPath);
+    Fs.rmSync(Path.join(repository, progressPath));
+    commitAll(repository, "delete prior ledger");
+  }
+  const definition = "### Task 1: Create file\n\n- Depends on: none\n- Files: src/new.ts";
+  const inputContext = JSON.stringify({
+    version: 1,
+    repository,
+    intentCommit: "tactical:scaffold-fixture",
+    taskDefinition: taskDefinitionDigest(definition),
+    inputs: [],
+  });
+  const taskBlock = `${definition}\n- Notes: ${inputContext}`;
+  const breakdown = taskBreakdownDigest(
+    [1],
+    [{
+      id: 1,
+      title: "Create file",
+      dependsOn: [],
+      filesDeclared: true,
+      files: ["src/new.ts"],
+      source: definition,
+    }],
+  );
+  write(
+    repository,
+    ".kepler/changes/scaffold/plan.md",
+    `---\nartifact: plan\nchange: scaffold\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\ninitialization:\n  version: 1\n  base: ${base}\n  authority: requester-message-1\n  breakdown: ${breakdown}\n  taskIds: [1]\n---\n# Plan: Scaffold\n\n## Overview\n\n## Tasks\n\n${taskBlock}\n\n## Done when\n\nThe initial work is complete.\n`,
+  );
+  return { repository, directory, breakdown, base };
 };
 
 const runContext = (
@@ -176,6 +275,7 @@ describe("change context", () => {
     expect(first.stdout).toContain(
       "route-unit: .kepler/maps/auth/route.md — unit 2",
     );
+    expect(first.stdout).toMatch(/route-unit-revision: [a-f0-9]{40}/);
     expect(first.stdout).toMatch(/proposal\.md\s+present/);
     expect(first.stdout).toContain("requirements/  present  auth");
     expect(first.stdout).toContain("Task 1: done, feedback: absent");
@@ -184,6 +284,441 @@ describe("change context", () => {
       "summary: add-auth — 1/2 tasks done, whole change: not reviewed",
     );
     expect(renderContextResult(first)).toBe(first.stdout.trimEnd());
+  });
+
+  it("uses a planned route binding when a current proposal has no route unit", async () => {
+    const repository = makeRepo();
+    const proposal = `---\nartifact: proposal\nchange: modern\nstatus: approved\ndecision: accepted\nauthor: Test <test@example.com>\ncreated: 2026-09-12\nroute_unit: null\n---\n# Proposal: Add auth\n\n## Why\n\n## Goals & Success Criteria\n\n## Non-Goals\n\n## Proposed Change\n\n## Capabilities\n\n## Impact\n`;
+    const planSource = `---\nartifact: plan\nchange: modern\nstatus: approved\ndecision: accepted\nauthor: Test <test@example.com>\ncreated: 2026-09-12\nroute_unit: .kepler/maps/auth/route.md — unit 2\n---\n${plan}`;
+    const directory = seed(repository, "modern", {
+      ...splitFiles,
+      "proposal.md": proposal,
+      "plan.md": planSource,
+    });
+
+    const result = await runContext({ changeDir: directory });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      "route-unit: .kepler/maps/auth/route.md — unit 2",
+    );
+    expect(result.stdout).toMatch(/route-unit-revision: [a-f0-9]{40}/);
+  });
+
+  it("requires a real route unit at the committed route revision", async () => {
+    const missingRepository = makeRepo();
+    const missingDirectory = seed(missingRepository, "missing-route-unit", {
+      ...splitFiles,
+      "proposal.md": proposal.replace("unit 2", "unit 3"),
+      "plan.md": plan.replace("unit 2", "unit 3"),
+    });
+    const missing = await runContext({ changeDir: missingDirectory });
+
+    expect(missing.exitCode).not.toBe(0);
+    expect(missing.stderr).toContain("route unit 3 does not exist");
+
+    const dirtyRepository = makeRepo();
+    const dirtyDirectory = seed(dirtyRepository, "dirty-route", splitFiles);
+    write(
+      dirtyRepository,
+      ".kepler/maps/auth/route.md",
+      authRoute.replace("status: shipping", "status: open"),
+    );
+    const dirty = await runContext({ changeDir: dirtyDirectory });
+
+    expect(dirty.exitCode).not.toBe(0);
+    expect(dirty.stderr).toContain("route binding differs from its committed revision");
+  });
+
+  it("reports both conflicting route bindings and returns a nonzero status", async () => {
+    const repository = makeRepo();
+    const proposal = `---\nartifact: proposal\nchange: conflict\nstatus: approved\ndecision: accepted\nauthor: Test <test@example.com>\ncreated: 2026-09-12\nroute_unit: .kepler/maps/auth/route.md — unit 1\n---\n# Proposal: Add auth\n\n## Why\n\n## Goals & Success Criteria\n\n## Non-Goals\n\n## Proposed Change\n\n## Capabilities\n\n## Impact\n`;
+    const planSource = `---\nartifact: plan\nchange: conflict\nstatus: approved\ndecision: accepted\nauthor: Test <test@example.com>\ncreated: 2026-09-12\nroute_unit: null\n---\n${plan}`;
+    const directory = seed(repository, "conflict", {
+      ...splitFiles,
+      "proposal.md": proposal,
+      "plan.md": planSource,
+    });
+
+    const result = await runContext({ changeDir: directory });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.status).toBe("error");
+    expect(result.stderr).toContain("route binding conflict");
+    expect(result.stderr).toContain("proposal.md route_unit=\".kepler/maps/auth/route.md — unit 1\"");
+    expect(result.stderr).toContain("plan.md route_unit=null");
+
+    const distinctRepository = makeRepo();
+    const distinctDirectory = seed(distinctRepository, "distinct-route-conflict", {
+      ...splitFiles,
+      "proposal.md": proposal.replace("change: conflict", "change: distinct-route-conflict"),
+      "plan.md": planSource
+        .replace("change: conflict", "change: distinct-route-conflict")
+        .replace(
+          "route_unit: null",
+          "route_unit: .kepler/maps/auth/route.md — unit 2",
+        ),
+    });
+    const distinct = await runContext({ changeDir: distinctDirectory });
+
+    expect(distinct.exitCode, `${distinct.stdout}\n${distinct.stderr}`).not.toBe(0);
+    expect(distinct.stderr).toContain("route binding conflict");
+    expect(distinct.stderr).toContain("proposal.md route_unit=\".kepler/maps/auth/route.md — unit 1\"");
+    expect(distinct.stderr).toContain("plan.md route_unit=\".kepler/maps/auth/route.md — unit 2\"");
+  });
+
+  it("reports identity and execution orders separately and detects changed task inputs", async () => {
+    const repository = makeRepo();
+    const directory = makeChangeDir(repository, "scheduled");
+    write(repository, "AGENTS.md", "Use verified commands.\n");
+    commitPaths(repository, "standards", "AGENTS.md");
+    const inputBlob = git(repository, "rev-parse", "HEAD:AGENTS.md");
+    const taskData = [
+      { id: 1, title: "First", dependsOn: "none" },
+      { id: 2, title: "Second", dependsOn: "Task 4" },
+      { id: 3, title: "Third", dependsOn: "Task 2" },
+      { id: 4, title: "Prerequisite", dependsOn: "Task 1" },
+    ];
+    const taskBlocks = taskData.map(({ id, title, dependsOn }) => {
+      const definition = `### Task ${id}: ${title}\n\n- Depends on: ${dependsOn}\n- Files: src/task-${id}.ts`;
+      const inputContext = JSON.stringify({
+        version: 1,
+        repository,
+        intentCommit: "tactical:context-fixture",
+        taskDefinition: taskDefinitionDigest(definition),
+        inputs: [{ path: "AGENTS.md", blob: inputBlob }],
+      });
+      return `${definition}\n- Notes: ${inputContext}`;
+    });
+    write(
+      repository,
+      ".kepler/changes/scheduled/plan.md",
+      `---\nartifact: plan\nchange: scheduled\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\nexecution:\n  version: 1\n  order: [1, 4, 2, 3]\n---\n# Plan: Scheduled\n\n## Overview\n\n\`\`\`md\n### Task 99: Fake\n- Depends on: Task 1\n\`\`\`\n\n## Tasks\n\n${taskBlocks.join("\n\n")}\n\n## Done when\n\nThe scheduled work is complete.\n`,
+    );
+    const entries = taskData.map(({ id, title }) => `  - id: ${id}\n    title: ${title}\n    status: pending\n    progress: tasks/task-${id}/progress.md`).join("\n");
+    write(
+      repository,
+      ".kepler/changes/scheduled/progress.md",
+      `---\nartifact: progress\nchange: scheduled\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n${entries}\n---\n# Progress: Scheduled\n\n| Task | Status | Progress |\n| --- | --- | --- |\n${taskData.map(({ id, title }) => `| Task ${id}: ${title} | pending | [details](tasks/task-${id}/progress.md) |`).join("\n")}\n`,
+    );
+    for (const { id, title } of taskData)
+      write(
+        repository,
+        `.kepler/changes/scheduled/tasks/task-${id}/progress.md`,
+        `---\nartifact: task-progress\nchange: scheduled\ntask: ${id}\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task ${id} — ${title}\n`,
+      );
+
+    const current = await runContext({ changeDir: directory });
+    expect(current.exitCode).toBe(0);
+    expect(current.stdout).toContain("identity-order: 1, 2, 3, 4");
+    expect(current.stdout).not.toContain("Task 99");
+    expect(current.stdout).toContain("execution-order: 1, 4, 2, 3");
+    expect(current.stdout).toContain("execution-history: uncommitted");
+    expect(current.stdout).toContain("formal-intent: tactical (approval references are assertions)");
+    expect(current.stdout).toContain("Task 1 input context: current");
+
+    write(repository, "AGENTS.md", "Use changed commands.\n");
+    const stale = await runContext({ changeDir: directory });
+    expect(stale.stdout).toContain("Task 1 input context: stale (AGENTS.md)");
+  });
+
+  it("reports history-verified unaffected tasks under an input-impact record", async () => {
+    const repository = makeRepo();
+    const directory = makeChangeDir(repository, "impact");
+    write(repository, "AGENTS.md", "Use the old command.\n");
+    commitPaths(repository, "old input", "AGENTS.md");
+    const previousBlob = git(repository, "rev-parse", "HEAD:AGENTS.md");
+    const definition = "### Task 1: Preserve obligations\n\n- Depends on: none";
+    const inputContext = JSON.stringify({
+      version: 1,
+      repository,
+      intentCommit: "tactical:context-fixture",
+      taskDefinition: taskDefinitionDigest(definition),
+      inputs: [{ path: "AGENTS.md", blob: previousBlob }],
+    });
+    const planPath = ".kepler/changes/impact/plan.md";
+    const planBody = `# Plan: Impact\n\n## Overview\n\nA plan.\n\n## Tasks\n\n${definition}\n- Notes: ${inputContext}\n\n## Done when\n\nExisting obligations remain complete.\n`;
+    write(
+      repository,
+      planPath,
+      `---\nartifact: plan\nchange: impact\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\n---\n${planBody}`,
+    );
+    write(
+      repository,
+      ".kepler/changes/impact/progress.md",
+      "---\nartifact: progress\nchange: impact\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n  - id: 1\n    title: Preserve obligations\n    status: pending\n    progress: tasks/task-1/progress.md\n---\n# Progress: Impact\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Preserve obligations | pending | [details](tasks/task-1/progress.md) |\n",
+    );
+    write(
+      repository,
+      ".kepler/changes/impact/tasks/task-1/progress.md",
+      "---\nartifact: task-progress\nchange: impact\ntask: 1\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 1 — Preserve obligations\n",
+    );
+    commitAll(repository, "initial plan and task ledger");
+    const previousPlanCommit = git(repository, "log", "-1", "--format=%H", "--", planPath);
+    write(repository, "AGENTS.md", "Use the new command.\n");
+    commitPaths(repository, "change input", "AGENTS.md");
+    const currentBlob = git(repository, "rev-parse", "HEAD:AGENTS.md");
+    const inputImpact = {
+      version: 1,
+      previousPlanCommit,
+      reviewReference: "context-review-21",
+      changes: [
+        {
+          path: "AGENTS.md",
+          previousBlob,
+          currentBlob,
+          affectedTasks: [],
+          unaffectedTasks: [1],
+          newTasks: [],
+          unresolvedIntent: false,
+          rationale: "Existing task obligations remain unchanged.",
+        },
+      ],
+    };
+    write(
+      repository,
+      planPath,
+      `---\nartifact: plan\nchange: impact\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\ninput_impact: ${JSON.stringify(inputImpact)}\n---\n# Plan: Impact\n\n## Overview\n\n- Input impact review: context-review-21\n- Input impact previous plan: ${previousPlanCommit}\n\n## Tasks\n\n${definition}\n- Notes: ${inputContext}\n\n## Done when\n\nExisting obligations remain complete.\n`,
+    );
+    commitPaths(repository, "record input impact", planPath);
+
+    const result = await runContext({ changeDir: directory });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("input-impact-history: verified");
+    expect(result.stdout).toContain("input-impact-review: context-review-21 (assertion, not authenticated)");
+    expect(result.stdout).toContain("Task 1 input context: impact-reviewed-unaffected (AGENTS.md)");
+  });
+
+  it("marks only authorized history-free missing initialization as recoverable", async () => {
+    const clean = createInitialContextScaffold();
+    const eligible = await runContext({ changeDir: clean.directory });
+    expect(eligible.stdout).toContain("scaffold-recovery: eligible");
+    const planContractLine = eligible.stdout
+      .split("\n")
+      .find((line) => line.startsWith("plan-contract-data: "));
+    expect(planContractLine).toBeDefined();
+    const planContractData = JSON.parse(
+      planContractLine?.slice("plan-contract-data: ".length) ?? "null",
+    ) as {
+      readonly taskBreakdownDigest: string;
+      readonly recordedInitialization: { readonly breakdown: string } | null;
+      readonly tasks: readonly { readonly taskDefinitionDigest: string }[];
+    };
+    const expectedTaskDigest = taskDefinitionDigest(
+      "### Task 1: Create file\n\n- Depends on: none\n- Files: src/new.ts",
+    );
+    expect(planContractData.taskBreakdownDigest).toBe(
+      taskBreakdownDigestFromDefinitions(
+        [1],
+        [{ id: 1, definitionDigest: expectedTaskDigest }],
+      ),
+    );
+    expect(planContractData.recordedInitialization?.breakdown).toBe(clean.breakdown);
+    expect(planContractData.tasks[0]?.taskDefinitionDigest).toBe(expectedTaskDigest);
+
+  });
+
+  it("blocks initial recovery after an unfinished definition amendment", async () => {
+    const amendedScaffold = createInitialContextScaffold();
+    commitAll(amendedScaffold.repository, "commit initial scaffold plan");
+    const planPath = ".kepler/changes/scaffold/plan.md";
+    const initialPlan = Fs.readFileSync(
+      Path.join(amendedScaffold.repository, planPath),
+      "utf8",
+    );
+    const originalDefinition =
+      "### Task 1: Create file\n\n- Depends on: none\n- Files: src/new.ts";
+    const originalNotes = initialPlan
+      .split("\n")
+      .find((line) => line.startsWith("- Notes: "))
+      ?.slice("- Notes: ".length);
+    expect(originalNotes).toBeDefined();
+    const originalContext = JSON.parse(originalNotes ?? "null") as {
+      readonly version: number;
+      readonly repository: string;
+      readonly intentCommit: string;
+      readonly taskDefinition: string;
+      readonly inputs: readonly { readonly path: string; readonly blob: string }[];
+    };
+    const changedDefinition = originalDefinition.replace(
+      "Create file",
+      "Create revised file",
+    );
+    const amendedNotes = JSON.stringify({
+      ...originalContext,
+      taskDefinition: taskDefinitionDigest(changedDefinition),
+    });
+    write(
+      amendedScaffold.repository,
+      planPath,
+      initialPlan.replace(
+        `${originalDefinition}\n- Notes: ${originalNotes}`,
+        `${changedDefinition}\n- Notes: ${amendedNotes}`,
+      ),
+    );
+    commitPaths(amendedScaffold.repository, "amend unfinished task", planPath);
+    const amendedRecovery = await runContext({ changeDir: amendedScaffold.directory });
+    expect(amendedRecovery.stdout).toContain("scaffold-recovery: blocked");
+    expect(amendedRecovery.stdout).toContain(
+      "amended plan cannot use initial-scaffold recovery",
+    );
+
+  });
+
+  it("blocks initial recovery after forged original proof", async () => {
+    const forgedScaffold = createInitialContextScaffold();
+    const planPath = ".kepler/changes/scaffold/plan.md";
+    commitAll(forgedScaffold.repository, "commit original proof snapshot");
+    const forgedPlan = Fs.readFileSync(
+      Path.join(forgedScaffold.repository, planPath),
+      "utf8",
+    ).replace(forgedScaffold.breakdown, "f".repeat(64));
+    write(forgedScaffold.repository, planPath, forgedPlan);
+    commitPaths(forgedScaffold.repository, "forge original breakdown", planPath);
+    const forgedRecovery = await runContext({ changeDir: forgedScaffold.directory });
+    expect(forgedRecovery.stdout).toContain("scaffold-recovery: blocked");
+    expect(forgedRecovery.stdout).toContain(
+      "initial plan revision does not contain the recorded initialization proof",
+    );
+
+  });
+
+  it("blocks initial recovery after changing the recorded base", async () => {
+    const changedBaseScaffold = createInitialContextScaffold();
+    const planPath = ".kepler/changes/scaffold/plan.md";
+    commitAll(changedBaseScaffold.repository, "commit original base plan");
+    write(changedBaseScaffold.repository, "base-marker.txt", "advance the repository\n");
+    const changedBase = commitAll(changedBaseScaffold.repository, "advance repository base");
+    const changedBasePlan = Fs.readFileSync(
+      Path.join(changedBaseScaffold.repository, planPath),
+      "utf8",
+    ).replace(changedBaseScaffold.base, changedBase);
+    write(changedBaseScaffold.repository, planPath, changedBasePlan);
+    commitPaths(changedBaseScaffold.repository, "change initialization base", planPath);
+    const changedBaseRecovery = await runContext({ changeDir: changedBaseScaffold.directory });
+    expect(changedBaseRecovery.stdout).toContain("scaffold-recovery: blocked");
+    expect(changedBaseRecovery.stdout).toContain(
+      "initialization revision already contains .kepler/changes/scaffold/plan.md",
+    );
+
+  });
+
+  it("blocks initial recovery when task work already exists", async () => {
+    const partial = createInitialContextScaffold();
+    write(partial.repository, "src/new.ts", "export const partial = true;\n");
+    const blocked = await runContext({ changeDir: partial.directory });
+    expect(blocked.stdout).toContain("scaffold-recovery: blocked");
+    expect(blocked.stdout).toContain("Task 1 has partial work in src/new.ts");
+
+  });
+
+  it("blocks initial recovery after deleted root progress history", async () => {
+    const deletedHistory = createInitialContextScaffold(true);
+    const deleted = await runContext({ changeDir: deletedHistory.directory });
+    expect(deleted.stdout).toContain("scaffold-recovery: blocked");
+    expect(deleted.stdout).toContain("root task progress has deleted history since initialization");
+  });
+
+
+  it.each(["deleted checkpoint", "unavailable checkpoint history", "task title", "root change", "root title", "plan title"])("rejects initial recovery with inconsistent %s", async (failure) => {
+    const scaffold = createInitialContextScaffold();
+    const progressPath = ".kepler/changes/scaffold/progress.md";
+    const taskPath = ".kepler/changes/scaffold/tasks/task-1/progress.md";
+    const checkpointPath = ".kepler/changes/scaffold/tasks/task-1/.base";
+    const planPath = ".kepler/changes/scaffold/plan.md";
+    const runtime = createContextRuntime();
+    if (failure === "deleted checkpoint") {
+      commitPaths(scaffold.repository, "capture initial pending plan", planPath);
+      write(scaffold.repository, checkpointPath, scaffold.base + "\n");
+      commitPaths(scaffold.repository, "record tracked checkpoint", checkpointPath);
+      Fs.unlinkSync(Path.join(scaffold.repository, checkpointPath));
+      commitPaths(scaffold.repository, "delete tracked checkpoint", checkpointPath);
+    } else if (failure === "unavailable checkpoint history") {
+      const originalGit = runtime.git;
+      const unavailable = createContextRuntime({
+        git: {
+          ...originalGit,
+          pathHistorySince: (cwd, base, path) => path.endsWith("/.base")
+            ? { status: 1, stdout: "", stderr: "checkpoint history unavailable" }
+            : originalGit.pathHistorySince(cwd, base, path),
+        },
+      });
+      const result = await runContext({ changeDir: scaffold.directory }, unavailable);
+      expect(result.stdout).toContain("scaffold-recovery: blocked");
+      expect(result.stdout).toContain("checkpoint");
+      return;
+    } else if (failure === "task title") {
+      write(scaffold.repository, taskPath, "---\nartifact: task-progress\nchange: scaffold\ntask: 1\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 1 — Wrong title\n");
+    } else {
+      const change = failure === "root change" ? "other" : "scaffold";
+      const title = failure === "root title" ? "Other title" : "Scaffold";
+      write(scaffold.repository, progressPath, `---\nartifact: progress\nchange: ${change}\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n  - id: 1\n    title: Create file\n    status: pending\n    progress: tasks/task-1/progress.md\n---\n# Progress: ${title}\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Create file | pending | [details](tasks/task-1/progress.md) |\n`);
+      if (failure === "plan title") {
+        const source = Fs.readFileSync(Path.join(scaffold.repository, planPath), "utf8");
+        write(scaffold.repository, planPath, source.replace("# Plan: Scaffold", "# Plan: Other title"));
+      }
+    }
+    const result = await runContext({ changeDir: scaffold.directory }, runtime);
+    expect(result.stdout).toMatch(/scaffold-recovery: blocked|format: invalid/);
+    expect(result.stdout).not.toContain("scaffold-recovery: eligible");
+    if (failure === "deleted checkpoint") expect(result.stdout).toContain("checkpoint");
+  });
+
+  it.each(["task log", "root ledger"])("retains valid pending %s during initial recovery", async (present) => {
+    const scaffold = createInitialContextScaffold();
+    if (present === "task log")
+      write(scaffold.repository, ".kepler/changes/scaffold/tasks/task-1/progress.md", "---\nartifact: task-progress\nchange: scaffold\ntask: 1\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 1 — Create file\n");
+    else
+      write(scaffold.repository, ".kepler/changes/scaffold/progress.md", "---\nartifact: progress\nchange: scaffold\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n  - id: 1\n    title: Create file\n    status: pending\n    progress: tasks/task-1/progress.md\n---\n# Progress: Scaffold\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Create file | pending | [details](tasks/task-1/progress.md) |\n");
+    const result = await runContext({ changeDir: scaffold.directory });
+    expect(result.stdout).toContain("scaffold-recovery: eligible");
+  });
+
+  it.each(["null", "{ version: 2, order: [1] }"])("names the exact invalid execution diagnostic for %s without numeric fallback", async (execution) => {
+    const scaffold = createInitialContextScaffold();
+    const path = ".kepler/changes/scaffold/plan.md";
+    const source = Fs.readFileSync(Path.join(scaffold.repository, path), "utf8");
+    write(scaffold.repository, path, source.replace("route_unit: null\n", `route_unit: null\nexecution: ${execution}\n`));
+    const result = await runContext({ changeDir: scaffold.directory });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("format: invalid");
+    expect(result.stdout).toMatch(/execution.*(object|version|unsupported|must)/i);
+    expect(result.stdout).not.toContain("execution-order: 1");
+  });
+
+  it("fails closed on reordered schedules without history or with damaged prior plans", async () => {
+    const writePlan = (
+      repository: string,
+      body: string,
+      execution?: readonly number[],
+    ) =>
+      write(
+        repository,
+        ".kepler/changes/history/plan.md",
+        `---\nartifact: plan\nchange: history\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\n${execution ? `execution:\n  version: 1\n  order: [${execution.join(", ")}]\n` : ""}---\n# Plan: History\n\n## Overview\n\n## Tasks\n\n${body}\n## Done when\n\nThe schedule is clear.\n`,
+      );
+    const reordered = makeRepo();
+    const reorderedDir = makeChangeDir(reordered, "history");
+    writePlan(reordered, "### Task 1: First\n\n### Task 2: Second", [1, 2]);
+    commitPaths(reordered, "first plan", ".kepler/changes/history/plan.md");
+    writePlan(
+      reordered,
+      "### Task 1: First\n\n### Task 2: Second\n\n### Task 3: Prerequisite",
+      [1, 3, 2],
+    );
+    commitPaths(reordered, "reorder without proof", ".kepler/changes/history/plan.md");
+    const reorderedContext = await runContext({ changeDir: reorderedDir });
+    expect(reorderedContext.stdout).toContain("execution-history: blocked (execution order changed without committed execution transition evidence)");
+
+    const damaged = makeRepo();
+    const damagedDir = makeChangeDir(damaged, "history");
+    write(damaged, ".kepler/changes/history/plan.md", "---\nartifact: plan\nchange: history\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\n---\n# Plan: History\n");
+    commitPaths(damaged, "damaged prior plan", ".kepler/changes/history/plan.md");
+    writePlan(damaged, "### Task 1: First");
+    commitPaths(damaged, "replace damaged plan", ".kepler/changes/history/plan.md");
+    const damagedContext = await runContext({ changeDir: damagedDir });
+    expect(damagedContext.stdout).toContain("execution-history: blocked (preceding committed plan revision is malformed or unsupported)");
   });
 
   it("classifies a current change with an empty pending task log as split", async () => {
@@ -305,7 +840,8 @@ decision: accepted
       "changes",
       "legacy-change",
     );
-    write(legacyChange, "proposal.md", proposal);
+    const legacyProposal = "# Proposal: legacy-change\n";
+    write(legacyChange, "proposal.md", legacyProposal);
 
     const result = await runContext(
       { all: true },
@@ -321,13 +857,13 @@ decision: accepted
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("legacy-change");
-    expect(Fs.readFileSync(canonicalProposal, "utf8")).toBe(proposal);
+    expect(Fs.readFileSync(canonicalProposal, "utf8")).toBe(legacyProposal);
     expect(
       Fs.readFileSync(
         Path.join(legacyChange, "proposal.md"),
         "utf8",
       ),
-    ).toBe(proposal);
+    ).toBe(legacyProposal);
   });
 
   it("returns an environment error for unreadable all-scope discovery", async () => {

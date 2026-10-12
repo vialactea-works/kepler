@@ -82,7 +82,7 @@ describe("change-scoped artifact lint contract", () => {
     )
     expectOrdered(
       section(skills["kepler-code"], "## Process"),
-      "root-row transition",
+      "root metadata/row transition",
       "kepler workbench lint --change-dir <change-dir>",
     )
     expectOrdered(

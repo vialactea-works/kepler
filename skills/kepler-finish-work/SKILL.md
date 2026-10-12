@@ -54,12 +54,12 @@ skill's own directory — they are co-located with this `SKILL.md`, not at `${XD
   push, open a request, or remove a workspace until the exact preconditions pass.
 - **Physical evidence governs.** Use the exact root ledger and physically last task and review
   records. Never recover an earlier approval from history.
-- **Intent before action; observation after action.** Commit an `Attempt N` before the first
-  finish side effect. Read back every relevant effect before writing its matching `Outcome N`.
+- **Intent before action; observation after action.** Commit an `Attempt N` before canonical
+  specs or any other finish side effect. Read back every effect before its matching `Outcome N`.
 - **Finish history is paired and append-only.** The attempt says what will be done; the outcome
   says what was verified. Neither rewrites the other.
-- **Specs are the truth.** Fold the approved requirement deltas into the canonical specs at
-  human-readable altitude before attempting to finish.
+- **Specs are the truth.** Validate approved deltas read-only before journaling. Fold them into
+  canonical specs at human-readable altitude only inside a verified durable Attempt.
 - **Same-attempt ownership is narrow.** Expected canonical spec, route, map, and numbered finish
   mutations made by this skill do not invalidate the attempt whose gate admitted them. No other
   post-gate material edit receives that treatment.
@@ -76,7 +76,8 @@ findings if it exits nonzero. Identify the complete test suite and build/typeche
 
 ```bash
 kepler workbench precondition \
-  --change-dir <change-dir> --test-cmd '<full test suite && build/typecheck>'
+  --change-dir <change-dir> --test-cmd '<full test suite && build/typecheck>' \
+  --target-branch <full-target-reference>
 ```
 
 Use `--whole-change-waived` only for an explicit user waiver. The waiver changes only the
@@ -91,12 +92,32 @@ requirements to lint. It must validate all of these facts and close with `gate: 
 - The exact root task ledger has one ordered row for every active task, no extra row, the exact
   lowercase task-progress link, and status `done`. In every linked file, the physically last
   task attempt is well formed and has exactly one `Outcome: done`.
-- Every active task's physically last task feedback pass is valid, fresh for its latest task
-  progress commit, `approved`, on the current branch, and has no blocking findings or unresolved
-  `cannot verify from diff` finding.
-- The physically last whole-branch review pass is valid, on the current branch, `approved`, and
-  has no blocking findings. Its reviewed range must be structurally valid. Unless explicitly
-  waived, its Head must also contain the latest material change commit.
+- Every active task's task-progress artifact is tracked and committed at `HEAD`; its latest
+  implementation commit resolves, and the physically last task feedback pass is valid, fresh for
+  that commit, `approved`, on the current branch, and has no blocking findings or unresolved
+  `cannot verify from diff` finding. Its Base agrees with the canonical first-attempt checkpoint.
+  Each task's current definition digest and selected-input handoff are verified against committed
+  history; any input-impact classification is committed and verified, and affected tasks carry the
+  required follow-up plan binding. A historical task whose input provenance is absent may use only
+  a task-scoped `legacy_input_confirmations` entry that context and admission report as
+  `legacy-current-confirmed`; its `historicalInputs: "unknown"` stays unknown and the record binds
+  the unchanged task definition, canonical repository, current committed inputs/approval, owner and
+  independent-review references, and rationale. This is a current scope confirmation, not historical
+  proof, authentication, semantic review, or a waiver. All task-feedback, intent, review, cleanliness,
+  test, and whole-change gates still apply. An explicit serial execution transition is committed,
+  verified, and obeyed by task history; completed tasks retain numeric identity order and immutable
+  definitions.
+- Every present formal proposal/design/requirements input has explicit `approved` / `accepted`
+  metadata, an exact full-commit plan reference and requester-held approval reference, and current
+  bytes matching that committed revision. Tactical absence is valid; a plan's status/default or
+  lint alone is not approval. If optional `critique.md` exists, its disposition must be settled.
+  These owner references are assertions, not cryptographic authentication.
+- The physically last whole-branch review pass is valid, durable, and on the current branch. It may
+  be a full `approved` pass or a validated `approved-remediation` pass whose immutable full baseline,
+  resolution map, target/range, intent, and correction coverage all pass the CLI gate. Either verdict
+  must have no blocking findings. Its range must use the actual target merge base. Unless explicitly
+  waived, its Head must also contain the latest material change commit. A metadata disposition such
+  as `applied` never grants clearance; the waiver changes only material ancestry.
 
 If the Kepler CLI/workbench is unavailable, stop: a hand-written artifact parser cannot replace
 lint or the precondition command. Fail closed on missing evidence, contradictory state, unreachable
@@ -106,9 +127,23 @@ If any gate fails, stop and report the gate output verbatim. Perform no finish a
 create or change `finish.md`, do not synchronize specs or route state, and do not write root
 `progress.md`. A precondition failure has no finish-history record because no attempt began.
 
-After the gate opens, capture the full gate-entry `HEAD`, branch, base branch, worktree path,
-review Base and Head, latest material commit, waiver state, and route state. These values define
-the admitted attempt and its post-gate mutation boundary.
+After the gate opens, require one `verified-head: <full-commit>` line and compare it with current
+`HEAD` before capturing the named source branch, resolved delivery target, base branch, worktree
+path, review Base and Head, latest material commit, waiver state, and route state. If the identity is
+absent or differs, rerun preconditions. Use the verified identifier as gate-entry `HEAD`; do not
+silently capture a newer revision. For new generation/finish effects, require the named source branch
+to differ from the actual target by normalized refs and configured local/remote mapping, never tip
+SHA. The only exception is the scoped A7 repair of an already-observed delivered effect on its
+surviving base; that exception cannot authorize new code or delivery and must use A7's recorded
+provenance and exact repair allowlist rather than ordinary source-branch admission. Before
+canonical-spec synchronization or any finish intent, run `kepler workbench context <change-dir>` for
+route-backed work. Require an unambiguous canonical route/unit, exact committed route-source
+revision and owner/change/source/target/base match for an ordinary attempt; inspect visible claims
+for another owner and stop on conflict or ambiguity. A7 repair verifies the original route/effect
+provenance and cannot replay a route transition. This local scan is not distributed exclusivity. Before the first effect and each later
+effect, confirm that `HEAD`, source/target branches, base branch, worktree identity, and target
+repository still match the admitted boundary. A changed branch or worktree stops even when the
+commit SHA is unchanged.
 
 ## Specification synchronization
 
@@ -129,8 +164,8 @@ The content set comes from those approved change artifacts. Never invent canonic
 the raw diff, root or task progress, task feedback, whole-branch review comments, or an external
 request. Never add, edit, or rewrite a file under `requirements/` during finish-work.
 
-If synchronization discovers a missing or incorrect change requirement, abort before allocating
-an attempt or committing canonical specs. Route the defect to artifact revision, then require a
+During read-only validation, if synchronization would require a missing or incorrect change requirement,
+abort before allocating an attempt or committing canonical specs. Route the defect to artifact revision, then require a
 fresh whole-branch review before finish-work runs again. The same stop applies when the proposal,
 design, and requirement deltas disagree. Report the affected artifact and mismatch without
 repairing approved intent inside the finish stage.
@@ -155,14 +190,17 @@ If behavior changed, treat the absent delta as a missing change requirement: abo
 revision and fresh whole-branch review. Otherwise record that no canonical spec changed. A
 tactical path does not permit spec drift.
 
-After every canonical spec mutation, run `kepler workbench lint --file <file>` at the
+Do not mutate a canonical file during this validation. Resolve its exact planned target and approved
+input blob identities first, then commit and verify the Attempt as specified in Process. Only inside
+that same Attempt, after every canonical spec mutation, run `kepler workbench lint --file <file>` at the
 mutation boundary. A nonzero lint result is a failed gate: correct the spec and rerun lint, or
 stop with the exact finding without staging or committing it. This file-scoped lint is additive;
 it does not replace the semantic, freshness, ancestry, or completion gates. Review the
 synchronization and stage only canonical `.kepler/specs/` paths derived from the already
-approved artifacts. If any changed, commit them before allocating the finish attempt, verify the
-commit, and restore a clean tree. If none changed, record the verified no-change `HEAD` instead of
-manufacturing an empty commit. Either result is an expected finish-owned synchronization for this
+approved artifacts. If any changed, commit them after the verified finish Attempt, verify the
+commit, and restore a clean tree. If none changed, observe no change without manufacturing an empty
+commit. Record the actual synchronization paths/commit or verified no change in Outcome, never as
+already-observed synchronization in the preceding intent. Either result is an expected finish-owned synchronization for this
 attempt, but it does not make an unrelated edit safe.
 
 ## Finish history
@@ -183,8 +221,15 @@ must be strictly monotonic, each number must occur once for each kind, and Outco
 matching observation for Attempt N. Lint decides whether the existing section format is valid;
 check actual attempt/outcome evidence for a safe resume before any action.
 
-Populate the template-defined attempt with durable gate evidence, specification synchronization,
-selected strategy, intended workspace result, and route intent. Append its matching outcome only
+Populate the template-defined attempt with durable gate evidence, planned specification targets and
+approved input identities, selected strategy, intended workspace result, and route intent. Populate
+Admission identity with the exact verified HEAD, original target ref/commit, review Base/Head and
+artifact-only review commit, original explicit material-waiver reference or null, and unique approved
+input paths/blob IDs. Source identity records the canonical absolute Git common directory, original
+root, full source ref and absolute Git worktree identity. Route identity is null or records the exact
+route/map/unit/source blob, previous in-progress state, owner/change/source/target/base and the resolved
+shipping condition. Use canonical strategy tokens, not prose synonyms, in every new Strategy field.
+These are recovery provenance, not authenticated owner approval. Append its matching outcome only
 after reading back the effect, recording the completed or blocked result together with verified
 external, workspace, route, and partial-state evidence. The installed template remains the exact
 creation and attempt shape; these lifecycle rules govern later outcomes without duplicating that
@@ -216,13 +261,49 @@ Compare observed state with that attempt's recorded strategy and intent:
   changing it.
 
 Never allocate or execute a duplicate attempt before this reconciliation, and never renumber the
-dangling attempt. After a blocked outcome, a later retry is a new attempt and must pass current
-preconditions again.
+dangling attempt. After a blocked outcome before any verified delivery, a later ordinary retry is a new attempt and
+must pass current preconditions again. Never reopen or rewrite a paired blocked outcome.
+
+If a paired blocked outcome follows verified delivery, do not run delivery again. Request
+finalization-repair admission on the surviving branch/base:
+
+```bash
+kepler workbench precondition --change-dir <change-dir> \
+  --test-cmd '<full test suite && build/typecheck>' \
+  --target-branch <recorded-original-target> --recover-finish <original-delivery-attempt>
+```
+
+Require `admission: finalization-repair`, current `verified-head`, exact `remaining-effects`, and
+`gate: repair-open`. This authorization cannot enter the ordinary synchronization/delivery path.
+The CLI rereads immutable original task/review evidence at admitted HEAD, recomputes historical Base
+against the original target commit rather than today's merged target, verifies the recorded review
+artifact-only revision and original narrow waiver, reobserves delivery, and binds current clean
+HEAD/tests/build/branch/worktree. A removed source branch is not an input to another merge.
+A changed current merge base does not invalidate the already-delivered historical review.
+
+Create a new numbered `reconcile-delivery` Attempt linked by Recovery of to the original attempt and
+blocked-outcome commit, plus the previous failed-repair outcome commit or null. Copy the original
+Admission/Source/Route identities and delivery identity; record only the exact remaining effects.
+Preserve both original records. Complete only those named canonical/route/map/history effects,
+observing each for idempotent reuse, then persist its separately verified Outcome. Never repeat merge,
+request creation, or branch/worktree cleanup. A failed repair receives its own paired blocked Outcome;
+a later repair binds the same original delivery and the latest failed repair and requires changed
+conditions/evidence, not an identical retry. New application/test/design/requirement changes need an
+ordinary change and review.
+
+Any dirty surviving tree closes automated repair, even an exact owned route/map diff from failed
+lint or commit. Report the paths and ask the owner to authorize preservation/restoration or a scoped
+commit. Do not discard, stage, pre-commit or normalize them to manufacture cleanliness. Rerun
+admission afterward. Missing/forged historical provenance, rewritten merge content, changed intent or
+ambiguous delivery requires owner adjudication; legacy records remain immutable and do not receive
+invented modern provenance.
 
 ## Post-gate mutation boundary
 
-Capture the gate-entry `HEAD` and compare every later commit and working-tree path with it before
-each finish effect. The only allowed post-gate changes are canonical `.kepler/specs/` folding
+Use the gate's `verified-head` as gate-entry `HEAD` and compare every later commit and working-tree
+path with it before each finish effect. Recheck the admitted branch, base branch, worktree identity,
+and target repository at every effect boundary, including when a branch change keeps the same
+commit SHA. The only allowed post-gate changes are canonical `.kepler/specs/` folding
 derived from already approved artifacts, the exact route and map transition named by the
 attempt, and the numbered `finish.md` mutations for that same `Attempt N` and `Outcome N`.
 
@@ -236,6 +317,27 @@ return the change to whole-branch review. If an attempt commit already exists, p
 matching outcome when the verified repository state makes that safe. The ancestry waiver does
 not excuse any post-gate mutation outside this allowlist.
 
+## Route ownership and workspace retention
+
+Before the first finish-owned write or route-backed attempt, run context and require one canonical
+route/unit binding, its exact committed route-source revision, and agreement with the
+owner/change/source/target/base recorded in the proposal or plan. For an ordinary attempt, require
+the selected unit to remain owned by this change and in `in-progress`; A7 repair instead verifies
+its recorded original route/effect state and never replays the transition. Inspect known
+proposals/plans, local and visible remote branches, and worktrees for competing claims. Stop before writing finish intent on conflict or ambiguity. A map-level status is
+an aggregate summary, not proof of unit ownership or shipment. Record the owner, change, full source
+and target refs, base/input revision, route/unit and route-source revision in `Attempt N`. Record the
+route blob revision after the route/map transition in `Outcome N`.
+
+The designated user/controller authorizes any withdrawal or transfer. Before changing a claim,
+inspect partial implementation, Git/provider effects, dependent work and every visible owner. Record
+the authorized release/transfer in existing change intent, preserve branch/history and partial work,
+and revalidate dependencies. Reset a unit to `pending` only when no verified shipment or partial
+effect is being erased. Never reset `shipped`, infer rollback, or repeat delivery to release a claim.
+Before removing a branch/worktree, prove it is exclusively owned by this change, clean, and safely
+preserved, and confirm the selected strategy explicitly calls for removal. Retain and report shared,
+dirty or ambiguously owned workspaces; isolation is not a cleanup-ownership certificate.
+
 ## Process
 
 1. **Inspect existing history.** Validate `finish.md`. If an attempt is dangling, follow
@@ -243,32 +345,40 @@ not excuse any post-gate mutation outside this allowlist.
 2. **Run preconditions.** For a new attempt, run the exact gate in **Preconditions**. On failure,
    report its output without writing anything.
 3. **Capture gate entry.** Record the full admitted identities and establish the post-gate
-   allowlist.
-4. **Persist specification synchronization.** After preconditions pass, validate the approved
-   change artifacts, then synchronize canonical specifications at altitude. A missing or
-   incorrect requirement returns to artifact revision and fresh whole-branch review without an
-   attempt. Otherwise commit and verify only changed `.kepler/specs/` paths, or verify the
-   no-change `HEAD`, then check the mutation boundary.
-5. **Resolve intent.** Detect the workspace with
-   `kepler workbench isolate --check`, resolve the actual base branch and selected
-   strategy, and identify any exact route and map transitions. Ask if the strategy is still
-   unspecified and no project default exists.
+   allowlist. Run the route-binding/ownership check described above before any canonical-spec
+   synchronization or finish-history write.
+4. **Validate synchronization read-only.** Check approved artifact consistency, exact input blobs,
+   canonical targets and spec impact without changing canonical files. Missing/inconsistent inputs
+   return to artifact revision and fresh whole-branch review without an Attempt or spec commit.
+5. **Resolve compatible intent.** Detect the workspace with
+   `kepler workbench isolate --check`, resolve the actual target branch and selected strategy, and
+   identify any exact route and map transitions. For a route-backed change, run context again and
+   record its exact committed route-source revision and owner-bound route/unit/source/target/base
+   identity in the Attempt. Stop on a changed revision, conflicting binding, or competing owner.
+   Capture the unit's old state and exact Shipping rules condition. Require the strategy to satisfy
+   that condition within this invocation before any Attempt or effects. A merge-required route with
+   a request-open strategy stops for a compatible strategy or authorized rule decision; do not create
+   an awaiting-merge state, request or spec write. No-op qualifies only when the route explicitly
+   permits it. Ask if the strategy is still unspecified and no project default exists.
 6. **Commit intent.** Append the template-defined `Attempt N` with complete durable intent. Run
    `kepler workbench lint --file <change-dir>/finish.md` after the finish-history mutation and
    before committing. A nonzero lint result is a failed gate: correct the history and rerun lint,
    or report the exact blocker without committing or handing off. Commit that attempt alone on the
    change branch, verify the commit contains the expected finish path, and confirm it is reachable
-   from the branch. This commit must exist before any external finish action.
-7. **Apply route intent.** If route-backed, update only the named unit from `in-progress` to
-   `shipped`; after each route or map write, run `kepler workbench lint --file <path>` and
-   resolve every finding before the next mutation. Update the map from `shipping` to `shipped`
-   only when every unit is verified shipped. Commit the exact route/map paths and read them back.
-   If not route-backed, record no route mutation.
-8. **Check the boundary.** Reinspect all post-gate commits and working-tree paths. Abort on any
-   mutation not owned by this attempt.
-9. **Execute the strategy.** Follow exactly one branch in **Strategy execution**. Treat the
-   first route mutation, push, request creation, merge, worktree removal, or no-op verification
-   as an action that requires the attempt commit already to exist.
+   from the branch. This commit must exist before canonical specifications or any external finish action.
+7. **Synchronize inside the Attempt.** Apply/lint approved canonical deltas, commit only exact
+   derived spec paths and read back their actual result. Observe no change without an empty commit.
+   An interruption before/after this commit resumes the same unmatched Attempt from its first
+   unverified step; recheck approved identities and the admitted allowlist before continuing.
+8. **Check the boundary.** Reinspect all post-gate commits and working-tree paths before each effect.
+   Abort on any mutation not owned by this attempt. A changed input identity aborts recovery.
+9. **Execute then qualify the strategy.** Follow exactly one branch in **Strategy execution**.
+   Read back the qualifying Git/provider effect before route mutation. On the surviving branch,
+   advance only the named unit from `in-progress` to `shipped`; lint every route/map mutation before
+   continuing and commit/read back exact paths. Update the map only when every unit is verified
+   shipped. Reuse an exact prior advancement only while the original unit/map/condition/input
+   identity and observed qualification still hold. Preserve siblings and partial writes; route/map
+   updates are not atomic and do not imply rollback. If not route-backed, record no route mutation.
 10. **Read back actual state.** Query git, the request provider when applicable, the worktree
     list, and route files. Collect actual identifiers and states; do not draft the outcome from
     intended values.
@@ -284,22 +394,30 @@ not excuse any post-gate mutation outside this allowlist.
 ## Strategy execution
 
 - **local-merge:** From the main checkout, merge the change branch including the verified
-  attempt commit and any route commit into the resolved base branch according to the project's
+  attempt commit and admitted synchronization into the resolved base branch according to the project's
   workflow. Never remove a worktree from inside itself. Remove the linked worktree and delete the
-  change branch only when the project workflow calls for it. Then read back the base ref and
-  workspace list: verify the base contains the attempt and route state, the merge result is
-  present, and the worktree is absent when removal was intended. Append the matching `Outcome N`
+  change branch only when the project workflow calls for it and the Route ownership and workspace
+  retention checks prove exclusive ownership, clean state and preserved work. Then read back the
+  base ref and workspace list: verify the base contains the attempt, the merge result is present,
+  and the worktree is absent when removal was authorized and intended. Only after that qualifying
+  merge, apply/lint/commit and read back the named route/map advancement on base. Append the matching `Outcome N`
   on the base branch, commit it there, and verify that commit and pair on the base. If the base is
   pushed by the workflow, push the outcome commit and verify the remote base ref too.
-- **pull-request:** Push the change branch containing the attempt and route state, verify the
-  remote ref, then open the pull request or merge request using the approved change artifacts.
-  Read back its canonical URL, open state, head commit, and base branch from the provider. Leave
-  the branch and worktree in place. Append the matching `Outcome N`, commit it on the change
+- **pull-request:** Push the change branch containing the attempt and synchronization, verify the
+  remote ref, then open the pull request or merge request using approved artifacts. Read back its
+  canonical URL, provider/repository, open state, head commit, source and base. Request-open qualifies
+  only when Shipping rules permit it. Then apply/lint/commit route/map on the change branch, push and
+  verify it. Leave the branch and worktree in place. A historical already-open request requiring
+  merge remains unshipped and blocked until actual merged readback qualifies; linked repair may use
+  that merged state and immutable content provenance without requiring the object to remain open
+  or creating a duplicate. Rewritten/ambiguous content stops for owner adjudication. Append the matching `Outcome N`, commit it on the change
   branch, push that commit, and verify the request head and remote branch include the outcome
   commit. A locally committed outcome that did not reach the remote request is blocked, not
   completed.
 - **no-op:** Perform no merge, push, request creation, branch deletion, or worktree removal.
-  Verify that the intended branch and worktree remain and that route intent, if any, is committed.
+  Verify that the intended branch and worktree remain. Only an explicit no-op Shipping rule may
+  qualify route intent; then apply/lint/commit its named advancement and read it back. No-op never
+  implies an external delivery.
   Append the matching `Outcome N` on the unchanged change branch, commit it there, then re-read
   the branch, worktree, route, and paired history before reporting completion.
 
@@ -319,7 +437,9 @@ allocate a replacement attempt during the same recovery.
 
 - Never edit application code or delete, weaken, or rewrite tests to open the gate.
 - Never write finish state into root `progress.md`, task progress, task feedback, or root review.
-- Never create an attempt before the gates and committed spec synchronization.
+- Never create an attempt before the gates and read-only validation, or commit specs before intent.
+- Never mutate a route before observed compatible shipping qualification.
+- Never use repair-open to allocate an ordinary delivery attempt or replay a delivered effect.
 - Never begin a route or strategy effect before the attempt commit is verified.
 - Never overwrite, reorder, pair loosely, or backfill finish history from memory.
 - Never remove a worktree from inside it.
@@ -338,42 +458,52 @@ Never claim a merge, pull request, no-op, route transition, workspace removal, o
 that specific result has been read back. If outcome persistence itself failed, say that the
 attempt remains dangling instead of describing an unpersisted result as history.
 
+Outcomes with modern provenance record Result, Specification synchronization result (exact paths and
+commit or verified no change), Delivery identity (observed Git result, canonical request or no-op), and
+Remaining effects (exact typed paths or an empty array). Repairs retain original identity and report
+new provider qualification/readback separately. Persist and push the route and Outcome before any
+completed claim. A pending or failed qualifying effect leaves the unit unshipped.
+
 ## Process flow
 
 ```dot
 digraph kepler_finish_work {
-    "Read finish history" [shape=box];
-    "Dangling Attempt N?" [shape=diamond];
-    "Reconcile actual state\nwithout a duplicate attempt" [shape=box];
-    "Lint artifacts + run finish gates" [shape=box];
-    "Gate open?" [shape=diamond];
-    "Report verbatim blocker\n(no writes)" [shape=box];
-    "Capture gate-entry HEAD" [shape=box];
-    "Synchronize specs + commit" [shape=box];
-    "Resolve strategy + route intent" [shape=box];
-    "Append and commit Attempt N" [shape=box];
-    "Apply route intent + verify" [shape=box];
-    "Post-gate boundary clean?" [shape=diamond];
-    "Finish action" [shape=box];
-    "Read back external, workspace,\nand route state" [shape=box];
-    "Append and persist Outcome N" [shape=doublecircle];
-    "Return to whole-branch review" [shape=box];
-
     "Read finish history" -> "Dangling Attempt N?";
+    "Dangling Attempt N?" [shape=diamond];
     "Dangling Attempt N?" -> "Reconcile actual state\nwithout a duplicate attempt" [label="yes"];
-    "Dangling Attempt N?" -> "Lint artifacts + run finish gates" [label="no"];
+    "Dangling Attempt N?" -> "Paired blocked delivery?" [label="no"];
+    "Paired blocked delivery?" [shape=diamond];
+    "Paired blocked delivery?" -> "Historical finalization-repair admission" [label="yes"];
+    "Paired blocked delivery?" -> "Lint artifacts + run finish gates" [label="no"];
     "Lint artifacts + run finish gates" -> "Gate open?";
+    "Gate open?" [shape=diamond];
     "Gate open?" -> "Report verbatim blocker\n(no writes)" [label="no"];
     "Gate open?" -> "Capture gate-entry HEAD" [label="yes"];
-    "Capture gate-entry HEAD" -> "Synchronize specs + commit";
-    "Synchronize specs + commit" -> "Resolve strategy + route intent";
-    "Resolve strategy + route intent" -> "Append and commit Attempt N";
-    "Append and commit Attempt N" -> "Apply route intent + verify";
-    "Apply route intent + verify" -> "Post-gate boundary clean?";
+    "Capture gate-entry HEAD" -> "Validate inputs and compatible strategy read-only";
+    "Validate inputs and compatible strategy read-only" -> "Intent valid?";
+    "Intent valid?" [shape=diamond];
+    "Intent valid?" -> "Report verbatim blocker\n(no writes)" [label="no"];
+    "Intent valid?" -> "Append and commit Attempt N" [label="yes"];
+    "Append and commit Attempt N" -> "Synchronize specs + commit inside Attempt";
+    "Synchronize specs + commit inside Attempt" -> "Post-gate boundary clean?";
+    "Post-gate boundary clean?" [shape=diamond];
     "Post-gate boundary clean?" -> "Return to whole-branch review" [label="no"];
     "Post-gate boundary clean?" -> "Finish action" [label="yes"];
-    "Finish action" -> "Read back external, workspace,\nand route state";
+    "Finish action" -> "Observed shipping qualification?";
+    "Observed shipping qualification?" [shape=diamond];
+    "Observed shipping qualification?" -> "Keep route unshipped and record blocked state" [label="no"];
+    "Observed shipping qualification?" -> "Apply route intent + verify on surviving branch" [label="yes"];
+    "Apply route intent + verify on surviving branch" -> "Read back external, workspace,\nand route state";
+    "Historical finalization-repair admission" -> "Gate repair-open?";
+    "Gate repair-open?" [shape=diamond];
+    "Gate repair-open?" -> "Report verbatim blocker\n(no writes)" [label="no"];
+    "Gate repair-open?" -> "Commit linked reconcile-delivery Attempt" [label="yes"];
+    "Commit linked reconcile-delivery Attempt" -> "Observe and complete exact remaining effects\nwithout redelivery or cleanup";
+    "Observe and complete exact remaining effects\nwithout redelivery or cleanup" -> "Read back external, workspace,\nand route state";
+    "Reconcile actual state\nwithout a duplicate attempt" -> "Observe first unverified step of same Attempt";
+    "Observe first unverified step of same Attempt" -> "Read back external, workspace,\nand route state";
+    "Keep route unshipped and record blocked state" -> "Append and persist Outcome N";
     "Read back external, workspace,\nand route state" -> "Append and persist Outcome N";
-    "Reconcile actual state\nwithout a duplicate attempt" -> "Read back external, workspace,\nand route state";
+    "Append and persist Outcome N" [shape=doublecircle];
 }
 ```

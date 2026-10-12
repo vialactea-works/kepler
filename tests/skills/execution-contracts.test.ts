@@ -73,7 +73,7 @@ describe("kepler-plan execution contract", () => {
     const process = section(skill, "## Process")
     const replan = section(skill, "## Re-plan mode")
 
-    expect(process).toMatch(/`plan\.md` already exists.*kepler workbench lint --change-dir <change-dir>/is)
+    expect(process).toMatch(/`plan\.md` exists.*all initialized root\/task paths are present.*kepler workbench lint --change-dir <change-dir>/is)
     expect(process).toMatch(/successful lint.*must not be overridden.*layout or template comparison/is)
     expect(replan).toMatch(/do not reject a lint-valid artifact.*additional frontmatter or\s+body content/is)
     expect(replan).not.toMatch(/planned legacy layout is `legacy-unsupported`/i)
@@ -112,11 +112,27 @@ describe("kepler-code execution contract", () => {
   })
 
   it("uses the stable task checkpoint and keeps review and finish evidence separate", () => {
-    expect(skill).toContain("<change-dir>/tasks/task-N/.base")
-    expect(skill).toMatch(/full commit identifier/)
-    expect(skill).toMatch(/never overwrite|does not overwrite/i)
+    expect(skill).toContain("tasks/task-N/.base")
+    expect(skill).toMatch(/derives the canonical Base from the first\s+parent of the earliest committed task-progress revision/i)
+    expect(skill).toMatch(/no-overwrite\s+cache, not authority/i)
+    expect(skill).toMatch(/reconstructs it only when missing\s+and history proves the value/i)
     expect(skill).toMatch(/writes attempt details to the task log.*do not.*feedback.*review.*finish outcomes to root progress/is)
     expect(skill).toMatch(/writer\s+ownership rule.*not a reason to reject.*lint-accepted content/is)
+  })
+
+  it("treats root metadata and rows as one task ledger and aggregate status as implementation-only", () => {
+    const process = section(skill, "## Process")
+
+    expect(process).toMatch(/frontmatter metadata entry and\s+Markdown row together to `in-progress`/is)
+    expect(process).toMatch(/aggregate `status: complete` means all active implementation\s+rows are done.*never means.*finish-work passed/is)
+    expect(process).toMatch(/root metadata\/row transition.*root aggregate status as an implementation summary only/is)
+  })
+
+  it("keeps every attempt's terminal Outcome unique and append-only", () => {
+    const process = section(skill, "## Process")
+
+    expect(process).toMatch(/each attempt exactly one terminal `- Outcome: done` or `- Outcome: blocked`/is)
+    expect(process).toMatch(/append a new attempt.*instead of adding a second Outcome to existing history/is)
   })
 
   it("finalizes assigned task-local status only with its attempt outcome", () => {
@@ -135,10 +151,21 @@ describe("kepler-code execution contract", () => {
   it("creates checkpoints only before evidence-free first attempts and stops for historical recovery", () => {
     const process = section(skill, "## Process")
 
-    expect(process).toMatch(/row is `pending`.*task log has no attempt.*feedback is absent/is)
-    expect(process).toMatch(/historical checkpoint.*unambiguous durable\s+git and task evidence/is)
-    expect(process).toMatch(/stop.*intervention/is)
-    expect(process).toMatch(/never substitute `HEAD~1`/)
+    expect(process).toContain("The CLI records current `HEAD` only for a clean, committed pending task")
+    expect(process).toMatch(/with no\s+attempt or feedback/)
+    expect(process).toMatch(/With durable task history, it derives the canonical Base from the first\s+parent of the earliest committed task-progress revision/is)
+    expect(process).toMatch(/reconstructs it only when missing\s+and history proves the value/is)
+    expect(process).toMatch(/Stop for a malformed or conflicting cache.*missing or ambiguous\s+history/is)
+    expect(process).toMatch(/never substitute current `HEAD`, `HEAD~1`/)
+  })
+
+  it("requires semantic no-task-work inspection and a standalone checkpoint before implementation", () => {
+    const process = section(skill, "## Process").replace(/\s+/g, " ")
+    expect(process).toMatch(/before.*first-attempt.*--record.*inspect.*task-owned.*committed.*uncommitted/is)
+    expect(process).toMatch(/mechanical eligibility.*does not prove.*absence of task-owned/is)
+    expect(process).toMatch(/task-owned work.*(?:ambiguous|uncertain).*stop.*never record current `HEAD`/is)
+    expect(process).toMatch(/standalone invocation.*run `kepler workbench diff --record --task N --change-dir <change-dir>`.*successful.*before.*implementation/is)
+    expect(process.indexOf("successful checkpoint validation")).toBeLessThan(process.indexOf("**Begin the attempt.**"))
   })
 
   it("persists graceful blockers without committing partial production edits", () => {

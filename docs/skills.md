@@ -23,9 +23,11 @@ init ──▶ [ propose ] ──▶ plan ──▶ ( code ◀──▶ code-fee
 ```
 
 Seven core skills run in fixed sequence, with an optional pre-change planning stage (Wayfinder).
-`kepler-init` runs once per project. `kepler-propose` is the optional heavyweight
-front door — a tactical change skips it and starts at `kepler-plan`, which creates the required
-plan. For every task, `code` and `code-feedback` loop until that task passes; one whole-branch
+`kepler-init` runs once per project. `kepler-propose` is the optional heavyweight front door;
+a tactical change starts at `kepler-plan`. If planning finds a bounded behavior change that needs
+a requirements delta, `kepler-propose` handles only that approved delta, then returns the exact
+committed revision for planning to revalidate. For every task, `code` and `code-feedback` loop until
+that task passes; one whole-branch
 `review` follows after all tasks pass, then `finish-work` closes the change. `kepler-orchestrate`
 drives that sequence in one session using subagents. `kepler-critique` is an optional design-phase
 gate before planning. Neither Wayfinder nor critique is part of the seven-skill core line.
@@ -77,8 +79,8 @@ The distributed `kepler workbench` command is the supported workflow-mechanics s
 these skills. Its subcommands are:
 
 - `kepler workbench isolate` — check, create, or verify an isolated workspace.
-- `kepler workbench diff` — record checkpoints and package task or change diffs.
-- `kepler workbench precondition` — evaluate finish-work gates.
+- `kepler workbench diff` — record checkpoints and package task or change diffs. Whole-change packaging requires an explicit `--target-branch refs/remotes/<remote>/<branch>` or `refs/heads/<branch>`.
+- `kepler workbench precondition` — evaluate finish-work gates against the explicit `--target-branch` reference; the command never infers a default branch.
 - `kepler workbench context` — inspect change artifacts and lifecycle state.
 - `kepler workbench prototype` — create, resume, or verify prototype branches.
 - `kepler workbench lint` — validate one file or one change directory.
@@ -153,7 +155,10 @@ needed to understand what will be true, why this path was chosen, and how delive
 ### `kepler-propose` — idea → proposal, requirements, design *(step 1, optional)*
 
 The heavyweight front door. Turns an idea into a well-formed change through collaborative dialogue,
-gating on approval before any implementation.
+gating on approval before any implementation. Tactical changes start at `kepler-plan`; when planning
+finds a bounded behavior change that needs a requirements delta, this skill also supports a
+requirements-only approval path with no proposal or design, then returns the committed delta to
+planning for revalidation.
 
 - **When:** for a change that warrants a spec; skip it for a tactical change.
 - **Inputs:** a change idea; the project's existing specs (`.kepler/specs/`); `AGENTS.md`.

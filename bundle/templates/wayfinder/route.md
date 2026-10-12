@@ -26,6 +26,14 @@ units:
   frontmatter. Downstream processes update lifecycle metadata without rewriting
   the synthesized body.
 
+  Keep unit IDs unique and in body order. Each frontmatter ID/name must match
+  exactly one numbered Units heading at the same position. Dependencies must be
+  unique, refer to other existing units, and form an acyclic graph. This
+  structural check does not replace the semantic causal-order and destination-
+  coverage review. A downstream `in-progress` unit status is visible ownership
+  evidence, not a lock; the owner commits its claim with the change scaffolding
+  on a named source branch distinct from the delivery target.
+
   Delete this comment block and every inline hint before finalizing.
 -->
 
@@ -98,9 +106,11 @@ units:
 ## Shipping rules
 
 <!--
-  Describe how downstream processes execute the units: merge-back branch,
-  commit and merge/PR conventions, and shipping-relevant operation rules carried
-  from the map. Wayfinder defines these rules but does not perform the work.
+  Describe how downstream processes execute the units: the actual merge-back
+  branch and repository, commit and merge/PR conventions, and shipping-relevant
+  operation rules carried from the map. Wayfinder defines these rules but does
+  not perform the work. Consumers must compare a named source branch with this
+  delivery target by branch identity, not tip SHA.
 -->
 
 - Merge-back branch: `<branch from map>`

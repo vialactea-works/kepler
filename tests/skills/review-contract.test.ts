@@ -1,6 +1,8 @@
 import * as Fs from "node:fs"
 import { describe, expect, it } from "vitest"
 import { readSkill, section } from "./helpers.js"
+import { createArtifactReader } from "../../packages/cli/src/workbench/artifact-reader.js"
+import { parseReviewPasses } from "../../packages/cli/src/workbench/review-passes.js"
 
 const readReview = () => readSkill("kepler-review")
 const readQualityRubric = () =>
@@ -83,9 +85,9 @@ describe("kepler-review contract", () => {
     const inputs = section(readReview(), "## Inputs")
     const wrongScope = section(readReview(), "## Wrong scope")
 
-    expect(inputs).toMatch(/resolve.*target branch.*default branch/is)
+    expect(inputs).toMatch(/resolve only the explicitly supplied target; never infer a default branch/is)
     expect(inputs).toMatch(/`git merge-base`.*target.*`HEAD`/is)
-    expect(inputs).toMatch(/supplied base.*equal.*actual merge base/is)
+    expect(inputs).toMatch(/compute the actual merge\s+base.*supplied base.*equal it/is)
     expect(wrongScope).toMatch(/arbitrary ancestor.*task checkpoint/is)
     expect(wrongScope).toMatch(/stop\s+without recording a verdict/is)
     expect(wrongScope).toContain("`kepler-code-feedback`")
@@ -96,12 +98,91 @@ describe("kepler-review contract", () => {
 
     expect(inspection).toMatch(/complete branch diff.*starting evidence/is)
     expect(inspection).toMatch(/not.*inspection boundary/is)
-    expect(inspection).toMatch(/Every pass.*affected consumers/is)
+    expect(inspection).toMatch(/Every full pass.*affected consumers/is)
     expect(inspection).toContain("assumptions")
     expect(inspection).toMatch(/cross-task (composition|integration)/i)
     expect(inspection).toMatch(/missing material changes/i)
     expect(inspection).toMatch(/scope and boundary violations/i)
     expect(inspection).toMatch(/changed cause.*affected location/is)
+  })
+
+  it("ships executable single-line resolution examples and exact cumulative identity coverage", async () => {
+    const template = Fs.readFileSync(new URL("../../bundle/templates/review.md", import.meta.url), "utf-8")
+    for (const resource of [readReview(), template]) {
+      const example = /^[ \t]*Resolutions: (\[.*\])[ \t]*$/m.exec(resource)
+      expect(example, "Installed reviewer resource is missing its exact Resolutions JSON example").not.toBeNull()
+      if (!example) continue
+      const entries = JSON.parse(example[1]!)
+      expect(entries.length).toBeGreaterThan(0)
+      for (const entry of entries) {
+        expect(Object.keys(entry).sort()).toEqual(["evidence", "finding", "verification"])
+        expect(entry.finding).toBe("pass-1-blocking-1")
+        expect(entry.evidence.length).toBeGreaterThan(0)
+        expect(entry.evidence.every((value: unknown) => typeof value === "string" && value.trim() !== "")).toBe(true)
+        expect(entry.verification.trim()).not.toBe("")
+      }
+      expect(resource).toMatch(/exact unique.*baseline.*scoped suffix/is)
+      const base = "a".repeat(40)
+      const fullHead = "b".repeat(40)
+      const currentHead = "c".repeat(40)
+      const parent = "d".repeat(40)
+      const source = `---\nartifact: review\nchange: demo\ncreated: 2026-09-12\nstatus: complete\ndecision: accepted\n---\n\n# Whole-branch Review: Demo\n\n## Pass 1 — 2026-09-12\n\nBase: ${base}\nHead: ${fullHead}\nVerdict: changes-requested\nScope: full\nTarget: refs/heads/main\n\n### Blocking\n- [src/file name.ts:1] id: pass-1-blocking-1; kind: code-defect; Correct the behavior (violates: acceptance)\n\n### Suggestions\n- None.\n\n## Pass 2 — 2026-09-13\n\nBase: ${base}\nHead: ${currentHead}\nVerdict: approved-remediation\nScope: remediation\nTarget: refs/heads/main\nParent pass: 1\nParent commit: ${parent}\nDelta base: ${fullHead}\nResolutions: ${example[1]}\n\n### Blocking\n- None.\n\n### Suggestions\n- None.\n`
+      const artifact = await createArtifactReader({ readFile: () => source })(".kepler/changes/demo/review.md")
+      expect(artifact._tag).toBe("recognized")
+      if (artifact._tag === "recognized") {
+        const result = parseReviewPasses(artifact)
+        expect(result.diagnostics).toEqual([])
+        expect(result.latest?.clearance).toMatchObject({ scope: "remediation", resolutions: entries })
+      }
+    }
+  })
+
+  it("keeps inspection, graph and routing mode-specific without repeating full review", () => {
+    const skill = readReview()
+    const process = section(skill, "## Process")
+    const flow = section(skill, "## Process flow")
+    const prompt = Fs.readFileSync(new URL("../../skills/kepler-orchestrate/references/whole-branch-review-prompt.md", import.meta.url), "utf-8")
+    expect(process).toMatch(/For `full`, read the complete branch diff/is)
+    expect(process).toMatch(/For `remediation`,.*cumulative correction delta/is)
+    expect(prompt).toMatch(/In full mode,.*complete branch diff.*broader repository/is)
+    expect(prompt).toMatch(/In remediation mode,.*do not repeat a full inspection/is)
+    expect(flow).toContain('"Review mode?"')
+    expect(flow).toContain('label="remediation"')
+    expect(flow).toContain('label="approved-remediation"')
+    const handoff = section(skill, "## Output and handoff")
+    expect(handoff).toMatch(/evidence-gap.*located evidence.*unchanged material range.*without inventing.*tasks/is)
+    expect(handoff).toMatch(/intent-defect.*kepler-propose/is)
+    expect(handoff).toMatch(/code-defect.*numbered remediation/is)
+  })
+
+  it("propagates classified routing through controller handoffs and qualifies the whole-review rubric", () => {
+    const controller = readSkill("kepler-orchestrate")
+    const process = section(controller, "## Process")
+    const feedbackHandoff = /10\. \*\*Confirm the feedback[\s\S]*?(?=\n11\.)/.exec(process)?.[0] ?? ""
+    const wholeHandoff = /14\. \*\*Route whole-branch[\s\S]*?(?=\n15\.)/.exec(process)?.[0] ?? ""
+    const taskPrompt = Fs.readFileSync(new URL("../../skills/kepler-orchestrate/references/code-feedback-prompt.md", import.meta.url), "utf-8")
+    const rubric = readQualityRubric()
+    expect(feedbackHandoff).toMatch(/classify.*before.*freshness/is)
+    expect(feedbackHandoff).toMatch(/code-defect.*same Task N.*relevant verification/is)
+    expect(wholeHandoff).toMatch(/fresh or stale/is)
+    expect(taskPrompt).toMatch(/code-defect.*same Task \[N\].*kepler-code/is)
+    expect(taskPrompt).toMatch(/evidence-gap.*same Base and Head/is)
+    expect(taskPrompt).toMatch(/intent-defect.*proposal/is)
+    expect(rubric).toMatch(/In `full` mode.*complete merge-base-to-head diff/is)
+    expect(rubric).toMatch(/In `remediation` mode.*cumulative correction delta.*do not repeat/is)
+  })
+
+  it("keeps diagram routes and located-evidence handoffs consistent for typed and stale findings", () => {
+    const flow = section(readSkill("kepler-orchestrate"), "## Process flow")
+    const prompt = Fs.readFileSync(new URL("../../skills/kepler-orchestrate/references/code-feedback-prompt.md", import.meta.url), "utf-8")
+    expect(flow).toContain('label="changes-requested, fresh or stale"')
+    expect(flow).toContain('label="code-defect"')
+    expect(flow).toContain('label="evidence-gap"')
+    expect(flow).toContain('label="intent-defect"')
+    expect(flow).toContain('label="approved / approved-remediation, current"')
+    expect(flow).not.toContain('label="absent / lint-invalid / stale"')
+    expect(prompt).toMatch(/typed `evidence-gap`.*legacy.*cannot verify from diff/is)
+    expect(prompt).toMatch(/same supplied `Base` and `Head`/is)
   })
 
   it("runs only focused verification for a concrete doubt", () => {
@@ -125,7 +206,7 @@ describe("kepler-review contract", () => {
     expect(artifact).toMatch(/preserve.*prior\s+pass/is)
     expect(artifact).toMatch(/frontmatter.*only.*artifact identity.*lifecycle/is)
     expect(artifact).toMatch(
-      /Each pass contains exactly one full `Base:`, `Head:`, and `Verdict:` field,[\s\S]*?exactly its two child sections, `### Blocking` and `### Suggestions`/,
+      /Each pass contains exactly one full\s+`Base:`, `Head:`, and `Verdict:` field, followed by `Scope:` and `Target:`[\s\S]*?exactly the two child sections, `### Blocking` and `### Suggestions`/,
     )
     expect(artifact).toMatch(/never rewrite a prior pass/is)
     expect(artifact).toMatch(/no `### Reviewed range`\s+heading.*allowed/is)
@@ -212,8 +293,8 @@ describe("kepler-review contract", () => {
   it("routes final findings through re-plan or proposal revision", () => {
     const handoff = section(readReview(), "## Output and handoff")
 
-    expect(handoff).toMatch(/changes-requested.*complete finding set.*re-plan/is)
-    expect(handoff).toMatch(/independently verifiable.*multiple.*remediation tasks/is)
+    expect(handoff).toMatch(/changes-requested.*complete classified finding set.*re-plan/is)
+    expect(handoff).toMatch(/independently verifiable.*own code and\s+code-feedback cycle/is)
     expect(handoff).toMatch(/invalidates.*approved requirement or design.*kepler-propose/is)
     expect(handoff).toMatch(/Never send whole-branch findings directly to\s+`kepler-code`/i)
   })

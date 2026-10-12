@@ -1,8 +1,8 @@
 ---
 artifact: proposal
 change: <YYYY-MM-DD-change-title>
-status: draft | approved | implemented
-decision: accepted | rejected | skipped
+status: draft
+decision: skipped
 author: <Name <email>>
 created: <YYYY-MM-DD>
 route_unit: <.kepler/maps/<effort>/route.md — unit N, or null>
@@ -13,6 +13,7 @@ route_unit: <.kepler/maps/<effort>/route.md — unit N, or null>
   Produced by: kepler-propose (step 1)
   Owns the WHY and the product-level WHAT. Target length: 1–2 pages.
   OPTIONAL artifact — skip for small changes and start at plan.md.
+  A draft or a template default is never requester approval. Show the requester the exact final candidate bytes, including status: approved and decision: accepted, and wait for explicit approval of that revision before writing it. Commit exactly those approved bytes; any later intent edit needs new approval.
   Delete this comment block and every inline <!-- ... --> hint before finalizing.
   Before creating this artifact, read the configured Git identity with `git config user.name` and
   `git config user.email`, then write `author: Name <email>` using both configured values. If either

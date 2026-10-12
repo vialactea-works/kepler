@@ -34,9 +34,9 @@ describe("kepler-orchestrate task resume contract", () => {
     )
   })
 
-  it("dispatches code feedback when feedback is stale", () => {
+  it("routes stale or invalid feedback to its owner without an identical retry", () => {
     expect(matrix).toMatch(
-      /\| `done` \| stale or lint-invalid \| Dispatch `kepler-code-feedback`/,
+      /\| `done` \| stale or lint-invalid.*Route to the owner.*do not issue an identical retry/,
     )
   })
 
@@ -46,16 +46,13 @@ describe("kepler-orchestrate task resume contract", () => {
     )
   })
 
-  it("returns ordinary fresh changes-requested feedback to code", () => {
+  it("classifies every outstanding requested-change finding before freshness routing", () => {
     expect(matrix).toMatch(
-      /\| `done` \| fresh `changes-requested` with no canonical unresolved `cannot verify from diff` Blocking item \| Dispatch `kepler-code` with `tasks\/task-N\/feedback\.md`/,
+      /\| `done` \| `changes-requested`, fresh or stale \| Preserve and classify every outstanding finding before freshness routing/,
     )
-  })
-
-  it("adjudicates a canonical unresolved feedback item before routing", () => {
-    expect(matrix).toMatch(
-      /\| `done` \| fresh `changes-requested` with a canonical unresolved `cannot verify from diff` Blocking item \| Driver adjudicates the concrete named risk before code or advancement/,
-    )
+    expect(matrix).toMatch(/Route code defects to `kepler-code`/)
+    expect(matrix).toMatch(/evidence gaps through bounded located-evidence adjudication/)
+    expect(matrix).toMatch(/intent defects to the owning proposal\/design stage/)
   })
 
   it("advances only after fresh task approval", () => {
@@ -71,6 +68,32 @@ describe("kepler-orchestrate task resume contract", () => {
     expect(matrix).toMatch(
       /\| `done` \| latest feedback-touching commit is mixed \| Dispatch `kepler-code-feedback`/,
     )
+  })
+})
+
+describe("kepler-orchestrate replicated task evidence contract", () => {
+  const consistency = singleLine(section(skill, "## Task handoff consistency"))
+  const process = singleLine(section(skill, "## Process"))
+  const implementer = singleLine(readReference("implementer-prompt.md"))
+
+  it("checks root metadata and body rows before applying the task matrix", () => {
+    expect(consistency).toMatch(/frontmatter task list and Markdown rows must match exactly.*ordered task id, title, status, and progress link/is)
+    expect(process).toMatch(/lint includes exact consistency between root progress metadata and body rows/is)
+    expect(implementer).toMatch(/matching root metadata entry and Markdown row/is)
+  })
+
+  it("preserves in-progress and correction boundaries without treating aggregate complete as a gate", () => {
+    expect(consistency).toMatch(/`in-progress`.*`status: pending`.*no attempt/is)
+    expect(consistency).toMatch(/correction.*prior finalized local status and attempt/is)
+    expect(consistency).toMatch(/aggregate `status: complete`.*implementation summary.*never a finish-work gate/is)
+  })
+
+  it("diagnoses contradictory terminal evidence with its owner before advancement", () => {
+    expect(consistency).toMatch(/root `done` or `blocked`.*local status\/latest terminal Outcome/is)
+    expect(consistency).toMatch(/diagnose.*owning coder/is)
+    expect(consistency).toMatch(/driver never invents a done attempt/is)
+    expect(process).toMatch(/subagent returns.*rerun `kepler workbench lint --change-dir <change-dir>`.*stop on nonzero exit/is)
+    expect(process).toMatch(/independently read the committed root metadata entry and row.*task-local status.*physical latest attempt\/Outcome/is)
   })
 })
 
@@ -121,33 +144,65 @@ describe("kepler-orchestrate TDD refactor handoff contract", () => {
   })
 })
 
+describe("kepler-orchestrate route ownership admission contract", () => {
+  const process = singleLine(section(skill, "## Process"));
+  const implementer = singleLine(readReference("implementer-prompt.md"));
+  const code = readSkill("kepler-code");
+  const propose = readSkill("kepler-propose");
+  const plan = readSkill("kepler-plan");
+  const wayfinder = readSkill("kepler-wayfinder");
+  const finish = readSkill("kepler-finish-work");
+
+  it("binds route revision and owner claims before task writes", () => {
+    expect(process).toMatch(/route-backed change.*canonical route\/unit.*exact committed route-source revision/is);
+    expect(process).toMatch(/scan known proposals\/plans.*local and visible remote branches.*worktrees.*another owner/is);
+    expect(process).toMatch(/local scan.*cannot prove cross-clone exclusivity.*unsupported/is);
+    expect(implementer).toMatch(/current context's route-unit and route-source revision.*scan visible claims/is);
+  });
+
+  it("dispatches a resolved target and rejects source-target aliases without tip-SHA identity", () => {
+    expect(process).toMatch(/full named source branch ref.*resolved full delivery-target ref/is);
+    expect(implementer).toContain("[DISPATCH_TARGET]");
+    expect(code).toMatch(/full resolved delivery-target ref/);
+    expect(section(code, "## Dispatch identity readback")).toMatch(/compares the source and target by full refs and configured upstream mapping, not tip\s+SHAs/);
+  });
+
+  it("requires owner-directed claim transfer and retains uncertain workspaces", () => {
+    const proposalProcess = singleLine(section(propose, "## Process"));
+    const planProcess = singleLine(section(plan, "## Process"));
+    const claiming = singleLine(section(wayfinder, "## Map mechanics"));
+    const retention = singleLine(section(finish, "## Route ownership and workspace retention"));
+
+    expect(proposalProcess).toMatch(/explicit owner authorization.*inspection of partial work.*Git\/provider effects.*preservation of history\/work/is);
+    expect(planProcess).toMatch(/explicit owner authorization.*inspection of partial work.*Git\/provider effects.*preservation of history\/work/is);
+    expect(claiming).toMatch(/never use a workspace suffix.*competing or ambiguous claim.*owner-directed resume\/transfer/is);
+    expect(claiming).toMatch(/local scan.*not a cross-clone lock.*unsupported/is);
+    expect(retention).toMatch(/designated user\/controller authorizes any withdrawal or transfer/is);
+    expect(retention).toMatch(/Retain and report shared, dirty or ambiguously owned workspaces/is);
+  });
+});
+
 describe("kepler-orchestrate whole-branch resume contract", () => {
   const matrix = singleLine(section(skill, "## Whole-branch resume matrix"))
 
-  it("dispatches whole-branch review when review is absent", () => {
-    expect(matrix).toMatch(/\| absent \| Dispatch `kepler-review`/)
+  it("requires a full review when the review is absent", () => {
+    expect(matrix).toMatch(/\| absent \| Obtain a full whole-branch review with explicit target and actual merge base/)
   })
 
-  it("dispatches whole-branch review when review is malformed or stale", () => {
-    expect(matrix).toMatch(/\| stale or lint-invalid \| Dispatch `kepler-review`/)
+  it("routes invalid review evidence to its owner without identical retries", () => {
+    expect(matrix).toMatch(/\| lint-invalid, undurable, or off-branch \| Diagnose the exact invalid evidence with its owner.*do not grant clearance or repeat an identical dispatch/)
   })
 
-  it("keeps a lint-valid skipped branch pass from authorizing finish", () => {
-    expect(matrix).toMatch(
-      /\| fresh `skipped` \| Dispatch `kepler-review`.*artifact is valid but does not approve the branch/,
-    )
+  it("keeps a valid skipped branch pass from authorizing finish", () => {
+    expect(matrix).toMatch(/\| valid `skipped` \| Obtain a non-skipped review with a stated review purpose/)
   })
 
-  it("routes fresh requested changes through classification", () => {
-    expect(matrix).toMatch(
-      /\| fresh `changes-requested` \| Classify the complete finding set for re-plan or the upstream-defect stop/,
-    )
+  it("classifies requested changes before choosing remediation scope", () => {
+    expect(matrix).toMatch(/\| valid latest `changes-requested` \| Preserve and classify all blockers before choosing remediation scope/)
   })
 
-  it("hands fresh approval to finish-work", () => {
-    expect(matrix).toMatch(
-      /\| fresh `approved` with no blocking findings \| Hand off to `kepler-finish-work`/,
-    )
+  it("hands current full or bounded approval to finish-work", () => {
+    expect(matrix).toMatch(/\| valid full `approved` or `approved-remediation`, with current clearance \| Hand off to `kepler-finish-work`/)
   })
 })
 
@@ -175,37 +230,43 @@ describe("kepler-orchestrate checkpoint and evidence contract", () => {
     expect(advance).toBeGreaterThan(commit)
   })
 
-  it("creates a task-local base only before a genuine first attempt", () => {
+  it("runs the shared checkpoint verifier before every code dispatch", () => {
     expect(skill).toContain("<change-dir>/tasks/task-N/.base")
-    expect(process).toContain(
-      "kepler workbench diff --record --task N --change-dir <change-dir>",
+    expect(process).toMatch(
+      /run `kepler workbench diff --record --task N --change-dir <change-dir>` before every code dispatch/is,
     )
     expect(checkpointRules).toMatch(
-      /only when.*root row is `pending`.*task log has no `## Attempt`.*feedback.*absent.*no task-owned implementation changes/is,
+      /with no task attempt or feedback history.*records current `HEAD` only when.*root row is `pending`.*committed task log has no attempt.*worktree is clean/is,
     )
-    expect(checkpointRules).toMatch(/record current `HEAD` as the checkpoint/i)
-    expect(process).not.toMatch(
-      /before any first attempt, retry, or correction dispatch.*--record/is,
+    expect(checkpointRules).toMatch(
+      /initial pending-log creation commit is not an implementation attempt/is,
     )
     expect(process).not.toContain("~/.kepler/scripts/")
   })
 
-  it("reconstructs or stops instead of rebasing historical work", () => {
+  it("does not treat clean pending logs as semantic authority to crop prior task work", () => {
+    expect(checkpointRules).toMatch(/before.*first-attempt.*--record.*inspect.*task-owned.*committed.*uncommitted/is)
+    expect(checkpointRules).toMatch(/mechanical eligibility.*does not prove.*absence of task-owned/is)
+    expect(checkpointRules).toMatch(/task-owned work.*(?:ambiguous|uncertain).*stop.*never record current `HEAD`/is)
+  })
+
+  it("reconstructs only from agreeing historical evidence and preserves the cache", () => {
     expect(checkpointRules).toMatch(
-      /historical evidence exists when.*status.*other than `pending`.*`## Attempt`.*feedback/is,
+      /durable task history.*first parent.*earliest committed task-progress revision.*first attempt/is,
     )
     expect(checkpointRules).toMatch(
-      /missing or malformed.*unambiguous durable git, task, and feedback evidence/is,
+      /every valid feedback `Base:` must agree/is,
     )
     expect(checkpointRules).toMatch(
-      /valid feedback `Base:`.*first parent.*earliest commit.*first task attempt/is,
+      /ignored.*`tasks\/task-N\/.base` is a no-overwrite cache:.*never treats it as authority/is,
     )
-    expect(checkpointRules).toMatch(/every available candidate.*same full commit/i)
     expect(checkpointRules).toMatch(
-      /existing checkpoint.*historical evidence.*match.*candidate.*precede the first implementation attempt/is,
+      /(?:restores|reconstructs) it only when it is missing and history proves the value/is,
     )
-    expect(checkpointRules).toMatch(/otherwise stop.*intervention/i)
-    expect(checkpointRules).toMatch(/never.*current `HEAD`.*historical evidence/is)
+    expect(checkpointRules).toMatch(
+      /malformed or conflicting existing cache.*missing or ambiguous historical evidence.*owner diagnosis/is,
+    )
+    expect(checkpointRules).toMatch(/never substitute current `HEAD`, `HEAD~1`/is)
   })
 
   it("makes the implementer preserve rather than create a checkpoint", () => {
@@ -290,7 +351,8 @@ describe("kepler-orchestrate prompt scopes", () => {
     expect(codeFeedback).toContain("<change-dir>/tasks/task-N/feedback.md")
     expect(codeFeedback).toContain("kepler workbench lint --change-dir <change-dir>")
     expect(codeFeedback).toMatch(/only lint decides whether their format is valid/is)
-    expect(codeFeedback).toMatch(/follow kepler-code-feedback's.*append.*commit rules/is)
+    expect(codeFeedback).toMatch(/kepler-code-feedback's evidence, review, append, and commit rules/is)
+    expect(codeFeedback).toMatch(/CLI-verified historical checkpoint, not only the ignored `.base` cache/is)
     expect(codeFeedback).toMatch(/do not impose a second template or pass-shape validator/is)
     expect(codeFeedback).toMatch(/bounded inspection/i)
   })
@@ -300,11 +362,12 @@ describe("kepler-orchestrate prompt scopes", () => {
 
     expect(codeFeedback).toContain("## Located evidence")
     expect(codeFeedback).toContain("[LOCATED_EVIDENCE_OR_NONE]")
-    expect(codeFeedback).toMatch(/exact named cross-task evidence/i)
-    expect(codeFeedback).toMatch(/same supplied `Head`/i)
+    expect(codeFeedback).toMatch(/exact named located evidence/i)
+    expect(codeFeedback).toMatch(/typed `evidence-gap`.*legacy.*cannot verify from diff/is)
+    expect(codeFeedback).toMatch(/same supplied `Base` and `Head`/i)
     expect(codeFeedback).toMatch(/new physical pass/i)
     expect(process).toMatch(
-      /located evidence resolves.*re-dispatch.*same Base and Head.*new physical pass/is,
+      /located evidence resolves.*re-dispatch.*new physical pass.*same Base and Head/is,
     )
   })
 
@@ -312,7 +375,7 @@ describe("kepler-orchestrate prompt scopes", () => {
     const process = singleLine(section(skill, "## Process"))
 
     expect(process).toMatch(
-      /confirmed code gap.*dispatch `kepler-code`.*feedback.*located gap/is,
+      /confirmed code gap.*dispatch `kepler-code`.*`kepler-code-feedback`.*located gap/is,
     )
   })
 

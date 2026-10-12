@@ -4,7 +4,7 @@ change: <YYYY-MM-DD-change-title>
 status: draft
 created: <YYYY-MM-DD>
 author: <Name <email>>
-decision: accepted | rejected | skipped
+decision: skipped
 route_unit: null
 ---
 
@@ -17,6 +17,7 @@ route_unit: null
   OPTIONAL artifact — skip for mechanical changes and start at plan.md.
   Scale each section to its complexity: a sentence when obvious, a few paragraphs
   when nuanced. Delete a section that does not apply.
+  A draft or a template decision default is never requester approval. Show the requester the exact final candidate bytes, including status: approved and decision: accepted, and wait for explicit approval of that revision before writing it. Commit exactly those approved bytes; any later intent edit needs new approval.
   Delete this comment block and inline hints before finalizing.
   Before creating this artifact, read the configured Git identity with `git config user.name` and
   `git config user.email`, then write `author: Name <email>` using both configured values. If either

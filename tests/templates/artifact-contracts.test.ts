@@ -18,6 +18,18 @@ function readFrontmatter(template: string): string {
 }
 
 describe("split execution artifact templates", () => {
+  it("distinguishes SHA-256 plan digests from Git provenance and preserves initialization history", () => {
+    const instructions = readTemplate("plan.md").match(/<!--([\s\S]*?)-->/)?.[1] ?? "";
+
+    expect(instructions).toContain("taskDefinitionDigest");
+    expect(instructions).toContain("taskBreakdownDigest");
+    expect(instructions).toContain("lowercase 64-hex SHA-256");
+    expect(instructions).toContain("Git commits and blobs");
+    expect(instructions).toContain("remain 40-hex");
+    expect(instructions).toContain("Preserve the original `initialization.breakdown`");
+    expect(instructions).toContain("checked against that historical plan");
+  });
+
   it("gives every lifecycle producer disposable authoring instructions", () => {
     const lifecycleTemplates = [
       ["progress.md", "kepler-plan", ".kepler/changes/<change>/progress.md"],
@@ -47,6 +59,17 @@ describe("split execution artifact templates", () => {
     expect(template).toContain("title: \"<task title>\"")
     expect(template).toContain("progress: tasks/task-N/progress.md")
     expect(template).toContain("status: pending | in-progress | blocked | complete")
+    expect(template).toContain("Root `status: complete` means all active implementation rows are done")
+  })
+
+  it("provides a synchronized root task ledger skeleton", () => {
+    const template = readTemplate("progress.md")
+
+    expect(template).toContain("Root `status: complete` means all active implementation rows are done")
+    expect(template).toContain("The frontmatter and table must match exactly")
+    expect(template).toContain("| Task | Status | Progress |")
+    expect(template).toContain("| Task N: <escaped display title> | pending | [details](tasks/task-N/progress.md) |")
+    expect(template).toContain("one matching row per active task in numeric identity order")
   })
 
   it("guides every author-bearing template to configured Git identity", () => {
@@ -78,10 +101,13 @@ describe("split execution artifact templates", () => {
   it("defines the task-local progress artifact", () => {
     const template = readTemplate("task-progress.md")
 
-    expect(template).toContain("# Task Progress: Task N — <title>")
+    expect(template).toContain("# Task Progress: Task N — <exact unescaped plan task title>")
     expect(template).not.toContain("## Attempt N — <YYYY-MM-DD>")
     expect(template).not.toContain("- Outcome: done | blocked")
     expect(template).not.toContain("- Verified: `<command>` → <result>")
+    expect(template).toMatch(/each new attempt.*exactly one terminal `- Outcome: done` or `- Outcome: blocked`/is)
+    expect(template).toMatch(/append a new\s+attempt for corrections.*instead of adding another Outcome to historical attempts/is)
+    expect(template).toMatch(/preserve.*historical unbulleted Outcome.*without rewriting/is)
   })
 
   it("defines the task-local feedback artifact", () => {
@@ -129,7 +155,7 @@ describe("split execution artifact templates", () => {
       ].join("\n"),
     )
     expect(template).toMatch(
-      /## Pass N — <YYYY-MM-DD>[\s\S]*?^Base: <full merge-base commit identifier>$[\s\S]*?^Head: <full head commit identifier>$[\s\S]*?^Verdict: approved \| changes-requested \| skipped$[\s\S]*?^### Blocking$[\s\S]*?^### Suggestions$/m,
+      /## Pass N — <YYYY-MM-DD>[\s\S]*?^Base: <full merge-base commit identifier>$[\s\S]*?^Head: <full head commit identifier>$[\s\S]*?^Verdict: approved \| changes-requested \| skipped \| approved-remediation$[\s\S]*?^Scope: full$[\s\S]*?^Target: refs\/remotes\/<remote>\/<branch>$[\s\S]*?^### Blocking$[\s\S]*?^### Suggestions$/m,
     )
     expect(template.match(/^Base: .+$/gm)).toHaveLength(1)
     expect(template.match(/^Head: .+$/gm)).toHaveLength(1)

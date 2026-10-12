@@ -17,10 +17,18 @@ tasks:
   Lives at: .kepler/changes/<change>/progress.md
   Detailed execution history belongs in each linked task progress artifact.
   Allowed task statuses: pending | in-progress | blocked | done
+  Root `status: complete` means all active implementation rows are done; it does not
+  mean task feedback, whole-branch review, or finish-work passed.
   Delete this instruction block and every inline hint before finalizing.
 -->
 
 # Progress: <Change Title>
 
-<!-- Add one `tasks` frontmatter entry per active task in plan order. The frontmatter
-     is the machine-readable task ledger; task details remain in linked files. -->
+<!-- Add one `tasks` frontmatter entry and one matching row per active task in numeric identity order.
+     The orchestrator's optional execution sequence is separate from this ledger's physical order.
+     Escape `|` in display titles as `\|`. The frontmatter and table must match exactly;
+     task details remain in linked files. -->
+
+| Task | Status | Progress |
+| --- | --- | --- |
+| Task N: <escaped display title> | pending | [details](tasks/task-N/progress.md) |

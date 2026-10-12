@@ -47,6 +47,15 @@ export class DiffCommand extends CommandRunner {
     return directory;
   }
 
+  @Option({
+    flags: "--target-branch <reference>",
+    name: "targetBranch",
+    description: "Select the whole-change review target branch",
+  })
+  parseTargetBranch(reference: string): string {
+    return reference;
+  }
+
   @Option({ flags: "--task <number>", description: "Select a task number" })
   parseTask(task: string): string {
     return task;
@@ -69,6 +78,8 @@ export class DiffCommand extends CommandRunner {
     const base = typeof options?.base === "string" ? options.base : undefined;
     const changeDir =
       typeof options?.changeDir === "string" ? options.changeDir : undefined;
+    const targetBranch =
+      typeof options?.targetBranch === "string" ? options.targetBranch : undefined;
     const task = typeof options?.task === "string" ? options.task : undefined;
     const out = typeof options?.out === "string" ? options.out : undefined;
 
@@ -76,6 +87,7 @@ export class DiffCommand extends CommandRunner {
       if (
         wholeChange ||
         base !== undefined ||
+        targetBranch !== undefined ||
         task === undefined ||
         out !== undefined
       ) {
@@ -99,14 +111,23 @@ export class DiffCommand extends CommandRunner {
         );
         return;
       }
+      if (targetBranch === undefined) {
+        this.reportUsageError("--whole-change requires --target-branch");
+        return;
+      }
       await this.execute({
         mode: "whole-change",
+        targetBranch,
         ...(out === undefined ? {} : { out }),
       });
       return;
     }
 
     if (base !== undefined) {
+      if (targetBranch !== undefined) {
+        this.reportUsageError("--target-branch is only valid with --whole-change");
+        return;
+      }
       if (task !== undefined) {
         this.reportUsageError("--task is meaningless with --base");
         return;
@@ -117,6 +138,11 @@ export class DiffCommand extends CommandRunner {
         ...(changeDir === undefined ? {} : { changeDir }),
         ...(out === undefined ? {} : { out }),
       });
+      return;
+    }
+
+    if (targetBranch !== undefined) {
+      this.reportUsageError("--target-branch is only valid with --whole-change");
       return;
     }
 

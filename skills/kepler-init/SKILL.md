@@ -46,8 +46,10 @@ It does not create templates: the artifact templates are global, installed at
    - `specs/` — canonical capability truth.
    - `changes/` — one directory per change.
 5. **Confirm or record.** Working with a person, show the drafted `AGENTS.md` for correction
-   before finishing — these standards steer every later step, so accuracy matters. Running
-   unattended, record any assumptions you made.
+   before finishing. Verify documented build/test/lint commands against current repository
+   evidence or requester input. Do not declare the project ready while migration or any required project fact, standard, or
+   verification command remains unresolved: ask when attended, otherwise report the exact gap and
+   preserve completed work. Unattended assumptions may cover only non-blocking details.
 
 ## Principles
 
@@ -60,7 +62,9 @@ It does not create templates: the artifact templates are global, installed at
 ## Output
 
 `AGENTS.md` written or updated, and `.kepler/{specs,changes}/` in place. The project is
-ready for `kepler-propose` (or `kepler-plan` for tactical changes).
+ready for `kepler-propose` (or `kepler-plan` for tactical changes) only after migration and
+required facts, standards, and verification commands are resolved. If any remain unresolved,
+the project is not ready: preserve completed work and report the exact gap.
 
 ## Process flow
 
@@ -68,18 +72,25 @@ ready for `kepler-propose` (or `kepler-plan` for tactical changes).
 digraph kepler_init {
     "Explore project (read-only)" [shape=box];
     "Write AGENTS.md\n(six standing areas)" [shape=box];
+    "Resolve legacy migration" [shape=box];
     "Scaffold .kepler/\n(specs, changes)" [shape=box];
     "Interactive?" [shape=diamond];
     "Confirm AGENTS.md with user" [shape=box];
-    "Record assumptions" [shape=box];
+    "Record non-blocking assumptions" [shape=box];
+    "Required facts, standards and commands resolved?" [shape=diamond];
+    "Hold: report gap and preserve work" [shape=box];
     "Project ready for the pipeline" [shape=doublecircle];
 
     "Explore project (read-only)" -> "Write AGENTS.md\n(six standing areas)";
-    "Write AGENTS.md\n(six standing areas)" -> "Scaffold .kepler/\n(specs, changes)";
+    "Write AGENTS.md\n(six standing areas)" -> "Resolve legacy migration";
+    "Resolve legacy migration" -> "Scaffold .kepler/\n(specs, changes)" [label="resolved"];
+    "Resolve legacy migration" -> "Hold: report gap and preserve work" [label="error or unresolved"];
     "Scaffold .kepler/\n(specs, changes)" -> "Interactive?";
     "Interactive?" -> "Confirm AGENTS.md with user" [label="yes"];
-    "Interactive?" -> "Record assumptions" [label="no"];
-    "Confirm AGENTS.md with user" -> "Project ready for the pipeline";
-    "Record assumptions" -> "Project ready for the pipeline";
+    "Interactive?" -> "Record non-blocking assumptions" [label="no"];
+    "Confirm AGENTS.md with user" -> "Required facts, standards and commands resolved?";
+    "Record non-blocking assumptions" -> "Required facts, standards and commands resolved?";
+    "Required facts, standards and commands resolved?" -> "Project ready for the pipeline" [label="yes"];
+    "Required facts, standards and commands resolved?" -> "Hold: report gap and preserve work" [label="no"];
 }
 ```

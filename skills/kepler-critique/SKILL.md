@@ -18,8 +18,9 @@ implementation. Wayfinder is likewise optional and outside the core count.
 
 **Judge, don't fix.** You produce a verdict and located findings. You never modify
 `proposal.md`, `requirements/`, or `design.md`. The single `decision` field records what the
-user did with the critique. Once it records a user decision, the critique is settled and is
-not worked again unless the user explicitly requests a new critique pass.
+user did with the critique. Apply the supported settlement matrix in **Handoff**; a recorded
+`skipped` decision or `accepted` changes-requested verdict is not settled. Preserve settled
+dispositions and do not work them again unless the user requests a new critique pass.
 
 ## Inputs
 
@@ -95,10 +96,10 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    `critique.md` in the change directory, written from the findings that survived
    validation. Record `created`, `verdict`, and `decision` (`accepted`, `applied`, `rejected`,
    or `skipped`) in frontmatter; do not duplicate these fields as body metadata. Use
-   `accepted` when the user accepts a verdict that needs no remediation, `applied` when the
-   user accepts and applies the requested changes, `rejected` when the user dismisses the
-   critique, and `skipped` when no user decision is collected. Never add a second resolution
-   field. After you write the report, run
+   `accepted` only when the user accepts an `approved` verdict that needs no remediation,
+   `applied` when the user accepts and applies `changes-requested` findings, `rejected` when the
+   user explicitly dismisses those findings, and `skipped` when no user decision is collected.
+   `decision: accepted` on a `changes-requested` verdict does not settle its application. Never add a second resolution field. After you write the report, run
    `kepler workbench lint --file <change-dir>/critique.md` before printing it or handing it off.
    A nonzero lint result is a failed gate: correct the report and rerun lint, or stop with the
    exact finding without declaring the critique compliant.
@@ -185,14 +186,22 @@ verdict and a numbered findings list. This skill does not modify `proposal.md`,
 
 ## Handoff
 
-- **Name the next step, per the disposition.** An `approved` critique with
-  `decision: accepted` is cleared. A `changes-requested` critique with `decision: applied`
-  is cleared because the user accepted and applied its findings. A critique with
-  `decision: rejected` is also settled: the user dismissed it, so its findings are not worked.
-  Continue each cleared or dismissed critique directly to the next applicable core stage.
-  `decision: skipped` records that no user decision was collected; follow the verdict when
-  naming the handoff, but do not manufacture a user decision. Never rerun
-  `kepler-critique` merely to replace a settled verdict with `approved`.
+- **Require a settled disposition before handoff.** An `approved` critique with decision
+  `accepted`, `applied`, or `rejected` is settled under the shared supported matrix. New approved
+  reports normally use `accepted`; preserve legitimate historical applied/rejected dispositions
+  rather than forcing a replacement critique. A `changes-requested` critique is settled only when the requester records
+  `decision: applied` after applying the findings, or `decision: rejected` after explicitly
+  dismissing them. `changes-requested` with `accepted` or `skipped` holds at the artifact owner;
+  `approved` with `skipped` and any `verdict: skipped` supply no clearance. A skipped decision
+  means no owner disposition was collected. Never infer one from a named next stage, formal
+  artifact status, template default, or unattended authorization. Return unresolved findings to
+  `kepler-propose` for revision/reapproval or request the missing owner decision; do not dispatch
+  planning/code while this hold remains. Applied/rejected critique decisions are settled: preserve
+  them and never rerun `kepler-critique` merely to replace them with `approved`.
+- **Name the next step only after the hold clears.** A settled critique may continue to the next
+  applicable core stage. Critique remains optional; when no critique artifact exists, do not
+  manufacture one. A critique disposition never substitutes for explicit revision-bound requester
+  approval of formal proposal/design/requirements inputs.
 - **Choose the applicable core stage.** With no `plan.md`, the next stage is
   `kepler-plan`. With an existing plan that remains valid after the revisions, the user may
   continue with `kepler-code` for one task or `kepler-orchestrate` for the whole plan. If
