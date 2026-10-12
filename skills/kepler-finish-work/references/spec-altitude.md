@@ -14,8 +14,9 @@ It does **not** govern the change artifacts themselves.
 
 **Change artifacts may be as specific as they need to be.** A `requirements/` delta, a
 `design.md`, a `plan.md` — these describe one particular change and can name concrete mechanism,
-exact signatures, and even code when that is the clearest way to pin the work down. They keep
-the structured `SHALL` + `WHEN`/`THEN` form. Do not lift or strip them.
+exact signatures, and even code when that is the clearest way to pin the work down. Requirement
+deltas keep the structured `SHALL` + `WHEN`/`THEN` form; design explains the model and architecture,
+and plan records implementation steps. Do not apply canonical-spec altitude restrictions to them.
 
 **The canonical spec is different.** It is the project's durable body of knowledge — the
 contracts, behaviors, invariants, decisions, and learnings that outlive any single change. It is
@@ -84,6 +85,22 @@ not belong. Each register has a home section:
 | **Decision / pattern** | `## Decisions` | a *reusable* design rule or deliberate decision, stated so future work follows it. Where the "learnings and decisions" from `design.md` land — distilled to the rule, not the instance. |
 | (narrative frame) | `## Overview` | one paragraph orienting the reader to what the capability is. |
 
+## Domain and architecture mapping
+
+Use the canonical glossary and authoritative project sources for meanings, contexts and ownership. Keep the model consistent across artifacts while preserving the distinction between change intent and current capability truth. Map only supported, relevant facts:
+
+| Durable fact | Canonical home |
+| --- | --- |
+| Domain/context responsibility, related contexts and boundary ownership | Overview |
+| Consumer-visible ports, commands, events, payloads and error contracts | Contract |
+| Observable interactions, state transitions, guards and translation outcomes | Behavior and Examples |
+| Rules that hold across states, including their owning context | Invariants |
+| Durable boundary, dependency-direction and translation policies | Decisions |
+
+Private wiring, package inventories and source-code attribution remain in design; they are not canonical requirements. A public package API can be a consumer contract. A reusable ownership or dependency rule may belong in Decisions; a concrete adapter class or injection token is mechanism. The black-box test applies to behavioral guarantees, while architectural policy must survive a reasonable reimplementation even when dependency inspection checks compliance.
+
+Preserve established model facts during reformat; do not force new classifications or invent definitions. From-code documents current behavior, never a proposed design as already implemented. Distillation takes its content only from the approved change inputs, under finish-work's synchronization rules. Surface conflicts and uncertain meanings before publishing dependent claims. Keep all five canonical sections concise and omit irrelevant subsections; no new domain metadata or mandatory architecture catalog is needed.
+
 ## The altitude test
 
 Applies to every statement you are about to write into the canonical spec. A statement is at the
@@ -93,9 +110,7 @@ statement is still true.
 
 Three litmus checks, sharpest first:
 
-1. **Black-box scenario.** Each behavior should be observable through inputs and outputs. If a
-   statement could only be verified by inspecting source, an AST, or call structure, it is too
-   low. You cannot black-box-test "uses a `switch`." You can black-box-test "not-found → 404."
+1. **Black-box scenario.** Each behavioral guarantee should be observable through inputs and outputs. A behavior verified only by inspecting source, an AST, or call structure is too low. You cannot black-box-test "uses a `switch`." You can black-box-test "not-found → 404." Durable architectural policies use the decision/pattern test below; dependency inspection alone does not make a reusable policy too low.
 2. **The "via / using / as" tell.** A clause like "… via a `BeforeCreate` hook", "… using a
    `switch`", "… as a `json.RawMessage`" almost always names a HOW. Cut the clause; keep the WHAT.
 3. **Reason to change.** If the statement would change for a reason no consumer of the contract
@@ -151,7 +166,7 @@ that capability is where the pattern is established.
 - Library mechanics (ORM hooks, specific SDK calls) — state the **effect**, not the call.
 - File paths or package layout **as requirements**. (Fine as an informative aside; a requirement
   anchored to a path is false the day the file moves.)
-- Anything whose behavior could only be verified by reading the source.
+- Behavioral guarantees that can only be verified by reading source. This excludes private mechanism, not durable architectural policies in Decisions.
 
 (All of the above are legitimate in the change's `requirements/`, `design.md`, or `plan.md` —
 they just do not survive the distillation into the canonical spec.)

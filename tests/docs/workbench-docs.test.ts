@@ -79,6 +79,39 @@ describe("workbench documentation", () => {
     expect(framework).toMatch(/lint.*(?:not|does not).*semantic gates/is);
   });
 
+  it.each(["docs/sdd-framework.md", "docs/skills.md"])(
+    "documents proportionate domain and architecture design coverage in %s", (document) => {
+      const domain = content[document].split("## Domain language and capability scope\n")[1].split("\n## ")[0].replace(/\s+/g, " ");
+      expect(domain).toMatch(/design.*domain model.*architecture/i);
+      expect(domain).toMatch(/packages.*ports and adapters.*code attribution/i);
+      expect(domain).toMatch(/existing.*proposed.*removed/i);
+      expect(domain).toMatch(/seven.*headings.*optional/i);
+      expect(domain).toMatch(/historical lint-valid.*not.*new.*sections/i);
+      expect(domain).toMatch(/semantic.*(?:not|rather than).*schema/i);
+      expect(domain).toMatch(/canonical.*Overview.*Contract.*Behavior.*Invariants.*Decisions/i);
+    },
+  );
+
+  it("provides fictional multi-context and small-change examples without rewriting history", () => {
+    const examples = content["docs/sdd-framework.md"].split("### Design examples\n")[1]?.split("\n## ")[0] ?? "";
+    expect(examples).toContain("fictional");
+    expect(examples).toContain("#### Multi-context change");
+    expect(examples).toContain("#### Small change with intact boundaries");
+    expect(examples).toContain("OrderStore");
+    expect(examples).toMatch(/created.*modified.*removed/s);
+    expect(examples).toMatch(/Order.*Ordering.*Order.*Billing/s);
+    expect(examples).toMatch(/proposed.*cancelOrder/s);
+    expect(examples).toMatch(/no glossary.*README/s);
+    expect(examples).toMatch(/no.*(?:new|changed).*ports.*events/s);
+  });
+
+  it("summarizes architectural design ownership in the template index and README", () => {
+    const templates = readFileSync(resolve(root, "bundle/templates/README.md"), "utf8");
+    expect(templates).toMatch(/`design\.md`.*Domain model and architectural realization/);
+    expect(templates).toMatch(/seven.*headings.*optional/is);
+    expect(content["README.md"]).toMatch(/design.*package.*ports.*adapters.*code attribution/is);
+  });
+
   it.each(contractDocuments)(
     "defines review history modes and evidence authority independently in %s",
     (document) => {

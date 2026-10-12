@@ -33,7 +33,7 @@ The full path produces:
 
 - `proposal.md` — the PRD: why, what changes, the sourced domain language, involved subdomains and bounded contexts, capability scope, and affected boundaries.
 - `requirements/<capability>.md` — the SRS (delta form) for each capability.
-- `design.md` — the SDD: how it will be built.
+- `design.md` — the SDD: the change's domain model, architectural boundaries, package responsibilities, ports and adapters, code attribution, and supporting decisions.
 
 The requirements-only path produces only the minimal approved
 `requirements/<capability>.md` delta files needed for a bounded tactical behavior change. It does
@@ -62,6 +62,19 @@ A capability is a cohesive, durable area of responsibility with a clear boundary
 For example, `rest-api` can represent an infrastructure bounded context with its own external request/response model, vocabulary, translation into domain operations, and compatibility obligations. State which domain contexts retain business rules and data ownership. REST alone does not establish a bounded context: an HTTP adapter may belong to an existing context. A package, deployment unit or endpoint is not automatically a context or capability. Do not create overlapping parent and child capabilities that duplicate the same contracts.
 
 Preserve existing capability slugs, frontmatter metadata and the file mapping from `requirements/<capability>.md` to `.kepler/specs/<capability>.md`. Record scope in prose, not new mandatory metadata. Historical proposals and specs remain valid under their existing lint contract; do not rewrite approved history to add these sections or classifications. New full-path proposals use the expanded authoring contract below. The glossary is shared vocabulary support, not automatically a capability requiring a new delta.
+
+## Design authoring contract
+
+Describe the change in its project's domain and architectural language before explaining implementation choices. Use the installed design template as an outline, with coverage proportional to the change:
+
+- **Language and goal:** Express goals in sourced, context-scoped terms from the canonical glossary and authoritative project documents. Cite their sources or the proposal's Domain Context; do not create a replacement glossary. Record undefined or conflicting meanings in Open Questions. A material unresolved meaning or owner blocks approval; obtain requester resolution through domain modeling, and keep unattended work draft.
+- **Model:** Describe relevant domains, subdomains, bounded contexts, terms, relationships, commands, events, states and invariants, including who owns each rule and how meanings translate across contexts. Use core, supporting or generic classifications only when supported by project evidence or an explicit proposed decision. Separate current facts from the proposed model; a package or transport alone does not establish a context.
+- **Packages and boundaries:** For each package created, modified or removed, identify its responsibility, domain/context ownership and domain, application or infrastructure role, the contracts it exposes and those it depends on. Explain data ownership, interactions, trust and compatibility across boundaries. For removals, trace responsibility transfers or retirements and affected consumers. Trace existing callers' success and failure outcomes into replacement contracts and requirements; retire or change an outcome only when the change explicitly authorizes it. A package can contain several contexts; attribute individual responsibilities rather than forcing one-to-one ownership.
+- **Ports and adapters:** Name inbound use-case contracts and outbound capabilities, their owners, consumers/providers and relevant inputs, results, errors and invariant obligations. Identify each adapter and model translation. Reuse existing functions and injected collaborators as ports where suitable; dependencies point toward the application core. Distinguish dependency direction from runtime flow and describe unchanged seams when relevant.
+- **Code attribution:** Map affected code to its domain/context or infrastructure responsibility, marking references as existing, proposed or removed. Verify existing references in the repository; proposed code needs an explicit owner and contract, not a claim that it already exists. Explain where removed responsibilities go and check surviving consumers. This mapping records responsibility, not author metadata or plan task steps.
+- **Proportionate coverage:** Keep the seven lint-required headings from the design template, with concise explanations when no facts apply. Omit optional sections and tables when prose or upstream references provide the relevant coverage. Do not invent events, states, interfaces, layers or definitions to fill the outline; missing material evidence remains a question. Historical lint-valid designs are not invalid for lacking the new model or mapping sections. These are semantic authoring and review expectations, not new CLI schema requirements.
+
+Architectural realization leads into the decisions and trade-offs that support it. Tie testing to contracts, state transitions and invariant owners: core tests substitute outbound capabilities, while adapter checks exercise translation and failure boundaries.
 
 ## Tactical requirements-only approval
 
@@ -196,7 +209,7 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    either changed, discard the stale selection and re-evaluate the route before writing any artifact.
 4. **Set up the change.** Create `.kepler/changes/<YYYY-MM-DD-title>/`.
 5. **Explore context (read-only).** Project structure, docs, recent commits, and the canonical
-   specs (`.kepler/specs/`). Read the canonical glossary and relevant domain and architecture documentation before drafting goals. Identify established subdomains, bounded contexts, their responsibilities and interactions; distinguish evidence from inferred boundaries and resolve material ambiguity with the requester. Read the specs before drafting: they hold the conventions and
+   specs (`.kepler/specs/`). Read the canonical glossary and relevant domain and architecture documentation before drafting goals. Identify established subdomains, bounded contexts, their responsibilities and interactions; distinguish evidence from inferred boundaries and resolve material ambiguity with the requester. Inspect affected packages, public contracts, ports, adapters and significant code references so the design can attribute responsibilities without guessing. Read the specs before drafting: they hold the conventions and
    prior decisions the change inherits, so a MODIFIED capability builds on the behavior its
    canonical spec already documents (human-readable prose — Overview / Contract / Behavior /
    Invariants / Decisions) rather than contradicting it. When step 1 entered map-aware mode,
@@ -260,20 +273,11 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    with their trade-offs and a recommendation. Attended, invoke `kepler-grilling` with
    the approaches as content and "an approach is chosen" as the exit condition.
    Unattended, pick the recommended approach and record the reasoning.
-10. **Write the design (how).** From the chosen approach, write `design.md`: context,
-   decisions (with the alternatives considered), architecture, testing strategy, risks, and
-   any change-specific boundaries. As you shape the architecture and components, apply
-   `references/code-quality.md` (read from this skill's references directory) — cohesive
-   units with one reason to change, narrow boundaries, inverted dependencies with named
-   testable seams — sized to the change, not gold-plated. Capture the outcome in the
-   design's **Quality Lens** subsection (one line for a trivial change). After the design
-   artifact mutation, run `kepler workbench lint --change-dir <change-dir>` and resolve every
-   warning or error before self-review or handoff.
+10. **Write the design (how).** Follow **Design authoring contract**: establish sourced goals, the relevant model and architectural realization before supporting decisions. Cover affected packages, ports/adapters and code attribution, testing strategy, risks and change-specific operating boundaries. Reference upstream scope and requirements rather than duplicating them. Apply `references/code-quality.md` from this skill's references directory to cohesive units, narrow boundaries, inward dependencies and named testable seams, proportional to the change. Capture evidence in the design's **Quality Lens** subsection (one line for a trivial change). After the design artifact mutation, run `kepler workbench lint --change-dir <change-dir>` and resolve every warning or error before self-review or handoff.
 11. **Self-review each artifact.** First confirm the workspace: `git rev-parse --show-toplevel`
     ends in `.worktrees/<title>` (or you were legitimately working in place per step 3) and every
     artifact was written under that root, not the default checkout. Then scan for placeholders,
-    contradictions, scope creep, and ambiguity; fix in place. For a new full-path proposal, verify every goal uses sourced, context-scoped terms, every capability has a supported scope and responsibility, and affected contexts and boundaries are covered without duplicate contracts. Missing material domain context is a failed semantic gate even when structural lint passes. Then run `design.md` against
-    `references/code-quality.md`.
+    contradictions, scope creep, and ambiguity; fix in place. For a new full-path proposal, verify every goal uses sourced, context-scoped terms, every capability has a supported scope and responsibility, and affected contexts and boundaries are covered without duplicate contracts. Missing material domain context is a failed semantic gate even when structural lint passes. For the design candidate, verify sourced language, model ownership, package roles, provided/required contracts, adapter translation and code attribution against the inputs and repository. Check relevant transitions and invariants, current versus proposed claims, and removed responsibilities. Missing material ownership or contracts and unsupported claims are a failed semantic gate even if lint passes; omitted irrelevant tables are not. Then run `design.md` against `references/code-quality.md`.
     **Blocking:** for a non-trivial change — one that adds or restructures units, not a
     mechanical or single-file edit — an unresolved structural smell (a unit with more than one
     reason to change, a leaked boundary, a hard-wired dependency with no testable seam) is a

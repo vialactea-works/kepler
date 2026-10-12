@@ -153,6 +153,23 @@ describe("SetupService filesystem integration", () => {
     }
   });
 
+  it("installs and refreshes the bundled design and canonical spec bytes", () => {
+    const templatesBase = Path.join(tmpHome, ".config/vialactea-works/kepler", "templates");
+    runSetup();
+    for (const file of ["design.md", "requirements-spec.md"]) {
+      const installedPath = Path.join(templatesBase, file);
+      const bundledPath = Path.join(process.cwd(), "bundle", "templates", file);
+      expect(Fs.readFileSync(installedPath)).toEqual(Fs.readFileSync(bundledPath));
+      Fs.writeFileSync(installedPath, "stale template\n");
+    }
+    runSetup();
+    for (const file of ["design.md", "requirements-spec.md"]) {
+      expect(Fs.readFileSync(Path.join(templatesBase, file))).toEqual(
+        Fs.readFileSync(Path.join(process.cwd(), "bundle", "templates", file)),
+      );
+    }
+  });
+
   it("copies wayfinder artifact templates", () => {
     runSetup();
 

@@ -27,8 +27,7 @@ dispositions and do not work them again unless the user requests a new critique 
 - The change directory path (`.kepler/changes/<change>/`).
 - The propose artifacts under review: `proposal.md` (why), `requirements/<capability>.md`
   (what), `design.md` (how). Any subset that exists — a change may skip some.
-- **The actual codebase.** Every reference the artifacts make — a type, function, file, or
-  code example — must be checked against the real repository, not taken on trust.
+- **The actual codebase.** Check existing-code claims against the repository and clearly identified proposed references against their stated ownership, contracts and design rationale.
 - The project's canonical specs (`.kepler/specs/`) — the current requirement truth each
   MODIFIED capability builds on.
 - The change's `route_unit` frontmatter field (in the proposal), if present — follow it to the
@@ -48,13 +47,8 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 
 ## Principles
 
-- **Evidence over claims.** Trust the codebase, not the artifact's description of it. A
-  design that says a type "is satisfied structurally" means nothing until you read the type
-  and confirm the signatures line up.
-- **Ground every reference.** The sharpest defect a design carries is a reference to code
-  that does not exist, or no longer will. Verify each named type/function/file/example
-  against the repository, and confirm nothing is planned against code the same change
-  removes. This is a required step, not an optional pass.
+- **Evidence over claims.** Verify existing-code claims against source and language/ownership claims against the glossary and authoritative project documents. Confirm signatures before accepting a structural compatibility claim; a directory name alone cannot establish a bounded context.
+- **Ground every reference.** Distinguish existing, proposed and removed code. An existing-code claim without matching source is a defect; a proposed addition is legitimate when its owner, contract and rationale are explicit. Confirm surviving consumers do not depend on code the change removes.
 - **Specific and located.** Every finding names the artifact and place, says what is wrong
   and what to change, and cites the criterion or standard it violates. "`design.md:126`
   claims `RapClient` satisfies `RAPStatusChecker`, but their `IsDone` return types differ"
@@ -74,13 +68,8 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    Kepler CLI/workbench is unavailable, list the directory yourself), then read every one of them
    (`proposal.md`, `requirements/`, `design.md`) and the canonical specs the change builds on.
    Note which capabilities are new vs modified vs removed — the removed set drives the cleanup
-   check.
-2. **Ground every reference in the codebase.** This is the load-bearing step. For each
-   type, function, file, or code example the artifacts cite, read the real code and confirm
-   it exists with the shape claimed — signatures, return types, field names, table names.
-   Then check the other direction: nothing may be planned to modify, call, subclass, or
-   use-as-example any code the change itself removes. A phantom reference or a change
-   against deleted code is a blocking finding.
+   check. Read the glossary and cited domain/architecture documents before judging design goals, ownership or classifications; verify documented fallback language when the glossary is absent.
+2. **Ground every reference in the codebase.** Classify each type, function, file or example as existing, proposed or removed. Read existing code and confirm the claimed signatures, return types, field names and behavior. Clearly proposed additions need not exist yet: check their owner, contract, rationale and compatibility with existing consumers. Flag unsupported existing-code claims, proposals that pretend to be implemented, and surviving steps that call, subclass or use code the change removes. Trace responsibility transfers rather than treating every proposed name as a phantom reference.
 3. **Review across dimensions** (checklist below).
 4. **Apply the structural rubric.** Run `design.md` and `requirements/` against
    `references/code-quality.md`, scaled to the change, and capture the outcome as a Quality
@@ -111,9 +100,11 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 - **Semantic coherence:** One term per concept within each bounded context, used consistently across artifacts. Verify definitions and sources against the canonical glossary and supplementary project documentation. The same word may have distinct meanings across contexts; check explicit translations rather than demanding a global definition. Verify mappings to code names, including documented legacy aliases. An unsupported meaning or conflict with canonical language is a located finding.
 - **Domain scope:** For new full-path proposals, check Domain Context names the involved subdomains and bounded contexts, their responsibilities, involvement and language sources. Each capability must identify a cohesive scope (domain, subdomain or bounded context), responsibility and relation to that context. Infrastructure responsibilities qualify when their model, boundary and contract support the claim; REST alone does not establish a context. A package or endpoint name is insufficient evidence. Flag overlapping parent/child contracts and independent goals bundled into one capability. Existing lint-valid historical proposals missing Domain Context are not invalid for that omission alone; do not demand retroactive backfill of approved history. Requirements-only changes need no proposal.
 - **Boundary impact:** Verify ownership and contract changes across the named contexts, including data ownership, translation, trust, compatibility, migration and coordination obligations. Check that business rules remain with their stated owner rather than leaking into an infrastructure context. If the proposal says no boundary changes, verify its explanation against the stated change. A material unresolved ownership or meaning blocks approval; structural lint cannot establish semantic completeness.
-- **Code-reference validity:** Every referenced type/function/file/example exists in the
-  codebase with the claimed signature and shape. No phantom references; no example that
-  contradicts the real API it stands on.
+- **Domain model:** For a new or revised design candidate, check sourced goals and relevant domains, subdomains, bounded contexts, relationships, commands, events, states and invariants. Confirm rule ownership and translation across contexts. Core/supporting/generic classifications need evidence or an explicit proposed decision. Distinguish current facts from the proposed model and flag unsupported claims or undefined/conflicting meanings. Missing material language or ownership blocks approval even when lint passes.
+- **Architectural realization:** Check each package created, modified or removed for its responsibility, domain/context or infrastructure role, exposed and required ports, adapters, dependency direction and test seams. Verify data/contract ownership and boundary translation; business rules belong to their stated domain owner. Trace retirement or transfer of removed responsibilities and ports. Check replacement contracts and requirements retain existing callers' success and failure outcomes unless the change explicitly changes or retires them. Missing material contracts or consumers blocks approval even when structural lint passes.
+- **Code attribution:** Verify affected code is mapped to its domain/context or infrastructure responsibility, with existing, proposed and removed references distinguished. Compare attribution against source and documented ownership; a package need not map one-to-one to a context. Flag unassigned relevant responsibilities, rule leakage into adapters, or contradictory mappings.
+- **Proportionate design coverage:** Prose and upstream references can provide coverage without every optional subsection or table. Historical lint-valid designs are not invalid solely for missing the new model or mapping sections; do not rewrite approved history. Do not demand invented events, layers or interfaces, and do not excuse missing material evidence as irrelevant. Structural lint checks format, not semantic completeness.
+- **Code-reference validity:** Existing references must match the real code and signatures; examples using existing APIs must honor their actual contracts. Explicitly proposed references need a supported owner and contract and must not claim an implemented API exists.
 - **Cleanup consistency:** Nothing is planned to modify, call, or use-as-example any
   type/function/code the change removes. When the change is a cleanup, list what it deletes
   and confirm no surviving step still leans on it — and that the deletion list is complete.
@@ -212,7 +203,7 @@ verdict and a numbered findings list. This skill does not modify `proposal.md`,
 ```dot
 digraph kepler_critique {
     "Establish scope\n(proposal + requirements + design + specs)" [shape=box];
-    "Ground every reference\n(verify code exists; nothing uses removed code)" [shape=box];
+    "Ground every reference\n(existing / proposed / removed)" [shape=box];
     "Review across dimensions\n(consistency, coherence, references, cleanup)" [shape=box];
     "Apply code-quality rubric\n(-> Quality Lens)" [shape=box];
     "Verdict?" [shape=diamond];
@@ -221,8 +212,8 @@ digraph kepler_critique {
     "State what was verified" [shape=box];
     "Write critique.md + print to chat" [shape=doublecircle];
 
-    "Establish scope\n(proposal + requirements + design + specs)" -> "Ground every reference\n(verify code exists; nothing uses removed code)";
-    "Ground every reference\n(verify code exists; nothing uses removed code)" -> "Review across dimensions\n(consistency, coherence, references, cleanup)";
+    "Establish scope\n(proposal + requirements + design + specs)" -> "Ground every reference\n(existing / proposed / removed)";
+    "Ground every reference\n(existing / proposed / removed)" -> "Review across dimensions\n(consistency, coherence, references, cleanup)";
     "Review across dimensions\n(consistency, coherence, references, cleanup)" -> "Apply code-quality rubric\n(-> Quality Lens)";
     "Apply code-quality rubric\n(-> Quality Lens)" -> "Verdict?";
     "Verdict?" -> "Validate findings with author\n(kepler-grilling)" [label="changes-requested"];

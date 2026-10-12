@@ -98,6 +98,80 @@ describe("domain-language authoring resources", () => {
     expect(dimensions).toMatch(/historical.*missing.*Domain Context.*not.*invalid/i);
   });
 
+  it("authors designs through a sourced domain model and architectural realization", () => {
+    const contract = compact(section(propose, "## Design authoring contract"));
+    const process = compact(section(propose, "## Process"));
+    expect(contract).toMatch(/goals.*sourced.*glossary/i);
+    expect(contract).toMatch(/domains.*subdomains.*bounded contexts.*relationships.*commands.*events.*states.*invariants/i);
+    expect(contract).toMatch(/core.*supporting.*generic.*supported/i);
+    expect(contract).toMatch(/package.*created, modified or removed.*responsibility.*exposes.*depends on/i);
+    expect(contract).toMatch(/existing callers.*success.*failure.*replacement contracts.*requirements/i);
+    expect(contract).toMatch(/inbound.*outbound.*owner.*adapter.*translation/i);
+    expect(contract).toMatch(/affected code.*domain.*infrastructure.*existing.*proposed.*removed/i);
+    expect(contract).toMatch(/undefined.*conflicting.*Open Questions.*material.*blocks approval/i);
+    expect(contract).toMatch(/optional sections.*do not invent.*interfaces/i);
+    expect(contract).toMatch(/historical lint-valid designs.*not.*new.*sections/i);
+    expect(process).toMatch(/Write the design.*Design authoring contract.*before.*decisions/i);
+    expect(process).toMatch(/Self-review each artifact.*design.*ownership.*contracts.*failed semantic gate/i);
+  });
+
+  it("critiques model, package and port coverage while distinguishing proposed code", () => {
+    const dimensions = compact(section(critique, "## Review dimensions"));
+    const process = compact(section(critique, "## Process"));
+    expect(dimensions).toMatch(/Domain model.*relationships.*commands.*events.*states.*invariants/i);
+    expect(dimensions).toMatch(/Architectural realization.*package.*created, modified or removed.*exposed.*required.*ports.*adapters/i);
+    expect(dimensions).toMatch(/Code attribution.*domain.*infrastructure.*responsibility/i);
+    expect(dimensions).toMatch(/current.*proposed.*unsupported.*claims/i);
+    expect(dimensions).toMatch(/historical lint-valid designs.*not.*missing.*new.*sections/i);
+    expect(process).toMatch(/existing, proposed or removed.*proposed.*need not exist.*owner.*contract/i);
+    expect(process).toMatch(/existing.*signatures.*return types/i);
+    expect(critique).not.toMatch(/Every referenced type\/function\/file\/example exists/);
+    expect(critique).not.toContain("verify code exists; nothing uses removed code");
+    expect(dimensions).toMatch(/missing.*material.*blocks approval.*lint/i);
+  });
+
+  it("keeps design author and reviewer quality rubrics synchronized and proportionate", () => {
+    const references = ["kepler-propose", "kepler-critique"].map((name) => Fs.readFileSync(
+      new URL(`../../skills/${name}/references/code-quality.md`, import.meta.url), "utf8",
+    ));
+    expect(references[0]).toBe(references[1]);
+    const ownership = compact(section(references[0], "### Domain ownership & architectural attribution").split("\n### ")[0]);
+    expect(ownership).toMatch(/glossary.*sources.*package.*ports.*adapters.*code/i);
+    expect(ownership).toMatch(/proposed.*existing/i);
+    expect(ownership).toMatch(/do not.*invent.*context.*interface/i);
+  });
+
+  it("maps durable model and architecture facts into canonical sections without importing mechanisms", () => {
+    const inputs = compact(section(compose, "## Inputs"));
+    const model = compact(section(compose, "## Domain and architecture grounding"));
+    const process = compact(section(compose, "## Process"));
+    expect(inputs).toMatch(/domain and architecture documentation/i);
+    expect(model).toMatch(/glossary.*authoritative project.*undefined.*conflicting/i);
+    expect(model).toMatch(/domains.*subdomains.*bounded contexts.*relationships.*commands.*events.*states.*invariants/i);
+    expect(model).toMatch(/package.*ports.*adapters.*code.*evidence.*not.*context/i);
+    expect(model).toMatch(/Overview.*Contract.*Behavior.*Invariants.*Decisions/i);
+    expect(model).toMatch(/private wiring.*code attribution.*design.*not.*canonical requirements/i);
+    expect(process).toMatch(/reformat.*preserve.*ownership.*translation.*current.*guarantees/i);
+    expect(process).toMatch(/from-code.*proposed.*design.*not.*current/i);
+    expect(process).toMatch(/Self-review.*ownership.*source.*unknown/i);
+  });
+
+  it("keeps direct-authoring and distillation architecture guidance at the same altitude", () => {
+    const references = ["kepler-compose-spec", "kepler-finish-work"].map((name) => Fs.readFileSync(
+      new URL(`../../skills/${name}/references/spec-altitude.md`, import.meta.url), "utf8",
+    ));
+    expect(references[0]).toBe(references[1]);
+    const mapping = compact(section(references[0], "## Domain and architecture mapping"));
+    expect(mapping).toMatch(/glossary.*authoritative.*sources/i);
+    expect(mapping).toMatch(/responsibility.*Overview/);
+    expect(mapping).toMatch(/ports.*commands.*events.*Contract/);
+    expect(mapping).toMatch(/transitions.*Behavior/);
+    expect(mapping).toMatch(/Invariants.*Decisions/);
+    expect(mapping).toMatch(/private.*code attribution.*design/i);
+    expect(mapping).toMatch(/preserve.*reformat/i);
+    expect(mapping).toMatch(/from-code.*current behavior.*never a proposed design/i);
+  });
+
   it("records outside-map naming confirmation without manufacturing a ticket", () => {
     const session = compact(section(modeling, "## During the session"));
     const flow = section(modeling, "## Process flow");

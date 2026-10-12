@@ -122,7 +122,7 @@ standing areas, scaffolds `.kepler/specs/` and `.kepler/changes/`, and establish
 **kepler-propose** is the optional front door. Through dialogue — clarifying questions one
 at a time, then two or three alternative approaches with trade-offs — it produces the
 proposal, the per-capability requirements, and the design, and gates on approval before any
-implementation. New proposals use context-scoped project language, identify involved subdomains and bounded contexts, and describe affected ownership and contract boundaries. A change that does not warrant this depth starts at planning. When planning finds
+implementation. New proposals use context-scoped project language, identify involved subdomains and bounded contexts, and describe affected ownership and contract boundaries. Design realizes that scope through package responsibilities, ports/adapters and code attribution, with relevant model behavior and supporting decisions. A change that does not warrant this depth starts at planning. When planning finds
 a bounded tactical behavior change that needs a requirements delta, propose has a requirements-only
 approval path: it creates no proposal or design and returns the exact committed delta to planning
 for revalidation.
@@ -198,6 +198,45 @@ New full-path proposals add Domain Context with Ubiquitous Language and Subdomai
 
 These authoring requirements leave historical lint-valid artifacts unchanged. Scope stays in prose: existing capability slugs, metadata and delta-to-spec mappings remain stable. The tactical requirements-only path consumes the same language without creating a proposal or domain-context artifact. The canonical glossary retains the requirements-spec envelope and five required sections; it is vocabulary support, not an automatic application capability or implementation specification.
 
+### Architectural design coverage
+
+`design.md` explains the change's domain model and architecture before supporting decisions. Source goals and scoped meanings from the glossary or authoritative project documents. Cover relevant domains, subdomains, bounded contexts, relationships, commands, events, states and invariants, with rule ownership and cross-context translation. Record undefined terms, conflicting sources and uncertain owners in Open Questions; material uncertainty blocks approval and unattended work remains draft.
+
+Describe affected packages, their responsibilities and domain/application/infrastructure roles, ports and adapters, and code attribution. For each created, modified or removed package, name provided and required contracts and trace responsibility transfers or retirements. Carry callers' success and failure outcomes into replacement contracts and requirements unless the change explicitly changes them. Map affected code as existing, proposed or removed to its owner and role. Existing references must match source; proposed names need explicit contracts and ownership, not an already-implemented claim. Keep dependencies toward the application core and distinguish them from runtime flow. A package or transport alone does not establish a context.
+
+Retain the seven existing lint-required headings: Context, Goals / Non-Goals, Decisions, Architecture & Components, Testing Strategy, Constraints & Boundaries, and Risks / Trade-offs. Keep concise explanations when no facts apply; optional Domain Model, flow sections and architecture tables may be omitted when prose or references provide the relevant coverage. Do not invent events, layers or interfaces for the outline. These are semantic authoring and review checks, not new schema requirements. Historical lint-valid designs are not invalid for lacking the new model or mapping sections. Architectural boundaries describe system ownership; Constraints & Boundaries describes change-specific agent operating rules.
+
+Canonical specs use the same language and ownership model at altitude: responsibility and related contexts in Overview; consumer-visible ports, commands and events in Contract; observable transitions and translation in Behavior; lasting rules and their owner in Invariants; reusable boundary policies in Decisions. Private wiring and code attribution stay in design. From-code documents current behavior, not an unimplemented design; reformat preserves durable facts and flags uncertain scope. See [the design template](../bundle/templates/design.md) and [the skills reference](./skills.md#domain-language-and-capability-scope).
+
+### Design examples
+
+These are illustrative excerpts for fictional projects, not complete artifacts or claims about Kepler's implementation. Each project's cited documents are the assumed confirmed sources; an actual author must read and verify their own sources.
+
+#### Multi-context change
+
+**Context and goal:** The commerce project's `glossary.md` defines an Order in Ordering as a purchase request, and an Order in Billing as a billable reference to a submitted purchase. `docs/commerce.md` assigns purchase rules to Ordering and invoice rules to Billing. The requested change lets a submitted Ordering Order be cancelled before dispatch, while preserving Billing's existing reference and invoice rules. Those meanings translate at the integration boundary; they are not one global definition.
+
+**Model:** Ordering owns the proposed `CancelOrder` command, Submitted → Cancelled transition, and `OrderCancelled` outcome. The guard requires an existing submitted Order that has not dispatched. Billing retains ownership of its invoice invariants. No message broker follows from naming the domain event; transport remains an adapter choice.
+
+**Architecture:** The new `packages/console` adapter is created, `packages/ordering` is modified, and `packages/legacy-submit` is removed. The console provides user command parsing and requires Ordering's submit/cancel use cases; ordering owns the rules, exposes those inbound contracts and depends on its existing outbound `OrderStore` capability. The existing storage adapter implements that port. Legacy-submit's parsing responsibility transfers to console, with consumers moved before retirement. No package is equated automatically with a bounded context.
+
+| Code reference | Status | Owner and responsibility |
+| --- | --- | --- |
+| `submitOrder` | existing | Ordering application use case; preserves submission rules |
+| proposed `cancelOrder` | proposed | Ordering application use case; enforces the cancellation guard |
+| console command parser | proposed | Infrastructure adapter; translates user input into Ordering commands |
+| legacy-submit parser | removed | Parsing moves to console; no surviving caller depends on it |
+
+**Decision and verification:** Reuse `OrderStore` rather than adding a second persistence abstraction. Verify the guard through the Ordering port with substituted storage; exercise console translation separately. Confirm the legacy callers migrate and Billing's unchanged contracts still hold. The canonical spec keeps the cancellation contract, observable transition and invariant owner, not the parser filenames or storage wiring.
+
+#### Small change with intact boundaries
+
+**Context and goal:** A single-package CLI has no glossary; its `README.md#commands` defines command names and help behavior. The change corrects one help description to match that documented command. No additional domain classification is established or needed for this wording correction.
+
+**Architecture and attribution:** The existing help formatter in the CLI package is an infrastructure presentation responsibility. Its command input and rendered-help output remain unchanged. There are no new or changed ports, adapters, events, state transitions or data ownership; Domain Model and the package/port tables can be omitted. Cite the README and formatter as evidence instead of inventing a context or interface.
+
+**Decision and verification:** No new architectural choice. Check the corrected help output and preserve command parsing behavior. Keep the seven required headings, using brief explanations for unchanged boundaries, ordinary project operating rules and the limited risk. If the documented command meaning conflicts with code, record the conflict for requester resolution rather than silently choosing a definition.
+
 ## Artifacts and layout
 
 **Templates are global.** The canonical set lives in the repository's `bundle/templates/` and
@@ -214,7 +253,7 @@ installed copy, so there is one definition of each artifact's shape.
   changes/
     <YYYY-MM-DD-title>/
       proposal.md                     # optional — PRD (why)
-      design.md                       # optional — SDD (how)
+      design.md                       # optional — SDD (domain model and architecture)
       requirements/<capability>.md    # optional — SRS delta (what)
       plan.md                         # required — the handoff contract
       progress.md                     # required — current task ledger
@@ -234,7 +273,7 @@ The document set and the standards it borrows from:
 | `proposal.md` | PRD | Why, domain scope and boundary impact | — |
 | `requirements/<capability>.md` | SRS (delta) | What | ISO/IEC/IEEE 29148 |
 | `specs/<capability>.md` | SRS (canonical) | What | ISO/IEC/IEEE 29148 |
-| `design.md` | SDD | How | IEEE 1016 |
+| `design.md` | SDD | Domain model and architectural realization | IEEE 1016 |
 | `plan.md` | Plan | Steps | — |
 | `progress.md` | Task ledger | Current implementation status and task-history links | — |
 | `tasks/task-N/progress.md` | Task progress | Implementation attempts | — |

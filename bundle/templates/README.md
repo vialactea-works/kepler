@@ -20,8 +20,8 @@ taken in spirit (right-sized), not by conformance.
 | `glossary.md` | Canonical glossary | Context-scoped language | `.kepler/specs/glossary.md` | kepler-init / domain modeling / Wayfinder closing act |
 | `proposal.md` | PRD | Why, domain scope and boundary impact | `<change>/proposal.md` | kepler-propose |
 | `requirements-change.md` | SRS (delta) | What | `<change>/requirements/<capability>.md` | kepler-propose |
-| `requirements-spec.md` | SRS (canonical) | What | `.kepler/specs/<capability>.md` | kepler-finish-work |
-| `design.md` | SDD | How | `<change>/design.md` | kepler-propose |
+| `requirements-spec.md` | SRS (canonical) | What | `.kepler/specs/<capability>.md` | kepler-finish-work / kepler-compose-spec |
+| `design.md` | SDD | Domain model and architectural realization | `<change>/design.md` | kepler-propose |
 | `plan.md` | Plan | Steps | `<change>/plan.md` | kepler-plan |
 | `progress.md` | Task index | Current task status | `<change>/progress.md` | kepler-plan (initialize) / kepler-code (update assigned row) |
 | `task-progress.md` | Task Progress | Task execution history | `<change>/tasks/task-N/progress.md` | kepler-plan (initialize) / kepler-code (append attempts) |
@@ -35,6 +35,10 @@ delta a change proposes; `requirements-spec.md` is the consolidated truth it fol
 `glossary.md` reuses requirements-spec metadata and the five canonical sections for lint compatibility, with vocabulary entries under Contract. It is language support, not an automatic application capability. Preserve an existing glossary rather than regenerating it from the new template.
 
 New full-path proposals add Domain Context (scoped language and involved subdomains/contexts) and Affected Boundaries under Impact. Capability entries identify their domain, subdomain or bounded-context scope, including infrastructure responsibilities with a durable contract. Scope remains prose; slugs and delta-to-spec mappings stay unchanged. These authoring rules do not retroactively invalidate historical lint-valid proposals or require a proposal on the tactical path.
+
+New designs explain sourced goals, the relevant domain model, current and proposed boundaries, affected package roles, provided/required ports, adapters and code attribution before supporting decisions. Keep the seven lint-required headings concise; optional sections and tables are aids, not a mandatory architecture catalog. Undefined meanings and material ownership gaps need requester resolution, not invented definitions. These semantic authoring expectations do not add schema fields or invalidate historical lint-valid designs.
+
+Canonical specs preserve durable model contracts, ownership and boundary policies in their existing five sections. Private wiring, package inventories and source-code attribution remain in design rather than becoming canonical requirements.
 
 ## Required vs optional
 

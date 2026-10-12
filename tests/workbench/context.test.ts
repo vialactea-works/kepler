@@ -1405,7 +1405,10 @@ Verdict: approved
     const result = await runContext({ changeDir: directory });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("whole change: approved (fresh)");
+    expect(result.stdout).toContain(
+      "whole change: approved (range-fresh; clearance-unverified)",
+    );
+    expect(result.stdout).not.toContain("whole change: approved (fresh)");
   });
 
   it("rejects malformed current review instead of parsing its legacy body", async () => {

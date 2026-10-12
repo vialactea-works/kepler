@@ -97,7 +97,7 @@ The skills produce durable, per-project artifacts under `.kepler/`:
   changes/
     <YYYY-MM-DD-title>/
       proposal.md                     # optional — why
-      design.md                       # optional — how
+      design.md                       # optional — domain model and architecture
       requirements/<capability>.md    # optional — what (delta form)
       plan.md                         # required — the handoff contract
       progress.md                     # required — current task ledger
@@ -113,6 +113,8 @@ Changes are ephemeral; specs are durable. When a change finishes, its requiremen
 `specs/`, the project's always-current requirements truth. Init establishes the canonical glossary;
 new proposals use its scoped language and describe involved contexts and boundary impact. A capability
 may represent a domain, subdomain or bounded context, including infrastructure responsibilities.
+A design explains the relevant model, package responsibilities, ports and adapters, and code attribution
+before its supporting decisions. Coverage scales to the change; unresolved language is surfaced, not invented.
 See [domain language and capability scope](docs/skills.md#domain-language-and-capability-scope).
 
 When upgrading this workflow, first finish any active change with the Kepler generation that

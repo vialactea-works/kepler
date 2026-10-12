@@ -67,8 +67,10 @@ describe("change-scoped artifact lint contract", () => {
     expect(skills["kepler-propose"]).toContain(
       "kepler workbench lint --file <path>",
     )
-    expect(skills["kepler-finish-work"]).toContain(
-      "kepler workbench lint --file <path>",
+    expect(
+      section(skills["kepler-finish-work"], "## Specification synchronization"),
+    ).toMatch(
+      /after every canonical spec mutation, run `kepler workbench lint --file <(?:path|file)>`/,
     )
   })
 

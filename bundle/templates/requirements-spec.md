@@ -42,14 +42,18 @@ decision: accepted | rejected | skipped
      Infrastructure scopes qualify when they own an observable contract, such as an external
      model and translation into domain operations. Use scoped glossary meanings; distinguish
      evidenced boundaries from inferences. Keep scope in prose, preserve existing slugs and
-     metadata, and do not force historical reclassification. Orient a new reader. -->
+     metadata, and do not force historical reclassification. Cite language and ownership sources;
+     surface unresolved meanings before publishing dependent claims. Private wiring and code
+     attribution belong in design, not in canonical requirements. Orient a new reader. -->
 
 ## Contract
 
 <!-- The concrete interface a consumer touches. Tables can clarify shaped contracts:
      persisted schema, request/response bodies, event payloads, config keys, status
      codes, error taxonomy. This is where a data-model capability shows its field
-     names and types, and an endpoint capability shows its routes.
+     names and types, and an endpoint capability shows its routes. Describe public ports, commands
+     and events as consumer contracts, with inputs, outcomes and error obligations; avoid private
+     interfaces, adapter classes and injection tokens.
      Add domain subheadings (### <event type>, ### <endpoint>) as merge anchors when a
      capability has several distinct contract surfaces. Keep this section even if there
      is no separate consumer-facing interface; state that concisely. -->
@@ -63,7 +67,9 @@ decision: accepted | rejected | skipped
 <!-- Narrative input->output prose, including edge and error paths. Then a compact,
      greppable Examples block: each bullet an input/trigger -> observable outcome. The
      Examples are this spec's conformance points (the distilled proto-tests) — keep
-     only ones that state durable, black-box behavior. -->
+     only ones that state durable, black-box behavior. Include applicable state transitions, guards
+     and translation outcomes, keeping invariant ownership consistent with the named contexts.
+     A proposed design is not proof that a behavior is already implemented. -->
 
 **Examples**
 
@@ -72,7 +78,8 @@ decision: accepted | rejected | skipped
 ## Invariants
 
 <!-- Properties that hold across all states and over time. This is the one section
-     where MUST / NEVER earn their keep. If none are known, say so briefly. -->
+     where MUST / NEVER earn their keep. Name the context that owns a rule when relevant.
+     If none are known, say so briefly. -->
 
 -
 
@@ -80,6 +87,8 @@ decision: accepted | rejected | skipped
 
 <!-- Reusable design rules or deliberate decisions future work must follow ("policy,
      not incident"). State the rule, not the one occurrence. Draw from design.md's
-     Decisions. If none are known, say so briefly. -->
+     Decisions, including durable boundary, dependency-direction and translation policy. These
+     survive reimplementation; one adapter's wiring or package layout does not. If none are known,
+     say so briefly. -->
 
 -

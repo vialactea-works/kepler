@@ -11,12 +11,15 @@ route_unit: null
 <!--
   SDD — Design / "How"   (IEEE 1016-inspired, right-sized)
   Produced by: kepler-propose (step 1 of the seven-stage pipeline).
-  Owns HOW the change is built. References proposal.md for why, requirements/ for what.
-  Focus on architecture and the decisions behind it — NOT line-by-line code
-  (that belongs in plan.md).
+  Owns the change's domain model and architectural realization. References proposal.md for why,
+  requirements/ for what. Explain responsibility and boundaries before supporting decisions;
+  implementation steps belong in plan.md.
   OPTIONAL artifact — skip for mechanical changes and start at plan.md.
-  Scale each section to its complexity: a sentence when obvious, a few paragraphs
-  when nuanced. Delete a section that does not apply.
+  Keep the seven lint-required headings: Context, Goals / Non-Goals, Decisions, Architecture &
+  Components, Testing Strategy, Constraints & Boundaries, and Risks / Trade-offs. Keep their
+  content concise when no facts apply; omit optional sections and subsections instead of inventing
+  content. Tables below are aids, not mandatory layouts. Existing lint-valid designs remain valid
+  without the new model or mapping sections; do not rewrite approved history.
   A draft or a template decision default is never requester approval. Show the requester the exact final candidate bytes, including status: approved and decision: accepted, and wait for explicit approval of that revision before writing it. Commit exactly those approved bytes; any later intent edit needs new approval.
   Delete this comment block and inline hints before finalizing.
   Before creating this artifact, read the configured Git identity with `git config user.name` and
@@ -30,35 +33,82 @@ route_unit: null
 
 ## Context
 
-<!-- Current state, constraints, and assumptions relevant to this change. What
-     exists today that this builds on or works around? What must stay true? -->
+<!-- Describe the current architecture, change scope and constraints. Read the canonical
+     glossary first, then authoritative project documentation for missing meanings; cite each
+     source and its context. Reference proposal Domain Context rather than copying the glossary.
+     If no glossary exists, disclose that gap and use sourced project language. Distinguish
+     established facts, proposed changes and assumptions. Record undefined or conflicting terms
+     in Open Questions; material language or ownership uncertainty blocks approval. Do not silently
+     redefine terms or update the glossary here. -->
 
 ## Goals / Non-Goals
 
 **Goals**
 
-- <what this design achieves>
+- <observable outcome in sourced, context-scoped project language; reference the proposal or requirement>
 
 **Non-Goals**
 
 - <what is explicitly out of scope for the design>
 
-## Decisions
+## Domain Model
 
-<!-- The heart of the document. One block per significant choice. -->
-
-### Decision: <name>
-
-- Choice: <what we are doing>
-- Alternatives considered: <X, Y — and why each was rejected>
-- Rationale: <why this option wins; the trade-off you accepted>
+<!-- Optional when the affected model is already clear from Context and upstream references.
+     Cover relevant domains, subdomains and bounded contexts; terms and relationships; commands,
+     events, states and invariants. Name who owns each rule and how meanings translate across
+     contexts. Distinguish current and proposed models and cite their sources. Use core, supporting
+     or generic subdomain classifications only when supported. A package, directory, service or
+     transport is not automatically a bounded context. Do not invent events, ports or definitions
+     to fill this outline. Omit irrelevant model elements; missing material evidence is an open
+     question, not a claim that the element does not apply. -->
 
 ## Architecture & Components
 
-<!-- The units involved and how they fit. For each unit state: responsibility,
-     public interface, and dependencies. A reader should understand what a unit
-     does without reading its internals, and you should be able to change its
-     internals without breaking consumers. A table or short sub-sections both work. -->
+<!-- Explain current and proposed boundaries, responsibility and data ownership, cross-context
+     interactions, trust, compatibility and coordination. If boundaries remain intact, say which
+     and why. Keep domain rules and application use cases independent of infrastructure;
+     dependencies point toward the application core. Reuse existing seams and abstractions.
+     Distinguish dependency direction from runtime call/data flow. Cover every affected package
+     and responsibility; use prose or tables proportional to the change. -->
+
+### Packages
+
+<!-- Cover each package created, modified or removed, its domain/context or infrastructure role,
+     exposed ports and required ports. For a removed package, identify the destination or retirement
+     of its responsibilities, contracts and consumers. Carry existing callers' success and failure
+     outcomes into replacement contracts and requirements, unless explicitly changed or retired.
+     If no package changes, state that briefly
+     and omit this subsection. A package may span contexts; identify ownership per responsibility. -->
+
+| Package | Change | Responsibility | Domain / context and role | Exposes | Depends on |
+| --- | --- | --- | --- | --- | --- |
+| <package> | <created, modified or removed> | <what it owns> | <sourced owner; domain, application or infrastructure role> | <provided contracts or none> | <required contracts or none> |
+
+### Ports & Adapters
+
+<!-- Name inbound use-case contracts and outbound capabilities, their owners and relevant inputs,
+     results, errors and invariants. Identify consumers/providers and adapters for UI, storage or
+     external services, including model translation at context boundaries. A port may be an existing
+     function or injected collaborator; do not add an interface merely to fill a row. Separate
+     existing contracts from explicitly proposed additions, changes or retirements. Omit this
+     subsection when no port or adapter is affected, explaining intact seams in the architecture prose. -->
+
+| Port / contract | Direction and owner | Consumers / providers | Adapter and translation | Source / proposed change |
+| --- | --- | --- | --- | --- |
+| <contract> | <inbound or outbound relative to the owning use case/context> | <caller and provider> | <adapter, translated meanings or none> | <existing reference or proposed contract> |
+
+### Code Attribution
+
+<!-- Map affected modules and significant symbols to their responsibility and domain/context or
+     infrastructure role. Verify existing references against source; proposed references need an
+     explicit contract and owner, not a claim that they already exist. For removed code, identify
+     what disappears or which owner receives the responsibility, and check surviving consumers.
+     This is responsibility ownership, not a change to author metadata. A few sentences can replace
+     the table; do not inventory unrelated code or repeat plan task steps. -->
+
+| Code | Existing / proposed / removed | Domain / context or infrastructure role | Responsibility | Source |
+| --- | --- | --- | --- | --- |
+| <module or symbol> | <reference status> | <sourced owner and role> | <rule, use case or adapter it realizes> | <code reference or explicit proposal> |
 
 ### Quality Lens
 
@@ -75,8 +125,21 @@ route_unit: null
 
 ## Data & Flow
 
-<!-- Data model changes and the main control/data flow (the happy path as a
-     sequence). Omit if trivial. -->
+<!-- Optional: show commands, interactions and observable outcomes across the named boundaries.
+     Describe relevant state transitions, guards, emitted events and failure paths, identifying the
+     owner of each invariant. A domain event does not imply a message broker. Omit when no flow
+     changes; reference established behavior rather than inventing transitions. -->
+
+## Decisions
+
+<!-- Supporting rationale for significant model or architectural choices. A concise note is
+     sufficient when there is no new choice; do not invent alternatives for a predetermined change. -->
+
+### Decision: <name>
+
+- Choice: <what we are doing; reference the affected model or boundary>
+- Alternatives considered: <viable alternatives and why they were rejected, or the constraint fixing this choice>
+- Rationale: <why this option wins; the trade-off accepted>
 
 ## Error Handling & Edge Cases
 
@@ -88,7 +151,8 @@ route_unit: null
 <!-- What will prove this works: unit vs integration boundaries, the key cases to
      cover, and how verification runs. Name the tactical gates, `kepler-code` and
      `kepler-code-feedback`, and the final gates, `kepler-review` and
-     `kepler-finish-work`. -->
+     `kepler-finish-work`. Tie checks to the named contracts, state transitions and invariant
+     owners; substitute outbound ports in core tests and exercise adapter translation at boundaries. -->
 
 ## Constraints & Boundaries
 
@@ -97,7 +161,8 @@ route_unit: null
      guidelines), not here — list only what is special to THIS change.
      "Ask first" is resolved by the skill asking the user for input; when running
      unattended, the agent auto-reflects — it answers the question itself and records
-     the reasoning before proceeding. Omit the section if none. -->
+     the reasoning before proceeding. Material language or ownership questions still require
+     requester resolution. If none apply, keep the heading and state that concisely. -->
 
 - Always: <actions the agent should take without asking, e.g. run tests before commit>
 - Ask first: <actions needing a decision, e.g. changing a public interface>
@@ -114,6 +179,9 @@ route_unit: null
 
 ## Open Questions
 
-<!-- Outstanding unknowns to resolve before or during implementation. Remove if none. -->
+<!-- Undefined terms, conflicting sources, uncertain ownership and other outstanding decisions.
+     Cite the affected source and explain what resolution is needed. Resolve material model or
+     boundary questions with the requester before approval; unattended work remains draft. Remove
+     this optional section if none remain. -->
 
 -

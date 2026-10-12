@@ -26,6 +26,11 @@ Fix it here instead.
 Each entry states the principle in one line, then the **smell** to look for in a design or
 plan and the **fix**, on their own lines.
 
+### Domain ownership & architectural attribution
+The glossary and authoritative sources establish the model; each affected package, its ports and adapters, and significant code have explicit responsibility ownership.
+- **Smell:** goals use unsourced meanings; a directory is treated as a context; a domain rule sits in an adapter without justification; affected responsibilities, contract owners or removal transfers are missing.
+- **Fix:** cite context-scoped sources and map responsibility to the owning domain/context or infrastructure role. Describe provided/required contracts and their translation, preserving callers' success and failure outcomes across transfers unless explicitly changed; distinguish proposed references from existing code and verify existing claims against source. Record material unknowns for requester resolution. Use concise prose when sufficient; do not invent a context, event, layer or interface to fill a table. This criterion checks relevant semantic coverage, not historical artifact layout.
+
 ### Single responsibility (cohesion)
 A unit has one reason to change.
 - **Smell:** you cannot state a component's responsibility without "and" or a bulleted list;

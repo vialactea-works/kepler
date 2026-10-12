@@ -24,6 +24,31 @@ const check = async (sourcePath: string, source: string) => {
   return validateArtifact(read);
 };
 
+const designPath = ".kepler/changes/2026-10-12-api-boundary/design.md";
+const designSections = [
+  "Context",
+  "Goals / Non-Goals",
+  "Decisions",
+  "Architecture & Components",
+  "Testing Strategy",
+  "Constraints & Boundaries",
+  "Risks / Trade-offs",
+];
+const legacyDesign = [
+  "---",
+  "artifact: design",
+  "change: 2026-10-12-api-boundary",
+  "status: draft",
+  "created: 2026-10-12",
+  "author: Ada Lovelace <ada@example.com>",
+  "decision: accepted",
+  "route_unit: null",
+  "---",
+  "# Design: API boundary",
+  "",
+  ...designSections.flatMap((heading) => [`## ${heading}`, "", "Existing content.", ""]),
+].join("\n");
+
 const legacyProposal = [
   "---",
   "artifact: proposal",
@@ -92,6 +117,66 @@ describe("domain-language artifact templates", () => {
     expect((await check(".kepler/changes/2026-10-12-api-boundary/proposal.md", renderTemplate("proposal.md")))._tag).toBe("valid");
   });
 
+  it("places the domain model and architecture before supporting decisions", async () => {
+    const template = readTemplate("design.md");
+    const instructions = template.replace(/\s+/g, " ");
+    expect(template.indexOf("## Domain Model")).toBeGreaterThan(template.indexOf("## Goals / Non-Goals"));
+    expect(template.indexOf("## Architecture & Components")).toBeGreaterThan(template.indexOf("## Domain Model"));
+    expect(template.indexOf("## Decisions")).toBeGreaterThan(template.indexOf("## Data & Flow"));
+    expect(instructions).toMatch(/glossary.*authoritative project documentation.*source/i);
+    expect(instructions).toMatch(/undefined.*conflicting.*Open Questions.*material.*approval/i);
+    expect(instructions).toMatch(/domains.*subdomains.*bounded contexts.*relationships.*commands.*events.*states.*invariants/i);
+    expect(template).toContain("### Packages");
+    expect(template).toContain("| Package | Change | Responsibility | Domain / context and role | Exposes | Depends on |");
+    expect(template).toContain("### Ports & Adapters");
+    expect(template).toContain("| Port / contract | Direction and owner | Consumers / providers | Adapter and translation | Source / proposed change |");
+    expect(template).toContain("### Code Attribution");
+    expect(template).toContain("| Code | Existing / proposed / removed | Domain / context or infrastructure role | Responsibility | Source |");
+    expect(instructions).toMatch(/package.*not automatically.*bounded context/i);
+    expect(instructions).toMatch(/core.*supporting.*generic.*supported/i);
+    expect(instructions).toMatch(/do not invent.*events.*ports.*definitions/i);
+    expect((await check(designPath, renderTemplate("design.md")))._tag).toBe("valid");
+  });
+
+  it("allows a proportionate design without optional model, flow or architecture tables", async () => {
+    const template = readTemplate("design.md");
+    expect(template.replace(/\s+/g, " ")).toMatch(/keep the seven lint-required headings.*omit optional sections and subsections/i);
+    expect(template).not.toContain("Delete a section that does not apply");
+    expect(template).not.toContain("Omit the section if none");
+    const optionalSections = ["Domain Model", "Data & Flow", "Error Handling & Edge Cases", "Migration / Rollout", "Open Questions"];
+    const optionalSubsections = ["Packages", "Ports & Adapters", "Code Attribution"];
+    const source = renderTemplate("design.md")
+      .split(/\n(?=## )/)
+      .filter((block) => !optionalSections.some((heading) => block.startsWith(`## ${heading}\n`)))
+      .join("\n")
+      .split(/\n(?=### )/)
+      .filter((block) => !optionalSubsections.some((heading) => block.startsWith(`### ${heading}\n`)))
+      .join("\n");
+    expect(source).not.toContain("## Domain Model");
+    expect(source).not.toContain("### Packages");
+    expect((await check(designPath, source))._tag).toBe("valid");
+  });
+
+  it("accepts a historical design without new semantic sections or metadata", async () => {
+    expect(legacyDesign).not.toContain("## Domain Model");
+    expect(legacyDesign).not.toContain("### Ports & Adapters");
+    const result = await check(designPath, legacyDesign);
+    expect(result._tag).toBe("valid");
+    if (result._tag === "valid") {
+      expect(Object.keys(result.metadata)).toEqual([
+        "artifact", "change", "status", "created", "author", "decision", "route_unit",
+      ]);
+    }
+  });
+
+  it.each(designSections)("still requires the existing design section %s", async (heading) => {
+    const result = await check(designPath, legacyDesign.replace(`## ${heading}`, "## Other section"));
+    expect(result._tag).toBe("invalid");
+    if (result._tag === "invalid") {
+      expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "missing-section", expected: heading }));
+    }
+  });
+
   it("retains the stable infrastructure capability mapping for deltas and canonical specs", async () => {
     for (const [name, sourcePath] of [
       ["requirements-change.md", ".kepler/changes/2026-10-12-api-boundary/requirements/rest-api.md"],
@@ -104,6 +189,19 @@ describe("domain-language artifact templates", () => {
       expect(source).toContain("# Capability: rest-api");
       expect((await check(sourcePath, source))._tag).toBe("valid");
     }
+  });
+
+  it("guides durable architecture into the five canonical sections without extra metadata", async () => {
+    const template = readTemplate("requirements-spec.md");
+    const instructions = template.replace(/\s+/g, " ");
+    expect(template.match(/^## .+$/gm)).toEqual([
+      "## Overview", "## Contract", "## Behavior", "## Invariants", "## Decisions",
+    ]);
+    expect(instructions).toMatch(/ports.*commands.*events.*consumer/i);
+    expect(instructions).toMatch(/state transitions.*invariant.*owner/i);
+    expect(instructions).toMatch(/durable boundary.*translation.*policy/i);
+    expect(instructions).toMatch(/private wiring.*code attribution.*design.*not.*requirements/i);
+    expect((await check(".kepler/specs/rest-api.md", renderTemplate("requirements-spec.md")))._tag).toBe("valid");
   });
 
   it("reads historical proposals and generic canonical glossaries unchanged", async () => {

@@ -35,6 +35,7 @@ creates a change directory — this skill operates only on `.kepler/specs/`.
   - from-code → the application (optionally scoped to a subsystem or a named capability).
 - The project's existing `.kepler/specs/` — to avoid duplication and reuse capability names.
 - The canonical glossary (`.kepler/specs/glossary.md`), when present, is the main source of context-scoped project language. Supplement missing definitions from established project documentation with source references; surface conflicts rather than silently redefining terms.
+- Relevant domain and architecture documentation, including confirmed ownership, context maps and design decisions. A proposed design is evidence of intent, not proof of current implementation.
 - Project standards (`AGENTS.md`) — for the git workflow and any domain vocabulary.
 
 If the mode is not given, infer it: an existing off-format spec as the target means reformat; a
@@ -68,6 +69,14 @@ skill's own directory — they are co-located with this SKILL.md, **not** at `${
   there are no applicable facts, and omit optional subsections. A tiny capability can be brief
   without inventing guarantees. Lint, not this writing rubric, decides existing format validity.
 
+## Domain and architecture grounding
+
+Read the canonical glossary and authoritative project documentation before naming responsibilities. Cite sources for scoped meanings and ownership; disclose a missing glossary and record undefined or conflicting terms for requester resolution rather than redefining them or updating vocabulary here. Material language or boundary uncertainty must be resolved before publishing a claim that depends on it.
+
+Identify relevant domains, subdomains, bounded contexts, terms, relationships, commands, events, states and invariants. Inspect package responsibilities, ports, adapters and significant code as evidence of implementation; a directory, transport or package is not proof of a context boundary. Distinguish domain rules, application use cases and infrastructure translation, and preserve existing capability boundaries and slugs.
+
+Map supported durable facts into the existing five sections: responsibility and related contexts into Overview; consumer-visible ports, commands, events and data shapes into Contract; observable interactions and state transitions into Behavior with Examples; invariant obligations and ownership into Invariants; durable boundary and translation policies into Decisions. Use only applicable facts. Private wiring, implementation-package inventories and code attribution belong in design, not in canonical requirements. Public package APIs may be contracts; private file layout is not.
+
 ## Process
 
 1. **Determine mode and scope.** Establish which mode you are in and its exact target (which
@@ -75,17 +84,13 @@ skill's own directory — they are co-located with this SKILL.md, **not** at `${
    anything.
 2. **Survey existing specs.** List `.kepler/specs/` so you reuse existing capability names and do not create an overlapping or duplicate spec. Read the glossary as language support, not as an automatic behavior capability. When reformatting a whole directory, preserve the glossary's vocabulary and canonical artifact contract; do not turn its entries into application behavior.
 3. **Gather the source material.**
-   - **reformat:** read each target spec in full. Inventory the durable facts it holds — every
-     contract, behavior, invariant, and decision — separating them from the mechanism and
-     scaffolding you will drop.
-   - **from-code:** explore the relevant code read-only (types, interfaces, handlers, schemas,
-     config, tests). Tests and public interfaces are the richest source of black-box behavior.
-     Group what you find into right-sized capabilities.
+   - **reformat:** read each target spec in full; preserve every durable contract, behavior, invariant and decision, including established ownership and translation policies. Use its language sources to clarify scope without forcing a reclassification. Separate mechanism and scaffolding from current guarantees; surface conflicting or undefined meanings instead of inventing a replacement model.
+   - **from-code:** explore relevant code, interfaces, handlers, schemas, config and tests read-only, together with domain/architecture documentation. Trace package responsibilities, ports, adapters and rule ownership as evidence. A proposed change in design is not a current guarantee: verify what exists before documenting it. Group observed behavior into right-sized capabilities and label material uncertainty rather than treating an inference or bug as a contract.
 4. **Map to the skeleton.** For each capability, place each durable fact into its section using
    the register→section mapping: consumer-facing shapes (schemas, payloads, endpoints, config
    keys, field names and types) → `## Contract`; observable input→output → `## Behavior` plus an
    **Examples** bullet; properties that always hold → `## Invariants`; reusable rules → `## Decisions`;
-   a one-paragraph orientation → `## Overview`. In Overview, identify the supported scope kind and name, responsibility, related contexts and boundary ownership. When an existing spec's scope is uncertain, flag that uncertainty instead of inventing a domain model or forcing a historical reclassification.
+   a one-paragraph orientation → `## Overview`. In Overview, identify the supported scope kind and name, responsibility, related contexts and boundary ownership. Apply **Domain and architecture grounding** and the reference's mapping to preserve relevant model contracts and boundary policies without copying private wiring or source-code inventories. When an existing spec's scope is uncertain, flag that uncertainty instead of inventing a domain model or forcing a historical reclassification.
 5. **Write the spec.** For a new author-bearing canonical spec, read `git config user.name` and
    `git config user.email` and record the configured identity as `author: Name <email>` in the
    requirements-spec frontmatter. If either value is missing, stop and report the missing identity;
@@ -99,10 +104,7 @@ skill's own directory — they are co-located with this SKILL.md, **not** at `${
    resolve the findings and rerun lint, or report the exact blocker without handing off or
    committing. Any correction made during self-review is another mutation and requires the same
    file-scoped lint command before handoff or commit.
-7. **Self-review and commit.** Re-read each spec against `references/spec-altitude.md`: no control
-   flow, no private names that are not the contract, no library calls, no file paths as
-   requirements, nothing that could only be verified by reading source. For reformat, also confirm
-   no durable fact from the original was lost. Show the composed or reformatted specs for review.
+7. **Self-review and commit.** Re-read each spec against `references/spec-altitude.md`: confirm scoped language, ownership, source support, current behavior and explicit unknowns. Do not publish an unresolved claim. Exclude control flow, private names that are not the contract, library calls and file paths as requirements; behavior must remain observable. Durable architectural policies belong in Decisions, even when checking compliance requires inspecting dependencies. For reformat, also confirm no durable fact from the original was lost. Show the composed or reformatted specs for review.
    On approval (or, running unattended, after self-review and a successful latest lint), commit
    following the project's git workflow. Reformatting a whole directory or bootstrapping a project
    is a large diff — group it into a sensible commit (e.g. one per capability, or one per run) per

@@ -162,9 +162,8 @@ planning for revalidation.
 
 - **When:** for a change that warrants a spec; skip it for a tactical change.
 - **Inputs:** a change idea; the canonical glossary and existing specs (`.kepler/specs/`); relevant domain and architecture documentation; `AGENTS.md`.
-- **Produces**, in `.kepler/changes/<YYYY-MM-DD-title>/`: `proposal.md` (why, sourced language, domain scope and boundary impact), `requirements/<capability>.md` (what, in delta form), `design.md` (how). New full-path proposals name involved subdomains and bounded contexts and identify each capability's represented scope. Older projects may use sourced project documentation when the glossary is absent.
-- **Notes:** one question at a time; proposes 2–3 approaches with trade-offs; the design must clear a
-  code-quality self-review before the gate opens. On handoff it discloses the worktree it created
+- **Produces**, in `.kepler/changes/<YYYY-MM-DD-title>/`: `proposal.md` (why, sourced language, domain scope and boundary impact), `requirements/<capability>.md` (what, in delta form), `design.md` (domain model, architectural realization and supporting decisions). New full-path proposals name involved subdomains and bounded contexts and identify each capability's represented scope. Older projects may use sourced project documentation when the glossary is absent.
+- **Notes:** one question at a time; proposes 2–3 approaches with trade-offs; design explains affected package roles, ports/adapters and code attribution using sourced language, with relevant commands, states and invariants. It must clear semantic coverage and a code-quality self-review before the gate opens. On handoff it discloses the worktree it created
   and, when working with a person, asks before proceeding to `kepler-plan`.
 - Source: [`skills/kepler-propose/SKILL.md`](../skills/kepler-propose/SKILL.md)
 
@@ -180,9 +179,7 @@ design-phase counterpart to `kepler-review`. Returns a numbered findings report 
   codebase (to ground every reference); the canonical specs (`.kepler/specs/`); `AGENTS.md`.
 - **Produces:** a verdict (`approved` / `changes-requested`) and a numbered, located findings list —
   printed to chat and persisted to `critique.md` in the change directory.
-- **Notes:** checks scoped terminology and sources, capability responsibilities, domain coverage and boundary ownership alongside logical consistency and — the load-
-  bearing step — that every referenced type/function/file/example actually exists in the codebase
-  and nothing is planned against code the change removes. Applies the same `references/code-quality.md`
+- **Notes:** checks scoped terminology, domain-model coverage, package roles, ports/adapters, code attribution and boundary ownership alongside logical consistency. Existing references must match the codebase; clearly proposed additions need supported ownership and contracts, and surviving consumers must not depend on removed code. Checks scale to relevant responsibilities rather than requiring every optional table. Applies the same `references/code-quality.md`
   rubric `kepler-propose` self-reviews against, capturing a Quality Lens. Its single `decision`
   field records whether the user accepted an approval, applied requested changes, rejected the
   critique, or skipped the decision. Accepted, applied, and rejected critiques are settled and do
@@ -345,13 +342,12 @@ other capability-behavior path creates a spec when `kepler-finish-work` distills
 
 - **When:** adopting Kepler on an existing codebase (bootstrap specs from code), or migrating specs
   written in the older `Requirement:` / `Scenario:` form into the current shape.
-- **Inputs:** the mode and its target (spec files to reformat, or the code to document); the existing
-  `.kepler/specs/`; `AGENTS.md`.
+- **Inputs:** the mode and its target (spec files to reformat, or the code to document); existing `.kepler/specs/`, the canonical glossary and authoritative domain/architecture documentation; `AGENTS.md`.
 - **Produces:** canonical specs in the skeleton (`## Overview` / `## Contract` / `## Behavior` +
   Examples / `## Invariants` / `## Decisions`), at altitude, in human-readable prose.
 - **Notes:** reads code and writes specs only — never edits application code, never creates a change
   directory. Reformat preserves every durable fact; from-code documents what the code actually does,
-  flagging inferred behavior rather than inventing guarantees.
+  flagging inferred behavior rather than inventing guarantees. Both modes retain supported responsibility, public model contracts, invariant ownership and durable boundary policies in the five canonical sections. Private wiring and code attribution remain in design, and a proposed design is not proof of current behavior.
 - Source: [`skills/kepler-compose-spec/SKILL.md`](../skills/kepler-compose-spec/SKILL.md)
 
 ## Domain language and capability scope
@@ -362,7 +358,9 @@ A capability is a cohesive, durable responsibility with a clear boundary and obs
 
 For example, `rest-api` may represent an infrastructure context that owns the external model and translation into domain operations while domain contexts retain business rules. REST alone does not establish a bounded context; an HTTP adapter may belong within an existing one. A package or endpoint is not automatically a context or capability.
 
-New proposals add Domain Context (Ubiquitous Language; Subdomains and Bounded Contexts) and Affected Boundaries under Impact. Goals use the sourced meanings, capability entries identify scope and responsibility, and Impact explains ownership, contract, trust and coordination changes. Detailed implementation remains in design. These are new authoring requirements, not retroactive schema gates: historical lint-valid proposals and specs remain valid and unchanged. Capability slugs, metadata and `requirements/<capability>.md` → `specs/<capability>.md` mappings stay stable. The requirements-only path still creates no proposal.
+New proposals add Domain Context (Ubiquitous Language; Subdomains and Bounded Contexts) and Affected Boundaries under Impact. Goals use the sourced meanings, capability entries identify scope and responsibility, and Impact explains ownership, contract, trust and coordination changes. Design explains the domain model and architecture: affected packages, provided/required contracts, ports and adapters, code attribution, relevant model behavior and supporting decisions. Distinguish existing, proposed and removed references; cite ownership and language sources instead of deriving contexts from folders. Keep the seven lint-required design headings concise and omit optional tables or sections when prose or upstream references provide coverage. Material unknown language, ownership or contracts remain approval blockers. These semantic authoring checks are not new schema gates; historical lint-valid designs are not invalid for missing the new model or mapping sections. Historical proposals and specs remain valid and unchanged. Capability slugs, metadata and `requirements/<capability>.md` → `specs/<capability>.md` mappings stay stable. The requirements-only path still creates no proposal or design.
+
+Canonical specs express responsibility and related contexts in Overview, public ports/commands/events in Contract, observable transitions in Behavior, lasting rules and owners in Invariants, and reusable boundary policies in Decisions. Preserve durable facts during reformat and verify current behavior in from-code; private wiring and code attribution are not canonical requirements. See [design examples](./sdd-framework.md#design-examples) for a multi-context change and a small change with intact boundaries.
 
 ## Artifacts and layout
 
@@ -378,7 +376,7 @@ artifacts live under the project's `.kepler/` directory:
   changes/
     <YYYY-MM-DD-title>/
       proposal.md                     # optional — why
-      design.md                       # optional — how
+      design.md                       # optional — domain model and architecture
       requirements/<capability>.md    # optional — what (delta form)
       critique.md                     # optional — design-phase review of the propose artifacts
       plan.md                         # required — the handoff contract
