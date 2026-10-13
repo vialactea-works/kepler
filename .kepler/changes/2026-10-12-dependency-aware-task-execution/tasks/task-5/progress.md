@@ -70,3 +70,48 @@ decision: accepted
 - Quality constraints: the added description regression reads the actual frontmatter discovery line, so it fails if that promise regresses even when body sections remain mode-scoped. No comments, alternate scheduler/result vocabulary, global or installed-resource changes, or sibling/task-6 edits.
 - Decision context: this is the same Task 5 correction after changes-requested feedback, not a new task or a new feedback/review outcome. Parent-run full suite and build verified the final source bytes; Task 5 implementation is done, without claiming feedback approval or advancing Task 6.
 - Outcome: done
+
+### Committed-file inventory correction for Attempt 2
+
+The Attempt 2 `Modified` summary above described the last writer's correction edits, not the complete scope of the signed Task 5 commit. This addendum corrects that omission and does not create another attempt or outcome. The signed commit `e82f5fc5e31dee82c28fb334b4d1d67e332f3aeb` contains exactly these ten paths:
+
+- `.kepler/changes/2026-10-12-dependency-aware-task-execution/tasks/task-5/progress.md`
+- `bundle/templates/plan.md`
+- `skills/kepler-code/SKILL.md`
+- `skills/kepler-orchestrate/SKILL.md`
+- `skills/kepler-orchestrate/references/implementer-prompt.md`
+- `skills/kepler-plan/SKILL.md`
+- `tests/skills/execution-contracts.test.ts`
+- `tests/skills/orchestrate-contract.test.ts`
+- `tests/skills/plan-tdd-contract.test.ts`
+- `tests/skills/planning-resources-contract.test.ts`
+
+The root Task 5 row was temporarily changed from `done` to `in-progress` during an earlier correction boundary, but this recovery writer did not change the root row; its committed bytes remain the `HEAD` value `done`, so the root ledger is not an additional path in that commit. This addendum identifies the earlier Attempt 2 `Modified` summary as incomplete, preserving all committed Attempt 1/2 bytes without amending them.
+
+## Attempt 3 — 2026-10-13
+
+- Modified: `bundle/templates/README.md`, `tests/skills/planning-resources-contract.test.ts`, and this task progress artifact. The root Task 5 ledger was already `done` at `HEAD` and remained unchanged; Task 6 and the aggregate root status remain pending and in-progress respectively.
+- Deleted: none.
+- Correction context: this same Task 5 implementation correction addresses the two Pass 2 blockers without changing plan intent, feedback/review artifacts, or acceptance. It qualifies the artifact-location guide's root-ownership statement by mode and records the complete ten-path inventory omitted from Attempt 2's abbreviated Modified summary. The committed Attempt 1 and Attempt 2 prefixes and both feedback passes remain unchanged.
+
+### Red
+
+- `bun --bun vitest run tests/skills/planning-resources-contract.test.ts` → failed as intended: the new assertion against `bundle/templates/README.md` found its unqualified Kepler-code root-row ownership sentence; 1 failed, 14 passed (`/tmp/kepler-dependency-recovery.3PAkG7/task-5-attempt-3-red.log`). This was the actual README behavior assertion, not a regex/body-heading or harness failure.
+
+### Green
+
+- Qualified the operative artifact-location paragraph: historical serial Kepler-code owns only its assigned root-row update; v2 workers write task-local evidence and the coordinator publishes root status through guarded publication.
+- `bun --bun vitest run tests/skills tests/templates` → passed: 17 files, 254 tests, 4.68s (`/tmp/kepler-dependency-recovery.3PAkG7/task-5-attempt-3-green.log`).
+
+### Refactor
+
+- Re-read the operative README paragraph and checked its relationship to the following dependency-mode guide; both now consistently distinguish legacy root-row ownership from v2 coordinator publication. The regression assertion reads the actual artifact-location README, not an appended note. Existing root/history/phase/outcome safety guidance remains untouched; no unrelated resource or Task 6 work was added.
+- `bun --bun vitest run tests/skills tests/templates` → passed after refactor: 17 files, 254 tests, 4.68s (`/tmp/kepler-dependency-recovery.3PAkG7/task-5-attempt-3-refactor.log`).
+- `git diff --check` → passed.
+- `bun packages/cli/src/cli/main.ts workbench lint --file .kepler/changes/2026-10-12-dependency-aware-task-execution/tasks/task-5/progress.md` → passed after renaming the inventory addendum heading so it is not parsed as a second Attempt (`/tmp/kepler-dependency-recovery.3PAkG7/task-5-attempt-3-final-lint.log`). The earlier failed source lint was an artifact-heading-format issue, not feature Red evidence.
+- `bun packages/cli/src/cli/main.ts workbench lint --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed after finalization (`/tmp/kepler-dependency-recovery.3PAkG7/task-5-attempt-3-final-lint.log`).
+- `bun --bun vitest run` → passed on unchanged README/test bytes: 62 files, 1156 tests, 224.90s (`/tmp/kepler-dependency-recovery.3PAkG7/task-5-attempt-3-parent-full.log`). `bun run build` → passed separately: core and CLI exited 0 (`/tmp/kepler-dependency-recovery.3PAkG7/task-5-attempt-3-parent-build.log`). Parent confirmed these README/test hashes remained unchanged after both gates. `git diff --check` passed.
+
+- Quality constraints: regression coverage enforces the user-visible location guide's mode-specific root ownership, and its language remains portable and consistent with surrounding descriptions. No comments, dependencies, command vocabulary changes, global/installed changes, sibling edits, feedback rewrites, or Task 6 advancement.
+- Decision context: the missing README mode qualification was a code defect within approved Task 5 scope. The Attempt 2 inventory omission is documentation of the actual already-signed commit scope, not a new task or review disposition. The lint heading repair only prevents metadata tooling from misclassifying that addendum as another Attempt. Original Base remains `cd002589a249f8492f027952699b651e43e01966`; no new checkpoint/admission was created.
+- Outcome: done

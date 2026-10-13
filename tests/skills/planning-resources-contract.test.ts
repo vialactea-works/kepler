@@ -23,6 +23,12 @@ describe("planning and resource gate contracts", () => {
     expect(consumption).toMatch(/v2.*task-local evidence.*original commit.*coordinator.*guarded root publication/is)
   })
 
+  it("keeps the artifact-location guide root ownership mode-scoped", () => {
+    const artifactGuide = readFileSync("bundle/templates/README.md", "utf8")
+
+    expect(artifactGuide).toMatch(/historical serial.*kepler-code.*root row.*v2.*workers?.*task-local evidence.*coordinator.*root status/is)
+  })
+
   it("carries applicable quality and verified decision context into the exact task before generation", () => {
     const decomposition = (section(plan, "## Process")
       .split("7. **Decompose.**")[1]

@@ -103,9 +103,10 @@ Per-project, under the project's `.kepler/` directory (created by `kepler-init`)
 
 `plan.md` is the declarative task contract authored up front. Kepler-plan initializes the root
 `progress.md` current-task ledger and each linked task progress file from the installed templates.
-Kepler-code updates only its assigned root row and appends implementation attempts to that task's
-progress file. Task feedback is kept alongside task progress, while `review.md` and `finish.md`
-remain change-level artifacts.
+In historical serial mode, Kepler-code updates only its assigned root row and appends implementation
+attempts to that task's progress file. In dependency-mode v2, workers write task-local evidence only;
+the coordinator publishes root status through guarded publication. Task feedback is kept alongside
+task progress, while `review.md` and `finish.md` remain change-level artifacts.
 
 `requirements/*.md` inside a change use delta headers (ADDED / MODIFIED / REMOVED /
 RENAMED). `kepler-finish-work` folds those deltas into the canonical
