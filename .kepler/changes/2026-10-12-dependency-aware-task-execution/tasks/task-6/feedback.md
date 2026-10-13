@@ -52,3 +52,18 @@ Verdict: changes-requested
 ### Suggestions
 
 - None.
+
+## Pass 4 — 2026-10-13
+
+Base: 5a6472d329b54459cc9f63aa1b1cb70f7713969b
+Head: ea782df7205a673842893005ed152a1d310ce24d
+Verdict: changes-requested
+
+### Blocking
+
+- [`packages/cli/src/workbench/task-checkpoint.ts:146-229,268-354`] `legacyScopePreparationBase` returns the first parent of a scope-only reservation as the task Base even when a later no-attempt task-progress-only commit lies between task-owned production and that reservation. In an independent disposable source-CLI fixture, `src/reserved.ts` changed in task-owned production, then task progress received a metadata-only commit, then the reservation and Attempt 1 were committed; `workbench diff --task 2` exited 0 and packaged the metadata commit as Base, omitting the pre-reservation production from chronology. `formatChange`'s new serial baseline catches the equivalent context call, but the checkpoint/diff caller still fails open. Preserve a verified pre-production serial baseline for checkpoint recovery and add a real Git/source-CLI regression for this intervening task-progress history, so the command rejects `reserved path changed before its reservation` rather than emitting a cropped package. (violates Task 6 acceptance 6; `requirements/execution.md` Bounded prerequisite expansions and Stable checkpoint authority; `requirements/workbench.md` Invalid graph or evidence); id: pass-4-blocking-1; kind: code-defect
+- [`docs/skills.md:7`] The reader-facing dependency-mode guidance assigns the two-expansion limit to an entire plan, but `requirements/execution.md` Bounded prerequisite expansions and the implementation impose it independently on each task. State the two/four lifetime bound per task so this public contract does not forbid valid multi-task plans or misdescribe the enforced behavior. (violates Task 6 acceptance 1 and 8; `requirements/execution.md` Bounded prerequisite expansions); id: pass-4-blocking-2; kind: code-defect
+
+### Suggestions
+
+- None.
