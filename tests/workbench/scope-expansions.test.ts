@@ -72,6 +72,126 @@ describe("committed reservation chronology", () => {
     ])).toMatchObject({ kind: "unverified" });
   });
 
+  it("uses preceding task history before admission and original Base after admission", async () => {
+    const admissionBase = "e".repeat(40);
+    const afterAdmission = "f".repeat(40);
+    const preAdmission = expansion("pre-admission");
+    const postAdmission = { ...expansion("post-admission"), paths: ["tooling/existing.ts"] };
+    const parents: Record<string, string | undefined> = {
+      [reserved]: first,
+      [admissionBase]: reserved,
+      [afterAdmission]: admissionBase,
+    };
+    const port: ScopeExpansionHistoryGit = {
+      ...git(),
+      isAncestor: (_root, base, head) => {
+        for (let current: string | undefined = head; current !== undefined; current = parents[current])
+          if (current === base) return ok();
+        return { status: 1, stdout: "", stderr: "" };
+      },
+      pathChanges: (_root, base, head) =>
+        (base === first && head === reserved) || (base === admissionBase && head === afterAdmission)
+          ? ok()
+          : { status: 1, stdout: "", stderr: "unexpected chronology range" },
+    };
+    expect(await validateScopeExpansionHistory(port, "/repo", [
+      { commit: first, entries: [] },
+      { commit: reserved, entries: [preAdmission] },
+      { commit: afterAdmission, entries: [preAdmission, postAdmission] },
+    ], admissionBase)).toMatchObject({ kind: "valid", reservationCommits: [reserved, afterAdmission] });
+  });
+
+  it("checks the full pre-admission history despite an intervening task-log update", async () => {
+    const intermediate = "c".repeat(40);
+    const secondReservation = "d".repeat(40);
+    const admissionBase = "e".repeat(40);
+    const firstReservation = expansion("first");
+    const second = { ...expansion("second"), paths: ["tooling/second.ts"] };
+    const parents: Record<string, string | undefined> = {
+      [reserved]: first,
+      [intermediate]: reserved,
+      [secondReservation]: intermediate,
+      [admissionBase]: secondReservation,
+    };
+    const port: ScopeExpansionHistoryGit = {
+      ...git(),
+      isAncestor: (_root, base, head) => {
+        for (let current: string | undefined = head; current !== undefined; current = parents[current])
+          if (current === base) return ok();
+        return { status: 1, stdout: "", stderr: "" };
+      },
+      pathChanges: (_root, base, head) =>
+        base === first && head === secondReservation ? ok("tooling/second.ts\n") : ok(),
+    };
+    expect(await validateScopeExpansionHistory(port, "/repo", [
+      { commit: first, entries: [] },
+      { commit: reserved, entries: [firstReservation] },
+      { commit: intermediate, entries: [firstReservation] },
+      { commit: secondReservation, entries: [firstReservation, second] },
+    ], admissionBase)).toMatchObject({ kind: "unverified" });
+  });
+
+  it("checks the full history without an original Base after an intervening task-log update", async () => {
+    const intermediate = "c".repeat(40);
+    const secondReservation = "d".repeat(40);
+    const firstReservation = expansion("first");
+    const second = { ...expansion("second"), paths: ["tooling/second.ts"] };
+    const parents: Record<string, string | undefined> = {
+      [reserved]: first,
+      [intermediate]: reserved,
+      [secondReservation]: intermediate,
+    };
+    const port: ScopeExpansionHistoryGit = {
+      ...git(),
+      isAncestor: (_root, base, head) => {
+        for (let current: string | undefined = head; current !== undefined; current = parents[current])
+          if (current === base) return ok();
+        return { status: 1, stdout: "", stderr: "" };
+      },
+      pathChanges: (_root, base, head) =>
+        base === first && head === secondReservation ? ok("tooling/second.ts\n") : ok(),
+    };
+    expect(await validateScopeExpansionHistory(port, "/repo", [
+      { commit: first, entries: [] },
+      { commit: reserved, entries: [firstReservation] },
+      { commit: intermediate, entries: [firstReservation] },
+      { commit: secondReservation, entries: [firstReservation, second] },
+    ])).toMatchObject({ kind: "unverified" });
+  });
+
+  it("checks pre-admission changes that precede the first reservation commit", async () => {
+    const secondReservation = "c".repeat(40);
+    const admissionBase = "d".repeat(40);
+    const firstReservation = expansion("first");
+    const second = { ...expansion("second"), paths: ["tooling/second.ts"] };
+    const parents: Record<string, string | undefined> = {
+      [reserved]: first,
+      [secondReservation]: reserved,
+      [admissionBase]: secondReservation,
+    };
+    const port: ScopeExpansionHistoryGit = {
+      ...git(),
+      isAncestor: (_root, base, head) => {
+        for (let current: string | undefined = head; current !== undefined; current = parents[current])
+          if (current === base) return ok();
+        return { status: 1, stdout: "", stderr: "" };
+      },
+      pathChanges: (_root, base, head) =>
+        base === first && head === secondReservation ? ok("tooling/second.ts\n") : ok(),
+    };
+    expect(await validateScopeExpansionHistory(port, "/repo", [
+      { commit: first, entries: [] },
+      { commit: reserved, entries: [firstReservation] },
+      { commit: secondReservation, entries: [firstReservation, second] },
+    ], admissionBase)).toMatchObject({ kind: "unverified" });
+  });
+
+  it("holds a pre-admission reservation without an earlier task-log baseline", async () => {
+    expect(await validateScopeExpansionHistory(git(), "/repo", [
+      { commit: reserved, entries: [expansion()] },
+    ], completed)).toMatchObject({ kind: "unverified" });
+  });
+
   it.each(["src/{one,two}.ts", "src/\nfile.ts", "C:/outside.ts", " src/file.ts"])("rejects ambiguous path %j", (path) => {
     expect(validateScopeExpansions([{ ...expansion(), paths: [path] }])).toMatchObject({ kind: "invalid" });
   });

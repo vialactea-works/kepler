@@ -88,8 +88,12 @@ export const validateScopeExpansionHistory = async (
   let previous: readonly ScopeExpansion[] = [];
   let priorAttempts: readonly ScopeExpansionAttempt[] = [];
   const reservationCommits: string[] = [];
-  const baseline = originalBase ?? snapshots[0]!.commit;
-  if (!fullCommit(baseline)) return { kind: "unverified", reason: "scope expansion baseline is unresolved" };
+  if (originalBase !== undefined) {
+    if (!fullCommit(originalBase)) return { kind: "unverified", reason: "scope expansion baseline is unresolved" };
+    const resolved = await git.resolveCommit(root, originalBase);
+    if (resolved.status !== 0 || resolved.stdout.trim() !== originalBase)
+      return { kind: "unverified", reason: "scope expansion baseline is unresolved" };
+  }
   for (let index = 0; index < snapshots.length; index++) {
     const snapshot = snapshots[index]!;
     const resolved = await git.resolveCommit(root, snapshot.commit);
@@ -111,9 +115,27 @@ export const validateScopeExpansionHistory = async (
       return { kind: "unverified", reason: "task attempt evidence was reordered" };
     const added = validated.entries.slice(previous.length);
     if (added.length > 0) {
-      if (index === 0 && originalBase === undefined)
+      let reservationBaseline = originalBase === undefined ? snapshots[0]?.commit : snapshots[index - 1]?.commit;
+      if (originalBase !== undefined) {
+        const admissionRelation = await git.isAncestor(root, snapshot.commit, originalBase);
+        if (admissionRelation.status === 0) {
+          const earliest = snapshots[0];
+          if (earliest === undefined || earliest.commit === snapshot.commit)
+            return { kind: "unverified", reason: "reservation history lacks a preceding task baseline" };
+          if ((await git.isAncestor(root, earliest.commit, snapshot.commit)).status !== 0)
+            return { kind: "unverified", reason: "scope expansion baseline ancestry is unavailable" };
+          reservationBaseline = earliest.commit;
+        } else if (admissionRelation.status === 1) {
+          if ((await git.isAncestor(root, originalBase, snapshot.commit)).status !== 0)
+            return { kind: "unverified", reason: "reservation does not descend from its task baseline" };
+          reservationBaseline = originalBase;
+        } else {
+          return { kind: "unverified", reason: "scope expansion baseline ancestry is unavailable" };
+        }
+      }
+      if (reservationBaseline === undefined || reservationBaseline === snapshot.commit)
         return { kind: "unverified", reason: "reservation history lacks a preceding task baseline" };
-      if ((await git.isAncestor(root, baseline, snapshot.commit)).status !== 0)
+      if ((await git.isAncestor(root, reservationBaseline, snapshot.commit)).status !== 0)
         return { kind: "unverified", reason: "reservation does not descend from its task baseline" };
       const changed = await git.changedPaths(root, snapshot.commit);
       if (changed.status !== 0)
@@ -125,7 +147,7 @@ export const validateScopeExpansionHistory = async (
           return { kind: "unverified", reason: "reservation was retroactively inserted into a completed or nonexistent attempt" };
         if (entry.paths.some((path) => changes.includes(path)))
           return { kind: "unverified", reason: "reservation commit also changes a reserved production path" };
-        const earlier = await git.pathChanges(root, baseline, snapshot.commit, entry.paths);
+        const earlier = await git.pathChanges(root, reservationBaseline, snapshot.commit, entry.paths);
         if (earlier.status !== 0)
           return { kind: "unverified", reason: "scope expansion production chronology is unavailable" };
         if (earlier.stdout.trim() !== "")

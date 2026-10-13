@@ -111,3 +111,17 @@ Include these variants within their parent scenarios without changing the histor
 The implementation continuation intentionally ran no native actor evaluations, broad smoke tests,
 skill-behavior tests, provider deliveries or scenario replay. Its narrow CLI/unit/type checks are
 listed separately in [the implementation handoff](../../docs/change-state-machine-implementation-handoff.md).
+
+## 2026-10-13 actual native observations
+
+This appendix records three later, isolated native actor outcomes in
+[`dependency-execution-scenarios.md`](dependency-execution-scenarios.md). It does not backfill
+any `not-run` row above, alter the historical checklist, or turn existing static Vitest/Git/CLI
+controls into native cases. The two positive publications observed implementation completion; the
+quota-negative publication observed a guarded blocked result. None performed independent feedback
+clearance or establishes full-gating clearance. The retained fixture records, rather than this
+appendix, remain the evidence source for sessions, commands, artifacts, and publications.
+
+Checklist: [x] isolated fixture and runtime bridge recorded; [x] three native outcomes observed;
+[x] positive and blocked root publications kept separate; [x] candidate overlay kept
+not-accepted; [x] historical rows preserved without inferred run results.

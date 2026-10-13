@@ -57,7 +57,7 @@ const fixture = async (sourcePredatesTask = false) => {
     changedPaths: (_root, revision) => run(root, ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", "-z", revision]),
     pathChanges: (_root, parent, head, paths) => run(root, ["log", "--full-history", "--format=%H", `${parent}..${head}`, "--", ...paths]),
   };
-  const inspect = (entries?: readonly ScopeExpansion[]) => inspectScopeExpansionHistory(git, root, sourcePath, 1, "demo", checked(root, ["rev-parse", "HEAD"]), entries);
+  const inspect = (entries?: readonly ScopeExpansion[], originalBase?: string) => inspectScopeExpansionHistory(git, root, sourcePath, 1, "demo", checked(root, ["rev-parse", "HEAD"]), entries, originalBase);
   return { root, git, base, write, commit, inspect };
 };
 
@@ -79,6 +79,17 @@ describe("real Git reservation history", () => {
     await f.write([reservation()], blocked);
     f.commit("Record terminal attempt without refund");
     expect(await f.inspect([reservation()])).toMatchObject({ kind: "valid", reservationCommits: [reserved] });
+  });
+
+  it("accepts committed owner reservations that precede an admission Base", async () => {
+    const f = await fixture();
+    const first = reservation("pre-admission-1", "tooling/first.ts");
+    const second = { ...reservation("pre-admission-2", "tooling/second.ts"), attempt: 1 };
+    await f.write([first]);
+    f.commit("Reserve first owner prerequisite");
+    await f.write([first, second]);
+    const admissionBase = f.commit("Reserve second owner prerequisite");
+    expect(await f.inspect([first, second], admissionBase)).toMatchObject({ kind: "valid" });
   });
 
   it("excludes existing-file ancestors before Base from the reservation range", async () => {

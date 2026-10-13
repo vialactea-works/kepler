@@ -33,6 +33,54 @@ const contractContent = Object.fromEntries(
 const workbenchSubcommands = ["isolate", "diff", "precondition", "context", "prototype", "lint"];
 
 describe("workbench documentation", () => {
+  it("distinguishes dependency readiness, admission, implementation completion, and full gating", () => {
+    expect(content["docs/skills.md"]).toMatch(/readiness.*admission.*implementation done.*fully gated/is);
+  });
+
+  it("gives readers mode-qualified dependency execution boundaries", () => {
+    const readerDocs = [
+      content["README.md"],
+      content["docs/modes.md"],
+      content["docs/sdd-framework.md"],
+      readFileSync(resolve(root, "docs/change-state-machine.md"), "utf8"),
+    ].join("\n");
+
+    expect(readerDocs).toMatch(/(?:version-2|version 2|v2).*dependenc.*unversioned.*(?:version-1|version 1|v1).*serial/is);
+    expect(readerDocs).toMatch(/unknown.*(?:mode|version).*fail(?:s)? closed/is);
+    expect(readerDocs).toMatch(/two.*lifetime.*(?:reservation|expansion).*four.*concrete paths/is);
+    expect(readerDocs).toMatch(/before.*edit.*(?:committed|reservation).*not.*(?:reset|refund)/is);
+    expect(readerDocs).toMatch(/descendants.*held.*independent.*ready.*(?:may|can).*proceed/is);
+    expect(readerDocs).toMatch(/(?:serialized coordinator|coordinator serializes).*integrat.*Verify.*root (?:publication|state|result)/is);
+    expect(readerDocs).toMatch(/original Base.*(?:retry|rebind|cache)/is);
+    expect(readerDocs).toMatch(/whole.branch review.*every active task.*fully gated/is);
+  });
+
+  it("records native dependency outcomes separately from static controls", () => {
+    const nativeEvidence = readFileSync(resolve(root, "tests/skills/dependency-execution-scenarios.md"), "utf8");
+    const checklist = readFileSync(resolve(root, "tests/skills/change-state-machine-scenarios.md"), "utf8");
+
+    expect(nativeEvidence).toMatch(/three native outcomes/i);
+    expect(nativeEvidence).toMatch(/\| Case \/ Goal binding \| Native session and runs \|/);
+    expect(nativeEvidence).toMatch(/coordinator-observations\.json/);
+    expect(nativeEvidence).toMatch(/prepared manifest.*historical.*pre-admission/is);
+    expect(nativeEvidence).toMatch(/observed `implementation-done`/i);
+    expect(nativeEvidence).toMatch(/implementation-blocked/i);
+    expect(nativeEvidence).toMatch(/scope expansion lifetime limit exceeded/i);
+    expect(nativeEvidence).toMatch(/not.*feedback clearance|feedback clearance.*not performed/is);
+    expect(nativeEvidence).toMatch(/17f74ff795025212de719246774a84e49abae85673624853e003723daa48e6b8/);
+    expect(nativeEvidence).toContain("50493ee4a6de0d58f7c5cabd9cec7e82ef7c73dc");
+    expect(nativeEvidence).toContain("a13fcca8d91e19c9bcfe6f701dd9218f3b78e4b27ea8716545396f17a61172e2");
+    expect(nativeEvidence).toContain("9266ae8b3acee8ef61539c8f8967ef01d0fc8e22ec998e9d8d874c7936b37394");
+    expect(nativeEvidence).toMatch(/pre-replay.*not-yet-run/is);
+    expect(nativeEvidence).toContain("Git public SSH signatures were verified separately");
+    expect(nativeEvidence).toMatch(/not actor PI\s+identity/i);
+    expect(nativeEvidence).toMatch(/bun tooling\/verify\.ts && bun --bun vitest run && bun --bun tsc --noEmit/);
+    expect(nativeEvidence).toMatch(/kepler workbench task-state --reserve/);
+    expect(nativeEvidence).toMatch(/static.*not native proof/i);
+    expect(checklist).toMatch(/2026-10-13 actual native observations/i);
+    expect(checklist).toMatch(/does not backfill/i);
+  });
+
   it("describes setup without installing helper scripts", () => {
     expect(content["README.md"]).toMatch(/kepler setup.*templates.*guidelines/s);
     expect(content["README.md"]).toMatch(/kepler workbench/);

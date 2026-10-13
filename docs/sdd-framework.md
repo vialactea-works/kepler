@@ -139,6 +139,37 @@ never touches sibling tasks, runs a code-quality self-review, and commits. It tr
 assigned row in root `progress.md` and appends detailed attempt evidence only to
 `tasks/task-N/progress.md`. It never edits `plan.md`.
 
+### Dependency-mode v2 tasks
+
+A dependency-mode v2 plan declares `execution: {version: 2, mode: dependencies}`. Each
+active task supplies Goal, Acceptance, Depends on, Steps, Verify, and Commit; Files is optional
+guidance, not an allowlist. A necessary goal-serving unlisted edit remains ordinary implementation
+latitude when it follows approved intent, design, and project standards, without re-planning. A separate prerequisite is different: reserve it in committed task-local evidence
+before editing it, with at most two lifetime reservations and at most four concrete paths in each.
+The record is lifetime accounting: retrying, correcting, removing, or reverting work does not reset
+or refund it. The next prerequisite after either bound, or one that changes approved public/security
+authority or adds a dependency, blocks for owner-approved re-planning.
+
+Dependency readiness is a computed projection; guarded admission is the mutation that binds a ready
+task to its original Base, current plan and task definition, isolated worker/worktree, and prerequisite
+approvals. On retry, rebind, integration, or cache loss, recover that original Base from verified
+admission history rather than a later attempt parent. A pending ready task is admitted only through
+the guarded workbench operation. `done` records integrated implementation completion, not clearance;
+fully gated additionally needs fresh independent approved feedback. A blocked or uncleared prerequisite
+holds its descendants, while independent compatible tasks may use isolated lanes. Workers produce only
+task-local evidence and original commits. The coordinator serializes ancestry-preserving integration,
+executes the task's exact Verify field after integration, and publishes the shared root state. For
+publication, Verify is one executable command string, such as `bun --bun vitest run tests/docs && bun run build`; expected results belong in Acceptance or explanatory prose, not inside that field.
+
+The strict TDD order remains Red, Green, Refactor, then Verify. A correction repeats Red, Green,
+Refactor, and Verify; it is not a shortcut around a failed check. Version 1 and unversioned plans
+remain serial in their historical numeric order. An unsupported version or mode fails closed rather
+than silently choosing serial execution. The CLI exposes guarded operations; it is not a distributed
+scheduler and does not promise concurrent execution. `done` and `blocked` are actor outcomes, while
+`interrupted` and `unavailable` are neutral observations. Owner-held intent and observed worker identity
+do not authenticate a signer or replace independent artifact-only feedback. Whole-branch review starts
+only after every active task is fully gated.
+
 **kepler-code-feedback** is the per-task tactical gate. It reviews one stable task diff from the
 task's unchanged checkpoint through the implementation Head, checks the task's acceptance and
 latest attempt evidence, and appends an artifact-only verdict to `tasks/task-N/feedback.md`. Its

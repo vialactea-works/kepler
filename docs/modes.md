@@ -40,6 +40,33 @@ Each step is a self-contained skill that names no tool and depends on no engine 
 the project's standards (`AGENTS.md`) and the shared artifacts under the project's `.kepler/`
 directory. The same skill guides a human in an editor and a coding agent.
 
+### Dependency-mode v2
+
+New dependency-mode plans declare `execution: {version: 2, mode: dependencies}`. Each active task
+has Goal, Acceptance, Depends on, Steps, Verify, and Commit; Files is optional guidance, not an
+allowlist. A goal-serving unlisted edit that respects approved intent and project standards stays in
+the task without re-planning. A distinct prerequisite needs a committed before-edit reservation:
+at most two for the task's lifetime and at most four concrete paths in each. Retries, correction
+cycles, removed records, and reverted edits neither reset nor refund that accounting. A third
+reservation or work that changes dependencies, public contracts, or security authority is held for
+owner-approved re-planning.
+
+Readiness is a derived projection. A ready task is admitted through the guarded operation that retains
+its original Base across retries, rebinds, and cache loss; readiness alone does not authorize edits.
+Implementation `done` is not full clearance: fresh independent approved feedback is also required.
+Held prerequisites hold their descendants, but independent ready work may use compatible isolated
+lanes. Workers write local attempts and original commits. A coordinator serializes integration, runs
+the exact Verify command after integration, and publishes root status. A Verify field contains one
+executable command such as `bun --bun vitest run tests/docs && bun run build`; describe expected results
+outside that field. This CLI coordination is not a distributed scheduler or a concurrency promise.
+
+The order is Red, Green, Refactor, then Verify; corrections repeat Red, Green, Refactor, and Verify.
+`done` and `blocked` are completed actor outcomes, while `interrupted` and `unavailable` are neutral
+observations that require independently verified artifacts. Owner-held intent and observed worker
+identity do not authenticate a signer or replace feedback. Version 1 and unversioned plans remain
+serial; unsupported versions or modes fail closed. Whole-branch review waits until every active task
+is fully gated.
+
 See **[Skills reference](./skills.md)** for what each skill does and how to run it, and
 **[SDD framework](./sdd-framework.md)** for the design rationale.
 

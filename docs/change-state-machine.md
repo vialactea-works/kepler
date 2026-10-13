@@ -186,6 +186,40 @@ E9 = material_commit_exists AND
 
 The waiver is narrow and intent-bearing: the CLI accepts a boolean flag and cannot establish who authorized it. The skill requires an explicit user waiver, records it in the Attempt, and does not let it bypass ledger, feedback, review validity/verdict, range ancestry, cleanliness, or test/build checks. Similarly, a passing gate does not make an invalid finish input acceptable. ([`precondition.command.ts`](../packages/cli/src/cli/nest/precondition.command.ts#L29-L77); [`inspectFreshness`](../packages/cli/src/workbench/precondition-reviews.ts#L184-L241); [`kepler-finish-work`](../skills/kepler-finish-work/SKILL.md#L71-L112))
 
+## Dependency-mode execution boundaries
+
+The following rules apply only when a plan declares `execution: {version: 2, mode: dependencies}`.
+Every active task has Goal, Acceptance, explicit Depends on, Steps, Verify, and Commit; Files is
+optional guidance, not an allowlist. Goal-serving unlisted edits that satisfy approved intent,
+design, and project standards remain implementation work and do not need re-planning. A new
+prerequisite is a different authority boundary: it needs a committed before-edit task-local
+reservation with at most two reservations over the task lifetime and at most four concrete paths in
+each. Removing, rewriting, reverting, retrying, or correcting a reservation does not reset or refund
+its allowance. A third reservation, a fifth path, an extra dependency, a public contract, or a
+security-policy change holds the task for owner-approved re-planning.
+
+Readiness is a derived projection, not admission. A pending ready task enters a lane only through the
+guarded task-state operation, which records its original Base, committed plan revision and task
+definition, worker/worktree identity, and prerequisite approvals. That original Base remains the
+recovery source across retries, rebinds, integration, and cache loss. A root `done` records verified
+integrated implementation, not clearance. A fully gated task additionally has fresh independent
+approved feedback. In-progress or implementation-done-but-uncleared prerequisites keep descendants
+held, while unrelated compatible ready work may proceed in isolated lanes. The serialized coordinator
+integrates original commits, executes the exact Verify command after integration, and performs guarded
+root publication; workers publish task-local attempts and original commits only.
+
+Verify is an executable field, not a caption: use one command such as `bun --bun vitest run tests/docs && bun run build`.
+Put expected results in Acceptance or surrounding narrative because the runtime does not strip prose
+from Verify. `done` and `blocked` are completed actor outcomes; `interrupted` and `unavailable` are
+neutral observations, so recovery checks independently verified artifacts instead of manufacturing a
+terminal record. Owner-held approval references and observed worker identity express intent and
+observation, not signer authentication. The TDD sequence remains Red, Green, Refactor, then Verify;
+a correction repeats Red, Green, Refactor, and Verify. Version 1 and unversioned plans retain serial
+execution. An unknown execution version or mode fails closed: it never silently gains a serial
+fallback. Version 2 offers guarded isolated-lane coordination, not a distributed scheduler or a
+promise that work will run concurrently. Whole-branch review remains closed until every active task
+is fully gated.
+
 ## Task implementation and feedback loop
 
 For one exact active Task N, code uses `tasks/task-N/.base` as the fixed pre-implementation checkpoint. The first checkpoint may be recorded at current `HEAD` only when the row is `pending`, no task attempt or feedback exists, and there is no task-owned implementation work. After durable evidence exists, reuse or reconstruct only the original checkpoint from unambiguous evidence; never replace it with the current `HEAD`. The coder changes only its assigned root row and task log, performs the plan's Red → Green → Refactor sequence, verifies, and commits implementation plus task evidence. A graceful blocker is an explicit `Outcome: blocked`; abrupt interruption leaves the row `in-progress` with no invented attempt. ([`kepler-code` TDD and process](../skills/kepler-code/SKILL.md#L58-L231); [`kepler-orchestrate` checkpoint recovery](../skills/kepler-orchestrate/SKILL.md#L32-L112))

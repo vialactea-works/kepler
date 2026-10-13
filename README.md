@@ -124,6 +124,14 @@ Setup does not delete stale helper files from an older generation. `bun run purg
 CLI symlink and `~/.kepler-dist/`, but preserves Kepler's global data. See the **[between-changes migration guidance](docs/sdd-framework.md#upgrading-to-the-split-workflow)**
 for the exact procedure. Never replace one part of the installed generation while a change is active.
 
+## Dependency-aware task execution
+
+New plans can opt into dependency mode with `execution: {version: 2, mode: dependencies}`. Each task has a coherent Goal, testable Acceptance, explicit `Depends on`, Steps, Verify, and Commit; Files is optional guidance, not an allowlist. A goal-serving unlisted edit stays within the task when it respects approved intent, design, and project standards. A new prerequisite instead needs a committed before-edit reservation: at most two over a task's lifetime and at most four concrete paths in each reservation. Removing, rewriting, reverting, retrying, or correcting work never resets or refunds that budget. A third reservation, a larger scope, a new public contract or dependency, or a public-security authority change requires owner-approved re-planning.
+
+Dependency readiness is a derived projection, not permission to edit. A guarded admission binds the original Base, plan revision, task definition, isolated worker/worktree, and prerequisite approvals; retries, rebinds, and a missing cache recover that original Base from admission history rather than guessing a newer checkpoint. A task's root `done` means its implementation was published, while fully gated also requires fresh independent approved feedback. When a prerequisite is blocked or uncleared, its descendants stay held; independent ready tasks may use compatible isolated lanes. The coordinator serializes original-commit integration, executes each task's exact Verify field after integration, and publishes the shared root result. This is not a distributed scheduler or a promise of concurrent execution.
+
+Version 1 and unversioned plans keep their historical numeric serial behavior. Unsupported execution versions or modes fail closed rather than falling back to serial behavior. `done` and `blocked` are completed actor outcomes; `interrupted` and `unavailable` are neutral observations that require artifact-based recovery, not invented terminal records. Whole-branch review begins only after every active task is fully gated, and finish remains closed until that review clears.
+
 ## Requirements
 
 - **A coding agent that loads `SKILL.md` files** (e.g. Claude Code).

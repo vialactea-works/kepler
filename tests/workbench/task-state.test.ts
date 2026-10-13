@@ -148,6 +148,16 @@ describe("native guarded task-state", () => {
       expect(Fs.readFileSync(Path.join(f.changeDir, "tasks/task-1/progress.md"), "utf8")).toBe(source);
       expect(source).not.toContain("## Attempt");
     });
+
+    it("admits after two owner reservations and rejects a third reservation by quota", () => {
+      const admitted = f.admit();
+      expect(admitted.status, admitted.stdout + admitted.stderr).toBe(0);
+      const lane = f.lanes[0] ?? "";
+      const third = invoke(lane, "worker-1", "--reserve", "--task", "1", "--change-dir", ".kepler/changes/state", "--expected-head", git(lane, "rev-parse", "HEAD"), "--reservation", JSON.stringify(reservation("third")));
+      expect(third.status).not.toBe(0);
+      expect(third.stderr).toContain("lifetime limit exceeded");
+      expect(third.stderr).not.toContain("does not descend from its task baseline");
+    });
   });
 
   describe("guarded publication", () => {

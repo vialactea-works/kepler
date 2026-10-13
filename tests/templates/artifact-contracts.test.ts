@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest"
 import * as Fs from "node:fs"
 import * as Path from "node:path"
+import * as Os from "node:os"
 import { execFileSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { parse } from "yaml"
 import { validateArtifact } from "../../packages/cli/src/workbench/artifact-contracts.js"
-import type { RecognizedArtifact } from "../../packages/cli/src/workbench/artifact-reader.js"
+import { createArtifactReader, type RecognizedArtifact } from "../../packages/cli/src/workbench/artifact-reader.js"
 import { validateArtifactMetadataSchema } from "../../packages/cli/src/workbench/artifact-schemas.js"
 import { validateTaskAdmission } from "../../packages/cli/src/workbench/task-admission.js"
 
@@ -76,6 +77,35 @@ describe("split execution artifact templates", () => {
     expect(validateArtifact(artifact(makeTask()))._tag).toBe("valid")
     expect(validateArtifact(artifact(makeTask("goal")))._tag).toBe("invalid")
     expect(validateArtifact(artifact(makeTask("dependency")))._tag).toBe("invalid")
+  })
+
+  it("validates the dependency execution example with the real artifact contract", async () => {
+    const fixture = Fs.mkdtempSync(Path.join(Os.tmpdir(), "kepler-dependency-example-"))
+    const changeDir = Path.join(fixture, ".kepler/changes/2026-10-12-example-dependency-execution")
+    const planPath = Path.join(changeDir, "plan.md")
+    const progressPath = Path.join(changeDir, "progress.md")
+    Fs.mkdirSync(changeDir, { recursive: true })
+    Fs.copyFileSync(Path.join(repositoryDir, "docs/examples/dependency-task-execution/plan.md"), planPath)
+    Fs.copyFileSync(Path.join(repositoryDir, "docs/examples/dependency-task-execution/progress.md"), progressPath)
+
+    try {
+      const readArtifact = createArtifactReader({ readFile: (sourcePath) => Fs.readFileSync(sourcePath, "utf8") })
+      const plan = await readArtifact(planPath)
+      const progress = await readArtifact(progressPath)
+      if (plan._tag !== "recognized" || progress._tag !== "recognized") throw new Error(JSON.stringify({ plan, progress }))
+
+      const planValidation = validateArtifact(plan)
+      const progressValidation = validateArtifact(progress)
+      if (planValidation._tag !== "valid" || progressValidation._tag !== "valid") throw new Error(JSON.stringify({ planValidation, progressValidation }))
+      expect(validateArtifactMetadataSchema(plan, "plan")).toEqual([])
+      expect(validateArtifactMetadataSchema(progress, "progress")).toEqual([])
+      expect(validateArtifactMetadataSchema({ ...plan, metadata: { ...plan.metadata, execution: { version: 9, mode: "unknown" } } }, "plan")).not.toEqual([])
+      expect(validateArtifact({ ...plan, body: plan.body.replace("- Goal: Establish a fictional shared contract for downstream examples.\n", "") })._tag).toBe("invalid")
+      expect(validateArtifact({ ...plan, body: plan.body.replace("- Depends on: Task 4\n", "") })._tag).toBe("invalid")
+      expect(validateArtifact({ ...plan, body: plan.body.replace("- Depends on: Task 4\n", "- Depends on: Task 99\n") })._tag).toBe("invalid")
+    } finally {
+      Fs.rmSync(fixture, { recursive: true, force: true })
+    }
   })
 
   it("renders dependency-mode task skeletons with a complete v2 contract", () => {
