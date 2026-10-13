@@ -15,7 +15,7 @@ tasks:
     progress: tasks/task-2/progress.md
   - id: 3
     title: "Project verified dependency readiness"
-    status: pending
+    status: done
     progress: tasks/task-3/progress.md
   - id: 4
     title: "Guard task admission and publication"
@@ -37,7 +37,7 @@ tasks:
 | --- | --- | --- |
 | Task 1: Validate dependency-mode task contracts | done | [details](tasks/task-1/progress.md) |
 | Task 2: Enforce lifetime prerequisite reservations | done | [details](tasks/task-2/progress.md) |
-| Task 3: Project verified dependency readiness | pending | [details](tasks/task-3/progress.md) |
+| Task 3: Project verified dependency readiness | done | [details](tasks/task-3/progress.md) |
 | Task 4: Guard task admission and publication | pending | [details](tasks/task-4/progress.md) |
 | Task 5: Update goal-driven workflow resources | pending | [details](tasks/task-5/progress.md) |
 | Task 6: Document and exercise the new task contract | pending | [details](tasks/task-6/progress.md) |

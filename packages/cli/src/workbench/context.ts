@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
   createArtifactReader,
   type ArtifactFileSystem,
@@ -37,6 +37,9 @@ import {
 } from "./task-checkpoint.js";
 import { parseReviewPasses } from "./review-passes.js";
 import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
+import { projectTaskReadiness, type TaskReadinessEvidence, type TaskReadinessProjection } from "./task-readiness.js";
+import { inspectInitialScaffold, inspectIntentApprovals, inspectTaskInputContext } from "./precondition-artifacts.js";
+import type { PreconditionRuntime } from "./precondition-runtime.js";
 import type { ProcessPort, ProcessResult } from "./runtime.js";
 import { resolveProjectDataPath } from "./project-data-path.js";
 
@@ -147,6 +150,7 @@ export interface ContextGitPort {
 }
 
 export interface ContextRuntime {
+  readonly process?: ProcessPort;
   readonly cwd: () => string;
   readonly fileSystem: ContextFileSystemPort;
   readonly git: ContextGitPort;
@@ -223,6 +227,7 @@ export interface ContextChange {
   readonly routeUnit?: string;
   readonly routeUnitRevision?: string;
   readonly tasks?: { readonly done: number; readonly total: number };
+  readonly readiness?: TaskReadinessProjection;
   readonly identityOrder?: readonly number[];
   readonly execution?: PlanExecutionContract;
   readonly executionOrder?: readonly number[];
@@ -293,18 +298,11 @@ const environment = {
 };
 
 const productionProcess: ProcessPort = {
-  run: (command, args, cwd) => {
-    const result = spawnSync(command, [...args], {
-      cwd,
-      encoding: "utf-8",
-      env: environment,
+  run: (command, args, cwd) => new Promise<ProcessResult>((resolve) => {
+    execFile(command, [...args], { cwd, encoding: "utf8", env: environment }, (error, stdout, stderr) => {
+      resolve({ status: error === null ? 0 : typeof error.code === "number" ? error.code : -1, stdout, stderr });
     });
-    return {
-      status: result.status ?? -1,
-      stdout: result.stdout ?? "",
-      stderr: result.stderr ?? "",
-    };
-  },
+  }),
 };
 
 const productionFileSystem: ContextFileSystemPort = {
@@ -413,6 +411,7 @@ export const createContextRuntime = (
   const processPort = overrides.process ?? productionProcess;
   return {
     cwd: overrides.cwd ?? (() => process.cwd()),
+    process: processPort,
     fileSystem: overrides.fileSystem ?? productionFileSystem,
     git: overrides.git ?? createGitPort(processPort),
   };
@@ -2037,6 +2036,19 @@ const latestParsedPass = (
   artifact: RecognizedArtifact,
 ): ReviewPassEvidence | undefined => parseReviewPasses(artifact).latest;
 
+interface ContextFeedbackInspection {
+  readonly standing: ContextStanding | string;
+  readonly implementation?: string;
+  readonly feedback?: Awaited<ReturnType<typeof readArtifact>>;
+  readonly progress?: Awaited<ReturnType<typeof readArtifact>>;
+  readonly checkpoint?: { readonly kind: "verified"; readonly base: string };
+  readonly feedbackDurable?: boolean;
+  readonly feedbackCommit?: string;
+  readonly feedbackFiles?: ProcessResult;
+  readonly progressDurable?: boolean;
+  readonly range?: ContextStanding;
+}
+
 const latestFeedback = async (
   runtime: ContextRuntime,
   root: string,
@@ -2044,56 +2056,65 @@ const latestFeedback = async (
   task: string,
   implementation: string | undefined,
   status: string,
-): Promise<ContextStanding | string> => {
-  const path = Path.join(dir, "tasks", `task-${task}`, "feedback.md");
-  if (!(await runtime.fileSystem.pathExists(path))) return "absent";
-  const readResult = await readArtifact(runtime, path);
-  if ("exitCode" in readResult) return "malformed";
-  if (!currentValid(readResult.artifact)) return "malformed";
-  if (
-    readResult.artifact.metadata.task !== Number(task) ||
-    readResult.artifact.metadata.change !== Path.basename(dir)
-  )
-    return "malformed";
-  const latest = latestParsedPass(readResult.artifact);
-  if (latest === undefined) return "malformed";
-  const verdict = latest.verdict;
-  const base = latest.base;
-  const head = latest.head;
-  if (!(await durableArtifact(runtime, root, path)))
-    return `${String(verdict)} (uncommitted)`;
-  const commit = text(
-    await runtime.git.latestCommit(root, relative(root, path)),
-  );
-  if (
-    !fullCommit(commit) ||
-    (await runtime.git.commitFiles(root, commit)).stdout
-      .trim()
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .join("\n") !== relative(root, path)
-  )
-    return `${String(verdict)} (uncommitted)`;
-  const standing = await validRange(runtime, root, base, head, implementation);
-  if (standing !== "fresh") return `${String(verdict)} (${standing})`;
-  const progressPath = Path.join(dir, "tasks", `task-${task}`, "progress.md");
-  const progress = await readArtifact(runtime, progressPath);
-  const progressContract = "exitCode" in progress ? undefined : metadataContract(progress.artifact);
-  if (progressContract?._tag !== "valid" || progressContract.artifact !== "task-progress" ||
-      progressContract.metadata.task !== Number(task) || progressContract.metadata.change !== Path.basename(dir) ||
-      !await durableArtifact(runtime, root, progressPath)) return `${String(verdict)} (stale)`;
-  const latestAttempt = progressContract.body.workflow.records.filter((record) => record.kind === "attempt").at(-1);
-  if (verdict === "approved" && (status !== "done" || progressContract.metadata.status !== "done" || latestAttempt?.fields.Outcome !== "done"))
-    return "approved (stale)";
-  const resolvedImplementation = implementation ? await runtime.git.resolveCommit(root, implementation) : undefined;
-  if (!resolvedImplementation || !successful(resolvedImplementation) || text(resolvedImplementation) !== implementation)
-    return `${String(verdict)} (stale)`;
-  const ranges = await readTaskFeedbackRanges(path, readResult.source, Path.basename(dir), Number(task));
-  const current = text(await runtime.git.currentHead(root));
-  if (ranges.kind !== "valid" || !fullCommit(current)) return `${String(verdict)} (malformed)`;
-  const checkpoint = await resolveTaskCheckpoint(contextTaskCheckpointGit(runtime), root, relative(root, progressPath), Number(task), Path.basename(dir), current, ranges.ranges);
-  if (checkpoint.kind !== "verified" || checkpoint.base !== base) return `${String(verdict)} (stale)`;
-  return `${String(verdict)} (fresh)`;
+): Promise<ContextFeedbackInspection> => {
+  let feedbackRead: ContextFeedbackInspection["feedback"];
+  let progressRead: ContextFeedbackInspection["progress"];
+  let verifiedCheckpoint: ContextFeedbackInspection["checkpoint"];
+  let feedbackDurable: boolean | undefined;
+  let feedbackCommit: string | undefined;
+  let feedbackFiles: ProcessResult | undefined;
+  let progressDurable: boolean | undefined;
+  let range: ContextStanding | undefined;
+  const standing = await (async (): Promise<ContextStanding | string> => {
+    const path = Path.join(dir, "tasks", `task-${task}`, "feedback.md");
+    if (!(await runtime.fileSystem.pathExists(path))) return "absent";
+    const readResult = await readArtifact(runtime, path);
+    feedbackRead = readResult;
+    if ("exitCode" in readResult) return "malformed";
+    if (!currentValid(readResult.artifact)) return "malformed";
+    if (
+      readResult.artifact.metadata.task !== Number(task) ||
+      readResult.artifact.metadata.change !== Path.basename(dir)
+    )
+      return "malformed";
+    const latest = latestParsedPass(readResult.artifact);
+    if (latest === undefined) return "malformed";
+    const verdict = latest.verdict;
+    const base = latest.base;
+    const head = latest.head;
+    feedbackDurable = await durableArtifact(runtime, root, path);
+    if (!feedbackDurable) return `${String(verdict)} (uncommitted)`;
+    const commit = text(await runtime.git.latestCommit(root, relative(root, path)));
+    feedbackCommit = commit;
+    feedbackFiles = fullCommit(commit) ? await runtime.git.commitFiles(root, commit) : undefined;
+    if (!feedbackFiles || feedbackFiles.stdout.trim().split(/\r?\n/).filter(Boolean).join("\n") !== relative(root, path))
+      return `${String(verdict)} (uncommitted)`;
+    range = await validRange(runtime, root, base, head, implementation);
+    if (range !== "fresh") return `${String(verdict)} (${range})`;
+    const progressPath = Path.join(dir, "tasks", `task-${task}`, "progress.md");
+    const progress = await readArtifact(runtime, progressPath);
+    progressRead = progress;
+    const progressContract = "exitCode" in progress ? undefined : metadataContract(progress.artifact);
+    if (progressContract?._tag !== "valid" || progressContract.artifact !== "task-progress" ||
+        progressContract.metadata.task !== Number(task) || progressContract.metadata.change !== Path.basename(dir))
+      return `${String(verdict)} (stale)`;
+    progressDurable = await durableArtifact(runtime, root, progressPath);
+    if (!progressDurable) return `${String(verdict)} (stale)`;
+    const latestAttempt = progressContract.body.workflow.records.filter((record) => record.kind === "attempt").at(-1);
+    if (verdict === "approved" && (status !== "done" || progressContract.metadata.status !== "done" || latestAttempt?.fields.Outcome !== "done"))
+      return "approved (stale)";
+    const resolvedImplementation = implementation ? await runtime.git.resolveCommit(root, implementation) : undefined;
+    if (!resolvedImplementation || !successful(resolvedImplementation) || text(resolvedImplementation) !== implementation)
+      return `${String(verdict)} (stale)`;
+    const ranges = await readTaskFeedbackRanges(path, readResult.source, Path.basename(dir), Number(task));
+    const current = text(await runtime.git.currentHead(root));
+    if (ranges.kind !== "valid" || !fullCommit(current)) return `${String(verdict)} (malformed)`;
+    const checkpoint = await resolveTaskCheckpoint(contextTaskCheckpointGit(runtime), root, relative(root, progressPath), Number(task), Path.basename(dir), current, ranges.ranges);
+    if (checkpoint.kind !== "verified" || checkpoint.base !== base) return `${String(verdict)} (stale)`;
+    verifiedCheckpoint = { kind: "verified", base: checkpoint.base };
+    return `${String(verdict)} (fresh)`;
+  })();
+  return { standing, implementation, feedback: feedbackRead, progress: progressRead, checkpoint: verifiedCheckpoint, feedbackDurable, feedbackCommit, feedbackFiles, progressDurable, range };
 };
 
 const latestReview = async (
@@ -2173,31 +2194,25 @@ const enrichSplit = async (
       "progress.md",
     ),
   );
-  const states = [];
-  for (const row of rows)
-    states.push({
-      task: row.task,
-      status: row.status,
-      feedback: await latestFeedback(
-        runtime,
-        root,
-        change.path,
-        row.task,
-        text(
-          await runtime.git.latestCommit(
-            root,
-            Path.join(
-              relative(root, change.path),
-              "tasks",
-              `task-${row.task}`,
-              "progress.md",
-            ),
-          ),
-        ),
-        row.status,
-      ),
-    });
   const plan = await readArtifact(runtime, Path.join(change.path, "plan.md"));
+  const planContractResult = "exitCode" in plan ? undefined : metadataContract(plan.artifact);
+  const planContract = planContractResult?._tag === "valid" ? planContractResult.body.workflow.plan : undefined;
+  const states = [];
+  const feedbackInspections = new Map<number, ContextFeedbackInspection>();
+  const inspectRow = async (row: LedgerRow) => {
+    const inspection = await latestFeedback(
+      runtime, root, change.path, row.task,
+      text(await runtime.git.latestCommit(root, Path.join(relative(root, change.path), "tasks", `task-${row.task}`, "progress.md"))),
+      row.status,
+    );
+    feedbackInspections.set(Number(row.task), inspection);
+    return { task: row.task, status: row.status, feedback: inspection.standing };
+  };
+  if (planContract?.execution?.version === 2)
+    for (let offset = 0; offset < rows.length; offset += 4)
+      states.push(...await Promise.all(rows.slice(offset, offset + 4).map(inspectRow)));
+  else
+    for (const row of rows) states.push(await inspectRow(row));
   const expectedTitle =
     "exitCode" in plan
       ? ""
@@ -2209,12 +2224,6 @@ const enrichSplit = async (
     taskPaths,
     expectedTitle,
   );
-  const planContractResult =
-    "exitCode" in plan ? undefined : metadataContract(plan.artifact);
-  const planContract =
-    planContractResult?._tag === "valid"
-      ? planContractResult.body.workflow.plan
-      : undefined;
   const taskInputs: NonNullable<ContextChange["taskInputs"]>[number][] = [];
   if (planContract) {
     let repositoryIdentity: string | undefined;
@@ -2312,10 +2321,120 @@ const enrichSplit = async (
       }
     }
   }
+  const readinessEvidence: TaskReadinessEvidence[] = [];
+  const dependencyMode = planContract?.execution?.version === 2 && planContract.execution.mode === "dependencies";
+  if (dependencyMode && planContract) {
+    const currentHead = text(await runtime.git.currentHead(root));
+    const evidenceRuntime: PreconditionRuntime | undefined = runtime.process === undefined ? undefined : {
+      cwd: runtime.cwd, process: runtime.process, fileSystem: runtime.fileSystem,
+      git: { ...runtime.git, blobAt: runtime.git.fileAt },
+    };
+    const intent = evidenceRuntime && planContractResult?._tag === "valid"
+      ? await inspectIntentApprovals(evidenceRuntime, root, change.path, planContractResult)
+      : undefined;
+    const scaffoldProblems = evidenceRuntime && planContractResult?._tag === "valid" && planContract.initialization !== undefined
+      ? await inspectInitialScaffold(evidenceRuntime, root, change.path, planContractResult, currentHead, false)
+      : ["initialization proof cannot be verified"];
+    const impact = await inspectInputImpact(contextHistoryRuntime(runtime), root, change.path, planContract);
+    const repositoryIdentity = await runtime.fileSystem.realpath(root);
+    const planVerified = intent !== undefined && intent.problems.length === 0 && scaffoldProblems.length === 0 &&
+      await durableArtifact(runtime, root, Path.join(change.path, "plan.md")) &&
+      change.executionTransitionStanding?.status === "verified" && impact.problems.length === 0 &&
+      (intentStanding === "tactical" || intentStanding === "approved-reference");
+    const rootPath = Path.join(change.path, "progress.md");
+    const committedRoot = await runtime.git.fileAt(root, currentHead, relative(root, rootPath));
+    const committedRootArtifact = successful(committedRoot)
+      ? await createArtifactReader({ readFile: () => committedRoot.stdout })(rootPath)
+      : undefined;
+    const committedRootContract = committedRootArtifact?._tag === "recognized" ? metadataContract(committedRootArtifact) : undefined;
+    const committedRows = committedRootContract?._tag === "valid" && committedRootContract.artifact === "progress" && committedRootContract.metadata.change === change.name
+      ? progressRows(bodyOf(committedRoot.stdout, committedRootArtifact as RecognizedArtifact)) ?? []
+      : [];
+    const collected = await Promise.all(planContract.tasks.filter((entry) => !/\(abandoned — .+\)$/.test(entry.title)).map(async (task): Promise<TaskReadinessEvidence> => {
+      const row = rows.find((entry) => Number(entry.task) === task.id);
+      const progressPath = Path.join(change.path, "tasks", `task-${task.id}`, "progress.md");
+      const progressRelative = relative(root, progressPath);
+      const inspection = feedbackInspections.get(task.id);
+      const progress = inspection?.progress ?? await readArtifact(runtime, progressPath);
+      const progressContract = "exitCode" in progress ? undefined : metadataContract(progress.artifact);
+      const durableProgress = inspection?.progressDurable ?? await durableArtifact(runtime, root, progressPath);
+      const implementationCommit = inspection?.implementation ?? text(await runtime.git.latestCommit(root, progressRelative));
+      const feedbackPath = Path.join(change.path, "tasks", `task-${task.id}`, "feedback.md");
+      const feedbackExists = await runtime.fileSystem.pathExists(feedbackPath);
+      const feedback = inspection?.feedback ?? (feedbackExists ? await readArtifact(runtime, feedbackPath) : undefined);
+      const parsedRanges = feedback && !("exitCode" in feedback)
+        ? await readTaskFeedbackRanges(feedbackPath, feedback.source, Path.basename(change.path), task.id)
+        : undefined;
+      const ranges = parsedRanges?.kind === "valid" ? parsedRanges.ranges : [];
+      const checkpoint = inspection?.checkpoint ?? (fullCommit(currentHead)
+        ? await resolveTaskCheckpoint(contextTaskCheckpointGit(runtime), root, progressRelative, task.id, Path.basename(change.path), currentHead, ranges)
+        : { kind: "unverified" as const });
+      const latest = feedback && !("exitCode" in feedback) && currentValid(feedback.artifact) &&
+        feedback.artifact.metadata.task === task.id && feedback.artifact.metadata.change === change.name &&
+        firstHeader(bodyOf(feedback.source, feedback.artifact)) === `Code Feedback: Task ${task.id} — ${task.title}`
+        ? latestParsedPass(feedback.artifact)
+        : undefined;
+      const feedbackDurable = inspection?.feedbackDurable ?? (feedbackExists && await durableArtifact(runtime, root, feedbackPath));
+      const feedbackCommit = inspection?.feedbackCommit ?? (feedbackDurable ? text(await runtime.git.latestCommit(root, relative(root, feedbackPath))) : "");
+      const feedbackFiles = inspection?.feedbackFiles ?? (fullCommit(feedbackCommit) ? await runtime.git.commitFiles(root, feedbackCommit) : undefined);
+      const feedbackIndependent = feedbackFiles !== undefined && successful(feedbackFiles) &&
+        feedbackFiles.stdout.trim() === relative(root, feedbackPath) && feedbackCommit !== implementationCommit;
+      const feedbackReachable = fullCommit(feedbackCommit) && fullCommit(currentHead) &&
+        successful(await runtime.git.isAncestor(root, feedbackCommit, currentHead)) && latest !== undefined &&
+        successful(await runtime.git.isAncestor(root, latest.head, feedbackCommit));
+      const range = inspection?.range ?? (latest
+        ? await validRange(runtime, root, latest.base, latest.head, fullCommit(implementationCommit) ? implementationCommit : undefined)
+        : "malformed");
+      const input = taskInputs.find((entry) => entry.task === task.id);
+      const inputProblems = evidenceRuntime && intent && planContractResult?._tag === "valid"
+        ? await inspectTaskInputContext(evidenceRuntime, root, change.path, planContractResult, task.id,
+            checkpoint.kind === "verified" ? checkpoint.base : undefined, repositoryIdentity,
+            intent.approvals, currentHead, impact,
+            checkpoint.kind === "verified" ? checkpoint : { kind: "unverified", reason: "task has no committed attempt" })
+        : ["input evidence ports are unavailable"];
+      const currentInputs = inputProblems.length === 0 && (task.inputContext === undefined || task.inputContext.taskDefinition === task.definitionDigest) &&
+        (input?.status === "current" || input?.status === "impact-reviewed-unaffected" || input?.status === "legacy-current-confirmed");
+      const validProgress = progressContract?._tag === "valid" && progressContract.artifact === "task-progress" &&
+        progressContract.metadata.task === task.id && progressContract.metadata.change === change.name &&
+        !("exitCode" in progress) && firstHeader(bodyOf(progress.source, progress.artifact)) === `Task Progress: Task ${task.id} — ${task.title}`
+        ? progressContract : undefined;
+      const latestAttempt = validProgress?.body.workflow.records.filter((record) => record.kind === "attempt").at(-1);
+      const committedRow = committedRows.find((entry) => Number(entry.task) === task.id);
+      const consistent = validProgress !== undefined && row?.status === validProgress.metadata.status &&
+        row?.status === committedRow?.status && row?.title === task.title && committedRow?.title === task.title &&
+        (row?.status === "pending" ? latestAttempt === undefined : row?.status === latestAttempt?.fields.Outcome);
+      let cacheValid = true;
+      const cachePath = Path.join(change.path, "tasks", `task-${task.id}`, ".base");
+      if (await runtime.fileSystem.pathExists(cachePath)) {
+        try {
+          const cache = (await runtime.fileSystem.readFile(cachePath)).trim();
+          const resolved = fullCommit(cache) ? await runtime.git.resolveCommit(root, cache) : undefined;
+          cacheValid = resolved !== undefined && successful(resolved) && text(resolved) === cache &&
+            successful(await runtime.git.isAncestor(root, cache, currentHead)) &&
+            (checkpoint.kind !== "verified" || checkpoint.base === cache);
+        } catch {
+          cacheValid = false;
+        }
+      }
+      const taskDone = row?.status === "done" && latestAttempt?.fields.Outcome === "done";
+      return {
+        task: task.id,
+        status: (row?.status === "pending" || row?.status === "blocked" || row?.status === "in-progress" || row?.status === "done") ? row.status : "blocked",
+        currentInputs,
+        checkpoint: cacheValid && (checkpoint.kind === "verified" || checkpoint.kind === "not-started"),
+        history: planVerified && consistent && durableProgress && checkpoint.kind !== "unverified",
+        implementation: { committed: durableProgress && fullCommit(implementationCommit), done: taskDone, consistent, baseHead: checkpoint.kind === "verified", reachable: checkpoint.kind === "verified" },
+        feedback: { physicallyLast: latest !== undefined, approved: latest?.verdict === "approved", fresh: range === "fresh", durable: feedbackDurable, independent: feedbackIndependent, noBlockers: (latest?.blocking.length ?? 1) === 0, baseHead: checkpoint.kind === "verified" && latest?.base === checkpoint.base, reachable: feedbackReachable && range === "fresh" },
+      };
+    }));
+    readinessEvidence.push(...collected);
+  }
+  const readiness = dependencyMode && planContract ? projectTaskReadiness({ execution: planContract.execution, tasks: planContract.tasks.filter((task) => !/\(abandoned — .+\)$/.test(task.title)), evidence: readinessEvidence }) : undefined;
   return {
     ...change,
     taskStates: states,
     taskInputs,
+    ...(readiness === undefined ? {} : { readiness }),
     ...(planContract?.executionTransition === undefined
       ? {}
       : { executionTransition: planContract.executionTransition }),
@@ -2410,6 +2529,12 @@ const renderOne = (change: ContextChange): string => {
           ? `  Task ${task.task} scoped legacy current-confirmation standing: ${task.status}${task.changedPaths.length === 0 ? "" : ` (${task.changedPaths.join(", ")})`}`
           : `  Task ${task.task} input context: ${task.status}${task.changedPaths.length === 0 ? "" : ` (${task.changedPaths.join(", ")})`}`,
       );
+    if (change.readiness) {
+      lines.push(`ready-tasks: ${change.readiness.ready.join(", ") || "none"}`);
+      lines.push(`fully-gated-tasks: ${change.readiness.fullyGated.join(", ") || "none"}`);
+      for (const held of change.readiness.held)
+        lines.push(`held-task: ${held.task} (${held.reasons.join("; ")})`);
+    }
     const whole = change.wholeReview ?? "not reviewed";
     lines.push(
       "reviews:",

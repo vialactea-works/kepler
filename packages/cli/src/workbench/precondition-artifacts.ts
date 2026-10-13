@@ -160,7 +160,7 @@ const formalIntentFiles = async (
   return files;
 };
 
-const inspectIntentApprovals = async (
+export const inspectIntentApprovals = async (
   runtime: PreconditionRuntime,
   root: string,
   changeDir: string,
@@ -232,12 +232,13 @@ const inspectIntentApprovals = async (
   };
 };
 
-const inspectInitialScaffold = async (
+export const inspectInitialScaffold = async (
   runtime: PreconditionRuntime,
   root: string,
   changeDir: string,
   plan: ValidArtifactContract,
   head: string,
+  includePriorWork = true,
 ): Promise<readonly string[]> => {
   const proof = plan.body.workflow.plan?.initialization;
   if (!proof) return [];
@@ -342,7 +343,7 @@ const inspectInitialScaffold = async (
     proof.breakdown
   )
     problems.push("initial plan task definitions do not match the authorized breakdown");
-  if (initialProjection?.execution?.version === 2) {
+  if (includePriorWork && initialProjection?.execution?.version === 2) {
     const activeInitialTasks = initialProjection.tasks.filter(
       (task) => proof.taskIds.includes(task.id) && !taskTitleAbandoned(task.title),
     );
@@ -614,7 +615,7 @@ const inspectLegacyInputConfirmation = async (
   return problems;
 };
 
-const inspectTaskInputContext = async (
+export const inspectTaskInputContext = async (
   runtime: PreconditionRuntime,
   root: string,
   changeDir: string,
