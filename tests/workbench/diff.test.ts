@@ -736,6 +736,44 @@ describe("diff package ranges", () => {
     Fs.rmSync(result.lastLine);
   });
 
+  it("packages a complete whole-change diff above 1 MiB through the runtime and source CLI", async () => {
+    const repo = inDirectory(makeRepo());
+    sourceCliTsconfig(repo);
+    const base = commitAll(repo, "configure source CLI fixture");
+    git(repo, "checkout", "-q", "-b", "large-change");
+    const sentinel = "END_OF_LARGE_PATCH";
+    write(repo, "large.txt", `${("0123456789abcdef".repeat(4) + "\n").repeat(80_000)}${sentinel}\n`);
+    const head = commitAll(repo, "add large text change");
+    const expected = spawnSync("git", ["diff", "-U10", `${base}..${head}`], {
+      cwd: repo,
+      encoding: "utf8",
+      env: fixtureEnvironment,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    expect(expected.status, expected.stderr).toBe(0);
+    expect(Buffer.byteLength(expected.stdout)).toBeGreaterThan(4_688_783);
+
+    const runtimeOutput = Path.join(repo, "runtime.diff");
+    const result = await executeDiff({
+      mode: "whole-change",
+      targetBranch: "refs/heads/main",
+      out: runtimeOutput,
+    });
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(Fs.readFileSync(runtimeOutput, "utf8").endsWith(expected.stdout)).toBe(true);
+
+    const cliOutput = Path.join(repo, "cli.diff");
+    const cli = spawnSync("bun", [sourceCli, "workbench", "diff", "--whole-change", "--target-branch", "refs/heads/main", "--out", cliOutput], {
+      cwd: repo,
+      encoding: "utf8",
+      env: fixtureEnvironment,
+    });
+    expect(cli.status, cli.stdout + cli.stderr).toBe(0);
+    const packaged = Fs.readFileSync(cliOutput, "utf8");
+    expect(packaged.endsWith(expected.stdout)).toBe(true);
+    expect(packaged.endsWith(`+${sentinel}\n`)).toBe(true);
+  });
+
   it("rejects invalid ancestry before reporting a package", async () => {
     const repo = inDirectory(makeRepo());
     const changeDir = makeChangeDir(repo, "add-auth");

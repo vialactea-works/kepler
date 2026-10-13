@@ -54,7 +54,9 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/
 The distributed `kepler workbench` command is the supported surface for workflow mechanics. Its
 operations are `kepler workbench isolate`, `kepler workbench diff`,
 `kepler workbench precondition`, `kepler workbench context`, and
-`kepler workbench prototype`. Artifact validation uses `kepler workbench lint`.
+`kepler workbench prototype`. `kepler workbench task-state` guards task admission (`--admit`),
+before-edit prerequisite reservations (`--reserve`), and integrated publication (`--publish`).
+Artifact validation uses `kepler workbench lint`. See the [task-state command reference](docs/skills.md#task-state) for required arguments.
 
 ```bash
 kepler setup          # bootstrap ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/ (preserves existing settings)

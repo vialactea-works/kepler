@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -30,7 +31,7 @@ const contractContent = Object.fromEntries(
   ]),
 );
 
-const workbenchSubcommands = ["isolate", "diff", "precondition", "context", "prototype", "lint"];
+const inventoryDocuments = ["README.md", "docs/modes.md", "docs/skills.md"];
 
 describe("workbench documentation", () => {
   it("distinguishes dependency readiness, admission, implementation completion, and full gating", () => {
@@ -98,8 +99,20 @@ describe("workbench documentation", () => {
   });
 
   it("names the supported workbench operations and lint scope", () => {
-    for (const subcommand of workbenchSubcommands) {
-      expect(allDocumentation).toMatch(new RegExp(`kepler workbench[^\\n]*${subcommand}`));
+    const help = spawnSync("bun", ["packages/cli/src/cli/main.ts", "workbench", "--help"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    expect(help.status, help.stdout + help.stderr).toBe(0);
+    const subcommands = [...help.stdout.matchAll(/^ {2}([a-z][a-z-]*) /gm)].map((match) => match[1]);
+    expect(subcommands).toContain("task-state");
+    for (const document of inventoryDocuments) {
+      for (const subcommand of subcommands) {
+        expect(content[document], document).toMatch(new RegExp(`kepler workbench[^\\n]*${subcommand}`));
+      }
+      for (const operation of ["--admit", "--reserve", "--publish"]) {
+        expect(content[document], document).toContain(operation);
+      }
     }
     expect(allDocumentation).toMatch(/kepler workbench lint --file <file>/);
     expect(allDocumentation).toMatch(/kepler workbench lint --change-dir <dir>/);

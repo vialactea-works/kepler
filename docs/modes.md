@@ -87,6 +87,7 @@ The distributed workbench is the supported workflow-mechanics surface. Its opera
 - `kepler workbench diff` — record checkpoints and package task or change diffs. Whole-change packaging requires `--target-branch refs/remotes/<remote>/<branch>` or `refs/heads/<branch>`; it never infers a default.
 - `kepler workbench precondition` — evaluate finish-work gates against an explicit `--target-branch` reference.
 - `kepler workbench context` — inspect change artifacts and lifecycle state.
+- `kepler workbench task-state` — guard task admission (`--admit`), before-edit reservations (`--reserve`), and integrated publication (`--publish`). See [task-state arguments](./skills.md#task-state); this operation does not schedule tasks.
 - `kepler workbench prototype` — create, resume, or verify prototype branches.
 - `kepler workbench lint` — validate one file or one change directory.
 

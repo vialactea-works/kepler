@@ -90,6 +90,7 @@ these skills. Its subcommands are:
 - `kepler workbench diff` — record checkpoints and package task or change diffs. Whole-change packaging requires an explicit `--target-branch refs/remotes/<remote>/<branch>` or `refs/heads/<branch>`.
 - `kepler workbench precondition` — evaluate finish-work gates against the explicit `--target-branch` reference; the command never infers a default branch.
 - `kepler workbench context` — inspect change artifacts and lifecycle state.
+- `kepler workbench task-state` — guard task admission (`--admit`), before-edit reservations (`--reserve`), and integrated publication (`--publish`).
 - `kepler workbench prototype` — create, resume, or verify prototype branches.
 - `kepler workbench lint` — validate one file or one change directory.
 
@@ -120,6 +121,26 @@ reject a lint-valid artifact because it includes additional frontmatter or body 
 different accepted layout, or differs from the installed template. A missing file, wrong task,
 uncommitted feedback, stale review, or unmet acceptance criterion remains a separate workflow
 or evidence gate; lint does not check those conditions.
+
+### Task-state
+
+Select exactly one of `--admit`, `--reserve`, or `--publish`. Each operation takes
+`--task <number>` and `--expected-head <full-commit>`; use `--change-dir <directory>`
+when running outside the change directory.
+
+- `--admit` requires `--worker <identity>`, `--worktree <directory>`, and an explicit
+  `--target-branch refs/heads/<branch>` or `refs/remotes/<remote>/<branch>`. Optional
+  `--retry` rebinds eligible recovery without resetting the original Base.
+- `--reserve` requires `--reservation '<json>'` containing `id`, `attempt`, `prerequisite`,
+  `necessity`, `evidence`, `paths`, and `verify`. An owner reservation before admission also
+  requires `--target-branch <ref>`. Commit the reservation before editing its paths.
+- `--publish` requires `--task-head <full-commit>`. A `done` implementation also requires
+  `--verify '<exact task Verify command>'`; the coordinator executes it after integration
+  before publishing root status. Optional `--response` accepts `done`, `blocked`,
+  `interrupted`, or `unavailable`; neutral responses do not publish an implementation outcome.
+
+Admission binds eligible dependency-mode work to an isolated lane. These operations guard
+local state transitions; they do not schedule work or grant feedback clearance.
 
 ## The skills
 

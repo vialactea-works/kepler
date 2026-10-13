@@ -3,9 +3,9 @@ import * as Fs from "node:fs";
 import * as Path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
 import { taskBreakdownDigestFromDefinitions, taskDefinitionDigest } from "../../packages/cli/src/workbench/artifact-body.js";
-import { cleanupRepos, commitAll, fixtureEnvironment, git, makeChangeDir, makeRepo, runCommand, write } from "./helpers.js";
+import { cleanupRepos, commitAll, fixtureEnvironment, git, makeChangeDir, makeRepo, runCommand, commitPaths, write } from "./helpers.js";
 
 const sourceCli = fileURLToPath(new URL("../../packages/cli/src/cli/main.ts", import.meta.url));
 const invoke = (cwd: string, worker: string, ...args: string[]) => {
@@ -14,7 +14,7 @@ const invoke = (cwd: string, worker: string, ...args: string[]) => {
   return { status: result.status ?? -1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 };
 
-const fixture = () => {
+const fixture = (dependent = false) => {
   const root = makeRepo();
   const changeDir = makeChangeDir(root, "state");
   const key = Path.join(root, ".git", "fixture-key");
@@ -36,7 +36,7 @@ const fixture = () => {
   const tasks = [1, 2].map((id) => {
     const title = id === 1 ? "Set count" : "Set label";
     const verify = id === 1 ? "bun -e \"import { count } from './src/counter.ts'; if (count !== 1) process.exit(1)\"" : "bun -e \"import { label } from './src/label.ts'; if (label !== 'ready') process.exit(1)\"";
-    const definition = `### Task ${id}: ${title}\n\n- Goal: ${title} to its accepted value.\n- Depends on: none\n- Files: src/${id === 1 ? "counter" : "label"}.ts\n- Acceptance:\n  - ${id === 1 ? "Count is 1." : "Label is ready."}\n- Steps:\n  1. Red — verify the current value fails.\n  2. Green — implement the accepted value.\n  3. Refactor — preserve the behavior.\n- Verify: ${verify}\n- Commit: feat: ${title.toLowerCase()}`;
+    const definition = `### Task ${id}: ${title}\n\n- Goal: ${title} to its accepted value.\n- Depends on: ${dependent && id === 2 ? "Task 1" : "none"}\n- Files: src/${id === 1 ? "counter" : "label"}.ts\n- Acceptance:\n  - ${id === 1 ? "Count is 1." : "Label is ready."}\n- Steps:\n  1. Red — verify the current value fails.\n  2. Green — implement the accepted value.\n  3. Refactor — preserve the behavior.\n- Verify: ${verify}\n- Commit: feat: ${title.toLowerCase()}`;
     const definitionDigest = taskDefinitionDigest(definition);
     const notes = { version: 1, repository: root, intentCommit: "tactical:task-state-fixture", taskDefinition: definitionDigest, inputs: [{ path: "AGENTS.md", blob }] };
     return { id, title, verify, definitionDigest, block: `${definition}\n- Notes: ${JSON.stringify(notes)}` };
@@ -102,6 +102,63 @@ describe("native guarded task-state", () => {
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("already bound");
       expect(f.metadata().tasks[1]?.status).toBe("pending");
+    });
+  });
+
+  describe("downstream shared-path reservation context", () => {
+    let f: ReturnType<typeof fixture>;
+    let lane: string;
+    const sharedReservation = { ...reservation("shared"), paths: ["src/counter.ts"] };
+    beforeEach(() => {
+      f = fixture(true);
+      expect(f.admit().status).toBe(0);
+      const published = publish(f, complete(f));
+      expect(published.status, published.stdout + published.stderr).toBe(0);
+      const head = git(f.root, "rev-parse", "HEAD");
+      write(f.changeDir, "tasks/task-1/feedback.md", `---\nartifact: feedback\nchange: state\ntask: 1\ncreated: 2026-10-13\nstatus: resolved\ndecision: accepted\n---\n# Code Feedback: Task 1 — Set count\n\n## Pass 1 — 2026-10-13\nBase: ${f.initial}\nHead: ${head}\nVerdict: approved\n\n### Blocking\n- None.\n\n### Suggestions\n- None.\n`);
+      commitPaths(f.root, "approve prerequisite", ".kepler/changes/state/tasks/task-1/feedback.md");
+      const admitted = f.admit(2);
+      expect(admitted.status, admitted.stdout + admitted.stderr).toBe(0);
+      lane = f.lanes[1] ?? "";
+    });
+
+    it("accepts a reserved path changed by a fully gated prerequisite before admission", () => {
+      const reserved = invoke(lane, "worker-2", "--reserve", "--task", "2", "--change-dir", ".kepler/changes/state", "--expected-head", git(lane, "rev-parse", "HEAD"), "--reservation", JSON.stringify(sharedReservation));
+      expect(reserved.status, reserved.stdout + reserved.stderr).toBe(0);
+
+      const context = invoke(lane, "worker-2", "context", ".kepler/changes/state");
+      expect(context.status, context.stdout + context.stderr).toBe(0);
+      expect(context.stdout).toContain("format: split");
+      expect(context.stdout).not.toContain("reserved path changed before its reservation");
+      expect(context.stdout).toContain("Task 2 input context: current");
+    });
+
+    it("rejects task-owned shared-path edits committed after admission but before reservation", () => {
+      write(lane, "src/counter.ts", "export const count = 2;\n");
+      commitAll(lane, "edit shared prerequisite before reservation");
+      const path = ".kepler/changes/state/tasks/task-2/progress.md";
+      const source = Fs.readFileSync(Path.join(lane, path), "utf8");
+      write(lane, path, source.replace("decision: accepted\n", `decision: accepted\nscope_expansions: ${JSON.stringify([sharedReservation])}\n`));
+      commitPaths(lane, "record late reservation", path);
+
+      const context = invoke(lane, "worker-2", "context", ".kepler/changes/state");
+      expect(context.stdout).toContain("format: invalid");
+      expect(context.stdout).toContain("reserved path changed before its reservation");
+    });
+
+    it("rejects rewritten admission authority instead of falling back to task-progress history", () => {
+      const reserved = invoke(lane, "worker-2", "--reserve", "--task", "2", "--change-dir", ".kepler/changes/state", "--expected-head", git(lane, "rev-parse", "HEAD"), "--reservation", JSON.stringify(sharedReservation));
+      expect(reserved.status, reserved.stdout + reserved.stderr).toBe(0);
+      const path = ".kepler/changes/state/progress.md";
+      const source = Fs.readFileSync(Path.join(lane, path), "utf8");
+      const metadata = parse(source.split("---")[1] ?? "");
+      metadata.tasks[1].admission.planDigest = "0".repeat(64);
+      write(lane, path, `---\n${stringify(metadata).trimEnd()}${source.slice(source.indexOf("\n---", 4))}`);
+      commitPaths(lane, "corrupt admission plan digest", path);
+
+      const context = invoke(lane, "worker-2", "context", ".kepler/changes/state");
+      expect(context.stdout).toContain("format: invalid");
+      expect(context.stdout).toMatch(/admission.*(?:stale|original|transition|parent)/i);
     });
   });
 

@@ -1802,6 +1802,21 @@ const formatChange = async (
           }
         }
         let scopeBase = feedbackRanges.at(-1)?.base;
+        if (entries.length > 0) {
+          const checkpoint = await resolveTaskCheckpoint(
+            scopedGit,
+            scopedRoot,
+            taskRelativePath,
+            Number(task.task),
+            name,
+            scopeHead,
+            feedbackRanges,
+          );
+          if (checkpoint.kind === "unverified")
+            return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${checkpoint.reason}`] }, sources };
+          if (planContract?.execution?.version === 2)
+            scopeBase = checkpoint.base;
+        }
         if (scopeBase === undefined && entries.length > 0) {
           const serialBase = await serialScopeBaseline(
             runtime,
@@ -1827,19 +1842,6 @@ const formatChange = async (
         );
         if (scopeHistory.kind === "unverified")
           return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${scopeHistory.reason}`] }, sources };
-        if (entries.length > 0) {
-          const checkpoint = await resolveTaskCheckpoint(
-            scopedGit,
-            scopedRoot,
-            taskRelativePath,
-            Number(task.task),
-            name,
-            scopeHead,
-            feedbackRanges,
-          );
-          if (checkpoint.kind === "unverified")
-            return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${checkpoint.reason}`] }, sources };
-        }
       } else if (Object.hasOwn(taskRead.artifact.metadata, "scope_expansions"))
         return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} reservation history requires a Git repository`] }, sources };
     }

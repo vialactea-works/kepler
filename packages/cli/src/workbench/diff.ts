@@ -8,7 +8,7 @@ import {
   type ArtifactReadResult,
 } from "./artifact-reader.js";
 import { validateArtifact } from "./artifact-contracts.js";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import type { ProcessPort, ProcessResult } from "./runtime.js";
 import { resolveProjectDataPath } from "./project-data-path.js";
 import { isFullTargetBranchReference } from "./git-reference.js";
@@ -167,18 +167,23 @@ const environment = {
 };
 
 const productionProcess: ProcessPort = {
-  run: (command, args, cwd) => {
-    const result = spawnSync(command, [...args], {
+  run: (command, args, cwd) => new Promise<ProcessResult>((resolve) => {
+    const child = spawn(command, [...args], {
       cwd,
-      encoding: "utf-8",
       env: environment,
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    return {
-      status: result.status ?? -1,
-      stdout: result.stdout ?? "",
-      stderr: result.stderr ?? "",
-    };
-  },
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
+    child.on("error", (error) => {
+      resolve({ status: -1, stdout, stderr: `${stderr}${error.message}\n` });
+    });
+    child.on("close", (status) => {
+      resolve({ status: status ?? -1, stdout, stderr });
+    });
+  }),
 };
 
 const productionFileSystem: DiffFileSystemPort = {
