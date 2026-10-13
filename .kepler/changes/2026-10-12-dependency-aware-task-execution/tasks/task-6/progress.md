@@ -2,7 +2,7 @@
 artifact: task-progress
 change: 2026-10-12-dependency-aware-task-execution
 task: 6
-status: done
+status: in-progress
 updated: 2026-10-13
 decision: accepted
 scope_expansions:
@@ -17,6 +17,16 @@ scope_expansions:
       - tests/workbench/scope-expansion-history.test.ts
       - tests/workbench/task-state.test.ts
     verify: bun --bun vitest run tests/workbench/scope-expansions.test.ts tests/workbench/scope-expansion-history.test.ts tests/workbench/task-state.test.ts
+  - id: task6-scoped-checkpoint-recovery
+    attempt: 2
+    prerequisite: Recover the legacy checkpoint from verified pre-attempt scope authority
+    necessity: The workbench diff checkpoint rejects the earlier Task 6 source changes because legacy scope chronology begins at the initial scaffold rather than the signed preparation baseline.
+    evidence: "`bun packages/cli/src/cli/main.ts workbench diff --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` reports `task checkpoint is unverified: reserved path changed before its reservation`; the signed first preparation commit 3d8de5c0b7eb2df2f6778ef521be90dc09801466 has first parent 5a6472d329b54459cc9f63aa1b1cb70f7713969b and changes only this task progress artifact."
+    paths:
+      - packages/cli/src/workbench/task-checkpoint.ts
+      - tests/workbench/diff.test.ts
+      - tests/workbench/task-ledger-history.test.ts
+    verify: bun --bun vitest run tests/workbench/diff.test.ts tests/workbench/task-ledger-history.test.ts tests/workbench/scope-expansion-history.test.ts
 ---
 
 # Task Progress: Task 6 — Document and exercise the new task contract
