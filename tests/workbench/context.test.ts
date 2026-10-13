@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
 import * as Path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   ContextService,
   createContextRuntime,
@@ -17,11 +19,43 @@ import {
   cleanupRepos,
   commitAll,
   commitPaths,
+  fixtureEnvironment,
   git,
   makeChangeDir,
   makeRepo,
   write,
 } from "./helpers.js";
+
+const sourceCli = fileURLToPath(new URL("../../packages/cli/src/cli/main.ts", import.meta.url));
+
+const sourceContext = (cwd: string, changeDir: string) => {
+  const result = spawnSync(
+    "bun",
+    [sourceCli, "workbench", "context", changeDir],
+    { cwd, encoding: "utf8", env: fixtureEnvironment },
+  );
+  return {
+    status: result.status ?? -1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
+};
+
+const sourceCliTsconfig = (repository: string) => {
+  write(
+    repository,
+    "tsconfig.json",
+    JSON.stringify({
+      compilerOptions: {
+        target: "ES2024",
+        experimentalDecorators: true,
+        emitDecoratorMetadata: true,
+        module: "Node16",
+        moduleResolution: "node16",
+      },
+    }),
+  );
+};
 
 const proposal = `# Proposal: Add auth
 
@@ -865,8 +899,209 @@ decision: accepted
     expect(result.stdout).not.toContain("reserved path changed before its reservation");
   });
 
-  it("rejects production committed before a pre-attempt reservation", async () => {
+  it("accepts a first no-feedback reservation after an approved predecessor changed a shared path", () => {
     const repository = makeRepo();
+    sourceCliTsconfig(repository);
+    const predecessorDefinition = "### Task 1: Complete predecessor";
+    const reservationDefinition = "### Task 2: Reserve shared prerequisite";
+    const taskNotes = (definition: string) => JSON.stringify({
+      version: 1,
+      repository,
+      intentCommit: "tactical:serial-predecessor-fixture",
+      taskDefinition: taskDefinitionDigest(definition),
+      inputs: [],
+    });
+    const directory = seed(repository, "serial-predecessor-reservation", {
+      "plan.md": `---
+artifact: plan
+change: serial-predecessor-reservation
+status: approved
+created: 2026-09-12
+author: caio
+decision: accepted
+route_unit: null
+execution:
+  version: 1
+  order: [1, 2]
+---
+# Plan: serial-predecessor-reservation
+
+## Overview
+
+## Tasks
+
+${predecessorDefinition}
+
+- Notes: ${taskNotes(predecessorDefinition)}
+
+${reservationDefinition}
+
+- Notes: ${taskNotes(reservationDefinition)}
+
+## Done when
+`,
+      "progress.md": `---
+artifact: progress
+change: serial-predecessor-reservation
+status: pending
+updated: 2026-09-12
+decision: accepted
+tasks:
+  - id: 1
+    title: Complete predecessor
+    status: pending
+    progress: tasks/task-1/progress.md
+  - id: 2
+    title: Reserve shared prerequisite
+    status: pending
+    progress: tasks/task-2/progress.md
+---
+# Progress: serial-predecessor-reservation
+
+| Task | Status | Progress |
+| --- | --- | --- |
+| Task 1: Complete predecessor | pending | [details](tasks/task-1/progress.md) |
+| Task 2: Reserve shared prerequisite | pending | [details](tasks/task-2/progress.md) |
+`,
+      "tasks/task-1/progress.md": `---
+artifact: task-progress
+change: serial-predecessor-reservation
+task: 1
+status: pending
+updated: 2026-09-12
+decision: accepted
+---
+# Task Progress: Task 1 — Complete predecessor
+`,
+      "tasks/task-2/progress.md": `---
+artifact: task-progress
+change: serial-predecessor-reservation
+task: 2
+status: pending
+updated: 2026-09-12
+decision: accepted
+---
+# Task Progress: Task 2 — Reserve shared prerequisite
+`,
+      "src/shared.ts": "export const shared = 'before';\n",
+    });
+    const scaffold = commitAll(repository, "initialize serial reservation fixture");
+    write(
+      directory,
+      "progress.md",
+      `---
+artifact: progress
+change: serial-predecessor-reservation
+status: pending
+updated: 2026-09-12
+decision: accepted
+tasks:
+  - id: 1
+    title: Complete predecessor
+    status: done
+    progress: tasks/task-1/progress.md
+  - id: 2
+    title: Reserve shared prerequisite
+    status: pending
+    progress: tasks/task-2/progress.md
+---
+# Progress: serial-predecessor-reservation
+
+| Task | Status | Progress |
+| --- | --- | --- |
+| Task 1: Complete predecessor | done | [details](tasks/task-1/progress.md) |
+| Task 2: Reserve shared prerequisite | pending | [details](tasks/task-2/progress.md) |
+`,
+    );
+    write(
+      directory,
+      "tasks/task-1/progress.md",
+      `---
+artifact: task-progress
+change: serial-predecessor-reservation
+task: 1
+status: done
+updated: 2026-09-12
+decision: accepted
+---
+# Task Progress: Task 1 — Complete predecessor
+
+## Attempt 1 — 2026-09-12
+
+- Outcome: done
+`,
+    );
+    write(repository, "src/shared.ts", "export const shared = 'predecessor';\n");
+    const implementation = commitAll(repository, "complete predecessor");
+    write(
+      directory,
+      "tasks/task-1/feedback.md",
+      `---
+artifact: feedback
+change: serial-predecessor-reservation
+task: 1
+created: 2026-09-12
+status: resolved
+decision: accepted
+---
+# Code Feedback: Task 1 — Complete predecessor
+
+## Pass 1 — 2026-09-12
+Base: ${scaffold}
+Head: ${implementation}
+Verdict: approved
+### Blocking
+- None.
+### Suggestions
+- None.
+`,
+    );
+    const approval = commitPaths(
+      repository,
+      "approve predecessor",
+      ".kepler/changes/serial-predecessor-reservation/tasks/task-1/feedback.md",
+    );
+    write(
+      directory,
+      "tasks/task-2/progress.md",
+      `---
+artifact: task-progress
+change: serial-predecessor-reservation
+task: 2
+status: pending
+updated: 2026-09-12
+decision: accepted
+scope_expansions:
+  - id: prepare-shared-prerequisite
+    attempt: 1
+    prerequisite: Prepare the shared prerequisite
+    necessity: The next serial task requires the shared fixture
+    evidence: The predecessor completed the shared fixture
+    paths:
+      - src/shared.ts
+    verify: bun --bun vitest run tests/workbench/context.test.ts
+---
+# Task Progress: Task 2 — Reserve shared prerequisite
+`,
+    );
+    const reservation = commitPaths(
+      repository,
+      "reserve shared prerequisite",
+      ".kepler/changes/serial-predecessor-reservation/tasks/task-2/progress.md",
+    );
+
+    const result = sourceContext(repository, directory);
+
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(git(repository, "rev-parse", `${reservation}^1`)).toBe(approval);
+    expect(result.stdout).toContain("format: split");
+    expect(result.stdout).toContain("Task 2 input context: current");
+    expect(result.stdout).not.toContain("reserved path changed before its reservation");
+  });
+
+  it("rejects production committed before a pre-attempt reservation", () => {
+    const repository = makeRepo();
+    sourceCliTsconfig(repository);
     const directory = seed(repository, "reserved-before-edit", {
       "plan.md": `---\nartifact: plan\nchange: reserved-before-edit\nstatus: approved\ncreated: 2026-09-12\nauthor: caio\ndecision: accepted\nroute_unit: null\n---\n# Plan: reserved-before-edit\n\n## Overview\n\n## Tasks\n\n### Task 1: Build it\n\n## Done when\n`,
       "progress.md": `---\nartifact: progress\nchange: reserved-before-edit\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n  - id: 1\n    title: Build it\n    status: pending\n    progress: tasks/task-1/progress.md\n---\n# Progress: reserved-before-edit\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Build it | pending | [details](tasks/task-1/progress.md) |\n`,
@@ -883,9 +1118,10 @@ decision: accepted
     );
     commitPaths(repository, "reserve after production", ".kepler/changes/reserved-before-edit/tasks/task-1/progress.md");
 
-    const result = await runContext({ changeDir: directory });
+    const result = sourceContext(repository, directory);
 
-    expect(result.changes[0]?.format).toBe("invalid");
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain("format: invalid");
     expect(result.stdout).toContain("reserved path changed before its reservation");
   });
 

@@ -1801,6 +1801,20 @@ const formatChange = async (
             if (parsedRanges.kind === "valid") feedbackRanges = parsedRanges.ranges;
           }
         }
+        let scopeBase = feedbackRanges.at(-1)?.base;
+        if (scopeBase === undefined && entries.length > 0) {
+          const serialBase = await serialScopeBaseline(
+            runtime,
+            scopedRoot,
+            dir,
+            planContract,
+            rows,
+            Number(task.task),
+          );
+          if (serialBase.kind === "unverified")
+            return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${serialBase.reason}`] }, sources };
+          if (serialBase.kind === "verified") scopeBase = serialBase.base;
+        }
         const scopeHistory = await inspectScopeExpansionHistory(
           scopeGit,
           scopedRoot,
@@ -1809,7 +1823,7 @@ const formatChange = async (
           name,
           scopeHead,
           entries,
-          feedbackRanges.at(-1)?.base,
+          scopeBase,
         );
         if (scopeHistory.kind === "unverified")
           return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${scopeHistory.reason}`] }, sources };
@@ -2144,6 +2158,51 @@ const latestFeedback = async (
     return `${String(verdict)} (fresh)`;
   })();
   return { standing, implementation, feedback: feedbackRead, progress: progressRead, checkpoint: verifiedCheckpoint, feedbackDurable, feedbackCommit, feedbackFiles, progressDurable, range };
+};
+
+const serialScopeBaseline = async (
+  runtime: ContextRuntime,
+  root: string,
+  dir: string,
+  plan: PlanContractProjection | undefined,
+  rows: readonly LedgerRow[],
+  task: number,
+): Promise<
+  | { readonly kind: "none" }
+  | { readonly kind: "verified"; readonly base: string }
+  | { readonly kind: "unverified"; readonly reason: string }
+> => {
+  if (plan?.execution?.version === 2) return { kind: "none" };
+  const order = plan?.executionOrder;
+  const position = order?.indexOf(task) ?? -1;
+  if (position < 0)
+    return { kind: "unverified", reason: "serial execution order is unavailable" };
+  if (position === 0) return { kind: "none" };
+  const predecessor = order?.[position - 1];
+  const row = predecessor === undefined
+    ? undefined
+    : rows.find((candidate) => Number(candidate.task) === predecessor);
+  if (!row || row.status !== "done")
+    return { kind: "unverified", reason: "prior serial task is not implementation done" };
+  const progressPath = Path.join(dir, "tasks", `task-${predecessor}`, "progress.md");
+  const implementation = text(
+    await runtime.git.latestCommit(root, relative(root, progressPath)),
+  );
+  const feedback = await latestFeedback(
+    runtime,
+    root,
+    dir,
+    String(predecessor),
+    implementation,
+    row.status,
+  );
+  if (
+    feedback.standing !== "approved (fresh)" ||
+    feedback.feedbackCommit === undefined ||
+    !fullCommit(feedback.feedbackCommit)
+  )
+    return { kind: "unverified", reason: "prior serial task has no fresh durable approval" };
+  return { kind: "verified", base: feedback.feedbackCommit };
 };
 
 const latestReview = async (

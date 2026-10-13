@@ -231,3 +231,45 @@ scope_expansions:
 ### Result
 
 - Outcome: done
+
+## Attempt 5 — 2026-10-13
+
+- Modified: `packages/cli/src/workbench/context.ts`, `tests/workbench/context.test.ts`, this task progress artifact, and the matching Task 6 root ledger state.
+- Created: none.
+- Deleted: none.
+- Owner scope assertion: requester, verbatim, “Apply a direct fix and just document it in the change; we don't have time for a proposal/plan loop”. This correction uses only the authorized context caller and focused context test; it adds no reservation, changes no quota or chronology rule, and leaves the plan, approved requirements, feedback, `.base`, installed resources, and shipping state unchanged.
+
+### Red
+
+- The first source-CLI fixture invocation failed before behavior because its disposable repository lacked decorator-enabled TypeScript settings. Added a fixture-local `tsconfig.json`; this harness repair is not feature Red evidence.
+- `bun --bun vitest run tests/workbench/context.test.ts -t 'accepts a first no-feedback reservation after an approved predecessor changed a shared path|rejects production committed before a pre-attempt reservation'` → failed as intended: the positive real Git/source-CLI case returned `format: invalid` with `Task 2 scope history: reserved path changed before its reservation`, while the paired task-owned production-before-reservation negative control passed.
+
+### Green
+
+- Context now uses a predecessor's fresh, durable, artifact-only serial approval as the original scope baseline only for a no-feedback reservation in a non-first serial slot. Missing predecessor authority holds with a diagnostic; a first slot remains unbaselined, so its own committed pre-reservation production remains detectable.
+- The paired source-CLI test command passed: 2 passed, 52 skipped. It asserts exit status separately from output, accepts the first no-feedback predecessor case, and rejects the actual task-owned earlier production case.
+- A disposable `git clone --no-local` detached at historical first Task 6 reservation `3d8de5c0b7eb2df2f6778ef521be90dc09801466` ran this checkout's source CLI and produced `format: split` without the Task 6 chronology diagnostic. The clone necessarily reports recorded task repository identities as stale; the committed fixture instead binds its input repository to its own root and asserts `Task 2 input context: current`.
+
+### Refactor
+
+- Extracted the disposable source-CLI TypeScript configuration helper in the focused test and reran the paired source-CLI checks: 2 passed, 52 skipped. No behavior-preserving production cleanup beyond the scoped baseline helper was needed.
+- `bun --bun vitest run tests/workbench/context.test.ts tests/workbench/diff.test.ts tests/workbench/task-ledger-history.test.ts tests/workbench/scope-expansion-history.test.ts tests/workbench/scope-expansions.test.ts tests/workbench/task-state.test.ts` → passed: 159 tests across 6 files, retaining the earlier-reverted and two/four lifetime-bound controls.
+
+### Verify
+
+- `bun --bun vitest run tests/docs tests/templates` → passed: 79 tests across 6 files.
+- `bun --bun vitest run` → passed: 1176 tests across 62 files in 217.32 seconds with default settings and no timeout, concurrency, or assertion override.
+- `bun run build` → passed: core and CLI builds.
+- LSP diagnostics on `packages/cli/src/workbench/context.ts` and `tests/workbench/context.test.ts` reported zero findings; one TypeScript server was silent-on-clean and therefore could not independently confirm clean.
+- `bun packages/cli/src/cli/main.ts workbench lint --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed after the synchronized attempt/root transition.
+- `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → `format: split`, verified serial order, 6/6 implementation done, and Task 6 feedback changes-requested (stale), preserving the independent feedback gate.
+- `bun packages/cli/src/cli/main.ts workbench diff --record --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed with original Base `5a6472d329b54459cc9f63aa1b1cb70f7713969b`; ignored `.base` remains unchanged.
+- `git diff --check` → passed after artifact synchronization.
+
+### Quality context
+
+- The correction keeps scope chronology in the existing typed Git/runtime boundary. A prior serial task supplies a baseline only after the existing freshness, durability, independent-artifact, checkpoint, and root-done checks succeed; no feedback range continues to use the direct historical chronology check for a first slot. The focused source-CLI tests and exact historical replay distinguish predecessor-owned shared-path history from actual task-owned prior production.
+
+### Result
+
+- Outcome: done
