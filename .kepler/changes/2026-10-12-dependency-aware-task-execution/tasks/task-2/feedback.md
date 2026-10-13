@@ -22,3 +22,17 @@ Verdict: changes-requested
 ### Suggestions
 
 - [packages/cli/src/workbench/scope-expansions.ts:128-132] Consider using a range-limited path-diff check whose semantics directly represent changes after the recorded task Base; document the chosen Git query through focused tests.
+
+## Pass 2 — 2026-10-13
+
+Base: a8af61e64d05f0a5bdcb23816cafdd6c0cf21cde
+Head: 7c3db2d8403c80bebe9ef45569e676c303960e40
+Verdict: approved
+
+### Blocking
+
+- None.
+
+### Suggestions
+
+- [tests/workbench/scope-expansion-history.test.ts:84-93] Pass 1 blocker `pass-1-blocking-1` is refuted: the real Git fixture proves `git log --full-history Base..reservation -- path` returns successful empty output for a file present at Base and unchanged before reservation, while the earlier-reverted-edit case remains rejected.
