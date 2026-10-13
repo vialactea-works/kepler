@@ -56,7 +56,7 @@ export const gitPathHistory = async (
 ): Promise<ProcessResult> =>
   !runtime.admissionSource && runtime.git.pathHistory
     ? runtime.git.pathHistory(root, sourcePath)
-    : gitCommand(runtime, ["log", "--format=%H", "HEAD", "--", sourcePath], root);
+    : gitCommand(runtime, ["log", "--format=%H", "--full-history", "HEAD", "--", sourcePath], root);
 
 export const gitBlobAt = async (
   runtime: PreconditionRuntime,

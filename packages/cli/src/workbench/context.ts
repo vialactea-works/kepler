@@ -36,6 +36,7 @@ import {
   type TaskFeedbackRange,
 } from "./task-checkpoint.js";
 import { parseReviewPasses } from "./review-passes.js";
+import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
 import type { ProcessPort, ProcessResult } from "./runtime.js";
 import { resolveProjectDataPath } from "./project-data-path.js";
 
@@ -69,6 +70,8 @@ export interface ContextFileSystemPort extends ArtifactFileSystem {
 }
 
 export interface ContextGitPort {
+  readonly changedPaths?: (cwd: string, commit: string) => ProcessResult | Promise<ProcessResult>;
+  readonly pathChanges?: (cwd: string, base: string, head: string, paths: readonly string[]) => ProcessResult | Promise<ProcessResult>;
   readonly repositoryRoot: (
     cwd: string,
   ) => ProcessResult | Promise<ProcessResult>;
@@ -347,7 +350,11 @@ const createGitPort = (processPort: ProcessPort): ContextGitPort => ({
   blobIdAt: (cwd, commit, sourcePath) =>
     processPort.run("git", ["rev-parse", "--verify", `${commit}:${sourcePath}`], cwd),
   pathHistory: (cwd, sourcePath) =>
-    processPort.run("git", ["log", "--format=%H", "HEAD", "--", sourcePath], cwd),
+    processPort.run("git", ["log", "--format=%H", "--full-history", "HEAD", "--", sourcePath], cwd),
+  changedPaths: (cwd, commit) =>
+    processPort.run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", "-z", commit], cwd),
+  pathChanges: (cwd, base, head, paths) =>
+    processPort.run("git", ["log", "--full-history", "--format=%H", `${base}..${head}`, "--", ...paths], cwd),
   pathHistoryAt: (cwd, commit, sourcePath) =>
     processPort.run("git", ["log", "--format=%H", commit, "--", sourcePath], cwd),
   treeEntry: (cwd, commit, sourcePath) =>
@@ -509,6 +516,8 @@ const safeRepositoryPath = (value: string): boolean =>
   value.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 
 const contextTaskCheckpointGit = (runtime: ContextRuntime): TaskCheckpointGit => ({
+  changedPaths: runtime.git.changedPaths,
+  pathChanges: runtime.git.pathChanges,
   pathHistory: (root, path) => runtime.git.pathHistory(root, path),
   blobAt: (root, commit, path) => runtime.git.fileAt(root, commit, path),
   firstParent: (root, commit) => runtime.git.firstParent(root, commit),
@@ -1776,6 +1785,22 @@ const formatChange = async (
         sources,
         error: taskRead,
       };
+    if (current && currentValid(taskRead.artifact)) {
+      const scopeContract = validateArtifact(taskRead.artifact);
+      const scopedRootResult = await runtime.git.repositoryRoot(dir);
+      if (scopeContract._tag === "valid" && successful(scopedRootResult)) {
+        const scopedRoot = text(scopedRootResult);
+        const scopedGit = contextTaskCheckpointGit(runtime);
+        const scopeHistory = await inspectScopeExpansionHistory({
+          ...scopedGit,
+          changedPaths: scopedGit.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
+          pathChanges: scopedGit.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
+        }, scopedRoot, relative(scopedRoot, taskPath), Number(task.task), name, text(await runtime.git.currentHead(scopedRoot)), scopeContract.body.workflow.scopeExpansions ?? []);
+        if (scopeHistory.kind === "unverified")
+          return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${scopeHistory.reason}`] }, sources };
+      } else if (Object.hasOwn(taskRead.artifact.metadata, "scope_expansions"))
+        return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} reservation history requires a Git repository`] }, sources };
+    }
     if (current) {
       if (
         !currentValid(taskRead.artifact) ||

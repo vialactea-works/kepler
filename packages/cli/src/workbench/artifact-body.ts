@@ -4,6 +4,7 @@ import { validateTaskInputContextSchema } from "./artifact-schemas.js";
 import type { RecognizedArtifact } from "./artifact-reader.js";
 import { parseReviewPasses } from "./review-passes.js";
 import { parseFinishRecords } from "./finish-records.js";
+import { validateScopeExpansions } from "./scope-expansions.js";
 import type {
   ArtifactBodyValidation,
   ArtifactContractDiagnostic,
@@ -1837,6 +1838,9 @@ export const validateArtifactBody = (
       ),
     );
   }
+  const scope = validateScopeExpansions(kind === "task-progress" && Object.hasOwn(artifact.metadata, "scope_expansions") ? artifact.metadata.scope_expansions : []);
+  if (scope.kind === "invalid")
+    diagnostics.push(bodyDiagnostic(artifact, "invalid-value", scope.reason, artifact.locations.metadata.startLine));
   const allowEmptyTaskProgress = pendingTaskProgress(artifact, kind, title);
   const allowEmptyFinishOutcome: readonly GenericWorkflowRecordKind[] =
     kind === "finish" && pendingFinishIntent(artifact) ? ["outcome"] : [];
@@ -1895,6 +1899,7 @@ export const validateArtifactBody = (
       records: workflowRecords,
       ...(plan === undefined ? {} : { plan }),
       ...(finish === undefined ? {} : { finish: finish.records }),
+      ...(kind === "task-progress" && Object.hasOwn(artifact.metadata, "scope_expansions") && scope.kind === "valid" ? { scopeExpansions: scope.entries } : {}),
       ...(critique === undefined ? {} : { critiqueDisposition: critique }),
     },
     diagnostics,

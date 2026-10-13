@@ -84,6 +84,8 @@ export interface DiffFileSystemPort extends ArtifactFileSystem {
 }
 
 export interface DiffGitPort {
+  readonly changedPaths?: (cwd: string, commit: string) => ProcessResult | Promise<ProcessResult>;
+  readonly pathChanges?: (cwd: string, base: string, head: string, paths: readonly string[]) => ProcessResult | Promise<ProcessResult>;
   readonly repositoryRoot: (
     cwd: string,
   ) => ProcessResult | Promise<ProcessResult>;
@@ -239,7 +241,11 @@ const createGitPort = (processPort: ProcessPort): DiffGitPort => ({
   statusPorcelain: (cwd) =>
     processPort.run("git", ["status", "--porcelain", "--untracked-files=all"], cwd),
   pathHistory: (cwd, sourcePath) =>
-    processPort.run("git", ["log", "--format=%H", "HEAD", "--", sourcePath], cwd),
+    processPort.run("git", ["log", "--format=%H", "--full-history", "HEAD", "--", sourcePath], cwd),
+  changedPaths: (cwd, commit) =>
+    processPort.run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", "-z", commit], cwd),
+  pathChanges: (cwd, base, head, paths) =>
+    processPort.run("git", ["log", "--full-history", "--format=%H", `${base}..${head}`, "--", ...paths], cwd),
   blobAt: (cwd, commit, sourcePath) =>
     processPort.run("git", ["show", `${commit}:${sourcePath}`], cwd),
   firstParent: (cwd, commit) =>
@@ -385,6 +391,8 @@ const taskBaseFile = (changeDir: string, task: string): string =>
   Path.join(changeDir, "tasks", `task-${task}`, ".base");
 
 const checkpointGit = (runtime: DiffRuntime): TaskCheckpointGit => ({
+  changedPaths: runtime.git.changedPaths,
+  pathChanges: runtime.git.pathChanges,
   pathHistory: (root, sourcePath) =>
     runtime.git.pathHistory?.(root, sourcePath) ?? {
       status: 2,

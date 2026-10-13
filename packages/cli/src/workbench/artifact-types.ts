@@ -246,6 +246,16 @@ export interface PlanTaskContract {
   readonly inputContext?: TaskInputContext;
 }
 
+export interface ScopeExpansion {
+  readonly id: string;
+  readonly attempt: number;
+  readonly prerequisite: string;
+  readonly necessity: string;
+  readonly evidence: string;
+  readonly paths: readonly string[];
+  readonly verify: string;
+}
+
 export interface TaskOrderEntry {
   readonly id: number;
   readonly dependsOn: readonly number[];
@@ -351,6 +361,7 @@ export interface FinishRecordProjection {
 
 export interface ArtifactWorkflowState {
   readonly finish?: readonly FinishRecordProjection[];
+  readonly scopeExpansions?: readonly ScopeExpansion[];
   readonly classification: ArtifactBodyClassification;
   readonly records: readonly ArtifactWorkflowRecord[];
   readonly passes?: readonly ReviewPassEvidence[];

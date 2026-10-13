@@ -808,6 +808,8 @@ const inspectCritiqueDisposition = async (
 };
 
 const checkpointGit = (runtime: PreconditionRuntime): TaskCheckpointGit => ({
+  changedPaths: (root, commit) => runtime.git.changedPaths?.(root, commit) ?? gitCommand(runtime, ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", "-z", commit], root),
+  pathChanges: (root, base, head, paths) => runtime.git.pathChanges?.(root, base, head, paths) ?? gitCommand(runtime, ["log", "--full-history", "--format=%H", `${base}..${head}`, "--", ...paths], root),
   pathHistory: (root, sourcePath) => gitPathHistory(runtime, root, sourcePath),
   blobAt: (root, commit, sourcePath) =>
     gitBlobAt(runtime, root, commit, sourcePath),

@@ -34,6 +34,8 @@ export interface PreconditionFileSystemPort {
 }
 
 export interface PreconditionGitPort {
+  readonly changedPaths?: (cwd: string, commit: string) => ProcessResult | Promise<ProcessResult>;
+  readonly pathChanges?: (cwd: string, base: string, head: string, paths: readonly string[]) => ProcessResult | Promise<ProcessResult>;
   readonly repositoryRoot: (
     cwd: string,
   ) => ProcessResult | Promise<ProcessResult>;

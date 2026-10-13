@@ -7,6 +7,7 @@ import { artifactContracts, validateArtifact } from "./artifact-contracts.js";
 import { validateArtifactBody } from "./artifact-body.js";
 import type { ProcessResult } from "./runtime.js";
 import { parseReviewPasses } from "./review-passes.js";
+import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
 
 export interface TaskFeedbackRange {
   readonly base: string;
@@ -27,6 +28,8 @@ export type TaskCheckpointResult =
   | { readonly kind: "unverified"; readonly reason: string };
 
 export interface TaskCheckpointGit {
+  readonly changedPaths?: (root: string, commit: string) => ProcessResult | Promise<ProcessResult>;
+  readonly pathChanges?: (root: string, base: string, head: string, paths: readonly string[]) => ProcessResult | Promise<ProcessResult>;
   readonly pathHistory: (
     root: string,
     sourcePath: string,
@@ -165,6 +168,12 @@ export const resolveTaskCheckpoint = async (
     .split(/\r?\n/)
     .map((commit) => commit.trim())
     .filter(Boolean);
+  const scopes = await inspectScopeExpansionHistory({
+    ...git,
+    changedPaths: git.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
+    pathChanges: git.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
+  }, root, sourcePath, task, change, currentHead);
+  if (scopes.kind === "unverified") return scopes;
   const attempts = await taskAttemptCommits(
     git,
     root,

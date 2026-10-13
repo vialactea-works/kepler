@@ -5,6 +5,7 @@ import type {
   ValidateFunction,
 } from "ajv";
 import type { RecognizedArtifact } from "./artifact-reader.js";
+import { scopeExpansionPathPattern, validateScopeExpansions } from "./scope-expansions.js";
 import {
   enumValues,
   requiredFields,
@@ -166,6 +167,31 @@ const intentApprovalReference: ArtifactMetadataSchema = {
     path: nonEmptyString,
     reference: nonEmptyString,
     commit: sha,
+  },
+};
+
+const scopeExpansion: ArtifactMetadataSchema = {
+  type: "object",
+  required: ["id", "attempt", "prerequisite", "necessity", "evidence", "paths", "verify"],
+  additionalProperties: false,
+  properties: {
+    id: nonEmptyString,
+    attempt: positiveInteger,
+    prerequisite: nonEmptyString,
+    necessity: nonEmptyString,
+    evidence: nonEmptyString,
+    paths: {
+      type: "array",
+      minItems: 1,
+      maxItems: 4,
+      uniqueItems: true,
+      items: {
+        type: "string",
+        minLength: 1,
+        pattern: scopeExpansionPathPattern,
+      },
+    },
+    verify: nonEmptyString,
   },
 };
 
@@ -333,6 +359,14 @@ const schemaProperties = (artifact: SupportedArtifact) => {
     properties.decision = { enum: ["accepted", "applied", "rejected", "skipped"] };
   if (artifact === "design" || artifact === "requirements-change")
     properties.status = { enum: ["draft", "approved"] };
+  if (artifact === "task-progress") {
+    properties.scope_expansions = {
+      type: "array",
+      maxItems: 2,
+      items: scopeExpansion,
+      uniqueItems: true,
+    };
+  }
   if (artifact === "plan") {
     properties.execution = executionContract;
     properties.execution_transition = executionTransitionContract;
@@ -730,7 +764,14 @@ export const validateArtifactMetadataSchema = (
 ): readonly ArtifactContractDiagnostic[] => {
   const validator = validators[kind];
   const valid = validator(artifact.metadata);
-  if (valid) return [];
+  if (valid) {
+    if (kind === "task-progress" && Object.hasOwn(artifact.metadata, "scope_expansions")) {
+      const scope = validateScopeExpansions(artifact.metadata.scope_expansions);
+      if (scope.kind === "invalid")
+        return [diagnostic(artifact, "invalid-value", scope.reason, { field: "scope_expansions" })];
+    }
+    return [];
+  }
   const errors: readonly ErrorObject[] = validator.errors ?? [];
   const seen = new Set<string>();
   return errors
