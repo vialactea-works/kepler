@@ -21,6 +21,18 @@ describe("kepler-orchestrate task resume contract", () => {
     expect(routing).not.toMatch(/publication.*interrupted.*unavailable.*outcome vocabulary/i)
   })
 
+  it("scopes dispatch selection, root ownership, and worker responses by execution mode", () => {
+    const prompt = readReference("implementer-prompt.md")
+    const opening = skill.split("The driver coordinates three distinct roles:")[1]?.split("**Continuous execution.**")[0] ?? ""
+
+    expect(prompt).toMatch(/historical.*execution selection.*slot.*predecessor/is)
+    expect(prompt).toMatch(/v2.*verified ready.*admission.*original Base.*worker.*lane.*prerequisite/is)
+    expect(prompt).toMatch(/v2.*interrupted.*unavailable.*nonterminal worker responses/is)
+    expect(prompt).toMatch(/canonical.*Outcome.*done.*blocked/is)
+    expect(opening).toMatch(/historical serial.*root status/is)
+    expect(opening).toMatch(/v2.*task-local evidence.*original commit.*coordinator.*guarded root publication/is)
+  })
+
   it("keeps portable skill commands executable-independent", () => {
     const portable = `${skill} ${readReference("implementer-prompt.md")}`
     expect(portable).not.toContain("packages/cli/src/cli/main.ts")

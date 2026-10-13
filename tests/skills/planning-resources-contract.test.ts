@@ -16,6 +16,13 @@ const taskProgressTemplate = readFileSync("bundle/templates/task-progress.md", "
 const changeStateMachine = readFileSync("docs/change-state-machine.md", "utf8")
 
 describe("planning and resource gate contracts", () => {
+  it("keeps bundled plan root ownership mode-scoped", () => {
+    const consumption = planTemplate.split("Consumption contract:")[1]?.split("The initial `status:")[0] ?? ""
+
+    expect(consumption).toMatch(/historical serial.*kepler-code.*root.*row/is)
+    expect(consumption).toMatch(/v2.*task-local evidence.*original commit.*coordinator.*guarded root publication/is)
+  })
+
   it("carries applicable quality and verified decision context into the exact task before generation", () => {
     const decomposition = (section(plan, "## Process")
       .split("7. **Decompose.**")[1]

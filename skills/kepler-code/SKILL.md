@@ -1,21 +1,21 @@
 ---
 name: kepler-code
-description: "Implement a single planned task by following its steps exactly, verify, run a code-quality self-review, and commit. Takes one exact active Task N, either by plan reference or as an identified inline task block."
+description: "Implement one exact active Task N by plan reference or inline block: execute legacy serial Steps faithfully or use bounded judgment within v2 Goal and Acceptance, preserving TDD, verification, code-quality review, and commit."
 ---
 
 # Implementing one task
 
-Implement exactly one active plan task, follow its steps, verify the result, review the
-implementation for code quality, and commit it with synchronized task-local evidence.
+Implement exactly one active plan task. In historical serial mode, follow its Steps; in v2 dependency mode, exercise bounded judgment within Goal and Acceptance. Verify the result, review implementation quality, and commit with synchronized task-local evidence.
 
 The **seven-stage core pipeline** is Kepler's fixed spec-driven sequence: init → propose → plan → code →
 code-feedback → review → finish-work. Each step is a skill a person or an agent can run. This
 skill is **step 3**, the code step. Wayfinder and `kepler-critique` are optional and remain
 outside the seven-step core count.
 
-**Scope: one task, steps as written.** The task's Steps were already designed and ordered by
-the plan step. Execute them faithfully. Do not redesign, reorder, add work, or inspect sibling
-task evidence.
+**Scope: one task.** In historical serial mode, execute the planned Steps exactly. In dependency-mode
+v2, apply bounded judgment within the task's Goal, Acceptance, approved intent, cited design, and
+standards. Do not redesign, reorder, add work outside approved intent, or inspect sibling task
+evidence; preserve the required TDD phase order.
 
 ## Inputs
 
@@ -23,10 +23,11 @@ Every invocation identifies exactly one existing active `Task N` from the change
 Exactly one of these forms supplies it:
 
 - **By reference:** the change's `plan.md` plus the exact numeric task id, such as `Task 3`.
-- **Inline:** one task block that includes its exact numeric `Task N` id as well as Files,
-  Acceptance, Steps, Verify, and Commit. If an inline task omits the numeric task id, includes
-  more than one id, or does not match one existing active plan task, stop before implementation
-  and ask for the exact id. The inline form does not permit title inference.
+- **Inline:** one task block that includes its exact numeric `Task N` id. In historical serial
+  mode it also includes Files, Acceptance, Steps, Verify, and Commit. In v2 it includes Goal,
+  Acceptance, Depends on, Steps, Verify, and Commit and may omit Files. If an inline task omits
+  the numeric task id, includes more than one id, or does not match one existing active plan task,
+  stop before implementation and ask for the exact id. The inline form does not permit title inference.
 
 Only a heading that ends with the complete canonical
 `### Task N: <title> (abandoned — <reason>)` form and supplies a nonempty reason is abandoned.

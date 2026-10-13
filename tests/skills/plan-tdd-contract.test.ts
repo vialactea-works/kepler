@@ -68,6 +68,19 @@ describe("kepler-plan TDD handoff", () => {
   })
 
 
+  it("allows v2 task contracts to omit Files while retaining legacy Files and bounded judgment", () => {
+    const principles = section(skill, "## Principles")
+    const v2 = principles.split("### Version 2 dependency-mode tasks")[1]?.split("### Historical serial tasks")[0] ?? ""
+    const legacy = principles.split("### Historical serial tasks")[1] ?? ""
+    const selfReview = section(skill, "## Self-review")
+
+    expect(v2).toMatch(/Goal.*Acceptance.*Depends on.*Steps.*Verify.*Commit/is)
+    expect(v2).toMatch(/Files.*optional guidance/is)
+    expect(legacy).toMatch(/listed Files.*boundary/is)
+    expect(selfReview).toMatch(/historical serial.*no further design/is)
+    expect(selfReview).toMatch(/v2.*Goal.*Acceptance.*bounded judgment/is)
+  })
+
   it("ships an executable red-green-refactor example in the installed plan template", () => {
     const task = template.split("### Task 1:")[1]?.split("### Task 2:")[0] ?? ""
     const steps = task.split("- Steps:")[1]?.split("- Verify:")[0] ?? ""

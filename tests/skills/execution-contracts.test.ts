@@ -99,6 +99,17 @@ describe("kepler-code execution contract", () => {
     expect(output).toMatch(/v2.*task-local.*terminal evidence.*coordinator.*root publication/is)
   })
 
+  it("scopes inline task and discovery instructions to the execution mode", () => {
+    const inputs = section(skill, "## Inputs")
+    const scope = skill.split("# Implementing one task")[1]?.split("## Inputs")[0] ?? ""
+
+    expect(skill).toMatch(/^description:.*one.*Task N.*reference.*inline.*legacy.*Steps.*exactly.*v2.*Goal.*Acceptance.*bounded judgment.*TDD.*verify.*quality.*commit/mis)
+    expect(scope).toMatch(/historical serial.*Steps.*exactly/is)
+    expect(scope).toMatch(/v2.*bounded judgment.*Goal.*Acceptance/is)
+    expect(inputs).toMatch(/v2.*Goal.*Acceptance.*Depends on.*Steps.*Verify.*Commit.*omit Files/is)
+    expect(inputs).toMatch(/historical serial.*Files/is)
+  })
+
   it("requires one exact active task id for referenced and inline inputs", () => {
     const inputs = section(skill, "## Inputs")
 

@@ -26,8 +26,10 @@ initialization:
   Consumption contract:
     - kepler-code (step 3) consumes ONE assigned task's block and its cited constraints; it must not inspect sibling details. In v2, independent ready tasks may use isolated lanes, while each worker remains scoped to its own task evidence. Keep each task self-contained.
     - kepler-plan initializes the root task index in progress.md and each task's
-      tasks/task-N/progress.md. kepler-code updates only that task's row and log;
-      kepler-code-feedback (step 4) owns tasks/task-N/feedback.md.
+      tasks/task-N/progress.md. In historical serial mode, kepler-code updates only its task's
+      root row and log. In v2, the worker writes task-local evidence and its original commit only;
+      the coordinator owns actual guarded root publication. kepler-code-feedback (step 4) owns
+      tasks/task-N/feedback.md.
     - Obtain `taskDefinitionDigest`, `taskBreakdownDigest`, recorded input context and current
       input probes from `kepler workbench context`; definition/breakdown digests use lowercase 64-hex SHA-256.
       Git commits and blobs, including `initialization.base` and input blob IDs,

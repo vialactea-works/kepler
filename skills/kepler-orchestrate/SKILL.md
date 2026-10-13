@@ -17,7 +17,7 @@ seven-step core count.
 
 The driver coordinates three distinct roles:
 
-- `kepler-code` owns one task's implementation status and task-local progress.
+- In historical serial mode, `kepler-code` owns one task's implementation/root status and task-local progress. In v2, its worker owns only task-local evidence and the original commit; the coordinator owns guarded root publication.
 - `kepler-code-feedback` judges one task's stable diff and owns its feedback artifact.
 - `kepler-review` judges the complete branch and owns the root review artifact.
 

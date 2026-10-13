@@ -33,7 +33,8 @@ Subagent:
     - Task input/context handoff: [TASK_INPUT_HANDOFF_OR_LEGACY_CONFIRMATION]
     - Formal intent authority: [approved-reference commit and requester-held reference, or tactical authority reference]
     - Quality/decision constraints: [applicable constraints with source and verified current decision, or why not applicable]
-    - Execution selection: [legacy numeric order, or explicit order, selected slot, predecessor task ID, and predecessor fresh approval commit]
+    - Historical serial execution selection only: [legacy numeric order, or explicit version-1 order, selected slot, predecessor task ID, and predecessor fresh approval commit]
+    - Dependency-mode v2 admission only: [verified ready/held projection, original Base, admitted worker identity, isolated lane/worktree, repository and plan/task/input bindings, prerequisite approval commits]
 
     Read only Task [N] from plan.md, its cited constraints, the root row named above, and this
     task's own evidence. Do not read or touch a sibling task. Select the execution contract from
@@ -43,8 +44,11 @@ Subagent:
     intent/design/standards; make necessary goal-serving unlisted edits, not unrelated work. Keep
     related TDD cycles in Red → Green → Refactor order. Do not impose a design absent from binding
     context or expand approved intent. Confirm the supplied plan commit is current, the task
-    identity/digest and current input standing match, formal intent is authorized, and Task [N] is
-    the current selected slot. For a legacy current confirmation, inspect only its exact current
+    identity/digest and current input standing match, and formal intent is authorized. In historical
+    serial mode, Task [N] must be the current selected slot with its predecessor approval. In v2,
+    validate the verified ready projection, coordinator admission, original Base, admitted worker,
+    isolated lane/worktree, repository/plan/task/input bindings, and prerequisite approvals instead;
+    readiness alone is not admission. For a legacy current confirmation, inspect only its exact current
     input scope and do not treat it as historic evidence or authorization. Execute kepler-code's
     **Dispatch identity readback** with these admitted values and independently observed current
     worker identity before checkpoint/status/code mutation and on resume. The readback proves the
@@ -102,8 +106,11 @@ Subagent:
     returns the same Task [N] to `kepler-code`; relevant verification is required before a fresh
     `kepler-code-feedback` pass.
 
-    The task log is the detailed report. Return only concise status and commit information:
-    - Status: done | blocked
+    The task log is the detailed report. Canonical artifact terminal outcomes remain `done` or
+    `blocked`. Return only concise status and commit information:
+    - Historical serial status: done | blocked
+    - V2 worker response: done | blocked | interrupted | unavailable; `interrupted` and
+      `unavailable` are nonterminal worker responses/observations, not root/result/feedback/review/finish statuses.
     - Commit created: full SHA and subject, or none
     - Test summary: one line
     - Concerns: one line, or none

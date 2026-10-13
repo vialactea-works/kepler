@@ -259,14 +259,15 @@ verification and another feedback pass. This handoff belongs to the driver, not 
    task constraints from plan-wide notes.
    Prefer more small tasks over few large ones. Cut the seams along the design's boundaries so
    each task lands one cohesive unit — a task you cannot describe without "and" is usually two.
-8. **Specify each task.** For every task capture: files (created / modified / deleted),
-   acceptance criteria (testable; cite the requirement scenario when one exists — and cover
+8. **Specify each task.** For every historical serial task capture complete Files (created /
+   modified / deleted), acceptance criteria (testable; cite the requirement scenario when one exists — and cover
    the error/edge behavior, not just the happy path), Steps ordered Red → Green → Refactor
    (or a technically justified alternative Red) followed by a Verify command with its expected
    result, and a commit message. In Red, explicitly run the check and observe the intended failure before
    production edits; in Green, rerun that check; in Refactor, rerun relevant tests after cleanup.
    Include the correction rule from **TDD task contract** in each task block, since the coder reads
-   no sibling block or plan-wide instructions. Where a step includes a code snippet, make it
+   no sibling block or plan-wide instructions. For v2, capture Goal, Acceptance, Depends on, Steps,
+   Verify, and Commit; Files may be omitted or supplied as optional guidance. Where a step includes a code snippet, make it
    model the clean shape from `references/code-quality.md`. In historical serial plans the coder
    copies a binding snippet verbatim; in v2 it is a design/standards example under bounded judgment.
 9. **Confirm or auto-reflect.** If working with a person, present the task breakdown and
@@ -493,8 +494,9 @@ Before finishing, confirm:
 - Each task includes the conditional correction cycle and its own task-local phase evidence; no
   task Step invokes `kepler-code-feedback` or edits sibling evidence. The driver obtains fresh
   approval before advancing.
-- Each task's Steps are explicit enough to follow with no further design.
-- In historical serial plans, each Files list is complete (created / modified / deleted); in v2, Files is optional guidance rather than an allowlist.
+- In historical serial plans, each task's Steps are explicit enough to follow with no further design,
+  and each Files list is complete (created / modified / deleted). In v2, Steps permit bounded
+  judgment within Goal, Acceptance, approved intent, design, and standards; Files is optional guidance rather than an allowlist.
 - Each acceptance criterion ties to a requirement scenario where one exists.
 - Dependencies are correct and acyclic.
 - The task seams follow the design's boundaries; no task bundles unrelated changes, and each
@@ -513,8 +515,8 @@ Before finishing, confirm:
 or single-file edit — do not finalize `plan.md` while a task carries an unresolved structural
 smell (bundles unrelated changes, cannot be tested in isolation, or embeds a snippet with a
 shortcut the coder will copy). Re-slice the tasks, or record a deliberate exception in the
-plan's **Quality notes** (Overview). The coder adds no design of its own, so a smell left in
-the plan ships to the code.
+plan's **Quality notes** (Overview). Historical serial coders add no design of their own; v2
+coders use bounded judgment only within Goal, Acceptance, approved intent, design, and standards.
 
 ## Output
 
