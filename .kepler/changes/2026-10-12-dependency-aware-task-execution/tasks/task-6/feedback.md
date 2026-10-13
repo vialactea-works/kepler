@@ -67,3 +67,17 @@ Verdict: changes-requested
 ### Suggestions
 
 - None.
+
+## Pass 5 — 2026-10-13
+
+Base: 5a6472d329b54459cc9f63aa1b1cb70f7713969b
+Head: cd6f2032117660fca6277e6cf33cf856a9148e89
+Verdict: changes-requested
+
+### Blocking
+
+- [`packages/cli/src/workbench/task-checkpoint.ts:205-240`] `legacySerialApprovalBase` walks prior feedback commits and continues past a newer pass unless that commit's latest verdict is approved; it can therefore select an older approved pass after a physically later `changes-requested` or malformed feedback commit. `resolveTaskCheckpoint` then treats that older commit as the serial pre-production baseline, allowing `workbench diff --task` to rely on approval that is no longer physically latest. Use only the physically latest durable feedback state at the reservation boundary and verify it against the latest predecessor implementation; if it is not fresh and approved, fail closed or use the conservative earliest verified task-log baseline. Add a real-Git/source-CLI regression where an older approved pass is followed by a newer `changes-requested` pass before the reservation, preserving the approved-predecessor positive and task-owned-production negative cases. (violates Task 6 acceptance 6; `requirements/workbench.md` Invalid graph or evidence; `requirements/review.md` Full task clearance); id: pass-5-blocking-1; kind: code-defect
+
+### Suggestions
+
+- None.
