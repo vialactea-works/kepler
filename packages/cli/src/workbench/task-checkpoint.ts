@@ -8,6 +8,7 @@ import { validateArtifactBody } from "./artifact-body.js";
 import type { ProcessResult } from "./runtime.js";
 import { parseReviewPasses } from "./review-passes.js";
 import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
+import { validateScopeExpansions } from "./scope-expansions.js";
 import { taskCheckpointHistoryAt, taskLedgerHistoryAt } from "./task-ledger-history.js";
 import { inspectTaskAdmissionHistory, type TaskAdmissionHistory } from "./task-admission-history.js";
 import { inspectTaskPublicationHistory } from "./task-publication-history.js";
@@ -152,6 +153,79 @@ const isAncestor = async (
   return undefined;
 };
 
+const legacyScopePreparationBase = async (
+  git: TaskCheckpointGit,
+  root: string,
+  sourcePath: string,
+  task: number,
+  change: string,
+  commits: readonly string[],
+): Promise<string | undefined | { readonly reason: string }> => {
+  const preceding = [] as RecognizedArtifact[];
+  const chronological = commits.toReversed();
+  for (const [index, commit] of chronological.entries()) {
+    const blob = await git.blobAt(root, commit, sourcePath);
+    if (blob.status !== 0) continue;
+    const artifact = recognized(
+      await createArtifactReader({ readFile: () => blob.stdout })(sourcePath),
+    );
+    if (artifact === undefined) continue;
+    if (!Object.hasOwn(artifact.metadata, "scope_expansions")) {
+      preceding.push(artifact);
+      continue;
+    }
+    if (
+      artifact.metadata.artifact !== "task-progress" ||
+      artifact.metadata.change !== change ||
+      artifact.metadata.task !== task ||
+      artifactContracts["task-progress"].validate(artifact).length > 0 ||
+      validateArtifactBody(artifact, "task-progress", "historical").diagnostics.length > 0
+    )
+      return { reason: "scope preparation authority is malformed" };
+    const entries = validateScopeExpansions(artifact.metadata.scope_expansions);
+    if (entries.kind !== "valid")
+      return { reason: "scope preparation authority is malformed" };
+    if (entries.entries.length === 0) {
+      preceding.push(artifact);
+      continue;
+    }
+    if (preceding.length === 0)
+      return { reason: "scope preparation lacks preceding task history" };
+    for (const earlier of preceding) {
+      if (
+        earlier.metadata.artifact !== "task-progress" ||
+        earlier.metadata.change !== change ||
+        earlier.metadata.task !== task ||
+        artifactContracts["task-progress"].validate(earlier).length > 0
+      )
+        return { reason: "scope preparation authority is malformed" };
+      if (
+        validateArtifactBody(earlier, "task-progress", "historical").workflow.records.some(
+          (record) => record.kind === "attempt",
+        )
+      )
+        return undefined;
+    }
+    if (git.changedPaths === undefined)
+      return { reason: "scope preparation changed paths are unavailable" };
+    const changed = await git.changedPaths(root, commit);
+    const paths = changed.stdout.split("\0").filter(Boolean);
+    if (changed.status !== 0 || paths.length !== 1 || paths[0] !== sourcePath)
+      return { reason: "scope preparation is not task-progress-only" };
+    const parent = await git.firstParent(root, commit);
+    const base = text(parent);
+    if (parent.status !== 0 || !fullCommit(base))
+      return { reason: "scope preparation has no resolvable first parent" };
+    const resolved = await git.resolveCommit(root, base);
+    if (resolved.status !== 0 || text(resolved) !== base)
+      return { reason: "scope preparation parent is unresolved" };
+    if ((await isAncestor(git, root, base, commit)) !== true)
+      return { reason: "scope preparation ancestry is invalid" };
+    return base;
+  }
+  return undefined;
+};
+
 export const resolveTaskCheckpoint = async (
   git: TaskCheckpointGit,
   root: string,
@@ -201,11 +275,16 @@ export const resolveTaskCheckpoint = async (
     .split(/\r?\n/)
     .map((commit) => commit.trim())
     .filter(Boolean);
+  const legacyBase = admission === undefined
+    ? await legacyScopePreparationBase(git, root, sourcePath, task, change, commits)
+    : undefined;
+  if (typeof legacyBase === "object") return { kind: "unverified", reason: legacyBase.reason };
+  const originalBase = admission?.kind === "verified" ? admission.original.base : legacyBase;
   const scopes = await inspectScopeExpansionHistory({
     ...git,
     changedPaths: git.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
     pathChanges: git.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
-  }, root, sourcePath, task, change, currentHead, undefined, admission?.kind === "verified" ? admission.original.base : undefined);
+  }, root, sourcePath, task, change, currentHead, undefined, originalBase);
   if (scopes.kind === "unverified") return scopes;
   const attempts = await taskAttemptCommits(
     git,
@@ -277,7 +356,7 @@ export const resolveTaskCheckpoint = async (
       reason: "current task progress does not preserve its attempt history",
     };
   const parentResult = await git.firstParent(root, attempt);
-  const base = admission?.kind === "verified" ? admission.original.base : text(parentResult);
+  const base = originalBase ?? text(parentResult);
   if (parentResult.status !== 0 || !fullCommit(base))
     return {
       kind: "unverified",

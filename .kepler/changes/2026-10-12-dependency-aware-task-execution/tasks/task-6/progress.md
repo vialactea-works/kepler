@@ -2,7 +2,7 @@
 artifact: task-progress
 change: 2026-10-12-dependency-aware-task-execution
 task: 6
-status: blocked
+status: done
 updated: 2026-10-13
 decision: accepted
 scope_expansions:
@@ -142,3 +142,50 @@ scope_expansions:
 - Blocker: context's independent scope-history call needs a history-derived legacy Base, but that caller is outside both approved reservation path sets. Supervisor directed no unreserved edit, third reservation, or chronology relaxation. The owner must resolve scope/intent before this task can be completed.
 - Implementation candidate paths intentionally remain uncommitted and unstaged: `packages/cli/src/workbench/task-checkpoint.ts` and `tests/workbench/diff.test.ts`.
 - Verification: source artifact lint after final metadata synchronization passed. The first `git diff --check` found a trailing blank line in this new evidence; after removing it, `git diff --check` passed.
+
+## Attempt 3 — 2026-10-13
+
+- Modified: `packages/cli/src/workbench/context.ts`, `packages/cli/src/workbench/task-checkpoint.ts`, `tests/workbench/context.test.ts`, `tests/workbench/diff.test.ts`, this task progress artifact, and the matching Task 6 root ledger state.
+- Created: none.
+- Deleted: none.
+- Owner scope decision: The requester stated verbatim, “Apply a direct fix and just document it in the change; we don't have time for a proposal/plan loop”. This is recorded as an owner-held assertion, not authenticated approval. It authorizes only the independent `packages/cli/src/workbench/context.ts` scope-history caller and the smallest focused `tests/workbench/context.test.ts` regression test because context independently omitted the history-verified Base and rejected Task 6's already-reserved paths. It does not authorize another reservation, changing the two/four limits, relaxing fail-closed chronology, changing approved requirements or the plan, or shipping. No broader policy change was needed. Existing partial checkpoint recovery work in `task-checkpoint.ts` and `diff.test.ts` was retained and exercised; the original Base and exactly two existing reservations remain unchanged.
+
+### Red
+
+- `bun --bun vitest run tests/workbench/context.test.ts -t 'validates pre-attempt reservations against the recovered preparation Base'` → failed as intended before the caller fix: expected `split`, received `invalid` for the committed pre-attempt reservation fixture.
+- The independent source CLI reproduced the same cause: `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → invalid, `Task 6 scope history: reserved path changed before its reservation`.
+
+### Green
+
+- Updated the context caller to route tasks with reservations through `resolveTaskCheckpoint`, which applies the verified legacy preparation Base or verified dependency admission Base before scope chronology validation. Tasks without reservations retain the previous focused scope-history check.
+- `bun --bun vitest run tests/workbench/context.test.ts -t 'validates pre-attempt reservations against the recovered preparation Base'` → passed.
+- `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed; format `split`, execution order `1, 2, 3, 4, 5, 6`, history `verified`, input context current, no Task 6 scope-history diagnostic.
+
+### Refactor
+
+- Initial full-suite run found a regression from routing tasks without reservations through the full checkpoint resolver: an existing malformed historical identity case received an earlier scope-history diagnostic; two other cases exceeded the suite's unmodified default 5-second test timeout. Narrowed checkpoint recovery to nonempty reservation sets, preserving the old no-reservation path. No timeout, concurrency, or assertion setting was changed.
+- `bun --bun vitest run tests/workbench/precondition.test.ts -t 'holds a legacy confirmation when an older task-progress identity is malformed despite a valid latest record'` → passed after narrowing the caller; existing diagnostics are preserved.
+- `bun --bun vitest run tests/workbench/context.test.ts tests/workbench/diff.test.ts tests/workbench/task-ledger-history.test.ts tests/workbench/scope-expansion-history.test.ts` → passed: 94 tests across 4 files before the no-reservation narrowing; the final full suite below includes the corrected caller and all ordinary legacy, dependency-mode, earlier-edit, and reverted-edit controls.
+
+### Verify
+
+- `bun --bun vitest run tests/docs tests/templates` → passed: 79 tests across 6 files.
+- `bun --bun vitest run` → final run passed: 1174 tests across 62 files, default settings. An earlier run during correction had 1171 passed and 3 failures (two default-timeout cases and the corrected no-reservation diagnostic regression); this is retained here as failed intermediate evidence, not represented as a passing result.
+- `bun run build` → passed: core and CLI builds.
+- `bun packages/cli/src/cli/main.ts workbench diff --record --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed; recovered Base remains `5a6472d329b54459cc9f63aa1b1cb70f7713969b`.
+- `bun packages/cli/src/cli/main.ts workbench lint --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed after root/local status synchronization.
+- Final `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → valid split; execution history verified; Task 6 `done`, input context current, summary `6/6 tasks done`. Feedback remains changes-requested and whole-change review remains not reviewed, both outside this implementation outcome.
+- `git diff --check` → passed. Protected approved plan/requirements and historical STPA analysis are byte-unchanged; the ignored `.base` SHA remains `ac3d4c7d9d8927492a311e5dc1c3e0bf0b4b6ab7d85f6cc2206dcf8a2f56f6fb`.
+
+### Corrections and acceptance reconciliation
+
+- The Attempt 2 append-only corrections identify the actual reader-cycle Green log (`task-6-reader-docs-green.log`, 78 checks) and the actual native detail log (`task-6-native-records-details-green.log`, 131 tests across 8 files); Attempt 1 remains verbatim and its incorrect `task-6-docs-source-green.log` and 13/18-files claims are not repeated as passing evidence.
+- This new done attempt and matching root `done` transition resolve the Task 6 local/root-state mismatch. The existing Pass 1 feedback artifact remains unchanged and changes-requested; this implementation outcome is not fresh feedback approval, whole-branch approval, finish-work clearance, or shipping.
+
+### Quality context
+
+- The change stays within the approved Task 6 intent and task's explicit scope decision: context now reuses checkpoint history authority only when reservations exist; no-reservation context behavior is preserved. Tests exercise the context regression and the complete suite's reservation chronology/lifetime, original-Base, earlier-edit, earlier-reverted, ordinary legacy, and version-2 paths. No code comments, new dependencies, changed limits, weakened assertions, or global/installed-resource edits.
+
+### Result
+
+- Outcome: done

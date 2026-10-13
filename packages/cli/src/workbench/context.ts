@@ -1784,11 +1784,21 @@ const formatChange = async (
       if (scopeContract._tag === "valid" && successful(scopedRootResult)) {
         const scopedRoot = text(scopedRootResult);
         const scopedGit = contextTaskCheckpointGit(runtime);
-        const scopeHistory = await inspectScopeExpansionHistory({
-          ...scopedGit,
-          changedPaths: scopedGit.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
-          pathChanges: scopedGit.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
-        }, scopedRoot, relative(scopedRoot, taskPath), Number(task.task), name, text(await runtime.git.currentHead(scopedRoot)), scopeContract.body.workflow.scopeExpansions ?? []);
+        const entries = scopeContract.body.workflow.scopeExpansions ?? [];
+        const scopeHistory = entries.length === 0
+          ? await inspectScopeExpansionHistory({
+              ...scopedGit,
+              changedPaths: scopedGit.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
+              pathChanges: scopedGit.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
+            }, scopedRoot, relative(scopedRoot, taskPath), Number(task.task), name, text(await runtime.git.currentHead(scopedRoot)), entries)
+          : await resolveTaskCheckpoint(
+              scopedGit,
+              scopedRoot,
+              relative(scopedRoot, taskPath),
+              Number(task.task),
+              name,
+              text(await runtime.git.currentHead(scopedRoot)),
+            );
         if (scopeHistory.kind === "unverified")
           return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${scopeHistory.reason}`] }, sources };
       } else if (Object.hasOwn(taskRead.artifact.metadata, "scope_expansions"))

@@ -840,6 +840,31 @@ decision: accepted
     );
   });
 
+  it("validates pre-attempt reservations against the recovered preparation Base", async () => {
+    const repository = makeRepo();
+    const directory = seed(repository, "reserved-preparation", {
+      "plan.md": `---\nartifact: plan\nchange: reserved-preparation\nstatus: approved\ncreated: 2026-09-12\nauthor: caio\ndecision: accepted\nroute_unit: null\n---\n# Plan: reserved-preparation\n\n## Overview\n\n## Tasks\n\n### Task 1: Build it\n\n## Done when\n`,
+      "progress.md": `---\nartifact: progress\nchange: reserved-preparation\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n  - id: 1\n    title: Build it\n    status: pending\n    progress: tasks/task-1/progress.md\n---\n# Progress: reserved-preparation\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Build it | pending | [details](tasks/task-1/progress.md) |\n`,
+      "tasks/task-1/progress.md": `---\nartifact: task-progress\nchange: reserved-preparation\ntask: 1\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 1 — Build it\n`,
+      "src/reserved.ts": "export const reserved = 'before';\\n",
+    });
+    commitAll(repository, "initialize reservation task");
+    write(directory, "src/reserved.ts", "export const reserved = 'prepared';\\n");
+    commitPaths(repository, "prepare reserved prerequisite", ".kepler/changes/reserved-preparation/src/reserved.ts");
+    write(
+      directory,
+      "tasks/task-1/progress.md",
+      `---\nartifact: task-progress\nchange: reserved-preparation\ntask: 1\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\nscope_expansions:\n  - id: prepare-prerequisite\n    attempt: 1\n    prerequisite: Prepare the required fixture\n    necessity: The prescribed verification requires this prepared file\n    evidence: The existing fixture has the wrong value\n    paths:\n      - .kepler/changes/reserved-preparation/src/reserved.ts\n    verify: bun --bun vitest run tests/workbench/context.test.ts\n---\n# Task Progress: Task 1 — Build it\n`,
+    );
+    commitPaths(repository, "reserve preparation prerequisite", ".kepler/changes/reserved-preparation/tasks/task-1/progress.md");
+
+    const result = await runContext({ changeDir: directory });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.changes[0]?.format).toBe("split");
+    expect(result.stdout).not.toContain("reserved path changed before its reservation");
+  });
+
   it("preserves pre-plan and legacy classifications", async () => {
     const repository = makeRepo();
     const prePlan = seed(repository, "pre-plan", { "proposal.md": proposal });

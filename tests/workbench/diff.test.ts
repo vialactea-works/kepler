@@ -233,6 +233,100 @@ describe("diff checkpoint recording", () => {
     expect(Fs.existsSync(basePath(changeDir, 2))).toBe(false);
   });
 
+  it("recovers a legacy checkpoint from a scope-only preparation", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    write(repo, "src/reserved.ts", "export const reserved = 'predecessor'\n");
+    const expectedBase = commitAll(repo, "complete predecessor source");
+    const progress = Path.join(changeDir, "tasks/task-2/progress.md");
+    Fs.writeFileSync(progress, Fs.readFileSync(progress, "utf8").replace(
+      "decision: accepted\n",
+      "decision: accepted\nscope_expansions:\n  - id: checkpoint-recovery\n    attempt: 1\n    prerequisite: Recover the task checkpoint\n    necessity: Legacy scope history needs its preparation baseline\n    evidence: The initial scaffold predates the predecessor source change\n    paths:\n      - src/reserved.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+    ));
+    commitAll(repo, "reserve checkpoint recovery before task source");
+    write(repo, "src/reserved.ts", "export const reserved = 'task'\n");
+    Fs.writeFileSync(progress, `${Fs.readFileSync(progress, "utf8").replace("status: pending", "status: done")}\n## Attempt 1 — 2026-10-13\n\n- Outcome: done\n`);
+    commitAll(repo, "implement scoped task");
+    const output = Path.join(repo, "task.diff");
+
+    const result = await executeDiff({ mode: "task", task: "2", changeDir, out: output });
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`Base: ${expectedBase}`);
+    expect(Fs.readFileSync(output, "utf8")).toContain("reserved = 'task'");
+  });
+
+  it("recovers the first task Base with a later legitimate reservation", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    const progress = Path.join(changeDir, "tasks/task-2/progress.md");
+    const initialBase = git(repo, "rev-parse", "HEAD");
+    Fs.writeFileSync(progress, Fs.readFileSync(progress, "utf8").replace(
+      "decision: accepted\n",
+      "decision: accepted\nscope_expansions:\n  - id: first-preparation\n    attempt: 1\n    prerequisite: Recover the first prerequisite\n    necessity: Establish the original recovery base\n    evidence: The first reservation predates its source change\n    paths:\n      - src/first.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+    ));
+    commitAll(repo, "reserve first prerequisite");
+    write(repo, "src/first.ts", "export const first = true\n");
+    commitAll(repo, "complete first prerequisite source");
+    Fs.writeFileSync(progress, `${Fs.readFileSync(progress, "utf8").replace("status: pending", "status: done")}\n## Attempt 1 — 2026-10-13\n\n- Outcome: done\n`);
+    write(repo, "src/task.ts", "export const task = true\n");
+    commitAll(repo, "complete first task attempt");
+    Fs.writeFileSync(progress, Fs.readFileSync(progress, "utf8").replace(
+      "    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+      "    verify: bun --bun vitest run tests/workbench/diff.test.ts\n  - id: second-preparation\n    attempt: 2\n    prerequisite: Recover the second prerequisite\n    necessity: A second reserved source change follows\n    evidence: This reservation precedes the correction attempt\n    paths:\n      - src/second.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+    ));
+    commitAll(repo, "reserve second prerequisite");
+    write(repo, "src/second.ts", "export const second = true\n");
+    Fs.writeFileSync(progress, `${Fs.readFileSync(progress, "utf8")}\n## Attempt 2 — 2026-10-14\n\n- Outcome: done\n`);
+    commitAll(repo, "complete corrected task attempt");
+
+    const result = await executeDiff({ mode: "task", task: "2", changeDir });
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`Base: ${initialBase}`);
+  });
+
+  it("rejects a legacy recovery preparation that changes reserved production", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    const progress = Path.join(changeDir, "tasks/task-2/progress.md");
+    Fs.writeFileSync(progress, Fs.readFileSync(progress, "utf8").replace(
+      "decision: accepted\n",
+      "decision: accepted\nscope_expansions:\n  - id: checkpoint-recovery\n    attempt: 1\n    prerequisite: Recover the task checkpoint\n    necessity: Legacy scope history needs its preparation baseline\n    evidence: The preparation must precede production\n    paths:\n      - src/reserved.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+    ));
+    write(repo, "src/reserved.ts", "export const reserved = 'invalid preparation'\n");
+    commitAll(repo, "invalid scope preparation with source");
+    Fs.writeFileSync(progress, `${Fs.readFileSync(progress, "utf8").replace("status: pending", "status: done")}\n## Attempt 1 — 2026-10-13\n\n- Outcome: done\n`);
+    commitAll(repo, "record invalid scoped task");
+
+    const result = await executeDiff({ mode: "task", task: "2", changeDir });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("scope preparation is not task-progress-only");
+  });
+
+  it("keeps the first-attempt Base with a later legitimate reservation", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    const initialBase = git(repo, "rev-parse", "HEAD");
+    commitFirstAttempt(repo, changeDir, 2);
+    const progress = Path.join(changeDir, "tasks/task-2/progress.md");
+    Fs.writeFileSync(progress, Fs.readFileSync(progress, "utf8").replace(
+      "decision: accepted\n",
+      "decision: accepted\nscope_expansions:\n  - id: correction-reservation\n    attempt: 2\n    prerequisite: Recover the task checkpoint\n    necessity: A later correction needs a reserved test fixture\n    evidence: This reservation precedes the correction attempt\n    paths:\n      - tests/correction.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+    ));
+    commitAll(repo, "reserve correction scope after first attempt");
+
+    const result = await executeDiff({ mode: "task", task: "2", changeDir });
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`Base: ${initialBase}`);
+  });
+
   it("rejects a conflicting checkpoint before writing a task package", async () => {
     const repo = inDirectory(makeRepo());
     const changeDir = makeChangeDir(repo, "add-auth");
