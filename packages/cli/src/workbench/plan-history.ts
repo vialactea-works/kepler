@@ -1,7 +1,12 @@
 import * as Path from "node:path";
 import { createArtifactReader } from "./artifact-reader.js";
 import { validateArtifact } from "./artifact-contracts.js";
-import { executionTransitionProblems, progressLedgerMatches } from "./artifact-body.js";
+import {
+  dependencyGraphProblems,
+  dependencyTransitionProblems,
+  executionTransitionProblems,
+  progressLedgerMatches,
+} from "./artifact-body.js";
 import type { PlanContractProjection, PlanExecutionTransitionContract, PlanInputImpactContract, PlanTaskContract, ValidArtifactContract } from "./artifact-types.js";
 import type { ProcessResult } from "./runtime.js";
 import { parseReviewPasses } from "./review-passes.js";
@@ -36,6 +41,34 @@ const text = (result: ProcessResult): string => result.stdout.trim();
 const fullCommit = (value: string | undefined): value is string => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
 const relativePath = (root: string, path: string): string => Path.relative(root, path).split(Path.sep).join("/");
 const sameList = (left: readonly number[], right: readonly number[]): boolean => left.length === right.length && left.every((id, index) => id === right[index]);
+const sameSet = (left: readonly number[], right: readonly number[]): boolean => left.length === right.length && new Set(left).size === new Set(right).size && left.every((id) => right.includes(id));
+const activeTasks = (projection: PlanContractProjection): PlanTaskContract[] =>
+  projection.executionOrder.flatMap((id) => {
+    const task = projection.tasks.find((entry) => entry.id === id);
+    return task ? [task] : [];
+  });
+const sameTaskDependencies = (
+  left: PlanContractProjection,
+  right: PlanContractProjection,
+): boolean => {
+  const leftTasks = activeTasks(left);
+  const rightTasks = activeTasks(right);
+  return sameList(left.executionOrder, right.executionOrder) &&
+    leftTasks.every((task, index) =>
+      sameList(task.dependsOn, rightTasks[index]?.dependsOn ?? []),
+    );
+};
+const executionChanged = (
+  previous: PlanContractProjection,
+  current: PlanContractProjection,
+): boolean =>
+  !sameList(previous.executionOrder, current.executionOrder) ||
+  previous.execution?.version !== current.execution?.version ||
+  (previous.execution?.version === 2 &&
+    current.execution?.version === 2 &&
+    !sameTaskDependencies(previous, current));
+const taskEdges = (projection: PlanContractProjection) =>
+  activeTasks(projection).map((task) => ({ id: task.id, dependsOn: task.dependsOn }));
 const isMetadataRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const titleOf = (artifact: ValidArtifactContract, prefix: string): string | null => {
   const titles = artifact.body.headings.filter((heading) => heading.level === 1);
@@ -67,10 +100,21 @@ const validateExecutionAmendment = async (
   if (transition.previousPlanCommit !== priorPlanCommit)
     problems.push("execution transition does not reference the actual preceding plan revision");
   const previousOrder = priorProjection.executionOrder;
-  if (!sameList(transition.previousOrder, previousOrder))
-    problems.push("execution transition previous order disagrees with the preceding plan");
-  if (sameList(previousOrder, currentOrder))
-    problems.push("execution transition proof is present without an order amendment");
+  if (transition.version === 1) {
+    if (!sameList(transition.previousOrder, previousOrder))
+      problems.push("execution transition previous order disagrees with the preceding plan");
+    if (sameList(previousOrder, currentOrder))
+      problems.push("execution transition proof is present without an order amendment");
+    if (transitionProjection.execution?.version !== 1 || priorProjection.execution?.version === 2)
+      problems.push("serial execution transition does not describe version 1 execution metadata");
+  } else {
+    if (transitionProjection.execution?.version !== 2)
+      problems.push("dependency scheduling transition does not describe version 2 dependency execution metadata");
+    if (!executionChanged(priorProjection, transitionProjection))
+      problems.push("dependency scheduling transition proof is present without a graph amendment");
+    if (JSON.stringify(priorProjection.inputImpact) !== JSON.stringify(transitionProjection.inputImpact))
+      problems.push("dependency scheduling transition cannot also amend formal input impact");
+  }
   const priorIds = priorProjection.identityOrder;
   if (
     transitionProjection.identityOrder.length < priorIds.length ||
@@ -125,16 +169,44 @@ const validateExecutionAmendment = async (
       problems.push(`execution transition removes existing Task ${priorTask.id}`);
       continue;
     }
-    if (
-      currentTask.definitionDigest !== priorTask.definitionDigest &&
-      (!affected || status === "done")
-    )
-      problems.push(`execution transition changes frozen or unclassified Task ${priorTask.id} definition`);
-    if (
-      JSON.stringify(currentTask.inputContext) !== JSON.stringify(priorTask.inputContext) &&
-      (!classified || status === "done")
-    )
-      problems.push(`execution transition changes frozen or unclassified Task ${priorTask.id} input handoff`);
+    if (transition.version === 2) {
+      if (currentTask.schedulingDigest !== priorTask.schedulingDigest)
+        problems.push(`dependency scheduling transition changes Task ${priorTask.id} outside its prerequisites`);
+      if (
+        transition.fullyGatedTasks.includes(priorTask.id) &&
+        !sameList(currentTask.dependsOn, priorTask.dependsOn)
+      )
+        problems.push(`dependency scheduling transition changes fully gated Task ${priorTask.id} prerequisites`);
+    } else {
+      if (
+        currentTask.definitionDigest !== priorTask.definitionDigest &&
+        (!affected || status === "done")
+      )
+        problems.push(`execution transition changes frozen or unclassified Task ${priorTask.id} definition`);
+      if (
+        JSON.stringify(currentTask.inputContext) !== JSON.stringify(priorTask.inputContext) &&
+        (!classified || status === "done")
+      )
+        problems.push(`execution transition changes frozen or unclassified Task ${priorTask.id} input handoff`);
+    }
+  }
+  if (transition.version === 2) {
+    for (const priorTask of priorProjection.tasks) {
+      if (rootRecords.find((record) => record.number === priorTask.id)?.fields.Status !== "done") continue;
+      for (const relative of [
+        `tasks/task-${priorTask.id}/progress.md`,
+        `tasks/task-${priorTask.id}/feedback.md`,
+      ]) {
+        const path = `${relativePath(root, changeDir)}/${relative}`;
+        const before = await runtime.git.blobIdAt(root, boundary, path);
+        const after = await runtime.git.blobIdAt(root, transitionCommit, path);
+        if (
+          successful(before) !== successful(after) ||
+          (successful(before) && text(before) !== text(after))
+        )
+          problems.push(`dependency scheduling transition changes existing Task ${priorTask.id} evidence`);
+      }
+    }
   }
   const boundaryGit: TaskCheckpointGit = {
     ...runtime.git,
@@ -142,7 +214,7 @@ const validateExecutionAmendment = async (
       runtime.git.pathHistoryAt(cwd, boundary, sourcePath),
   };
   const gateFailures: string[] = [];
-  const isGatedAtBoundary = async (taskId: number): Promise<boolean> => {
+  const isGatedAtBoundary = async (taskId: number, requireUnchangedDefinition: boolean): Promise<boolean> => {
     const ungated = (reason: string): false => {
       gateFailures.push(`Task ${taskId} ${reason}`);
       return false;
@@ -159,7 +231,7 @@ const validateExecutionAmendment = async (
       !priorTask ||
       !currentTask ||
       !rootRecord ||
-      currentTask.definitionDigest !== priorTask.definitionDigest ||
+      (requireUnchangedDefinition && currentTask.definitionDigest !== priorTask.definitionDigest) ||
       rootRecord.title !== priorTask.title ||
       rootRecord.fields.Status !== "done" ||
       !isMetadataRecord(rootMetadata) ||
@@ -239,18 +311,30 @@ const validateExecutionAmendment = async (
       return ungated("feedback range did not cover the task implementation at the preceding boundary");
     return true;
   };
-  const gatedPrefix: number[] = [];
-  for (const taskId of previousOrder) {
-    if (!(await isGatedAtBoundary(taskId))) break;
-    gatedPrefix.push(taskId);
+  const gatedTasks: number[] = [];
+  if (transition.version === 1) {
+    for (const taskId of previousOrder) {
+      if (!(await isGatedAtBoundary(taskId, true))) break;
+      gatedTasks.push(taskId);
+    }
+    if (!sameList(transition.fullyGatedPrefix, gatedTasks))
+      problems.push(
+        `execution transition gated prefix disagrees with durable task and feedback evidence${gateFailures[0] ? ` (${gateFailures[0]})` : ""}`,
+      );
+    problems.push(...executionTransitionProblems(previousOrder, currentOrder, gatedTasks));
+  } else {
+    for (const taskId of previousOrder)
+      if (await isGatedAtBoundary(taskId, false)) gatedTasks.push(taskId);
+    if (!sameSet(transition.fullyGatedTasks, gatedTasks))
+      problems.push(
+        `execution transition fully-gated task set disagrees with durable task and feedback evidence${gateFailures[0] ? ` (${gateFailures[0]})` : ""}`,
+      );
+    problems.push(...dependencyTransitionProblems(
+      taskEdges(priorProjection),
+      taskEdges(transitionProjection),
+      gatedTasks,
+    ));
   }
-  if (!sameList(transition.fullyGatedPrefix, gatedPrefix))
-    problems.push(
-      `execution transition gated prefix disagrees with durable task and feedback evidence${gateFailures[0] ? ` (${gateFailures[0]})` : ""}`,
-    );
-  problems.push(
-    ...executionTransitionProblems(previousOrder, currentOrder, gatedPrefix),
-  );
   return problems;
 };
 
@@ -288,22 +372,26 @@ export const inspectExecutionTransition = async (
     if (!previous) {
       if (transition) problems.push("execution transition has no actual preceding committed plan revision");
     } else {
-      const changed = !sameList(previous.projection.executionOrder, current.projection.executionOrder);
+      const changed = executionChanged(previous.projection, current.projection);
       const governed = previous.projection.execution !== undefined || current.projection.execution !== undefined || transition !== undefined;
       if (changed && governed) {
-        if (!transition || JSON.stringify(previous.projection.executionTransition) === key)
-          problems.push("execution order changed without committed execution transition evidence");
+        if (!transition || JSON.stringify(previous.projection.executionTransition) === key) {
+          const label = previous.projection.execution?.version === 2 || current.projection.execution?.version === 2
+            ? "execution contract"
+            : "execution order";
+          problems.push(`${label} changed without committed execution transition evidence`);
+        }
         else
           problems.push(...await validateExecutionAmendment(runtime, root, changeDir, transition, current.commit, previous.commit, previous.projection, current.plan));
       } else if (transition && !seenProofs.has(key)) {
-        problems.push("execution transition proof is present without an order amendment");
+        problems.push("execution transition proof is present without an execution amendment");
       }
     }
     if (transition) seenProofs.add(key);
   }
   const committed = revisions.at(-1)?.projection;
-  if (!committed || !sameList(committed.executionOrder, projection.executionOrder))
-    problems.push("current execution order changed after its committed history");
+  if (!committed || executionChanged(committed, projection))
+    problems.push("current execution contract changed after its committed history");
   if (JSON.stringify(committed?.executionTransition) !== JSON.stringify(projection.executionTransition))
     problems.push("current execution transition evidence is not committed");
   return problems;

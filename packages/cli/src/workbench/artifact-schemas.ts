@@ -50,13 +50,26 @@ const routeUnit: ArtifactMetadataSchema = {
 };
 
 const executionContract: ArtifactMetadataSchema = {
-  type: "object",
-  required: ["version", "order"],
-  additionalProperties: false,
-  properties: {
-    version: { const: 1 },
-    order: { type: "array", items: positiveInteger, uniqueItems: true },
-  },
+  anyOf: [
+    {
+      type: "object",
+      required: ["version", "order"],
+      additionalProperties: false,
+      properties: {
+        version: { const: 1 },
+        order: { type: "array", items: positiveInteger, uniqueItems: true },
+      },
+    },
+    {
+      type: "object",
+      required: ["version", "mode"],
+      additionalProperties: false,
+      properties: {
+        version: { const: 2 },
+        mode: { const: "dependencies" },
+      },
+    },
+  ],
 };
 
 const inputImpactContract: ArtifactMetadataSchema = {
@@ -99,26 +112,50 @@ const inputImpactContract: ArtifactMetadataSchema = {
 };
 
 const executionTransitionContract: ArtifactMetadataSchema = {
-  type: "object",
-  required: [
-    "version",
-    "previousPlanCommit",
-    "previousOrder",
-    "fullyGatedPrefix",
-    "approval",
-    "reason",
-    "affected",
+  anyOf: [
+    {
+      type: "object",
+      required: [
+        "version",
+        "previousPlanCommit",
+        "previousOrder",
+        "fullyGatedPrefix",
+        "approval",
+        "reason",
+        "affected",
+      ],
+      additionalProperties: false,
+      properties: {
+        version: { const: 1 },
+        previousPlanCommit: sha,
+        previousOrder: { type: "array", items: positiveInteger, uniqueItems: true },
+        fullyGatedPrefix: { type: "array", items: positiveInteger, uniqueItems: true },
+        approval: nonEmptyString,
+        reason: nonEmptyString,
+        affected: nonEmptyString,
+      },
+    },
+    {
+      type: "object",
+      required: [
+        "version",
+        "previousPlanCommit",
+        "fullyGatedTasks",
+        "approval",
+        "reason",
+        "affected",
+      ],
+      additionalProperties: false,
+      properties: {
+        version: { const: 2 },
+        previousPlanCommit: sha,
+        fullyGatedTasks: { type: "array", items: positiveInteger, uniqueItems: true },
+        approval: nonEmptyString,
+        reason: nonEmptyString,
+        affected: nonEmptyString,
+      },
+    },
   ],
-  additionalProperties: false,
-  properties: {
-    version: { const: 1 },
-    previousPlanCommit: sha,
-    previousOrder: { type: "array", items: positiveInteger, uniqueItems: true },
-    fullyGatedPrefix: { type: "array", items: positiveInteger, uniqueItems: true },
-    approval: nonEmptyString,
-    reason: nonEmptyString,
-    affected: nonEmptyString,
-  },
 };
 
 const intentApprovalReference: ArtifactMetadataSchema = {

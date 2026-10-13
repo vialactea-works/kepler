@@ -141,6 +141,7 @@ const makeEvidence = (
     readonly taskOutcomeField?: string;
     readonly rootStatus?: string;
     readonly withoutTaskInputContext?: boolean;
+    readonly dependencyMode?: boolean;
     readonly inputs?: readonly { readonly path: string; readonly blob: string }[];
     readonly intentCommit?: string;
     readonly intentApprovals?: readonly {
@@ -160,7 +161,9 @@ const makeEvidence = (
   const taskTitle = options.taskTitle ?? "Implement";
   const metadataTitle = options.metadataTitle ?? taskTitle;
   const displayTitle = taskTitle.replaceAll("|", "\\|");
-  const taskDefinition = `### Task 1: ${taskTitle}\n\n- Depends on: none`;
+  const taskDefinition = options.dependencyMode
+    ? `### Task 1: ${taskTitle}\n\n- Goal: Deliver ${taskTitle.toLowerCase()}.\n- Depends on: none\n- Acceptance:\n  - The ${taskTitle.toLowerCase()} is verified.\n- Steps:\n  1. Verify the task behavior.\n- Verify: bun --bun vitest run\n- Commit: feat: ${taskTitle.toLowerCase()}`
+    : `### Task 1: ${taskTitle}\n\n- Depends on: none`;
   const inputContext = JSON.stringify({
     version: 1,
     repository,
@@ -175,7 +178,7 @@ const makeEvidence = (
   write(
     repository,
     evidencePath("demo", "plan.md"),
-    `---\nartifact: plan\nchange: demo\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: ${options.routeUnit ?? "null"}\n${intentApprovals}---\n# Plan: Demo\n\n## Overview\nA plan.\n\n## Tasks\n\n${taskDefinition}\n${inputNotes}\n## Done when\nIt works.\n`,
+    `---\nartifact: plan\nchange: demo\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: ${options.routeUnit ?? "null"}\n${options.dependencyMode ? "execution:\n  version: 2\n  mode: dependencies\n" : ""}${intentApprovals}---\n# Plan: Demo\n\n## Overview\nA plan.\n\n## Tasks\n\n${taskDefinition}\n${inputNotes}\n## Done when\nIt works.\n`,
   );
   write(
     repository,
@@ -937,6 +940,251 @@ const makeExecutionTransitionEvidence = (
   return { changeDir: evidence.changeDir, transitionCommit };
 };
 
+const makeDependencyModeScaffold = (
+  repository: string,
+  unlistedMaterial = false,
+): { readonly changeDir: string; readonly base: string } => {
+  git(repository, "update-ref", fixtureTargetBranch, "HEAD");
+  const changeDir = makeChangeDir(repository, "dependency-scaffold");
+  const base = git(repository, "rev-parse", "HEAD");
+  const definition = [
+    "### Task 1: Create file",
+    "",
+    "- Goal: Create the required file.",
+    "- Depends on: none",
+    "- Acceptance:",
+    "  - The required file is verified.",
+    "- Steps:",
+    "  1. Verify the file behavior.",
+    "- Verify: bun --bun vitest run",
+    "- Commit: feat: create required file",
+  ].join("\n");
+  const context = JSON.stringify({
+    version: 1,
+    repository: Fs.realpathSync(repository),
+    intentCommit: "tactical:dependency-scaffold-fixture",
+    taskDefinition: taskDefinitionDigest(definition),
+    inputs: [],
+  });
+  const breakdown = taskBreakdownDigest([1], [{ id: 1, source: definition }]);
+  write(
+    repository,
+    evidencePath("dependency-scaffold", "plan.md"),
+    `---
+artifact: plan
+change: dependency-scaffold
+status: approved
+created: 2026-09-12
+author: test
+decision: accepted
+route_unit: null
+execution:
+  version: 2
+  mode: dependencies
+initialization:
+  version: 1
+  base: ${base}
+  authority: requester-scaffold-approval
+  breakdown: ${breakdown}
+  taskIds: [1]
+---
+# Plan: Dependency scaffold
+
+## Overview
+
+## Tasks
+
+${definition}
+- Notes: ${context}
+
+## Done when
+
+The file is complete.
+`,
+  );
+  write(
+    repository,
+    evidencePath("dependency-scaffold", "progress.md"),
+    `---
+artifact: progress
+change: dependency-scaffold
+status: pending
+updated: 2026-09-12
+decision: accepted
+tasks:
+  - id: 1
+    title: Create file
+    status: pending
+    progress: tasks/task-1/progress.md
+---
+# Progress: Dependency scaffold
+
+| Task | Status | Progress |
+| --- | --- | --- |
+| Task 1: Create file | pending | [details](tasks/task-1/progress.md) |
+`,
+  );
+  write(
+    repository,
+    evidencePath("dependency-scaffold", "tasks/task-1/progress.md"),
+    `---
+artifact: task-progress
+change: dependency-scaffold
+task: 1
+status: pending
+updated: 2026-09-12
+decision: accepted
+---
+# Task Progress: Task 1 — Create file
+`,
+  );
+  commitAll(repository, "commit dependency-mode initial scaffold");
+  if (unlistedMaterial) {
+    write(repository, "src/unlisted.ts", "export const partial = true;\n");
+    commitPaths(repository, "add unlisted material work", "src/unlisted.ts");
+  }
+  return { changeDir, base };
+};
+
+const makeDependencyModeTransitionEvidence = (
+  repository: string,
+  fullyGatedTasks: readonly number[] = [1],
+  options: {
+    readonly feedbackApproved?: boolean;
+    readonly taskOneDependsOnSecond?: boolean;
+    readonly taskOneGoal?: string;
+    readonly taskOneAcceptance?: string;
+    readonly mutateTaskEvidenceAtTransition?: boolean;
+  } = {},
+): { readonly changeDir: string; readonly transitionCommit: string } => {
+  const evidence = makeEvidence(repository, { dependencyMode: true });
+  const feedbackPath = evidencePath("demo", "tasks/task-1/feedback.md");
+  if (options.feedbackApproved === false) {
+    const feedback = Fs.readFileSync(Path.join(repository, feedbackPath), "utf8")
+      .replaceAll("Verdict: approved", "Verdict: changes-requested")
+      .replaceAll("### Blocking\n- None.", "### Blocking\n- [src/main.ts:1] Clarify the accepted behavior (violates: acceptance)");
+    write(repository, feedbackPath, feedback);
+    commitPaths(repository, "record unresolved Task 1 feedback", feedbackPath);
+  }
+  const planPath = evidencePath("demo", "plan.md");
+  const progressPath = evidencePath("demo", "progress.md");
+  const previousPlanCommit = git(repository, "log", "-1", "--format=%H", "--", planPath);
+  const approval = "requester-dependency-transition-22";
+  const reason = "Task 2 adds a required dependency scheduling obligation.";
+  const affected = "Task 2 is new; Task 1 remains fully gated.";
+  const secondDefinition = [
+    "### Task 2: Prerequisite",
+    "",
+    "- Goal: Deliver the prerequisite.",
+    "- Depends on: none",
+    "- Acceptance:",
+    "  - The prerequisite is verified.",
+    "- Steps:",
+    "  1. Verify the prerequisite behavior.",
+    "- Verify: bun --bun vitest run",
+    "- Commit: feat: add prerequisite",
+  ].join("\n");
+  const context = JSON.stringify({
+    version: 1,
+    repository: Fs.realpathSync(repository),
+    intentCommit: "tactical:precondition-fixture",
+    taskDefinition: taskDefinitionDigest(secondDefinition),
+    inputs: [],
+  });
+  const gatedTasks = fullyGatedTasks.length === 0 ? "[]" : `[${fullyGatedTasks.join(", ")}]`;
+  let planSource = Fs.readFileSync(Path.join(repository, planPath), "utf8");
+  planSource = planSource
+    .replace(
+      "  mode: dependencies\n---",
+      `  mode: dependencies\nexecution_transition:\n  version: 2\n  previousPlanCommit: ${previousPlanCommit}\n  fullyGatedTasks: ${gatedTasks}\n  approval: ${approval}\n  reason: ${reason}\n  affected: ${affected}\n---`,
+    )
+    .replace(
+      "## Overview\nA plan.\n",
+      `## Overview\nA plan.\n\n- Execution approval: ${approval}\n- Fully gated tasks: ${fullyGatedTasks.length === 0 ? "none" : fullyGatedTasks.join(", ")}\n- Reason: ${reason}\n- Affected obligations: ${affected}\n`,
+    )
+    .replace(
+      "\n## Done when\n",
+      `\n\n${secondDefinition}\n- Notes: ${context}\n\n## Done when\n`,
+    );
+  if (
+    options.taskOneDependsOnSecond ||
+    options.taskOneGoal !== undefined ||
+    options.taskOneAcceptance !== undefined
+  ) {
+    const firstTaskBlock = planSource.match(
+      /(### Task 1: Implement[\s\S]*?)(?=\n\n### Task 2:|\n## Done when)/,
+    )?.[1];
+    if (!firstTaskBlock) throw new Error("Task 1 fixture block is missing");
+    const notesStart = firstTaskBlock.lastIndexOf("\n- Notes: ");
+    const firstDefinition = notesStart < 0
+      ? firstTaskBlock
+      : firstTaskBlock.slice(0, notesStart);
+    const firstContextSource = notesStart < 0
+      ? "{}"
+      : firstTaskBlock.slice(notesStart + "\n- Notes: ".length);
+    const firstContext = JSON.parse(firstContextSource) as {
+      readonly [key: string]: unknown;
+      readonly taskDefinition: string;
+    };
+    const updatedDefinition = firstDefinition
+      .replace(
+        "- Depends on: none",
+        options.taskOneDependsOnSecond ? "- Depends on: Task 2" : "- Depends on: none",
+      )
+      .replace(
+        "- Goal: Deliver implement.",
+        options.taskOneGoal === undefined ? "- Goal: Deliver implement." : `- Goal: ${options.taskOneGoal}`,
+      )
+      .replace(
+        "  - The implement is verified.",
+        options.taskOneAcceptance === undefined ? "  - The implement is verified." : `  - ${options.taskOneAcceptance}`,
+      );
+    const updatedContext = JSON.stringify({
+      ...firstContext,
+      taskDefinition: taskDefinitionDigest(updatedDefinition),
+    });
+    planSource = planSource.replace(
+      firstTaskBlock,
+      `${updatedDefinition}\n- Notes: ${updatedContext}`,
+    );
+  }
+  write(repository, planPath, planSource);
+  let progressSource = Fs.readFileSync(Path.join(repository, progressPath), "utf8");
+  progressSource = progressSource
+    .replace("status: complete", "status: in-progress")
+    .replace(
+      "    progress: tasks/task-1/progress.md\n---",
+      "    progress: tasks/task-1/progress.md\n  - id: 2\n    title: Prerequisite\n    status: pending\n    progress: tasks/task-2/progress.md\n---",
+    )
+    .replace(
+      "| Task 1: Implement | done | [details](tasks/task-1/progress.md) |\n",
+      "| Task 1: Implement | done | [details](tasks/task-1/progress.md) |\n| Task 2: Prerequisite | pending | [details](tasks/task-2/progress.md) |\n",
+    );
+  write(repository, progressPath, progressSource);
+  write(
+    repository,
+    evidencePath("demo", "tasks/task-2/progress.md"),
+    `---
+artifact: task-progress
+change: demo
+task: 2
+status: pending
+updated: 2026-09-12
+decision: accepted
+---
+# Task Progress: Task 2 — Prerequisite
+`,
+  );
+  if (options.mutateTaskEvidenceAtTransition) {
+    const feedback = Fs.readFileSync(Path.join(repository, feedbackPath), "utf8")
+      .replace("Verdict: approved", "Verdict: changes-requested")
+      .replace("### Blocking\n- None.", "### Blocking\n- [src/main.ts:1] Clarify the accepted behavior (violates: acceptance)");
+    write(repository, feedbackPath, feedback);
+  }
+  const transitionCommit = commitAll(repository, "authorize dependency execution transition");
+  return { changeDir: evidence.changeDir, transitionCommit };
+};
+
 const makeEmptyProgressEvidence = (
   repository: string,
   abandoned: boolean,
@@ -1591,6 +1839,80 @@ it("rejects an input-impact reference that forges the preceding plan revision", 
 
   expect(result.stdout).toContain("input impact does not reference the actual preceding plan revision");
   expect(result.lastLine).toContain("gate: closed");
+});
+
+it("validates dependency-mode initial scaffolds with optional Files and no material work", async () => {
+  const repository = makeRepo();
+  const { changeDir } = makeDependencyModeScaffold(repository);
+  const result = await runPrecondition({ changeDir, testCommand: "true", targetBranch: fixtureTargetBranch });
+
+  expect(result.stdout).toContain("[PASS] Initialization proof");
+  expect(result.stdout).toContain("[PASS] Dependency execution contract (validated)");
+  expect(result.stdout).toContain("execution-mode: dependencies");
+  expect(result.stdout).not.toContain("execution-order:");
+  expect(result.stdout).not.toContain("explicit Files scopes");
+});
+
+it("holds optional-Files scaffold recovery when unlisted material history exists", async () => {
+  const repository = makeRepo();
+  const { changeDir } = makeDependencyModeScaffold(repository, true);
+  const result = await runPrecondition({ changeDir, testCommand: "true", targetBranch: fixtureTargetBranch });
+
+  expect(result.stdout).toContain("[FAIL] Initialization (");
+  expect(result.stdout).toContain("dependency-mode tasks without Files scopes have material history since initialization");
+});
+
+it("validates dependency-mode scheduling amendments against the durable fully gated set", async () => {
+  const repository = makeRepo();
+  const { changeDir } = makeDependencyModeTransitionEvidence(repository);
+  const result = await runPrecondition({ changeDir, testCommand: "true", targetBranch: fixtureTargetBranch });
+
+  expect(result.stdout).toContain("[PASS] Execution transition (requester-dependency-transition-22; owner authority is asserted, not authenticated)");
+});
+
+it("rejects an incomplete dependency-mode fully gated task set", async () => {
+  const repository = makeRepo();
+  const { changeDir } = makeDependencyModeTransitionEvidence(repository, []);
+  const result = await runPrecondition({ changeDir, testCommand: "true", targetBranch: fixtureTargetBranch });
+
+  expect(result.stdout).toContain("execution transition fully-gated task set disagrees with durable task and feedback evidence");
+});
+
+it("allows prerequisite-only scheduling changes to an implementation-done but uncleared task", async () => {
+  const repository = makeRepo();
+  const { changeDir } = makeDependencyModeTransitionEvidence(repository, [], {
+    feedbackApproved: false,
+    taskOneDependsOnSecond: true,
+  });
+  const result = await runPrecondition({ changeDir, testCommand: "true", targetBranch: fixtureTargetBranch });
+
+  expect(result.stdout).toContain("[PASS] Execution transition (requester-dependency-transition-22; owner authority is asserted, not authenticated)");
+  expect(result.stdout).not.toContain("changes Task 1 outside its prerequisites");
+});
+
+it.each(["Goal", "Acceptance"] as const)("rejects a scheduling-only amendment that changes a done task's %s", async (field) => {
+  const repository = makeRepo();
+  const taskContract = field === "Goal"
+    ? { taskOneGoal: "Change the delivered behavior." }
+    : { taskOneAcceptance: "A changed result must be verified." };
+  const { changeDir } = makeDependencyModeTransitionEvidence(repository, [], {
+    feedbackApproved: false,
+    taskOneDependsOnSecond: true,
+    ...taskContract,
+  });
+  const result = await runPrecondition({ changeDir, testCommand: "true", targetBranch: fixtureTargetBranch });
+
+  expect(result.stdout).toContain("dependency scheduling transition changes Task 1 outside its prerequisites");
+});
+
+it("rejects a dependency scheduling amendment that rewrites existing done-task feedback", async () => {
+  const repository = makeRepo();
+  const { changeDir } = makeDependencyModeTransitionEvidence(repository, [1], {
+    mutateTaskEvidenceAtTransition: true,
+  });
+  const result = await runPrecondition({ changeDir, testCommand: "true", targetBranch: fixtureTargetBranch });
+
+  expect(result.stdout).toContain("dependency scheduling transition changes existing Task 1 evidence");
 });
 
 it("validates execution transitions against the preceding committed plan and gated evidence", async () => {

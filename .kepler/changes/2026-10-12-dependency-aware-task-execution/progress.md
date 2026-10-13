@@ -1,13 +1,13 @@
 ---
 artifact: progress
 change: 2026-10-12-dependency-aware-task-execution
-status: pending
+status: in-progress
 updated: 2026-10-12
 decision: accepted
 tasks:
   - id: 1
     title: "Validate dependency-mode task contracts"
-    status: pending
+    status: done
     progress: tasks/task-1/progress.md
   - id: 2
     title: "Enforce lifetime prerequisite reservations"
@@ -35,7 +35,7 @@ tasks:
 
 | Task | Status | Progress |
 | --- | --- | --- |
-| Task 1: Validate dependency-mode task contracts | pending | [details](tasks/task-1/progress.md) |
+| Task 1: Validate dependency-mode task contracts | done | [details](tasks/task-1/progress.md) |
 | Task 2: Enforce lifetime prerequisite reservations | pending | [details](tasks/task-2/progress.md) |
 | Task 3: Project verified dependency readiness | pending | [details](tasks/task-3/progress.md) |
 | Task 4: Guard task admission and publication | pending | [details](tasks/task-4/progress.md) |

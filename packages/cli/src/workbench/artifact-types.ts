@@ -143,10 +143,15 @@ export type ArtifactBodyClassification =
   | "physical-last-pass"
   | "legacy-unsupported";
 
-export interface PlanExecutionContract {
-  readonly version: 1;
-  readonly order: readonly number[];
-}
+export type PlanExecutionContract =
+  | {
+      readonly version: 1;
+      readonly order: readonly number[];
+    }
+  | {
+      readonly version: 2;
+      readonly mode: "dependencies";
+    };
 
 export interface PlanInputImpactEntry {
   readonly path: string;
@@ -166,15 +171,24 @@ export interface PlanInputImpactContract {
   readonly changes: readonly PlanInputImpactEntry[];
 }
 
-export interface PlanExecutionTransitionContract {
-  readonly version: 1;
-  readonly previousPlanCommit: string;
-  readonly previousOrder: readonly number[];
-  readonly fullyGatedPrefix: readonly number[];
-  readonly approval: string;
-  readonly reason: string;
-  readonly affected: string;
-}
+export type PlanExecutionTransitionContract =
+  | {
+      readonly version: 1;
+      readonly previousPlanCommit: string;
+      readonly previousOrder: readonly number[];
+      readonly fullyGatedPrefix: readonly number[];
+      readonly approval: string;
+      readonly reason: string;
+      readonly affected: string;
+    }
+  | {
+      readonly version: 2;
+      readonly previousPlanCommit: string;
+      readonly fullyGatedTasks: readonly number[];
+      readonly approval: string;
+      readonly reason: string;
+      readonly affected: string;
+    };
 
 export interface IntentApprovalReference {
   readonly path: string;
@@ -226,6 +240,9 @@ export interface PlanTaskContract {
   readonly filesDeclared: boolean;
   readonly files: readonly string[];
   readonly definitionDigest: string;
+  readonly schedulingDigest: string;
+  readonly goal?: string;
+  readonly acceptance?: readonly string[];
   readonly inputContext?: TaskInputContext;
 }
 

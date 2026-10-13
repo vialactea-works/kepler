@@ -1086,20 +1086,11 @@ export const taskBreakdownDigest = (
     tasks.map((task) => ({ id: task.id, definitionDigest: taskDefinitionDigest(task.source) })),
   );
 
-export const executionSequenceProblems = (
+export const dependencyGraphProblems = (
   tasks: readonly TaskOrderEntry[],
-  execution: PlanExecutionContract,
 ): readonly string[] => {
-  const ids = tasks.map((task) => task.id);
-  const active = new Set(ids);
-  const order = execution.order;
+  const active = new Set(tasks.map((task) => task.id));
   const problems: string[] = [];
-  if (
-    order.length !== active.size ||
-    new Set(order).size !== order.length ||
-    order.some((id) => !active.has(id))
-  )
-    problems.push("Execution order must contain every active task exactly once");
   for (const task of tasks) {
     const unique = new Set(task.dependsOn);
     if (unique.size !== task.dependsOn.length)
@@ -1133,6 +1124,22 @@ export const executionSequenceProblems = (
     }
   }
   if (visited !== tasks.length) problems.push("Task prerequisites contain a cycle");
+  return [...new Set(problems)];
+};
+
+export const executionSequenceProblems = (
+  tasks: readonly TaskOrderEntry[],
+  execution: Extract<PlanExecutionContract, { readonly version: 1 }>,
+): readonly string[] => {
+  const active = new Set(tasks.map((task) => task.id));
+  const order = execution.order;
+  const problems = [...dependencyGraphProblems(tasks)];
+  if (
+    order.length !== active.size ||
+    new Set(order).size !== order.length ||
+    order.some((id) => !active.has(id))
+  )
+    problems.push("Execution order must contain every active task exactly once");
   const positions = new Map(order.map((id, index) => [id, index]));
   for (const task of tasks) {
     const position = positions.get(task.id);
@@ -1145,6 +1152,22 @@ export const executionSequenceProblems = (
     }
   }
   return [...new Set(problems)];
+};
+
+export const dependencyTransitionProblems = (
+  previousTasks: readonly TaskOrderEntry[],
+  currentTasks: readonly TaskOrderEntry[],
+  fullyGatedTasks: readonly number[],
+): readonly string[] => {
+  const previousIds = new Set(previousTasks.map((task) => task.id));
+  const currentIds = new Set(currentTasks.map((task) => task.id));
+  const problems: string[] = [];
+  if (new Set(fullyGatedTasks).size !== fullyGatedTasks.length)
+    problems.push("Fully gated task set contains duplicate task IDs");
+  for (const id of fullyGatedTasks)
+    if (!previousIds.has(id) || !currentIds.has(id))
+      problems.push(`Fully gated Task ${id} is not active in both plan revisions`);
+  return problems;
 };
 
 export const executionTransitionProblems = (
@@ -1181,28 +1204,60 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isFullSha = (value: unknown): value is string =>
   typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 
+const isPositiveTaskIdArray = (value: unknown): value is number[] =>
+  Array.isArray(value) && value.every((id) => Number.isInteger(id) && Number(id) > 0);
+
 const isSha256 = (value: unknown): value is string =>
   typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 
 const parseTaskDependencies = (
   lines: readonly string[],
-): { readonly dependsOn: readonly number[]; readonly problem?: string } => {
+): { readonly dependsOn: readonly number[]; readonly declared: boolean; readonly problem?: string } => {
   const declarations = lines.flatMap((line) => {
     const match = /^[ \t]*[-*][ \t]+Depends on:[ \t]*(.*?)[ \t]*$/.exec(line);
     return match === null ? [] : [match[1] ?? ""];
   });
-  if (declarations.length === 0) return { dependsOn: [] };
+  if (declarations.length === 0) return { dependsOn: [], declared: false };
   if (declarations.length !== 1)
-    return { dependsOn: [], problem: "has ambiguous Depends on declarations" };
+    return { dependsOn: [], declared: true, problem: "has ambiguous Depends on declarations" };
   const value = declarations[0] ?? "";
-  if (value === "none") return { dependsOn: [] };
+  if (value === "none") return { dependsOn: [], declared: true };
   if (!/^Task [1-9][0-9]*(?:, Task [1-9][0-9]*)*$/.test(value))
-    return { dependsOn: [], problem: "Depends on must be none or a comma-separated list of Task N IDs" };
+    return { dependsOn: [], declared: true, problem: "Depends on must be none or a comma-separated list of Task N IDs" };
   const dependsOn = value.split(", ").map((item) => Number(item.slice(5)));
   if (new Set(dependsOn).size !== dependsOn.length)
-    return { dependsOn: [], problem: "repeats a Depends on prerequisite" };
-  return { dependsOn };
+    return { dependsOn: [], declared: true, problem: "repeats a Depends on prerequisite" };
+  return { dependsOn, declared: true };
 };
+
+const taskFieldHeader = (line: string): RegExpExecArray | null =>
+  /^[-*][ \t]+([A-Za-z][A-Za-z ]*):[ \t]*(.*?)[ \t]*$/.exec(line);
+
+const readTaskField = (
+  lines: readonly string[],
+  name: string,
+): { readonly count: number; readonly lines: readonly string[] } => {
+  const declarations = lines.flatMap((line, index) => {
+    const match = taskFieldHeader(line);
+    return match?.[1] === name ? [{ index, value: match[2] ?? "" }] : [];
+  });
+  if (declarations.length !== 1) return { count: declarations.length, lines: [] };
+  const declaration = declarations[0];
+  if (!declaration) return { count: 0, lines: [] };
+  const values = declaration.value === "" ? [] : [declaration.value];
+  for (let index = declaration.index + 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (taskFieldHeader(line)) break;
+    values.push(line.trim());
+  }
+  return { count: 1, lines: values };
+};
+
+const taskFieldText = (field: { readonly lines: readonly string[] }): string =>
+  field.lines
+    .map((line) => line.replace(/^(?:[-*][ \t]+|[1-9][0-9]*[.)][ \t]+)/, "").trim())
+    .filter(Boolean)
+    .join(" ");
 
 const safeRepositoryPath = (value: string): boolean =>
   value !== "" &&
@@ -1330,6 +1385,8 @@ const readPlanProjection = (
 ): { readonly plan: PlanContractProjection; readonly diagnostics: readonly ArtifactContractDiagnostic[] } => {
   const diagnostics: ArtifactContractDiagnostic[] = [];
   const lines = bodyLines(artifact);
+  const rawExecution = artifact.metadata.execution;
+  const dependencyMode = isRecord(rawExecution) && rawExecution.version === 2 && rawExecution.mode === "dependencies";
   const taskRecords = records.filter((record) => record.kind === "task");
   const taskHeadings = headings.filter(
     (heading) => heading.level === 3 && /^Task [1-9][0-9]*:/.test(heading.text),
@@ -1355,8 +1412,33 @@ const readPlanProjection = (
     const visibleFieldLines = visibleTaskFieldLines(blockLines);
     const parsedDependencies = parseTaskDependencies(visibleFieldLines);
     const parsedFiles = parseTaskFiles(visibleFieldLines);
+    const goalField = readTaskField(visibleFieldLines, "Goal");
+    const acceptanceField = readTaskField(visibleFieldLines, "Acceptance");
+    const stepsField = readTaskField(visibleFieldLines, "Steps");
+    const verifyField = readTaskField(visibleFieldLines, "Verify");
+    const commitField = readTaskField(visibleFieldLines, "Commit");
+    const goal = taskFieldText(goalField);
+    const acceptance = acceptanceField.lines
+      .map((line) => line.replace(/^(?:[-*][ \\t]+|[1-9][0-9]*[.)][ \\t]+)/, "").trim())
+      .filter(Boolean);
+    const steps = stepsField.lines.filter(Boolean);
+    const verify = taskFieldText(verifyField);
+    const commit = taskFieldText(commitField);
     if (parsedDependencies.problem)
       diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Task ${record.number} ${parsedDependencies.problem}`, record.line));
+    if (dependencyMode) {
+      if (!parsedDependencies.declared)
+        diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Task ${record.number} requires an explicit Depends on declaration`, record.line));
+      for (const [label, field, value] of [
+        ["Goal", goalField, goal],
+        ["Acceptance", acceptanceField, acceptance.join(" ")],
+        ["Steps", stepsField, steps.join(" ")],
+        ["Verify", verifyField, verify],
+        ["Commit", commitField, commit],
+      ] as const)
+        if (field.count !== 1 || value.trim() === "")
+          diagnostics.push(bodyDiagnostic(artifact, "invalid-record", `Task ${record.number} requires visible nonempty ${label}`, record.line));
+    }
     const notes = visibleFieldLines.flatMap((line, offset) => {
       const match = /^[ \t]*[-*][ \t]+Notes:[ \t]*(.*?)[ \t]*$/.exec(line);
       return match === null ? [] : [{ value: match[1] ?? "", line: record.line + offset }];
@@ -1370,6 +1452,20 @@ const readPlanProjection = (
       diagnostics.push(...parsed.diagnostics);
       inputContext = parsed.value;
     }
+    const schedulingDigest = hashText(JSON.stringify({
+      title: record.title ?? "",
+      filesDeclared: parsedFiles.declared,
+      files: parsedFiles.files,
+      goal,
+      acceptance,
+      steps,
+      verify,
+      commit,
+      notes: notes.filter((entry) => !entry.value.startsWith("{")).map((entry) => entry.value),
+      inputContext: inputContext === undefined
+        ? null
+        : { ...inputContext, taskDefinition: "" },
+    }));
     tasks.push({
       id: record.number,
       title: record.title ?? "",
@@ -1377,6 +1473,9 @@ const readPlanProjection = (
       filesDeclared: parsedFiles.declared,
       files: parsedFiles.files,
       definitionDigest: digest,
+      schedulingDigest,
+      ...(goal === "" ? {} : { goal }),
+      ...(acceptance.length === 0 ? {} : { acceptance }),
       ...(inputContext === undefined ? {} : { inputContext }),
       source,
     });
@@ -1386,20 +1485,29 @@ const readPlanProjection = (
     const record = taskRecords.find((candidate) => candidate.number === task.id);
     return record !== undefined && !recordIsAbandoned(record);
   });
-  const rawExecution = artifact.metadata.execution;
   const hasExecution = Object.hasOwn(artifact.metadata, "execution");
-  const execution = isRecord(rawExecution) && rawExecution.version === 1 && Array.isArray(rawExecution.order) && rawExecution.order.every((id) => Number.isInteger(id) && Number(id) > 0)
-    ? { version: 1 as const, order: rawExecution.order as number[] }
-    : undefined;
+  let execution: PlanExecutionContract | undefined;
+  if (isRecord(rawExecution)) {
+    if (rawExecution.version === 1 && isPositiveTaskIdArray(rawExecution.order))
+      execution = { version: 1, order: rawExecution.order };
+    else if (rawExecution.version === 2 && rawExecution.mode === "dependencies")
+      execution = { version: 2, mode: "dependencies" };
+  }
   if (hasExecution && execution === undefined)
     diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Explicit execution metadata is malformed; legacy numeric order is not used", artifact.locations.metadata.startLine));
   const identityOrder = taskRecords.flatMap((record) => record.number === undefined ? [] : [record.number]);
-  const executionOrder = execution?.order ?? (hasExecution ? [] : activeTasks.map((task) => task.id));
-  if (execution !== undefined) {
+  const activeTaskEdges = activeTasks.map((task) => ({ id: task.id, dependsOn: task.dependsOn }));
+  let executionOrder: readonly number[];
+  if (execution?.version === 1) executionOrder = execution.order;
+  else if (hasExecution && execution === undefined) executionOrder = [];
+  else executionOrder = activeTasks.map((task) => task.id);
+  if (execution?.version === 1) {
     diagnostics.push(...executionSequenceProblems(
-      activeTasks.map((task) => ({ id: task.id, dependsOn: task.dependsOn })),
+      activeTaskEdges,
       execution,
     ).map((message) => bodyDiagnostic(artifact, "invalid-record", message, artifact.locations.metadata.startLine)));
+  } else if (execution?.version === 2) {
+    diagnostics.push(...dependencyGraphProblems(activeTaskEdges).map((message) => bodyDiagnostic(artifact, "invalid-record", message, artifact.locations.metadata.startLine)));
   } else if (!hasExecution) {
     const legacy = { version: 1 as const, order: executionOrder };
     diagnostics.push(...executionSequenceProblems(
@@ -1420,7 +1528,7 @@ const readPlanProjection = (
       : lines.slice(overviewStart + 1, overviewEnd < 0 ? lines.length : overviewEnd);
   const overviewFields = new Map<string, string[]>();
   for (const line of visibleTaskFieldLines(overview)) {
-    const match = /^[ \t]*-[ \t]+(Execution approval|Previous execution order|New execution order|Fully gated prefix|Reason|Affected obligations|Input impact review|Input impact previous plan):[ \t]*(.+?)[ \t]*$/.exec(line);
+    const match = /^[ \t]*-[ \t]+(Execution approval|Previous execution order|New execution order|Fully gated prefix|Fully gated tasks|Reason|Affected obligations|Input impact review|Input impact previous plan):[ \t]*(.+?)[ \t]*$/.exec(line);
     if (!match) continue;
     const values = overviewFields.get(match[1] ?? "") ?? [];
     values.push(match[2] ?? "");
@@ -1431,57 +1539,93 @@ const readPlanProjection = (
     return values.length === 1 ? values[0] : undefined;
   };
   const rawTransition = artifact.metadata.execution_transition;
-  const transition: PlanExecutionTransitionContract | undefined =
+  let transition: PlanExecutionTransitionContract | undefined;
+  if (
     isRecord(rawTransition) &&
-    rawTransition.version === 1 &&
     isFullSha(rawTransition.previousPlanCommit) &&
-    Array.isArray(rawTransition.previousOrder) &&
-    rawTransition.previousOrder.every((id) => Number.isInteger(id) && Number(id) > 0) &&
-    Array.isArray(rawTransition.fullyGatedPrefix) &&
-    rawTransition.fullyGatedPrefix.every((id) => Number.isInteger(id) && Number(id) > 0) &&
     typeof rawTransition.approval === "string" &&
     rawTransition.approval.trim() !== "" &&
     typeof rawTransition.reason === "string" &&
     rawTransition.reason.trim() !== "" &&
     typeof rawTransition.affected === "string" &&
     rawTransition.affected.trim() !== ""
-      ? {
-          version: 1,
-          previousPlanCommit: rawTransition.previousPlanCommit,
-          previousOrder: rawTransition.previousOrder as number[],
-          fullyGatedPrefix: rawTransition.fullyGatedPrefix as number[],
-          approval: rawTransition.approval,
-          reason: rawTransition.reason,
-          affected: rawTransition.affected,
-        }
-      : undefined;
+  ) {
+    if (
+      rawTransition.version === 1 &&
+      isPositiveTaskIdArray(rawTransition.previousOrder) &&
+      isPositiveTaskIdArray(rawTransition.fullyGatedPrefix)
+    )
+      transition = {
+        version: 1,
+        previousPlanCommit: rawTransition.previousPlanCommit,
+        previousOrder: rawTransition.previousOrder,
+        fullyGatedPrefix: rawTransition.fullyGatedPrefix,
+        approval: rawTransition.approval,
+        reason: rawTransition.reason,
+        affected: rawTransition.affected,
+      };
+    else if (
+      rawTransition.version === 2 &&
+      isPositiveTaskIdArray(rawTransition.fullyGatedTasks)
+    )
+      transition = {
+        version: 2,
+        previousPlanCommit: rawTransition.previousPlanCommit,
+        fullyGatedTasks: rawTransition.fullyGatedTasks,
+        approval: rawTransition.approval,
+        reason: rawTransition.reason,
+        affected: rawTransition.affected,
+      };
+  }
   const hasTransition = Object.hasOwn(artifact.metadata, "execution_transition");
   if (hasTransition && transition === undefined)
     diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Explicit execution transition metadata is malformed", artifact.locations.metadata.startLine));
   if (transition !== undefined) {
     if (["approved", "accepted", "yes", "true", "done"].includes(transition.approval.toLowerCase()))
       diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Execution approval must be an explicit reference, not a decision value", artifact.locations.metadata.startLine));
-    if (execution === undefined)
-      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Execution transition requires explicit execution metadata", artifact.locations.metadata.startLine));
-    else
-      diagnostics.push(...executionTransitionProblems(
-        transition.previousOrder,
-        execution.order,
-        transition.fullyGatedPrefix,
-      ).map((message) => bodyDiagnostic(artifact, "invalid-record", message, artifact.locations.metadata.startLine)));
-    const previousOrder = overviewField("Previous execution order");
-    const nextOrder = overviewField("New execution order");
-    const prefix = overviewField("Fully gated prefix");
     const overviewApproval = overviewField("Execution approval");
-    if (
-      previousOrder !== transition.previousOrder.join(", ") ||
-      nextOrder !== execution?.order.join(", ") ||
-      prefix !== (transition.fullyGatedPrefix.length === 0 ? "none" : transition.fullyGatedPrefix.join(", ")) ||
-      overviewApproval !== transition.approval ||
-      overviewField("Reason") !== transition.reason ||
-      overviewField("Affected obligations") !== transition.affected
-    )
-      diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Overview must record the execution transition reference, old/new orders, gated prefix, reason, and affected obligations", artifact.locations.body.startLine));
+    if (transition.version === 1) {
+      if (execution?.version !== 1) {
+        diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Serial execution transition requires version 1 execution metadata", artifact.locations.metadata.startLine));
+      } else {
+        diagnostics.push(...executionTransitionProblems(
+          transition.previousOrder,
+          execution.order,
+          transition.fullyGatedPrefix,
+        ).map((message) => bodyDiagnostic(artifact, "invalid-record", message, artifact.locations.metadata.startLine)));
+      }
+      const previousOrder = overviewField("Previous execution order");
+      const nextOrder = overviewField("New execution order");
+      const prefix = overviewField("Fully gated prefix");
+      if (
+        previousOrder !== transition.previousOrder.join(", ") ||
+        nextOrder !== (execution?.version === 1 ? execution.order.join(", ") : undefined) ||
+        prefix !== (transition.fullyGatedPrefix.length === 0 ? "none" : transition.fullyGatedPrefix.join(", ")) ||
+        overviewApproval !== transition.approval ||
+        overviewField("Reason") !== transition.reason ||
+        overviewField("Affected obligations") !== transition.affected
+      )
+        diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Overview must record the execution transition reference, old/new orders, gated prefix, reason, and affected obligations", artifact.locations.body.startLine));
+    } else {
+      if (execution?.version !== 2) {
+        diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Dependency scheduling transition requires version 2 dependency execution metadata", artifact.locations.metadata.startLine));
+      } else {
+        diagnostics.push(...dependencyTransitionProblems(
+          activeTaskEdges,
+          activeTaskEdges,
+          transition.fullyGatedTasks,
+        ).map((message) => bodyDiagnostic(artifact, "invalid-record", message, artifact.locations.metadata.startLine)));
+      }
+      const fullyGatedTasks = overviewField("Fully gated tasks");
+      const expectedGatedTasks = transition.fullyGatedTasks.length === 0 ? "none" : transition.fullyGatedTasks.join(", ");
+      if (
+        fullyGatedTasks !== expectedGatedTasks ||
+        overviewApproval !== transition.approval ||
+        overviewField("Reason") !== transition.reason ||
+        overviewField("Affected obligations") !== transition.affected
+      )
+        diagnostics.push(bodyDiagnostic(artifact, "invalid-record", "Overview must record the dependency scheduling transition reference, fully gated tasks, reason, and affected obligations", artifact.locations.body.startLine));
+    }
   }
   const rawApprovals = artifact.metadata.intent_approvals;
   const intentApprovals: IntentApprovalReference[] = Array.isArray(rawApprovals)

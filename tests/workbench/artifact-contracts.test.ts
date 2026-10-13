@@ -336,6 +336,46 @@ const expectInvalid = (result: ArtifactContractResult, code: string) => {
 };
 
 describe("artifact metadata contracts", () => {
+  it("projects validated goal and acceptance from dependency-mode plans", () => {
+    const task = [
+      "### Task 1: Implement",
+      "",
+      "- Goal: Deliver the approved behavior.",
+      "- Depends on: none",
+      "- Acceptance:",
+      "  - The behavior is observable.",
+      "- Steps:",
+      "  1. Verify the behavior.",
+      "- Verify: bun --bun vitest run",
+      "- Commit: feat: implement behavior",
+    ].join("\n");
+    const metadata = {
+      artifact: "plan",
+      change: "demo",
+      status: "approved",
+      created: "2026-09-12",
+      author: "test",
+      decision: "accepted",
+      route_unit: null,
+      execution: { version: 2, mode: "dependencies" },
+    };
+    const result = validateArtifact(
+      recognized(
+        ".kepler/changes/demo/plan.md",
+        metadata,
+        `# Plan: Demo\n\n## Overview\n\n## Tasks\n\n${task}\n\n## Done when\n\nIt works.\n`,
+      ),
+    );
+
+    expect(result._tag).toBe("valid");
+    if (result._tag === "valid")
+      expect(result.body.workflow.plan?.tasks[0]).toMatchObject({
+        id: 1,
+        goal: "Deliver the approved behavior.",
+        acceptance: ["The behavior is observable."],
+      });
+  });
+
   it.each(validArtifacts)("accepts %s", (sourcePath, metadata) => {
     const result = validateArtifact(recognized(sourcePath, metadata));
     expect(result._tag).toBe("valid");

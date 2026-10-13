@@ -21,6 +21,7 @@ import {
 import type {
   LegacyInputConfirmation,
   PlanContractProjection,
+  PlanExecutionContract,
   PlanExecutionTransitionContract,
   PlanInputImpactContract,
   PlanTaskContract,
@@ -139,6 +140,7 @@ export interface ContextGitPort {
     changePath: string,
     taskPaths: readonly string[],
   ) => ProcessResult | Promise<ProcessResult>;
+  readonly statusPorcelain: (cwd: string) => ProcessResult | Promise<ProcessResult>;
 }
 
 export interface ContextRuntime {
@@ -168,6 +170,8 @@ export interface ContextPlanContractData {
     readonly id: number;
     readonly title: string;
     readonly taskDefinitionDigest: string;
+    readonly goal?: string;
+    readonly acceptance?: readonly string[];
     readonly dependsOn: readonly number[];
     readonly recordedInputContext: {
       readonly repository: string;
@@ -217,6 +221,7 @@ export interface ContextChange {
   readonly routeUnitRevision?: string;
   readonly tasks?: { readonly done: number; readonly total: number };
   readonly identityOrder?: readonly number[];
+  readonly execution?: PlanExecutionContract;
   readonly executionOrder?: readonly number[];
   readonly executionTransition?: PlanExecutionTransitionContract;
   readonly inputImpact?: PlanInputImpactContract;
@@ -391,6 +396,8 @@ const createGitPort = (processPort: ProcessPort): ContextGitPort => ({
       ],
       cwd,
     ),
+  statusPorcelain: (cwd) =>
+    processPort.run("git", ["status", "--porcelain=v1", "--untracked-files=all"], cwd),
 });
 
 export const createContextRuntime = (
@@ -863,8 +870,13 @@ const inspectInitialScaffoldRecovery = async (
   else if (
     proof.taskIds.some((taskId) => {
       const task = initialPlan.tasks.find((entry) => entry.id === taskId);
-      return !task?.filesDeclared || /\(abandoned — .+\)$/.test(task.title);
+      return !task || /\(abandoned — .+\)$/.test(task.title);
     })
+  )
+    reasons.push("initial plan revision does not contain every active task");
+  else if (
+    initialPlan.execution?.version !== 2 &&
+    proof.taskIds.some((taskId) => !initialPlan.tasks.find((entry) => entry.id === taskId)?.filesDeclared)
   )
     reasons.push("initial plan revision does not contain active tasks with explicit Files scopes");
   else if (
@@ -874,6 +886,7 @@ const inspectInitialScaffoldRecovery = async (
   if (
     historicalInitialPlan &&
     (JSON.stringify(plan.identityOrder) !== JSON.stringify(historicalInitialPlan.identityOrder) ||
+      JSON.stringify(plan.execution) !== JSON.stringify(historicalInitialPlan.execution) ||
       JSON.stringify(plan.executionOrder) !== JSON.stringify(historicalInitialPlan.executionOrder) ||
       JSON.stringify(plan.tasks) !== JSON.stringify(historicalInitialPlan.tasks) ||
       JSON.stringify(plan.executionTransition) !== JSON.stringify(historicalInitialPlan.executionTransition) ||
@@ -1039,7 +1052,7 @@ const inspectInitialScaffoldRecovery = async (
           reasons.push(`Task ${task.id} input changed since handoff: ${input.path}`);
       }
     }
-    if (!task.filesDeclared)
+    if (!task.filesDeclared && plan.execution?.version !== 2)
       reasons.push(`Task ${task.id} has no complete Files scope for partial-work inspection`);
     for (const sourcePath of task.files) {
       if (!safeRepositoryPath(sourcePath)) {
@@ -1126,6 +1139,45 @@ const inspectInitialScaffoldRecovery = async (
         !(await taskProgressIsPending(text(version), task.id))
       )
         reasons.push(`Task ${task.id} progress history contains an attempt or invalid state`);
+    }
+  }
+  const unscopedTasks = plan.execution?.version === 2
+    ? plan.tasks.filter((task) => proof.taskIds.includes(task.id) && !task.filesDeclared)
+    : [];
+  if (unscopedTasks.length > 0) {
+    const scopedPaths = new Set(plan.tasks.flatMap((task) => task.files));
+    const excludedPaths = [
+      `${changePath}/plan.md`,
+      ...proof.taskIds.map((taskId) => `${changePath}/tasks/task-${taskId}/progress.md`),
+      ...scopedPaths,
+    ];
+    const materialCommit = await runtime.git.latestMaterialCommit(root, changePath, excludedPaths);
+    if (!successful(materialCommit)) {
+      reasons.push("material history for dependency-mode tasks without Files scopes cannot be verified");
+    } else if (text(materialCommit) !== "") {
+      const commit = text(materialCommit);
+      const resolvedMaterial = await runtime.git.resolveCommit(root, commit);
+      const postInitialization = fullCommit(commit) &&
+        successful(resolvedMaterial) &&
+        text(resolvedMaterial) === commit &&
+        commit !== proof.base &&
+        successful(await runtime.git.isAncestor(root, proof.base, commit));
+      if (postInitialization)
+        reasons.push(`dependency-mode tasks without Files scopes have material history since initialization at ${commit}`);
+      else if (!fullCommit(commit) || !successful(resolvedMaterial) || text(resolvedMaterial) !== commit)
+        reasons.push("material history for dependency-mode tasks without Files scopes cannot be verified");
+    }
+    const status = await runtime.git.statusPorcelain(root);
+    if (!successful(status)) {
+      reasons.push("uncommitted material state for dependency-mode tasks without Files scopes cannot be verified");
+    } else {
+      const changePrefix = `${changePath}/`;
+      for (const entry of text(status).split(/\r?\n/).filter(Boolean)) {
+        const paths = entry.slice(3).split(" -> ").filter(Boolean);
+        for (const path of paths)
+          if (!path.startsWith(changePrefix) && !scopedPaths.has(path))
+            reasons.push("task work cannot be bounded without Files scopes");
+      }
     }
   }
   return { status: reasons.length === 0 ? "eligible" : "blocked", reasons };
@@ -1875,7 +1927,10 @@ const formatChange = async (
       tasks: { done, total: rows.length },
       ...(planContract === undefined ? {} : {
         identityOrder: planContract.identityOrder,
-        executionOrder: planContract.executionOrder,
+        ...(planContract.execution === undefined ? {} : { execution: planContract.execution }),
+        ...(planContract.execution?.version === 2
+          ? {}
+          : { executionOrder: planContract.executionOrder }),
         ...(planContract.executionTransition === undefined
           ? {}
           : { executionTransition: planContract.executionTransition }),
@@ -2259,7 +2314,9 @@ const renderOne = (change: ContextChange): string => {
     lines.push(`plan-contract-data: ${JSON.stringify(change.planContractData)}`);
   if (change.identityOrder)
     lines.push(`identity-order: ${change.identityOrder.join(", ")}`);
-  if (change.executionOrder)
+  if (change.execution?.version === 2)
+    lines.push("execution-mode: dependencies");
+  else if (change.executionOrder)
     lines.push(`execution-order: ${change.executionOrder.join(", ")}`);
   if (change.executionTransitionStanding)
     lines.push(
@@ -2276,9 +2333,13 @@ const renderOne = (change: ContextChange): string => {
         `  input-impact: ${impact.path} ${impact.previousBlob ?? "absent"} -> ${impact.currentBlob ?? "absent"}; affected=${impact.affectedTasks.join(",") || "none"}; unaffected=${impact.unaffectedTasks.join(",") || "none"}; new=${impact.newTasks.join(",") || "none"}${impact.unresolvedIntent ? "; unresolved-intent" : ""}`,
       );
   }
-  if (change.executionTransition)
+  if (change.executionTransition?.version === 1)
     lines.push(
       `execution-transition: previous=${change.executionTransition.previousOrder.join(", ")}; gated-prefix=${change.executionTransition.fullyGatedPrefix.length === 0 ? "none" : change.executionTransition.fullyGatedPrefix.join(", ")}; approval=${change.executionTransition.approval} (assertion)`,
+    );
+  else if (change.executionTransition?.version === 2)
+    lines.push(
+      `execution-transition: fully-gated=${change.executionTransition.fullyGatedTasks.join(", ") || "none"}; approval=${change.executionTransition.approval} (assertion)`,
     );
   if (change.intentStanding)
     lines.push(`formal-intent: ${change.intentStanding} (approval references are assertions)`);
@@ -2429,6 +2490,8 @@ const buildContextPlanContractData = async (
         id: task.id,
         title: task.title,
         taskDefinitionDigest: task.definitionDigest,
+        ...(task.goal === undefined ? {} : { goal: task.goal }),
+        ...(task.acceptance === undefined ? {} : { acceptance: task.acceptance }),
         dependsOn: task.dependsOn,
         recordedInputContext: task.inputContext
           ? {

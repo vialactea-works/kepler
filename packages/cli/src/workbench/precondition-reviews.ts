@@ -210,14 +210,18 @@ const removeExecutionOverviewFields = (
 ): string => {
   const transition = contract.body.workflow.plan?.executionTransition;
   if (!transition) return source;
-  const fields = new Set([
+  const fields = new Set<string>([
     `- Execution approval: ${transition.approval}`,
-    `- Previous execution order: ${transition.previousOrder.join(", ")}`,
-    `- New execution order: ${contract.body.workflow.plan?.executionOrder.join(", ")}`,
-    `- Fully gated prefix: ${transition.fullyGatedPrefix.length === 0 ? "none" : transition.fullyGatedPrefix.join(", ")}`,
     `- Reason: ${transition.reason}`,
     `- Affected obligations: ${transition.affected}`,
   ]);
+  if (transition.version === 1) {
+    fields.add(`- Previous execution order: ${transition.previousOrder.join(", ")}`);
+    fields.add(`- New execution order: ${contract.body.workflow.plan?.executionOrder.join(", ")}`);
+    fields.add(`- Fully gated prefix: ${transition.fullyGatedPrefix.length === 0 ? "none" : transition.fullyGatedPrefix.join(", ")}`);
+  } else {
+    fields.add(`- Fully gated tasks: ${transition.fullyGatedTasks.length === 0 ? "none" : transition.fullyGatedTasks.join(", ")}`);
+  }
   const records = source.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g)?.filter(Boolean) ?? [];
   const visible = visibleMarkdownLines(source);
   const executionFields = new Set(

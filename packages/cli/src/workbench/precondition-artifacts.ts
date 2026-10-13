@@ -328,8 +328,13 @@ const inspectInitialScaffold = async (
   else if (
     proof.taskIds.some((taskId) => {
       const task = initialProjection.tasks.find((entry) => entry.id === taskId);
-      return !task?.filesDeclared || taskTitleAbandoned(task.title);
+      return !task || taskTitleAbandoned(task.title);
     })
+  )
+    problems.push("initial plan revision does not contain every active task");
+  else if (
+    initialProjection.execution?.version !== 2 &&
+    proof.taskIds.some((taskId) => !initialProjection.tasks.find((entry) => entry.id === taskId)?.filesDeclared)
   )
     problems.push("initial plan revision does not contain active tasks with explicit Files scopes");
   else if (
@@ -337,6 +342,83 @@ const inspectInitialScaffold = async (
     proof.breakdown
   )
     problems.push("initial plan task definitions do not match the authorized breakdown");
+  if (initialProjection?.execution?.version === 2) {
+    const activeInitialTasks = initialProjection.tasks.filter(
+      (task) => proof.taskIds.includes(task.id) && !taskTitleAbandoned(task.title),
+    );
+    const scopedPaths = new Set(activeInitialTasks.flatMap((task) => task.files));
+    for (const sourcePath of scopedPaths) {
+      if (
+        sourcePath === "" ||
+        sourcePath.startsWith("/") ||
+        sourcePath.includes("\\") ||
+        sourcePath.split("/").some((part) => part === "" || part === "." || part === "..")
+      ) {
+        problems.push("dependency-mode Files scope contains an unsafe repository path");
+        continue;
+      }
+      const history = await gitCommand(runtime, [
+        "log",
+        "--format=%H",
+        `${proof.base}..${head}`,
+        "--",
+        sourcePath,
+      ], root);
+      if (!successful(history) || text(history) !== "")
+        problems.push(`dependency-mode task has committed material history in ${sourcePath} since initialization`);
+      const baseline = await gitBlobIdAt(runtime, root, proof.base, sourcePath);
+      const current = await gitWorktreeBlob(runtime, root, sourcePath);
+      if (
+        successful(baseline) !== successful(current) ||
+        (successful(baseline) && text(baseline) !== text(current)) ||
+        !successful(await gitStagedDiff(runtime, root, sourcePath))
+      )
+        problems.push(`dependency-mode task has partial material work in ${sourcePath}`);
+    }
+    const unscopedTasks = activeInitialTasks.filter((task) => !task.filesDeclared);
+    if (unscopedTasks.length > 0) {
+      const excludedPaths = [
+        planPath,
+        ...taskProgressPaths,
+        ...proof.taskIds.map((task) => `${changePath}/tasks/task-${task}/feedback.md`),
+        ...scopedPaths,
+      ];
+      const material = await gitCommand(runtime, [
+        "log",
+        "-1",
+        "--format=%H",
+        head,
+        "--",
+        ".",
+        `:(exclude)${progressPath}`,
+        `:(exclude)${changePath}/review.md`,
+        `:(exclude)${changePath}/finish.md`,
+        ...excludedPaths.map((path) => `:(exclude)${path}`),
+      ], root);
+      if (!successful(material))
+        problems.push("material history for dependency-mode tasks without Files scopes cannot be verified");
+      else if (text(material) !== "") {
+        const commit = text(material);
+        const resolvedMaterial = await gitResolveCommit(runtime, root, commit);
+        if (!fullCommit(commit) || !successful(resolvedMaterial) || text(resolvedMaterial) !== commit)
+          problems.push("material history for dependency-mode tasks without Files scopes cannot be verified");
+        else if (commit !== proof.base && successful(await gitIsAncestor(runtime, root, proof.base, commit)))
+          problems.push(`dependency-mode tasks without Files scopes have material history since initialization at ${commit}`);
+      }
+      const status = await runtime.git.statusPorcelain(root);
+      if (!successful(status))
+        problems.push("uncommitted material state for dependency-mode tasks without Files scopes cannot be verified");
+      else {
+        const changePrefix = `${changePath}/`;
+        for (const entry of text(status).split(/\r?\n/).filter(Boolean)) {
+          const paths = entry.slice(3).split(" -> ").filter(Boolean);
+          for (const path of paths)
+            if (!path.startsWith(changePrefix) && !scopedPaths.has(path))
+              problems.push(`dependency-mode tasks without Files scopes have uncommitted material state at ${path}`);
+        }
+      }
+    }
+  }
   const initialProgressCommit = firstCommitByPath.get(progressPath);
   const initialProgress = initialProgressCommit
     ? await historicalArtifact(progressPath, initialProgressCommit)
@@ -1030,6 +1112,22 @@ export const inspectTasks = async (
     ...critiqueProblems,
     ...inputProblems,
   ];
+  let transitionStatus: string;
+  if (transitionProblems.length > 0)
+    transitionStatus = `[FAIL] Execution transition (${transitionProblems.join("; ")})`;
+  else if (execution?.executionTransition)
+    transitionStatus = `[PASS] Execution transition (${execution.executionTransition.approval}; owner authority is asserted, not authenticated)`;
+  else if (execution?.execution?.version === 2)
+    transitionStatus = "[PASS] Dependency execution contract (validated)";
+  else
+    transitionStatus = "[PASS] Execution order (legacy or unchanged initial declaration)";
+  const executionDetails: string[] = [];
+  if (execution !== undefined) {
+    executionDetails.push(`identity-order: ${execution.identityOrder.join(", ")}`);
+    if (execution.execution?.version === 2)
+      executionDetails.push("execution-mode: dependencies");
+    else executionDetails.push(`execution-order: ${execution.executionOrder.join(", ")}`);
+  }
   const output = [
     problems.length === 0
       ? `[PASS] Tasks (${tasks.length} implemented)`
@@ -1054,14 +1152,8 @@ export const inspectTasks = async (
     critiqueProblems.length === 0
       ? "[PASS] Critique disposition"
       : `[FAIL] Critique (${critiqueProblems.join("; ")})`,
-    transitionProblems.length === 0
-      ? execution?.executionTransition
-        ? `[PASS] Execution transition (${execution.executionTransition.approval}; owner authority is asserted, not authenticated)`
-        : "[PASS] Execution order (legacy or unchanged initial declaration)"
-      : `[FAIL] Execution transition (${transitionProblems.join("; ")})`,
-    ...(execution === undefined
-      ? []
-      : [`identity-order: ${execution.identityOrder.join(", ")}`, `execution-order: ${execution.executionOrder.join(", ")}`]),
+    transitionStatus,
+    ...executionDetails,
   ].join("\n") + "\n";
   return {
     passed: allProblems.length === 0,

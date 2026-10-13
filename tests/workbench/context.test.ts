@@ -216,7 +216,10 @@ const seed = (
   return directory;
 };
 
-const createInitialContextScaffold = (priorDeletedProgress = false) => {
+const createInitialContextScaffold = (
+  priorDeletedProgress = false,
+  dependencyMode = false,
+) => {
   const repository = makeRepo();
   const directory = makeChangeDir(repository, "scaffold");
   const base = git(repository, "rev-parse", "HEAD");
@@ -227,7 +230,9 @@ const createInitialContextScaffold = (priorDeletedProgress = false) => {
     Fs.rmSync(Path.join(repository, progressPath));
     commitAll(repository, "delete prior ledger");
   }
-  const definition = "### Task 1: Create file\n\n- Depends on: none\n- Files: src/new.ts";
+  const definition = dependencyMode
+    ? "### Task 1: Create file\n\n- Goal: Create the required file.\n- Depends on: none\n- Acceptance:\n  - The required file is verified.\n- Steps:\n  1. Verify the file behavior.\n- Verify: bun --bun vitest run\n- Commit: feat: create required file"
+    : "### Task 1: Create file\n\n- Depends on: none\n- Files: src/new.ts";
   const inputContext = JSON.stringify({
     version: 1,
     repository,
@@ -242,15 +247,15 @@ const createInitialContextScaffold = (priorDeletedProgress = false) => {
       id: 1,
       title: "Create file",
       dependsOn: [],
-      filesDeclared: true,
-      files: ["src/new.ts"],
+      filesDeclared: !dependencyMode,
+      files: dependencyMode ? [] : ["src/new.ts"],
       source: definition,
     }],
   );
   write(
     repository,
     ".kepler/changes/scaffold/plan.md",
-    `---\nartifact: plan\nchange: scaffold\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\ninitialization:\n  version: 1\n  base: ${base}\n  authority: requester-message-1\n  breakdown: ${breakdown}\n  taskIds: [1]\n---\n# Plan: Scaffold\n\n## Overview\n\n## Tasks\n\n${taskBlock}\n\n## Done when\n\nThe initial work is complete.\n`,
+    `---\nartifact: plan\nchange: scaffold\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\n${dependencyMode ? "execution:\n  version: 2\n  mode: dependencies\n" : ""}initialization:\n  version: 1\n  base: ${base}\n  authority: requester-message-1\n  breakdown: ${breakdown}\n  taskIds: [1]\n---\n# Plan: Scaffold\n\n## Overview\n\n## Tasks\n\n${taskBlock}\n\n## Done when\n\nThe initial work is complete.\n`,
   );
   return { repository, directory, breakdown, base };
 };
@@ -517,6 +522,25 @@ describe("change context", () => {
     expect(planContractData.recordedInitialization?.breakdown).toBe(clean.breakdown);
     expect(planContractData.tasks[0]?.taskDefinitionDigest).toBe(expectedTaskDigest);
 
+  });
+
+  it("allows dependency-mode scaffold recovery with optional Files when no task work exists", async () => {
+    const scaffold = createInitialContextScaffold(false, true);
+    const result = await runContext({ changeDir: scaffold.directory });
+
+    expect(result.stdout).toContain("format: legacy-unsupported");
+    expect(result.stdout).toContain("scaffold-recovery: eligible");
+    expect(result.stdout).toContain('"goal":"Create the required file."');
+    expect(result.stdout).toContain('"acceptance":["The required file is verified."]');
+  });
+
+  it("blocks dependency-mode scaffold recovery when unlisted material work exists", async () => {
+    const scaffold = createInitialContextScaffold(false, true);
+    write(scaffold.repository, "src/unlisted.ts", "export const partial = true;\n");
+    const result = await runContext({ changeDir: scaffold.directory });
+
+    expect(result.stdout).toContain("scaffold-recovery: blocked");
+    expect(result.stdout).toContain("task work cannot be bounded without Files scopes");
   });
 
   it("blocks initial recovery after an unfinished definition amendment", async () => {

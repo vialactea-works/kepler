@@ -15,6 +15,8 @@ import type { RecognizedArtifact } from "../../packages/cli/src/workbench/artifa
 const sha = "0123456789abcdef0123456789abcdef01234567";
 const task = (id: number, title: string, dependsOn = "none") =>
   `### Task ${id}: ${title}\n\n- Depends on: ${dependsOn}\n- Files: src/task-${id}.ts\n`;
+const dependencyTask = (id: number, title: string, dependsOn = "none") =>
+  `### Task ${id}: ${title}\n\n- Goal: Deliver ${title.toLowerCase()}.\n- Depends on: ${dependsOn}\n- Acceptance:\n  - The ${title.toLowerCase()} is verified.\n- Steps:\n  1. Verify the task behavior.\n- Verify: bun --bun vitest run\n- Commit: feat: ${title.toLowerCase()}\n`;
 const plan = (
   metadata: Record<string, unknown> = {},
   body = `${task(1, "First")}\n${task(2, "Second", "Task 1")}\n${task(3, "Third", "Task 2")}`,
@@ -150,6 +152,82 @@ describe("plan contract", () => {
     ).toContain("Task 2 requires active Task 4 earlier in execution order");
   });
 
+  it("projects dependency-mode plans without imposing numeric execution order", () => {
+    const dependencyTasks = [
+      dependencyTask(1, "Foundation"),
+      dependencyTask(2, "Left branch", "Task 4"),
+      dependencyTask(3, "Right branch", "Task 4"),
+      dependencyTask(4, "Shared prerequisite", "Task 1"),
+      dependencyTask(5, "Join branches", "Task 2, Task 3"),
+    ];
+    const projection = bodyContract(
+      plan(
+        { execution: { version: 2, mode: "dependencies" } },
+        dependencyTasks.join("\n"),
+      ),
+    );
+
+    expect(projection?.execution).toEqual({ version: 2, mode: "dependencies" });
+    expect(projection?.tasks[1]).toMatchObject({
+      dependsOn: [4],
+      goal: "Deliver left branch.",
+      acceptance: ["The left branch is verified."],
+      filesDeclared: false,
+    });
+    expect(projection?.tasks[4]?.dependsOn).toEqual([2, 3]);
+  });
+
+  it("validates dependency-mode chains, diamonds and later-numbered prerequisites", () => {
+    const bodies = [
+      dependencyTask(1, "Foundation"),
+      dependencyTask(2, "Left branch", "Task 4"),
+      dependencyTask(3, "Right branch", "Task 4"),
+      dependencyTask(4, "Shared prerequisite", "Task 1"),
+      dependencyTask(5, "Join branches", "Task 2, Task 3"),
+    ].join("\n");
+    const projection = bodyContract(
+      plan({ execution: { version: 2, mode: "dependencies" } }, bodies),
+    );
+
+    expect(projection?.tasks.map((entry) => entry.dependsOn)).toEqual([
+      [],
+      [4],
+      [4],
+      [1],
+      [2, 3],
+    ]);
+  });
+
+  it.each([
+    ["unknown", [dependencyTask(1, "First"), dependencyTask(2, "Second", "Task 9")].join("\n"), "Task 2 declares unknown or abandoned prerequisite 9"],
+    ["abandoned", [dependencyTask(1, "Retired (abandoned — superseded)"), dependencyTask(2, "Second", "Task 1")].join("\n"), "Task 2 declares unknown or abandoned prerequisite 1"],
+    ["self", dependencyTask(1, "First", "Task 1"), "Task 1 cannot depend on itself"],
+    ["cycle", [dependencyTask(1, "First", "Task 2"), dependencyTask(2, "Second", "Task 1")].join("\n"), "Task prerequisites contain a cycle"],
+    ["duplicate", [dependencyTask(1, "First"), dependencyTask(2, "Second", "Task 1, Task 1")].join("\n"), "Task 2 repeats a Depends on prerequisite"],
+    ["malformed", [dependencyTask(1, "First"), dependencyTask(2, "Second", "Task 1 Task 1")].join("\n"), "Task 2 Depends on must be none or a comma-separated list of Task N IDs"],
+  ])("rejects dependency-mode %s prerequisite declarations", (_name, body, diagnostic) => {
+    expect(
+      invalidMessages(
+        plan({ execution: { version: 2, mode: "dependencies" } }, body),
+      ),
+    ).toContain(diagnostic);
+  });
+
+  it.each([
+    ["Goal", dependencyTask(1, "First").replace("- Goal: Deliver first.\n", ""), "Task 1 requires visible nonempty Goal"],
+    ["Acceptance", dependencyTask(1, "First").replace("- Acceptance:\n  - The first is verified.\n", ""), "Task 1 requires visible nonempty Acceptance"],
+    ["Depends on", dependencyTask(1, "First").replace("- Depends on: none\n", ""), "Task 1 requires an explicit Depends on declaration"],
+    ["Steps", dependencyTask(1, "First").replace("- Steps:\n  1. Verify the task behavior.\n", ""), "Task 1 requires visible nonempty Steps"],
+    ["Verify", dependencyTask(1, "First").replace("- Verify: bun --bun vitest run\n", ""), "Task 1 requires visible nonempty Verify"],
+    ["Commit", dependencyTask(1, "First").replace("- Commit: feat: first\n", ""), "Task 1 requires visible nonempty Commit"],
+  ])("requires visible dependency-mode %s content", (_field, block, diagnostic) => {
+    expect(
+      invalidMessages(
+        plan({ execution: { version: 2, mode: "dependencies" } }, block),
+      ),
+    ).toContain(diagnostic);
+  });
+
   it.each([
     [{ version: 2, order: [1, 2, 3] }, "Explicit execution metadata is malformed; legacy numeric order is not used"],
     [{ version: 1, order: [1, 2, 2] }, "Execution order must contain every active task exactly once"],
@@ -203,6 +281,33 @@ describe("plan contract", () => {
     expect(invalidMessages(noOverview)).toContain(
       "Overview must record the execution transition reference, old/new orders, gated prefix, reason, and affected obligations",
     );
+  });
+
+  it("projects dependency-mode scheduling transition sets and their overview proof", () => {
+    const transition = {
+      version: 2,
+      previousPlanCommit: sha,
+      fullyGatedTasks: [1],
+      approval: "requester-scheduling-reference",
+      reason: "Add a prerequisite without changing accepted scope.",
+      affected: "Task 2 receives the new prerequisite.",
+    };
+    const source = plan(
+      {
+        execution: { version: 2, mode: "dependencies" },
+        execution_transition: transition,
+      },
+      dependencyTask(1, "First"),
+    );
+    const withOverview = {
+      ...source,
+      body: source.body.replace(
+        "## Overview\n\n",
+        `## Overview\n\n- Execution approval: ${transition.approval}\n- Fully gated tasks: 1\n- Reason: ${transition.reason}\n- Affected obligations: ${transition.affected}\n\n`,
+      ),
+    };
+
+    expect(bodyContract(withOverview)?.executionTransition).toEqual(transition);
   });
 
   it("projects explicit input-impact classifications without treating them as approval", () => {
