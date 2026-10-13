@@ -26,3 +26,18 @@ Verdict: changes-requested
 ### Suggestions
 
 - None.
+
+## Pass 2 — 2026-10-13
+
+Base: cd002589a249f8492f027952699b651e43e01966
+Head: e82f5fc5e31dee82c28fb334b4d1d67e332f3aeb
+Verdict: changes-requested
+
+### Blocking
+
+- [bundle/templates/README.md:106] The artifact-location guide still says without a mode qualification that Kepler-code updates its assigned root row, which contradicts the v2 coordinator-owned root-publication contract described immediately below. Qualify code-owned root-row updates as legacy serial behavior, state that v2 workers only write task-local evidence while the coordinator publishes root status, and add a contract assertion for this README wording (violates: Task 5 acceptance, root ownership).
+- [.kepler/changes/2026-10-12-dependency-aware-task-execution/tasks/task-5/progress.md:47] The latest attempt's Modified list omits seven paths changed by its correction commit: `bundle/templates/plan.md`, `skills/kepler-orchestrate/SKILL.md`, `skills/kepler-orchestrate/references/implementer-prompt.md`, `skills/kepler-plan/SKILL.md`, `tests/skills/orchestrate-contract.test.ts`, `tests/skills/plan-tdd-contract.test.ts`, and `tests/skills/planning-resources-contract.test.ts`. Record the complete attempt path set in its task-local evidence before claiming the attempt is fully documented; the current list is not an accurate inventory of the 10-path correction commit (violates: Task 5 acceptance, truthful task-local attempt evidence and project workflow contract).
+
+### Suggestions
+
+- None.
