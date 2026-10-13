@@ -24,3 +24,17 @@ Verdict: changes-requested
 ### Suggestions
 
 - None.
+
+## Pass 2 — 2026-10-13
+
+Base: 5a6472d329b54459cc9f63aa1b1cb70f7713969b
+Head: bdf1b181664404095695fa929327e7e95a1d0c67
+Verdict: changes-requested
+
+### Blocking
+
+- [`tests/workbench/context.test.ts:843-865`] The new context regression commits `.kepler/changes/reserved-preparation/src/reserved.ts` before it writes and commits that exact path's `scope_expansions` reservation, yet expects `format: split`. [`packages/cli/src/workbench/context.ts:1787-1801`] routes any reservation through `resolveTaskCheckpoint`; [`packages/cli/src/workbench/task-checkpoint.ts:209-224,278-287`] then treats the reservation commit's first parent as the recovered Base, so [`packages/cli/src/workbench/scope-expansions.ts:118-151`] checks only the cropped parent-to-reservation range and accepts the earlier production change. The direct inspector control at `tests/workbench/scope-expansion-history.test.ts:119-130` does reject this chronology only when no recovered Base crops it. Restore fail-closed before-edit chronology and add a real Git/CLI context negative regression for production committed before its reservation; preserve legitimate pre-attempt recovery without relaxing the two/four limits. (violates Task 6 acceptance 6; `requirements/execution.md` Bounded prerequisite expansions and `requirements/workbench.md` Invalid graph or evidence.)
+
+### Suggestions
+
+- None.
