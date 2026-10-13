@@ -54,6 +54,20 @@ describe("kepler-plan TDD handoff", () => {
     expect(replan).toMatch(/ownership conflict.*stop/is)
   })
 
+  it("keeps operative v2 task rules distinct from explicit legacy rules", () => {
+    const principles = section(skill, "## Principles")
+    const taskContract = principles.split("### Version 2 dependency-mode tasks")[1]?.split("### Historical serial tasks")[0] ?? ""
+    const legacy = principles.split("### Historical serial tasks")[1] ?? ""
+    expect(taskContract).toMatch(/Goal.*Acceptance.*Depends on.*Steps.*Verify.*Commit/is)
+    expect(taskContract).toMatch(/Files.*optional guidance.*not.*allowlist/is)
+    expect(taskContract).toMatch(/goal-serving unlisted paths/is)
+    expect(taskContract).toMatch(/Red.*Green.*Refactor/is)
+    expect(legacy).toMatch(/verbatim.*Steps/is)
+    expect(legacy).toMatch(/serial/is)
+    expect(taskContract).not.toMatch(/Steps are executed verbatim/)
+  })
+
+
   it("ships an executable red-green-refactor example in the installed plan template", () => {
     const task = template.split("### Task 1:")[1]?.split("### Task 2:")[0] ?? ""
     const steps = task.split("- Steps:")[1]?.split("- Verify:")[0] ?? ""

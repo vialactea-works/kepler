@@ -60,19 +60,26 @@ review have different evidence, inspection boundaries, artifact destinations, an
 
 ## Principles
 
+### Dependency-mode v2
+
+When the committed plan declares `execution: {version: 2, mode: dependencies}`, derive verified ready, held, and fully gated sets from workbench context on current committed evidence. A ready task is not admitted merely by readiness; root `done` is implementation status, not clearance. Admit the observed expected worker and lane before dispatch, and dispatch only compatible isolated lanes. Keep descendants held until every declared prerequisite is fully gated by fresh committed independent feedback.
+
+Workers own isolated task-local attempts and task commits only. One coordinator owns shared common-gitdir mutation: serialize integration of original worker commits, then guarded root publication for `done` or `blocked` only; interrupted and unavailable are neutral worker responses. Preserve each admission's original Base across retries, corrections, and cache loss; never turn partial work or an unavailable response into a fabricated attempt or `done`/`blocked` outcome. After integration, require exact integrated Verify before publishing `done`; feedback is independently authored and artifact-only. Require fresh committed independent feedback for every active task before whole-branch review or finish, regardless of root completion.
+
+Use the configured `kepler` executable for workbench commands; source-backed development fixtures may provide a fixture-local CLI bridge. `kepler workbench context <change-dir>` derives readiness. Guarded commands use `workbench task-state --admit [--retry] --task N --change-dir <path> --expected-head <full40> --worker <observed-worker> --worktree <linked-lane> --target-branch <full-ref>`, `--reserve --task N --change-dir <path> --expected-head <full40> --reservation '<exact JSON>'`, and `--publish --task N --change-dir <path> --expected-head <full40> --task-head <full40> --verify '<exact Verify>' --response done|blocked`. Confirm command-specific compatibility from the actual CLI; reservations bind before edits, permit two lifetime reservations and four paths each, and never refund. `workbench diff --record --task N --change-dir <path>` is not a substitute for v2 admission. For feedback packaging, use `workbench diff --task N --change-dir <path>`; `--record` writes or validates a cache rather than producing a diff package.
+
+### Historical serial mode
+
+Plans without the exact v2 execution declaration retain serial scheduling: use a validated explicit version-1 `execution.order` when present, otherwise numeric identity order; malformed explicit order holds without fallback. Preserve code-owned root updates and historical checkpoint behavior. Never infer v2 from installed resources or rewrite frozen plans.
+
 - **Read state, then dispatch.** Before every action, recompute the applicable matrix from the
   root row, the physically last verdict, and reviewed-range freshness.
-- **One active task lane.** Never dispatch task implementers in parallel. Select from the
-  validated `execution.order` when explicit, otherwise numeric legacy identity order. Resolve the
-  earliest active task that has not reached `done` plus fresh approval before selecting another.
-- **One task, one checkpoint.** Create `<change-dir>/tasks/task-N/.base` from current `HEAD` only
-  before a genuine first attempt. Every later dispatch validates the historical checkpoint or
-  recovers that same commit from unambiguous durable evidence; it never rebases the task range.
-- **Stage-owned evidence.** Code owns the root status and task progress, code feedback owns only
-  task feedback, and whole-branch review owns only root review.
+- **Mode-scoped dispatch.** In dependency-mode v2, derive readiness from current verified context and allow only compatible isolated admitted lanes; readiness alone is not admission. In historical serial mode, never dispatch task implementers in parallel and select numeric identity order.
+- **One task, one checkpoint.** In v2, preserve original admission Base across retries, corrections, and cache loss. In historical serial mode, create `.base` only before a genuine first attempt and recover the same commit from durable evidence; never rebase the task range.
+- **Stage-owned evidence.** In v2, workers own task-local attempts/commits, the coordinator owns guarded root publication, code feedback owns only task feedback, and whole-branch review owns only root review. Historical serial workers retain root status updates.
 - **Commit every gate.** A feedback or review verdict is not a completed checkpoint until its
   owner makes and verifies the required artifact-only commit.
-- **Files carry detail.** Task progress is the only detailed implementer report. Dispatch output
+- **Files carry detail.** In historical plans, task progress is the only detailed implementer report. Dispatch output
   is concise status and commit information; diff packages and verdict artifacts carry review
   evidence.
 - **Fail closed on actual gate failures.** An absent, lint-invalid, unreachable, contradictory,
@@ -81,7 +88,9 @@ review have different evidence, inspection boundaries, artifact destinations, an
 
 ## Checkpoint establishment and recovery
 
-Before any first-attempt `--record`, inspect the exact task's Files and Acceptance, working tree,
+For dependency-mode v2, admission binds the original Base and all task, plan, actor, lane, repository, and ordered prerequisite approval identities. Reuse that original admission Base through retry/correction and cache loss; never reset it to current HEAD. Only the coordinator serializes shared integration and guarded publication. An unavailable worker response preserves partial work and remains unresolved; it is not itself a task attempt or a fabricated terminal status. V2 root `done` requires integration and exact Verify, while `fully gated` additionally requires a fresh independently committed feedback approval for every active task.
+
+For historical serial mode only, before any first-attempt `--record`, inspect the exact task's Files and Acceptance, working tree,
 and attributable Git history for task-owned committed and uncommitted implementation changes.
 The CLI's mechanical eligibility does not prove the absence of task-owned work. A clean tree,
 pending row, or empty log cannot establish that absence. If task-owned work already exists or its
@@ -147,9 +156,38 @@ proven recording omission while preserving sibling rows, metadata, and history. 
 change implementation status, and the driver never invents a done attempt. If completion evidence
 is insufficient, resume normal verification rather than making a bookkeeping-only repair.
 
+## Dependency-mode v2 outcome routing
+
+For v2, first recompute the verified readiness projection (`ready`, `held`, and `fullyGated`) using `kepler workbench context <change-dir>`. Readiness is not admission, root `done` is not clearance, and no terminal worker response bypasses publication or feedback.
+
+| Worker / publication evidence | Coordinator action |
+| --- | --- |
+| Ready, not admitted | Admit the observed expected worker/lane against current full HEAD and prerequisites before dispatch; readiness alone never authorizes a worker. |
+| Held, including a descendant of an incomplete prerequisite | Do not dispatch; preserve completed work and wait for prerequisite fully gated feedback. |
+| Root `pending` and verified ready | Admit first, then dispatch only the expected worker/lane. |
+| Root `blocked` and newly resolved input | Preserve prior evidence; retry only after a changed resolution and guarded admission. |
+| Root `in-progress` or interrupted worker | Inspect only assigned lane, task commits, checkpoint and local evidence; resume same admission or hold, never select another task. |
+| Worker response absent or unavailable | Preserve partial lane and admission Base; inspect durable worker/task evidence. Missing response is not an attempt, blocked result, or done result. |
+| Worker reports blocked with truthful local evidence | Coordinator may publish only `blocked`; preserve uncommitted partial work and do not count fully gated. |
+| Worker done with original task commit | Serialize integration of that original commit; run its exact Verify on integrated bytes; publish `done` only through guarded publication. |
+| Worker blocked | Preserve partial work; coordinator publishes blocked through guarded publication only when worker supplied truthful task-local evidence. Never fabricate an attempt or mark done. |
+| Worker interrupted, unavailable, or response missing | Preserve the lane and partial work; keep unresolved/in-progress and inspect evidence. No fabricated terminal outcome: do not synthesize done or blocked or retry from a new Base. |
+| Feedback absent | Dispatch independent artifact-only feedback for the integrated task range; do not count fully gated. |
+| Feedback untracked or changed from `HEAD` | Re-review the same integrated range; untracked or modified verdicts never clear. |
+| Latest feedback-touching commit is mixed | Require a fresh artifact-only feedback commit on the same task range. |
+| Feedback stale or lint-invalid | Route stale evidence to its owner; do not issue an identical retry or infer approval. |
+| Feedback fresh `skipped` | Request a new feedback pass; skipped does not clear. |
+| Fresh changes-requested code-defect | Dispatch same task worker for correction with guarded `--admit --retry` against original Base and remaining lifetime reservations; integrate and verify, publish separately, then obtain new independent feedback. |
+| `cannot verify from diff` / evidence-gap | Adjudicate located evidence on unchanged Base/Head; re-feedback same-Head only with new evidence, or route a confirmed code gap to correction. |
+| Fresh `changes-requested` intent-defect | Return to approved intent owner; do not ask worker to work around it. |
+| Fresh durable `approved`, no blockers | Count fully gated only after current context confirms prerequisite gates; then recompute readiness. |
+| Integrated task has fresh durable approved feedback | Count fully gated only if readiness projection confirms prerequisites; then recompute all ready/held descendants. |
+
+Only compatible ready tasks with independently admitted isolated lanes may run concurrently. Each worker owns its task-local attempt and original task commit; a single coordinator serializes shared integration and guarded root publication. The only publication outcomes are `done` and `blocked`; `interrupted` and `unavailable` are worker responses, not root statuses. Reuse the admission-bound original Base through retries, corrections, and lost caches. Before whole-branch review or finish, require every active task fully gated with fresh committed independent feedback.
+
 ## Task resume matrix
 
-Apply this matrix to the earliest active task that is not fully gated. `Feedback state` means the
+This matrix applies to historical serial plans only. Apply it to the earliest active task that is not fully gated. `Feedback state` means the
 physically last pass in `tasks/task-N/feedback.md`, validated against the latest commit that
 touched that task's progress file.
 
@@ -233,6 +271,20 @@ Repeated review dispatches must name the evidence change that could alter the re
 change, stop and ask the responsible owner to adjudicate. Do not rerun approved current tasks or
 review merely because conversation history was compacted or lost.
 
+## Dependency-mode coordinator process
+
+For v2, use the configured `kepler` executable; development fixtures may expose it through a source-backed local bridge. First run `workbench context <change-dir>` and derive verified `ready`, `held`, and `fullyGated` sets. For each selected ready task, observe and admit its expected worker/lane before dispatch using `workbench task-state --admit [--retry] --task N --change-dir <path> --expected-head <full40> --worker <observed-expected-worker> --worktree <linked-lane> --target-branch <full-ref>`. Ready is not admitted; compatible isolated admissions may execute concurrently, but no worker may mutate shared root evidence.
+
+For a necessary prerequisite reservation, coordinator records it before edits with `workbench task-state --reserve --task N --change-dir <path> --expected-head <full40> --reservation '<exact JSON>'`; when reserving before admission include the target-branch flag required by the actual parser. The JSON binds `id`, `attempt`, `prerequisite`, `necessity`, `evidence`, concrete `paths`, and `verify`. Lifetime limit: two reservations per task, at most four paths per reservation, no refund across retry, abandonment, or correction. Reservations do not authorize new dependencies, public API changes, or security-policy changes; goal-serving unlisted edits alone do not require reservation. If necessity/intent is unresolved, bounds are exhausted, or changes exceed authority, preserve work and hold for re-plan.
+
+Workers return original task commits plus truthful task-local evidence. The coordinator serializes common-gitdir integration without rewriting worker ancestry, verifies exact task Verify on integrated bytes, then separately publishes with `workbench task-state --publish --task N --change-dir <path> --expected-head <full40> --task-head <full40> --verify '<exact Verify>' --response done|blocked`. Use the source parser's accepted response and option combinations; never pass incompatible admission flags to reserve/publish. Publication is separate ledger-only coordination, not feedback clearance. Package the actual integrated range with `workbench diff --task N --change-dir <path>`; do not use `--record`, which writes or validates a checkpoint cache. Missing/interrupted/unavailable worker responses preserve partial lane work and original admission Base, without fabricated attempts or terminal results. A blocked publication is coordinator-owned and does not discard partial edits. After every integration/publication recompute context; descendants remain held until prerequisites have fresh, durable, independent feedback approvals.
+
+Before whole-branch review or finish, every active task must be fully gated: integrated completion, guarded publication, and fresh committed independent feedback covering the integrated range. Root `done` or ready status alone never clears a task. Feedback remains independently authored and artifact-only; feedback outcome routing remains: approved clears only its task, skipped does not clear, changes-requested code-defect returns to that task's worker with verification, evidence-gap gets located independent evidence without invented code, intent-defect returns to intent owner, and invalid/stale evidence holds for owner diagnosis. Preserve all outcomes across missing/interrupted responses and never repeat unchanged dispatches.
+
+## Historical serial process
+
+The following numbered lifecycle applies to unversioned and version-1 serial plans. For v2, use the dependency-mode coordination contract and outcome routing above; do not make workers mutate shared root state or force one global serial lane.
+
 ## Process
 
 1. **Verify workspace isolation.** Run
@@ -300,8 +352,7 @@ review merely because conversation history was compacted or lost.
    Recheck the selected task's input standing before dispatch. A legacy task without versioned input
    provenance may use only a committed, task-scoped `legacy_input_confirmations` entry reported as
    `legacy-current-confirmed`; never convert its current input list into historical evidence. For
-   explicit execution metadata, re-run context and scoped lint, require `execution-history:
-   verified`, and confirm the order has not changed since selection. Dispatch only its first slot
+   historical version-1 serial execution metadata, re-run context and scoped lint, require `execution-history: verified`, and confirm its validated serial order has not changed since selection. Dispatch only its first slot
    that is not fully gated, with the current full plan commit, slot number, previous sequence-slot
    task ID and that task's durable fresh approval evidence. A newly inserted prerequisite cannot
    dispatch until the required quiescence and exact partial-work preservation/restoration authority
@@ -581,3 +632,7 @@ digraph kepler_orchestrate {
     "Whole-review state?" -> "Hand off to kepler-finish-work" [label="approved / approved-remediation, current"];
 }
 ```
+
+## Dependency-mode coordination
+
+For `execution: {version: 2, mode: dependencies}`, derive ready, held and fullyGated tasks with `kepler workbench context <change-dir>`. Root `done` is implementation publication, not clearance. Dispatch only compatible ready tasks in isolated lanes; serialize original-commit integration and guarded root publication. One coordinator performs `task-state --admit`, optional `--reserve`, and `--publish`; it does not invent a scheduler or cache. Descendants of blocked or uncleared tasks hold while unrelated ready tasks may proceed. Each active task needs current committed implementation evidence and fresh independent approved feedback before final review or finish. Preserve explicit legacy serial handling for unversioned and version-1 execution.

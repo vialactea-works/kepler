@@ -3,6 +3,11 @@ import * as Fs from "node:fs"
 import * as Path from "node:path"
 import { execFileSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
+import { parse } from "yaml"
+import { validateArtifact } from "../../packages/cli/src/workbench/artifact-contracts.js"
+import type { RecognizedArtifact } from "../../packages/cli/src/workbench/artifact-reader.js"
+import { validateArtifactMetadataSchema } from "../../packages/cli/src/workbench/artifact-schemas.js"
+import { validateTaskAdmission } from "../../packages/cli/src/workbench/task-admission.js"
 
 const templatesDir = Path.resolve(Path.dirname(fileURLToPath(import.meta.url)), "../../bundle/templates")
 const repositoryDir = Path.resolve(templatesDir, "../..")
@@ -60,6 +65,47 @@ describe("split execution artifact templates", () => {
     expect(template).toContain("progress: tasks/task-N/progress.md")
     expect(template).toContain("status: pending | in-progress | blocked | complete")
     expect(template).toContain("Root `status: complete` means all active implementation rows are done")
+  })
+
+  it("validates instantiated v2 plan task contracts and rejects missing Goal or dependency", () => {
+    const template = readTemplate("plan.md")
+    const metadata = parse(readFrontmatter(template).replace("<YYYY-MM-DD-change-title>", "2026-10-12-example").replace("<YYYY-MM-DD>", "2026-10-12").replace("<Name <email>>", "Test <test@example.com>").replace("<full 40-hex pre-scaffold Git commit>", "0123456789abcdef0123456789abcdef01234567").replace("<requester authority reference>", "approved request").replace("<64-hex SHA-256 task breakdown digest>", "a".repeat(64))) as Record<string, unknown>
+    const makeTask = (omit?: "goal" | "dependency") => `### Task 1: Example\n\n${omit === "goal" ? "" : "- Goal: Deliver example.\n"}${omit === "dependency" ? "" : "- Depends on: none\n"}- Acceptance:\n  - Example behavior is verified.\n- Steps:\n  1. Red — observe the failing behavior.\n  2. Green — implement the smallest fix.\n  3. Refactor — preserve behavior and rerun tests.\n- Verify: bun --bun vitest run\n- Commit: feat: implement example\n`
+    const artifact = (body: string): RecognizedArtifact => ({ _tag: "recognized", sourcePath: ".kepler/changes/2026-10-12-example/plan.md", metadata: { ...metadata, status: "approved", decision: "accepted", initialization: { version: 1, base: "0123456789abcdef0123456789abcdef01234567", authority: "approved request", breakdown: "a".repeat(64), taskIds: [1] } }, body: `# Plan: Example\n\n## Overview\n\n## Tasks\n\n${body}\n## Done when\n\nComplete.`, locations: { frontmatter: { startLine: 1, endLine: 10 }, metadata: { startLine: 2, endLine: 10 }, body: { startLine: 11, endLine: 30 } } })
+    expect(metadata.execution).toEqual({ version: 2, mode: "dependencies" })
+    expect(validateArtifact(artifact(makeTask()))._tag).toBe("valid")
+    expect(validateArtifact(artifact(makeTask("goal")))._tag).toBe("invalid")
+    expect(validateArtifact(artifact(makeTask("dependency")))._tag).toBe("invalid")
+  })
+
+  it("renders dependency-mode task skeletons with a complete v2 contract", () => {
+    const template = readTemplate("plan.md")
+    const tasks = template.split("## Tasks")[1]?.split("## Done when")[0] ?? ""
+    const blocks = tasks.split(/^### Task [12]:/m).slice(1)
+    expect(blocks).toHaveLength(2)
+    for (const block of blocks) {
+      const header = block.split(/^### Task /m)[0]
+      expect(header).toMatch(/- Goal:/)
+      expect(header).toMatch(/- Acceptance:/)
+      expect(header).toMatch(/- Depends on:/)
+      expect(header).toMatch(/- Steps:/)
+      expect(header).toMatch(/- Verify:/)
+      expect(header).toMatch(/- Commit:/)
+      expect(header).toMatch(/Files: optional guidance/)
+    }
+  })
+
+  it("parses the instantiated root template and validates omitted admission with the real schema", () => {
+    const template = readTemplate("progress.md").replace("<YYYY-MM-DD-change-title>", "2026-10-12-example").replace("status: pending | in-progress | blocked | complete", "status: pending").replace("<YYYY-MM-DD>", "2026-10-12").replace("decision: accepted | rejected | skipped", "decision: accepted").replace("<Change Title>", "Example").replace("<task title>", "Example").replace("id: N", "id: 1").replace("Task N: <escaped display title>", "Task 1: Example").replace("tasks/task-N/progress.md", "tasks/task-1/progress.md")
+    const metadata = parse(readFrontmatter(template)) as Record<string, unknown>
+    const artifact = {
+      _tag: "recognized" as const, sourcePath: "progress.md", metadata, body: "",
+      locations: { frontmatter: { startLine: 1, endLine: 1 }, metadata: { startLine: 1, endLine: 1 }, body: { startLine: 1, endLine: 1 } },
+    }
+    expect((metadata.tasks as Record<string, unknown>[])[0]).not.toHaveProperty("admission")
+    expect(validateArtifactMetadataSchema(artifact, "progress")).toEqual([])
+    expect(validateArtifactMetadataSchema({ ...artifact, metadata: { ...metadata, tasks: [{ ...(metadata.tasks as Record<string, unknown>[])[0], admission: null }] } }, "progress")).not.toEqual([])
+    expect(validateTaskAdmission(null)).toEqual({ kind: "invalid", reason: "task admission must be an object" })
   })
 
   it("provides a synchronized root task ledger skeleton", () => {

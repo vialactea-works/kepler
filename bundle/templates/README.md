@@ -110,3 +110,7 @@ remain change-level artifacts.
 `requirements/*.md` inside a change use delta headers (ADDED / MODIFIED / REMOVED /
 RENAMED). `kepler-finish-work` folds those deltas into the canonical
 `.kepler/specs/<capability>.md`, which holds no delta markers.
+
+## Dependency-mode execution
+
+New plans use version 2 dependency execution. Their task Files lists are optional guidance; Goal, Acceptance, approved intent and standards bound implementation. Root admission metadata is coordinator-owned provenance, while task-local `scope_expansions` preserves up to two lifetime before-edit reservations of at most four concrete paths. Existing serial artifacts remain historical and are not rewritten.

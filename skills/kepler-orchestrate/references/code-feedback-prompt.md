@@ -127,3 +127,7 @@ Subagent:
   or `none` when no peer context applies. It never crops the original cumulative range.
 - `[LOCATED_EVIDENCE_OR_NONE]` is `none` for an ordinary pass or exact named evidence adjudicating
   a typed evidence gap or legacy canonical unresolved item for same-Base/Head re-feedback.
+
+## Dependency-mode range
+
+Review the stable integrated range with commit attribution. Preserve append-only artifact-only feedback and judge Goal, Acceptance, TDD evidence and committed scope reservations; do not use Files as an allowlist or mutate coordinator-owned root publication.

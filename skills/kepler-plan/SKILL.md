@@ -44,6 +44,16 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 
 ## Principles
 
+### Version 2 dependency-mode tasks
+
+When the committed plan declares `execution: {version: 2, mode: dependencies}`, each task is governed by Goal, Acceptance, Depends on, Steps, Verify, and Commit. Files is optional guidance, not an allowlist. The Goal, Acceptance, approved intent, cited design and requirements, and project standards bind implementation. A coder may make goal-serving unlisted paths when needed to satisfy those constraints; unrelated edits and changes to public APIs, security policy, dependencies, or approved intent remain out of scope. Bind implementation to task-local context and intent, not an inferred file whitelist.
+
+Steps give the worker bounded judgment rather than specifying every edit verbatim. They preserve binding intent, design, and standards while allowing related checks and TDD cycles to establish the right solution. Keep each cycle in Red → Green → Refactor order and include Verify after Refactor. Expected worker judgment does not authorize changing the goal, approval, or architecture boundaries.
+
+### Historical serial tasks
+
+For plans without dependency-mode v2, retain the historical serial task contract: execute task Steps verbatim, treat listed Files as the task boundary, use numeric identity order, and do not add design of your own. Never rewrite a frozen historical plan into v2 or infer v2 from current templates.
+
 - **Plan-first, read-only.** Explore the code you will touch before writing the plan.
   Understand existing patterns and how tests run. Make no edits in this step.
 - **TDD-sized tasks.** Each task is small enough to implement and verify in isolation —
@@ -51,20 +61,13 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
   registration endpoint that validates email format" is right.
 - **One task at a time.** The coder consumes a single task and nothing else, so each task
   must be self-contained: its files, acceptance, and verification stand alone.
-- **Steps are executed verbatim.** The coder follows a task's Steps exactly and adds no
-  design of its own (it may be a weak model). Specify the complete Red → Green → Refactor
-  sequence, or a justified alternative Red when a conventional failing check is impossible.
-  The coder cannot invent missing steps or treat Green as completion.
+- **Task-specific execution contract.** Under v2, use the bounded-judgment contract above; under historical serial mode, Steps are executed verbatim and the coder does not add design. Specify the complete Red → Green → Refactor sequence, or a justified alternative Red when a conventional failing check is impossible. The coder cannot omit phases or treat Green as completion.
 - **Reference, don't copy.** Point to `design.md` / `requirements/`; do not duplicate them.
 - **Honor the canonical specs.** Before decomposing, read the `.kepler/specs/` entries for
   the capabilities the change touches. They record the conventions and decisions the project
   has already committed to; a plan that quietly contradicts them regresses agreed behavior.
   Follow them, or surface the conflict — do not plan around it silently.
-- **Plan for quality.** The coder executes verbatim and adds no design, so the plan carries
-  the quality — not the code step. Decompose so each task preserves the design's structure
-  and stays independently testable, and make any code snippet model the clean shape rather
-  than a shortcut the coder will copy. Judge the plan against `references/code-quality.md`
-  (read it from this skill's references directory), proportional to the change's size.
+- **Plan for quality.** Binding design and standards apply in every mode; the plan should carry enough quality constraints for implementation while preserving bounded worker judgment in v2. Decompose so each task preserves the design's structure and stays independently testable, and make any code snippet model the clean shape rather than a shortcut the coder will copy. Judge the plan against `references/code-quality.md` (read it from this skill's references directory), proportional to the change's size.
 - **Detail scales to risk.** Include code or exact commands only where they remove
   ambiguity. Otherwise state intent and let the coder think — do not pre-write the diff.
 - **Write flowing prose.** In `plan.md` — overviews, task descriptions, acceptance
@@ -249,8 +252,7 @@ verification and another feedback pass. This handoff belongs to the driver, not 
    approved intent and standards. Carry only applicable constraints into the exact task that
    needs them; record stale or conflicting advice as rejected context with its current-source
    reason. Do not add abstractions for an inapplicable rubric principle.
-7. **Decompose.** Break the work into TDD-sized tasks. Order them and mark logical dependencies
-   without implying concurrent implementation: the driver uses one task lane and serial execution.
+7. **Decompose.** Break the work into TDD-sized tasks and mark logical dependencies. Under v2, dependencies drive derived readiness and the coordinator dispatches only compatible ready work into isolated lanes. Historical serial mode remains one task lane in sequence.
    For each task, put the applicable structural quality constraint and verified decision/source
    in that task block, not only in Overview. If no relevant memory is available, state that and
    use current repository context. A coder receives one task at a time and will not infer sibling
@@ -265,7 +267,8 @@ verification and another feedback pass. This handoff belongs to the driver, not 
    production edits; in Green, rerun that check; in Refactor, rerun relevant tests after cleanup.
    Include the correction rule from **TDD task contract** in each task block, since the coder reads
    no sibling block or plan-wide instructions. Where a step includes a code snippet, make it
-   model the clean shape from `references/code-quality.md`; the coder copies it verbatim.
+   model the clean shape from `references/code-quality.md`. In historical serial plans the coder
+   copies a binding snippet verbatim; in v2 it is a design/standards example under bounded judgment.
 9. **Confirm or auto-reflect.** If working with a person, present the task breakdown and
    confirm it before finalizing. If running unattended with explicit authority to plan, self-review
    against the checklist below and record assumptions inline in the plan. This approval covers only
@@ -491,13 +494,14 @@ Before finishing, confirm:
   task Step invokes `kepler-code-feedback` or edits sibling evidence. The driver obtains fresh
   approval before advancing.
 - Each task's Steps are explicit enough to follow with no further design.
-- Each Files list is complete (created / modified / deleted).
+- In historical serial plans, each Files list is complete (created / modified / deleted); in v2, Files is optional guidance rather than an allowlist.
 - Each acceptance criterion ties to a requirement scenario where one exists.
 - Dependencies are correct and acyclic.
 - The task seams follow the design's boundaries; no task bundles unrelated changes, and each
   lands a unit that can be tested in isolation (`references/code-quality.md`, proportional to
   the change).
-- Any code snippet in a task models the clean shape — the coder copies it verbatim.
+- Any code snippet in a task models the clean shape. In historical serial plans it is copied
+  verbatim; in v2 it is a design/standards example under bounded judgment.
 - "Done when" requires all tasks `done`, tests and build passing, fresh committed `approved`
   feedback for every task before advancement, and an approved whole-branch review.
 - Root progress has exactly one correctly ordered row per active task, uses only `pending`,
@@ -561,3 +565,11 @@ digraph kepler_plan {
     "Auto-reflect + record assumptions" -> "Write plan.md + initialize task ledger + self-review";
 }
 ```
+
+## Dependency-mode planning
+
+New plans use `execution: {version: 2, mode: dependencies}`. Every active task has Goal, Acceptance, explicit `Depends on`, Steps, Verify and Commit; Files is optional guidance, not an allowlist. The coder may inspect and edit goal-serving unlisted paths when they remain within approved intent, binding design, standards and Acceptance. Red, Green and Refactor remain ordered and several related cycles may serve one coherent goal.
+
+Derive readiness with `kepler workbench context <change-dir>`; it is a verified ready, fullyGated or held projection, not scheduling authority. Preserve unversioned numeric serial plans and `execution: {version: 1, order: [...]}` as legacy serial modes. Never convert a frozen plan, its initialization, approval, task definitions or history to version 2.
+
+A new prerequisite needs an immutable task-local `scope_expansions` reservation before production edits: at most two lifetime reservations and at most four concrete implementation, test or documentation paths each. It records id, attempt, prerequisite, necessity, evidence, paths and verify. Retries, abandonment and corrections do not refund it. A third reservation, more paths, new dependency, public contract or security-policy change is blocked for owner-approved re-planning.

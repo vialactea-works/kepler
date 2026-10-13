@@ -313,3 +313,7 @@ digraph kepler_code_feedback {
     "Feedback-only bookkeeping commit" -> "Return control to driver";
 }
 ```
+
+## Dependency-mode feedback
+
+For dependency mode, review the actual integrated task range and retain artifact-only append-only feedback. Files are not an allowlist: judge Goal, Acceptance, binding constraints, TDD evidence and any scope expansion. Fresh independent `approved` feedback is clearance; `done`, missing, skipped, interrupted or unavailable responses are not. Do not change root status or coordinator admission/publication evidence.

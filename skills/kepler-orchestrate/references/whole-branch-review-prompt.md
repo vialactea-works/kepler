@@ -82,3 +82,7 @@ Subagent:
   identify the immutable full-review baseline, or `none` for full mode.
 - `[COMPLETE_APPROVED_REQUIREMENTS_AND_DESIGN_CONSTRAINTS]` carries the complete approved change
   intent rather than task-local excerpts.
+
+## Dependency-mode clearance
+
+Enter whole-branch review only when every active task has committed implementation evidence and fresh independent approved feedback. Root done alone, skipped feedback and unavailable responses do not clear a task.

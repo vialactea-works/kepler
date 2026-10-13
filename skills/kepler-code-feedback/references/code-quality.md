@@ -68,3 +68,7 @@ the intended regression rather than merely mirror implementation text or structu
 
 Every changed path should serve the assigned task. Flag unrelated edits, dead code, stubs, TODOs,
 debug output, commented-out code, weakened tests, and accidental generated artifacts.
+
+## Dependency-mode scope integrity
+
+Inspect goal-serving unlisted paths rather than rejecting them by filename. A prerequisite expansion must be necessary, committed before edits, bounded to two lifetime reservations and four concrete paths each, and within approved intent; otherwise request changes with a located finding.

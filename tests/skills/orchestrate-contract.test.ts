@@ -12,6 +12,34 @@ const readReference = (name: string): string => {
 const singleLine = (content: string): string => content.replace(/\s+/g, " ")
 
 describe("kepler-orchestrate task resume contract", () => {
+  it("routes each v2 feedback and worker outcome without fabricating clearance", () => {
+    const routing = section(skill, "## Dependency-mode v2 outcome routing")
+    for (const outcome of ["absent", "untracked or changed", "mixed", "stale or lint-invalid", "skipped", "changes-requested code-defect", "cannot verify from diff", "fresh durable approved", "interrupted", "unavailable"]) expect(routing).toContain(outcome)
+    expect(routing).toMatch(/code-defect.*--retry.*original Base.*new independent feedback/is)
+    expect(routing).toMatch(/same-Head.*evidence/is)
+    expect(routing).toMatch(/interrupted.*unavailable.*no fabricated/is)
+    expect(routing).not.toMatch(/publication.*interrupted.*unavailable.*outcome vocabulary/i)
+  })
+
+  it("keeps portable skill commands executable-independent", () => {
+    const portable = `${skill} ${readReference("implementer-prompt.md")}`
+    expect(portable).not.toContain("packages/cli/src/cli/main.ts")
+    expect(portable).toMatch(/kepler workbench context/)
+  })
+
+  it("separates dependency-mode readiness and coordinator publication from legacy serial ownership", () => {
+    const principles = section(skill, "## Principles")
+    const dependencyMode = principles.split("### Dependency-mode v2")[1]?.split("### Historical serial mode")[0] ?? ""
+    const legacy = principles.split("### Historical serial mode")[1] ?? ""
+    expect(dependencyMode).toMatch(/verified ready.*held.*fully gated/is)
+    expect(dependencyMode).toMatch(/ready.*not admitted/is)
+    expect(dependencyMode).toMatch(/coordinator.*integrat.*publish/is)
+    expect(dependencyMode).toMatch(/original Base.*retry/is)
+    expect(dependencyMode).toMatch(/fresh.*committed.*independent.*feedback.*every active task/is)
+    expect(legacy).toMatch(/validated explicit version-1 `execution\.order`.*otherwise numeric identity order/is)
+    expect(legacy).toMatch(/malformed explicit order holds without fallback/is)
+    expect(legacy).toMatch(/code-owned root updates/is)
+  })
   const matrix = singleLine(section(skill, "## Task resume matrix"))
 
   it("dispatches code for a pending task", () => {

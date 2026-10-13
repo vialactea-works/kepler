@@ -2,9 +2,7 @@
 
 A self-review rubric for **design and planning altitude** — the point where code
 quality is actually decided. The structure a design commits to, and the way a plan slices
-and sketches the work, are inherited by every line the coder later writes. A weak coder
-executing steps verbatim cannot invent quality that the design and plan did not encode, and
-catching a structural defect at review means paying to refactor code that already exists.
+and sketches the work, constrain every later implementation. Binding design and standards remain authoritative, while dependency-mode v2 workers use bounded judgment to meet Goal and Acceptance rather than merely transcribing snippets; historical serial tasks retain their verbatim Steps contract. Catching a structural defect at review means paying to refactor code that already exists.
 Fix it here instead.
 
 ## How to use this
@@ -115,3 +113,7 @@ indirection.
 - **`plan.md`** — whether the tasks preserve that structure, keep each unit independently
   testable, and whether any code snippet in the plan itself models the clean shape rather
   than a shortcut the coder will copy.
+
+## Dependency-mode boundaries
+
+Keep approval ownership outside execution. A scope reservation cannot introduce a new dependency, public contract or security-policy change; require owner-approved re-planning instead.

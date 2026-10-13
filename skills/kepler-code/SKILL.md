@@ -130,18 +130,24 @@ verifies identity only, never task selection, approval, or quality.
 
 ## Principles
 
-- **Follow the steps exactly.** Execute the authoritative Steps in order. If a step is wrong or
-  impossible, record a graceful blocked attempt; do not improvise a redesign.
+### Dependency-mode v2 task work
+
+When `plan.md` declares `execution: {version: 2, mode: dependencies}`, bind work to Goal, Acceptance, Depends on, Steps, Verify, Commit, cited approved intent/design, and standards. Files are optional guidance, not an allowlist: make goal-serving unlisted changes when necessary, while keeping unrelated edits and unapproved public/security/dependency/intent changes out. Exercise bounded judgment within those constraints. Steps preserve related TDD cycles in Red → Green → Refactor order and do not force a particular design. Worker owns task-local evidence and its isolated original commit, never shared root publication; the coordinator integrates and publishes. Reuse admitted original Base across retries, preserve partial edits, and never invent attempt/blocked/done evidence. A worker's terminal outcome is data for coordinator publication, not authority to mutate root state.
+
+### Historical serial task work
+
+Without the exact v2 declaration, retain the historical serial contract: execute Steps verbatim, treat Files as the boundary, update only the assigned root row and task log, and use the prior checkpoint lifecycle.
+
+- **Follow the steps exactly.** In historical mode, execute the authoritative Steps in order. If a step is wrong or impossible, record a graceful blocked attempt; do not improvise a redesign.
 - **Follow the grain.** Match the project's naming, structure, error handling, and tests.
 - **Small and honest.** No stubs, TODOs, dead code, commented-out blocks, or fabricated results.
-- **One task owns one lane.** Change only the assigned task's root row and task-local progress.
-  Never mutate a sibling row, progress file, feedback file, or checkpoint.
+- **Evidence ownership.** V2 workers change task-local progress and their isolated task commit only; coordinator publication alone changes shared root state. In historical mode, change only the assigned root row and task-local progress. In both modes: Never mutate a sibling row, progress file, feedback file, or checkpoint.
 - **Separate evidence by stage.** Implementation attempts belong in task progress. Task feedback,
   whole-branch review, and finish evidence never go in root or task progress.
 
 ## TDD implementation cycle
 
-Every ordinary implementation cycle follows Red, Green, and Refactor in that order. Run the cycle after the assigned row enters `in-progress` and before the final task verification. A plan step that changes behavior may require more than one cycle; each cycle remains in the same task-local attempt.
+Every ordinary implementation cycle follows Red, Green, and Refactor in that order. In historical mode run after the assigned row enters `in-progress`; in v2 run after guarded admission and before final task verification. Related checks may form multiple cycles. A plan step that changes behavior may require more than one cycle; each cycle remains in the same task-local attempt.
 
 ### Red
 
@@ -219,7 +225,7 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
    and worktrees for another claim on that unit. Resume only the same owner/change/branch; stop on a
    competing or ambiguous claim. The scan is local evidence, not distributed exclusivity. An
    unchanged plan revision is insufficient.
-   For an explicit execution sequence, before checkpoint validation or any mutation, rerun
+   **Historical serial mode only:** for an explicit execution sequence, before checkpoint validation or any mutation, rerun
    `kepler workbench lint --change-dir <change-dir>` and `kepler workbench context <change-dir>`.
    Require the task ID to occupy the dispatch's selected slot in the current validated order, the
    full supplied plan revision to equal the latest commit touching `plan.md`, and the transition
@@ -228,10 +234,16 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
    The driver must supply the previous execution slot and prove its durable fresh task approval
    before dispatch. A direct human/code call must supply the same selected-slot and predecessor-gate
    evidence; otherwise route it through `kepler-orchestrate`. Legacy plans without execution
-   metadata retain numeric serial order. The code skill still reads only the assigned task and
+   metadata retain numeric serial order.
+
+   **Dependency-mode v2 only:** validate the coordinator's verified admission binding before any mutation:
+   the admitted worker, lane/worktree, repository, plan revision, task digest, input bindings and
+   prerequisite approvals must match the current dispatch. Do not derive scheduling, a predecessor,
+   or a root authority from a worker readback. A mismatch holds the task and preserves work; route it
+   to the coordinator for renewed admission. The code skill still reads only the assigned task and
    never inspects sibling feedback or progress.
 
-4. **Validate the stable task checkpoint.** Before any first-attempt `--record`, inspect the
+4. **Validate the stable task checkpoint.** **Historical serial mode only:** before any first-attempt `--record`, inspect the
    exact task's Files and Acceptance, working tree, and attributable Git history for task-owned
    committed and uncommitted implementation changes. The CLI's mechanical eligibility does not
    prove the absence of task-owned work. A clean tree, pending row, or empty log cannot establish
@@ -251,7 +263,11 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
    and history proves the value. Stop for a malformed or conflicting cache, missing or ambiguous
    history, or invalid ancestry. The initial pending-log commit is not first-attempt provenance;
    never substitute current `HEAD`, `HEAD~1`, or another guessed base.
-5. **Begin the attempt.** Update only the assigned task's root frontmatter metadata entry and
+
+   **Dependency-mode v2 only:** recover the original admission Base verified at admission through retry,
+   correction and cache loss; `.base` remains a non-authoritative cache. Never record first-attempt
+   parent or current `HEAD` for v2. A missing or mismatched admission binding holds the lane.
+5. **Begin the attempt.** **Historical serial mode only:** update only the assigned task's root frontmatter metadata entry and
    Markdown row together to `in-progress` before executing implementation steps. A `pending`,
    `blocked`, or `done` task may enter `in-progress`; `done` means only that the latest
    implementation attempt completed. Preserve every sibling metadata entry, row, and file
@@ -263,8 +279,9 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
    result before implementation. Do not set the local status to `in-progress` before an attempt
    exists. Do not
    append an attempt yet: if the process terminates unexpectedly, `in-progress` remains the
-   interruption signal.
-6. **Execute the task Steps in order.** Touch only the task's listed files. For ordinary
+   interruption signal. **Dependency-mode v2 only:** the worker does not mutate shared root metadata
+   or rows; its already-admitted coordinator owns root authority.
+6. **Execute the task Steps in order.** **Historical serial mode only:** touch only the task's listed files. **Dependency-mode v2 only:** use Goal, Acceptance, cited binding intent/design/standards, and the approved admission to make necessary goal-serving unlisted edits; related Red → Green → Refactor cycles remain within that coherent task. For ordinary
    implementation work, execute the [TDD implementation cycle](#tdd-implementation-cycle) for
    each behavior change, including its Red, Green, and Refactor evidence. Run any additional tests
    or commands required by individual steps and keep actual results for the attempt evidence.
@@ -291,7 +308,7 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
    Then set the assigned task log frontmatter status: for a done attempt, its local `status` is
    `done`; for a blocked attempt, its local `status` is `blocked`. Preserve prior attempts and
    sibling files unchanged, including every sibling metadata entry and row.
-   Then update the same root frontmatter metadata entry
+   **Historical serial mode only:** then update the same root frontmatter metadata entry
    and Markdown row together from `in-progress` to the matching `done` or `blocked` status.
    After the synchronized task-progress attempt and root metadata/row transition, run
    `kepler workbench lint --change-dir <change-dir>` before the outcome-specific commit. Keep the
@@ -300,7 +317,7 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
    lint result is a failed gate: correct the artifacts and rerun lint, or report the exact blocker
    without committing or claiming compliance. Do not change another row or append
    review, feedback, or finish summaries anywhere in progress.
-10. **Commit according to the outcome.** For `done`, commit the assigned task's implementation,
+10. **Commit according to the outcome.** **Historical serial mode only:** for `done`, commit the assigned task's implementation,
     tests, its task-progress attempt, and its root-row final transition together using the task's
     Commit message. Do not commit the ignored `.base`. For a gracefully reported `blocked`
     attempt with no valid implementation commit, make an artifact-only bookkeeping commit that
@@ -309,6 +326,12 @@ For every cycle, task-local evidence must record the Red, Green, and Refactor co
     done. Run `git status` and confirm nothing under this task's change artifacts remains
     uncommitted after either commit; unrelated or partial production edits may remain only when
     they are explicitly reported with a blocked outcome.
+
+    **Dependency-mode v2 only:** commit truthful task-local terminal evidence and the original
+    signed worker commit; never mutate shared root state. For a blocked worker, commit only the
+    truthful task-local blocked artifact and leave partial production edits uncommitted for the
+    coordinator/owner to preserve. The coordinator serializes integration, runs exact Verify, then
+    completes guarded root publication.
 
 This skill never edits `plan.md`.
 
@@ -322,17 +345,22 @@ one next-numbered dated attempt at the physical end. Preserve prior attempts. Ch
 identity and actual verification evidence for this attempt without imposing an additional
 artifact-shape validator.
 
-Use the root `<change-dir>/progress.md` as the current task ledger. This skill writes task
-identity, status, and links there, and writes attempt details to the task log instead. Do not
-append feedback, whole-branch review, or finish outcomes to root progress. This is a writer
-ownership rule, not a reason to reject other lint-accepted content already in the file.
+Use the root `<change-dir>/progress.md` as the current task ledger. In historical serial mode,
+this skill writes its assigned identity/status/links there and writes attempt details to the task
+log instead. In dependency-mode v2, the worker writes only its task-local log and commit; the
+coordinator owns the shared root ledger. In either mode, this skill writes attempt details to the task log; do not append feedback, whole-branch review, or finish outcomes to root progress. This is a writer ownership rule, not a reason to reject other
+lint-accepted content already in the file.
 
 ## Blocking and interruption
 
-A graceful blocker is a completed code attempt with `Outcome: blocked`. Preserve its evidence in
-the assigned task log, set only its root row to `blocked`, and use the artifact-only commit path
-from Process step 10 without staging partial production work. Record which partial production
-edits remain uncommitted so a later retry can inspect them.
+**Historical serial mode:** a graceful blocker is a completed code attempt with `Outcome: blocked`.
+Preserve its evidence in the assigned task log, set only its root row to `blocked`, and use the
+artifact-only commit path from Process step 10 without staging partial production work. Record which
+partial production edits remain uncommitted so a later retry can inspect them.
+
+**Dependency-mode v2:** the worker records only truthful task-local blocked evidence. Interrupted,
+unavailable, or missing responses preserve the admitted lane and partial work; they create no root
+terminal status and no fabricated attempt. The coordinator recovers only verified durable evidence.
 
 An abrupt termination is different: if execution stops after the row entered `in-progress` but
 before final evidence can be appended and committed, do not manufacture a `blocked` or `done`
@@ -341,8 +369,9 @@ continuing or resolving it.
 
 ## Boundaries
 
-- Always: run required tests before a done commit; preserve the stable task checkpoint; commit
-  the root-row final transition and task-local evidence with the outcome.
+- Always: run required tests before a done commit and preserve the stable task checkpoint. In
+  historical serial mode commit the root-row final transition with task-local evidence; in v2 the
+  worker commits task-local evidence only and the coordinator owns publication.
 - Ask first about any decision the task did not specify, including a public interface change or new
   dependency. If unattended, record a genuine blocker instead of improvising a large decision.
 - Never: commit secrets; delete or weaken a test to make the suite pass; touch another task;
@@ -352,26 +381,34 @@ continuing or resolving it.
 ## Code-quality self-review
 
 - Do tests assert behavior and fail if that behavior breaks?
-- Is the implementation confined to the assigned task and its listed files?
+- In historical serial mode, is the implementation confined to the assigned task and its listed Files?
+  In v2, do every changed path and related TDD cycle serve Goal/Acceptance and binding
+  intent/design/standards?
 - Are naming, structure, and error handling consistent with the codebase?
 - Are there no dead paths, stubs, debug output, TODOs, or commented-out blocks?
 - Is every acceptance criterion satisfied by observed evidence?
-- Did only the assigned root metadata entry and row and the task progress file change among execution artifacts?
+- In historical serial mode, did only the assigned root metadata entry/row and task progress file
+  change among execution artifacts? In v2, did the worker make zero shared-root mutations?
 - Does the final commit match the task outcome and leave the checkpoint untracked?
 
 ## Output
 
-For `done`, output one implementation commit containing code, tests, the assigned task's canonical
-attempt evidence, and its root row set to `done`. For `blocked`, output one artifact-only commit
-containing the assigned task's blocker evidence and root row set to `blocked`, while reporting any
-partial production edits left uncommitted. In both cases, sibling task artifacts remain unchanged,
-the stable task checkpoint remains untracked, and `plan.md` remains read-only.
+In historical serial mode, for `done`, output one implementation commit containing code, tests, the
+assigned task's canonical attempt evidence, and its root row set to `done`. For `blocked`, output
+one artifact-only commit containing the assigned task's blocker evidence and root row set to
+`blocked`, while reporting any partial production edits left uncommitted. In dependency-mode v2,
+output task-local terminal evidence and the original signed worker commit only; the coordinator
+integrates, verifies, and separately completes root publication. In both cases, sibling task artifacts
+remain unchanged, the stable task checkpoint remains untracked, and `plan.md` remains read-only.
 
 ## Handoff
 
-- After a done commit, the driver runs `kepler-code-feedback` on this task's stable checkpoint
-  through the new task commit.
-- After a blocked bookkeeping commit, the driver decides how to resolve or retry this same task.
+- In historical serial mode, after a done commit the driver runs `kepler-code-feedback` on this
+  task's stable checkpoint through the new task commit. After a blocked bookkeeping commit, the
+  driver decides how to resolve or retry this same task.
+- In dependency-mode v2, hand the original worker commit and task-local evidence to the coordinator
+  for guarded integration, exact Verify, and separate root publication. Only then does independent
+  `kepler-code-feedback` review the actual integrated range; a worker `done` does not guess approval.
 - Working unattended, return without asking or invoking the next skill; the driver owns the
   code-feedback loop and task selection.
 
@@ -381,32 +418,43 @@ the stable task checkpoint remains untracked, and `plan.md` remains read-only.
 digraph kepler_code {
     "Confirm workspace + exact active Task N" [shape=box];
     "Lint existing artifacts + require task log" [shape=box];
-    "Record or reuse tasks/task-N/.base" [shape=box];
-    "Set only Task N in-progress" [shape=box];
+    "Legacy: record or reuse tasks/task-N/.base" [shape=box];
+    "Legacy: set only Task N in-progress" [shape=box];
+    "V2: verify already-admitted task-local start" [shape=box];
     "Red: failing behavioral check or justified alternative" [shape=box];
     "Green: smallest passing implementation" [shape=box];
     "Refactor: preserve behavior + relevant tests" [shape=box];
     "Correction needed?" [shape=diamond];
     "Verify + self-review" [shape=box];
     "Outcome?" [shape=diamond];
-    "Append done attempt + set row done" [shape=box];
-    "Append blocked attempt + set row blocked" [shape=box];
-    "Task commit" [shape=doublecircle];
-    "Artifact-only bookkeeping commit" [shape=doublecircle];
+    "Legacy: append done attempt + set row done" [shape=box];
+    "Legacy: append blocked attempt + set row blocked" [shape=box];
+    "Legacy task commit" [shape=doublecircle];
+    "Legacy artifact-only bookkeeping commit" [shape=doublecircle];
+    "V2: task-local evidence + original worker commit" [shape=box];
+    "V2 coordinator integration, Verify + guarded publication" [shape=doublecircle];
 
     "Confirm workspace + exact active Task N" -> "Lint existing artifacts + require task log";
-    "Lint existing artifacts + require task log" -> "Record or reuse tasks/task-N/.base";
-    "Record or reuse tasks/task-N/.base" -> "Set only Task N in-progress";
-    "Set only Task N in-progress" -> "Red: failing behavioral check or justified alternative";
+    "Lint existing artifacts + require task log" -> "Legacy: record or reuse tasks/task-N/.base" [label="legacy"];
+    "Legacy: record or reuse tasks/task-N/.base" -> "Legacy: set only Task N in-progress";
+    "Legacy: set only Task N in-progress" -> "Red: failing behavioral check or justified alternative";
+    "Lint existing artifacts + require task log" -> "V2: verify already-admitted task-local start" [label="v2"];
+    "V2: verify already-admitted task-local start" -> "Red: failing behavioral check or justified alternative";
     "Red: failing behavioral check or justified alternative" -> "Green: smallest passing implementation";
     "Green: smallest passing implementation" -> "Refactor: preserve behavior + relevant tests";
     "Refactor: preserve behavior + relevant tests" -> "Correction needed?";
     "Correction needed?" -> "Red: failing behavioral check or justified alternative" [label="yes; record correction"];
     "Correction needed?" -> "Verify + self-review" [label="no"];
     "Verify + self-review" -> "Outcome?";
-    "Outcome?" -> "Append done attempt + set row done" [label="done"];
-    "Outcome?" -> "Append blocked attempt + set row blocked" [label="blocked"];
-    "Append done attempt + set row done" -> "Task commit";
-    "Append blocked attempt + set row blocked" -> "Artifact-only bookkeeping commit";
+    "Outcome?" -> "Legacy: append done attempt + set row done" [label="legacy done"];
+    "Outcome?" -> "Legacy: append blocked attempt + set row blocked" [label="legacy blocked"];
+    "Legacy: append done attempt + set row done" -> "Legacy task commit";
+    "Legacy: append blocked attempt + set row blocked" -> "Legacy artifact-only bookkeeping commit";
+    "Outcome?" -> "V2: task-local evidence + original worker commit" [label="v2 truthful terminal evidence"];
+    "V2: task-local evidence + original worker commit" -> "V2 coordinator integration, Verify + guarded publication";
 }
 ```
+
+## Dependency-mode execution
+
+For `execution: {version: 2, mode: dependencies}`, a worker owns only its isolated task-local attempt and commits; it never updates the shared root ledger. The coordinator admits a verified ready task with `kepler workbench task-state --admit --task N --change-dir <path> --expected-head <full40> --worker <observed-expected-worker> --worktree <linked-lane> --target-branch <full-ref>`, may reserve scope with `--reserve --reservation '<exact JSON>'`, and publishes only after integrated verification with `--publish --task-head <full40> --verify '<exact Verify>'`. These operations bind original Base and durable admission history; `.base` remains a cache. A worker holds on missing, interrupted or unavailable evidence and never manufactures an outcome. Legacy root-row updates in this skill apply only to unversioned and version-1 serial plans.

@@ -5,6 +5,7 @@ status: draft
 created: <YYYY-MM-DD>
 author: <Name <email>>
 decision: skipped
+execution: {version: 2, mode: dependencies}
 route_unit: null
 intent_approvals: []
 initialization:
@@ -23,9 +24,7 @@ initialization:
   between planning and coding, for a human OR a Kepler agent.
 
   Consumption contract:
-    - kepler-code (step 3) consumes ONE task at a time (a single "### Task" block and its steps)
-      and nothing else — it must not read or implement sibling tasks. Keep each task
-      self-contained.
+    - kepler-code (step 3) consumes ONE assigned task's block and its cited constraints; it must not inspect sibling details. In v2, independent ready tasks may use isolated lanes, while each worker remains scoped to its own task evidence. Keep each task self-contained.
     - kepler-plan initializes the root task index in progress.md and each task's
       tasks/task-N/progress.md. kepler-code updates only that task's row and log;
       kepler-code-feedback (step 4) owns tasks/task-N/feedback.md.
@@ -52,8 +51,7 @@ initialization:
       numeric task identity.
     - kepler-review (step 5) owns the whole-branch review.md after all task feedback;
       kepler-finish-work (step 6) owns finish.md.
-    - Each task is a TDD-sized unit: small enough to implement and verify in isolation,
-      carrying its own acceptance check. Specify and execute Red before production edits,
+    - In v2 each task carries Goal, Acceptance, Depends on, Steps, Verify and Commit; Files is optional guidance, not an allowlist. Binding intent, cited design/requirements and standards bound implementation; necessary goal-serving unlisted edits are permitted. Historical serial tasks retain their frozen Files/verbatim-Steps contract. Each task is a TDD-sized unit with related Red → Green → Refactor cycles. Specify and execute Red before production edits,
       Green on the same check, and behavior-preserving Refactor with relevant tests afterward.
       Record exact commands and observed results in task-local progress. "Build authentication"
       is too big; "add a user-registration endpoint that validates email format" is right.
@@ -69,8 +67,9 @@ initialization:
       if there are no upstream docs, state the minimal why/what inline.
     - Detail scales to risk and executor: include code or exact commands when they remove
       ambiguity; otherwise state intent and let the coder think. Do not pre-write the
-      whole diff. Any snippet you do include is copied verbatim by the coder — make it model
-      the clean shape (cohesive, testable, no shortcut), never a throwaway.
+      whole diff. In v2, any snippet is a design/standards example under bounded judgment; in
+      historical serial plans a binding snippet is copied verbatim. Always model the clean shape
+      (cohesive, testable, no shortcut), never a throwaway.
     - Task seams follow the design's structure: each task lands one cohesive unit that can be
       tested in isolation, and its acceptance covers the error/edge behavior, not just the
       happy path. A task you cannot state without "and" is usually two.
@@ -121,17 +120,16 @@ initialization:
 
 <!-- Numbered for stable identity (kepler-code is pointed at "Task 3"). Keep headings, task
      directories and both root-ledger representations in numeric identity order. "Depends on"
-     expresses visible logical prerequisites. Ordinary plans execute serially in numeric order;
-     an authorized opt-in `execution` sequence may change only the serial order, never identity.
-     A versioned `execution` list contains every active ID exactly once, including done tasks;
-     absent metadata means legacy numeric order and malformed explicit metadata never falls back.
-     No parallel or DAG scheduler is implied. The root ledger still uses identity order; the driver
-     selects the first not-fully-gated ID from the validated execution sequence. -->
+     expresses logical prerequisites. V2 context derives ready/held/fully-gated tasks; coordinator
+     admission governs compatible isolated lanes. Historical plans without exact v2 metadata use
+     numeric serial order and imply no parallel or DAG scheduler. An authorized execution sequence,
+     where supported by a historical transition, changes only serial order, never identity. -->
 
 ### Task 1: <imperative title>
 
+- Goal: <observable result and reason>
 - Depends on: none
-- Files:
+- Files: optional guidance
   - Created: <paths, or none>
   - Modified: <paths, or none>
   - Deleted: <paths, or none>
@@ -144,23 +142,26 @@ initialization:
   1. Red — <write or update a behavioral check, run it before production edits, and observe the intended failure; if a conventional failing check is technically impossible, record the concrete reason and run the planned repeatable alternative before editing production files>
   2. Green — <make the smallest passing implementation, then rerun the same check or alternative to confirm it passes for the intended reason>
   3. Refactor — <perform behavior-preserving cleanup or record why none is needed, then rerun relevant behavioral and regression tests>
-  4. If a phase fails for the wrong reason, Verify fails, or feedback is `changes-requested`, record the correction and repeat Red → Green → Refactor with relevant verification in this task; block for re-plan if the correction exceeds Files or Acceptance.
+  4. If a phase fails for the wrong reason, Verify fails, or feedback is `changes-requested`, record the correction and repeat Red → Green → Refactor with relevant verification in this task; block for re-plan if the correction exceeds Acceptance or approved intent; Files is optional guidance.
 - Verify: `<command after Refactor, plus full tests and build per AGENTS.md>` → <expected result>
 - Commit: `<type: message>`
 
 ### Task 2: <imperative title>
 
+- Goal: <observable result and reason>
 - Depends on: Task 1
-- Files:
-  - Created:
-  - Modified:
-  - Deleted:
+- Files: optional guidance
+  - Created: <paths, or none>
+  - Modified: <paths, or none>
+  - Deleted: <paths, or none>
 - Acceptance:
-  -
+  - <observable pass/fail criterion>
 - Steps:
-  1.
-- Verify:
-- Commit:
+  1. Red — <failing behavior check before production edits>
+  2. Green — <smallest implementation; rerun the same check>
+  3. Refactor — <behavior-preserving cleanup and relevant tests>
+- Verify: `<command>` → <expected result>
+- Commit: `<type: message>`
 
 ## Done when
 
@@ -168,9 +169,7 @@ initialization:
      Task completion is tracked by the root progress.md index and each linked task log,
      not on the tasks here. -->
 
-- All active tasks are `done` in `progress.md` with task-local Red, Green, and Refactor evidence (or a justified alternative Red).
-- Each task has fresh committed `approved` feedback from `kepler-code-feedback` before the next task or whole-branch review; `changes-requested` returns the same task for correction and another pass.
+- In v2 every active task has worker-owned task-local Red, Green, and Refactor evidence (or justified alternative Red), integrated original task commit, and coordinator-published completion; historical serial tasks use their existing code-owned root transition.
+- Each task has fresh committed independent `approved` feedback before it is fully gated. V2 ready is not admitted and root done is not cleared; compatible isolated ready lanes may overlap, but descendants remain held until prerequisite approval. `changes-requested` returns the same task for correction and another pass.
 - `<test command>` passes; build / typecheck is clean.
-- Whole-branch review is approved with no blocking findings. When an explicit execution sequence
-  exists, every active task passed its ordinary implementation and fresh-feedback gates in that
-  validated serial order before whole-branch review.
+- Whole-branch review is approved with no blocking findings after every active task is fully gated with fresh feedback.

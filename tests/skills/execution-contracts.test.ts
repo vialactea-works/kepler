@@ -83,6 +83,22 @@ describe("kepler-plan execution contract", () => {
 describe("kepler-code execution contract", () => {
   const skill = readSkill("kepler-code")
 
+  it("scopes lifecycle ownership and checkpoint authority by execution mode", () => {
+    const process = section(skill, "## Process")
+    const blocking = section(skill, "## Blocking and interruption")
+    const output = section(skill, "## Output")
+
+    expect(process).toMatch(/v2.*verified admission.*worker.*lane.*repository.*plan.*input.*prerequisite.*binding/is)
+    expect(process).toMatch(/v2.*original.*admission Base.*retry.*cache loss/is)
+    expect(process).toMatch(/v2.*does not mutate.*shared root/is)
+    expect(process).toMatch(/v2.*Goal.*Acceptance.*goal-serving.*unlisted.*Red.*Green.*Refactor/is)
+    expect(process).toMatch(/v2.*original.*signed worker commit.*coordinator.*integrat.*Verify.*root publication/is)
+    expect(process).toMatch(/legacy.*execution sequence.*slot.*predecessor/is)
+    expect(process).toMatch(/legacy.*root.*in-progress/is)
+    expect(blocking).toMatch(/v2.*interrupted.*unavailable.*no.*root.*terminal status/is)
+    expect(output).toMatch(/v2.*task-local.*terminal evidence.*coordinator.*root publication/is)
+  })
+
   it("requires one exact active task id for referenced and inline inputs", () => {
     const inputs = section(skill, "## Inputs")
 

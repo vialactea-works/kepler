@@ -17,7 +17,7 @@ Subagent:
 
     - Change directory: [<change-dir>]
     - Task id: Task [N]
-    - Root ledger entry: [matching frontmatter task entry and Markdown row for Task N in <change-dir>/progress.md]
+    - Root ledger entry: [matching root metadata entry and Markdown row for Task N in <change-dir>/progress.md]
     - Task log: [<change-dir>/tasks/task-N/progress.md]
     - Task checkpoint: [<change-dir>/tasks/task-N/.base]
     - Canonical repository identity: [repository identity]
@@ -36,8 +36,13 @@ Subagent:
     - Execution selection: [legacy numeric order, or explicit order, selected slot, predecessor task ID, and predecessor fresh approval commit]
 
     Read only Task [N] from plan.md, its cited constraints, the root row named above, and this
-    task's own evidence. Do not read or touch a sibling task. Follow the task's Steps exactly;
-    do not redesign, reorder, or add work. Confirm the supplied plan commit is current, the task
+    task's own evidence. Do not read or touch a sibling task. Select the execution contract from
+    the committed plan declaration: dependency-mode v2 uses bounded judgment; historical serial
+    plans use verbatim Steps. In v2, implement the coherent Goal/Acceptance/Depends on/Steps/Verify/
+    Commit contract, with Files as optional guidance rather than an allowlist. Preserve binding
+    intent/design/standards; make necessary goal-serving unlisted edits, not unrelated work. Keep
+    related TDD cycles in Red → Green → Refactor order. Do not impose a design absent from binding
+    context or expand approved intent. Confirm the supplied plan commit is current, the task
     identity/digest and current input standing match, formal intent is authorized, and Task [N] is
     the current selected slot. For a legacy current confirmation, inspect only its exact current
     input scope and do not treat it as historic evidence or authorization. Execute kepler-code's
@@ -83,12 +88,14 @@ Subagent:
 
     ## Required outcome
 
-    The orchestrator has already established the checkpoint. Validate and preserve the
-    already-recorded task-local checkpoint; never create, reset, reconstruct, or replace it.
-    Follow kepler-code completely: transition only Task [N]'s matching root metadata entry and
-    Markdown row, execute and verify the task, append exactly one canonical attempt to the task
-    log, and commit the implementation plus that synchronized evidence with the task's specified
-    commit message. Preserve the root aggregate status as an implementation summary; `complete`
+    For dependency-mode v2, validate and preserve the already-recorded task-local checkpoint from coordinator admission; never create, reset, or replace it. Validate the coordinator's admission and original Base. Preserve that Base across retries/corrections/cache loss. The worker
+    records task-local attempt evidence and commits only its isolated original task changes; do not
+    update shared root metadata or row. Return truthful done/blocked/interrupted/unavailable
+    response evidence to the coordinator. The coordinator alone serializes integration, exact
+    integrated Verify, and guarded root publication; root publication is separate from independent
+    feedback clearance. Never fabricate an attempt or terminal outcome from a missing response.
+    For historical serial plans only, follow kepler-code's root-row transition and commit lifecycle.
+    Both modes preserve plan.md, sibling evidence, and feedback. Preserve the root aggregate status as an implementation summary; `complete`
     never means feedback, whole-branch review, or finish-work passed. Leave plan.md, sibling
     evidence, and feedback untouched. This task range is handed to the existing
     `kepler-code-feedback` refactor-phase review. A `changes-requested` refactor-phase review
@@ -124,3 +131,7 @@ Subagent:
 - `[FIRST_ATTEMPT_OR_READ_THE_LATEST_PHYSICAL_PASS_AT_<change-dir>/tasks/task-N/feedback.md]`
   says `First attempt; no feedback input` or directs a correction to the task's physically last,
   fresh `changes-requested` pass.
+
+## Dependency-mode dispatch
+
+For `execution: {version: 2, mode: dependencies}`, provide the coordinator admission binding, original Base, verified ready projection, lane and target branch. The worker records only task-local attempts and commits; it never mutates root status. It may use an already committed scope reservation only within its paths and intent. Missing admission, stale identity or unavailable evidence holds without a manufactured outcome.

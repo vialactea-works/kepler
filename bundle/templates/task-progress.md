@@ -16,7 +16,7 @@ decision: accepted | rejected | skipped
   Each new attempt has exactly one terminal `- Outcome: done` or `- Outcome: blocked`; append a new
   attempt for corrections instead of adding another Outcome to historical attempts. Preserve
   supported historical unbulleted Outcome fields without rewriting them.
-  Each attempt records the applicable task quality constraint and decision context, the observed
+  Optional immutable `scope_expansions` records reserve prerequisite paths before edits; each attempt records the applicable task quality constraint and decision context, the observed
   implementation or check shaped by it, or a justified non-applicability result.
   Delete this instruction block and every inline hint before finalizing.
 -->

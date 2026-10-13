@@ -186,7 +186,7 @@ describe("planning and resource gate contracts", () => {
     expect(dispatch).toContain("[TASK_INPUT_HANDOFF_OR_LEGACY_CONFIRMATION]")
   })
 
-  it("keeps execution scheduling serial and independent from numeric task identity", () => {
+  it("keeps historical execution scheduling serial and independent from numeric task identity", () => {
     const execution = section(plan, "## Serial execution order and prerequisite insertion").replace(/\s+/g, " ")
     const driverPrinciples = section(orchestrate, "## Principles").replace(/\s+/g, " ")
     const driverProcess = section(orchestrate, "## Process").replace(/\s+/g, " ")
@@ -196,7 +196,8 @@ describe("planning and resource gate contracts", () => {
     expect(progressTemplate.replace(/\s+/g, " ")).toMatch(/execution sequence is separate from this ledger's physical order/is)
     expect(execution).toMatch(/one serial lane, not a DAG or parallel scheduler/is)
     expect(execution).toMatch(/New task IDs are max\+1/is)
-    expect(driverPrinciples).toMatch(/Select from the validated `execution\.order` when explicit/is)
+    expect(driverPrinciples).toMatch(/validated explicit version-1 `execution\.order` when present.*otherwise numeric identity order/is)
+    expect(driverProcess).toMatch(/historical version-1 serial execution metadata.*validated serial order/is)
     expect(driverProcess).toMatch(/first slot that is not fully gated/is)
     expect(driverProcess).toMatch(/previous sequence-slot task ID and that task's durable fresh approval evidence/is)
     expect(codeProcess).toMatch(/selected slot in the current validated order/is)

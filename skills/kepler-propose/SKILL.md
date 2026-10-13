@@ -358,3 +358,7 @@ digraph kepler_propose {
     "Delta approved and committed?" -> "Ready for kepler-plan" [label="approved"];
 }
 ```
+
+## Dependency-mode compatibility
+
+Approved intent remains owner-held. A dependency-mode execution amendment is scheduling-only and must not rewrite frozen Goal, Acceptance, task definitions, initialization, approvals or history. New dependencies, public contracts and security-policy changes return to approved planning rather than scope expansion.
