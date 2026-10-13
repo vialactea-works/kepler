@@ -55,6 +55,94 @@ const sourceCliTsconfig = (repository: string) => {
   );
 };
 
+const createSerialReservationFixture = (
+  options: {
+    readonly latestChangesRequested?: boolean;
+    readonly predecessorAttemptAfterApproval?: boolean;
+  } = {},
+) => {
+  const repo = inDirectory(makeRepo());
+  sourceCliTsconfig(repo);
+  const changeDir = makeChangeDir(repo, "add-auth");
+  write(
+    changeDir,
+    "plan.md",
+    "---\nartifact: plan\nchange: add-auth\nstatus: approved\ncreated: 2026-09-12\nauthor: Test\ndecision: accepted\nroute_unit: null\nexecution:\n  version: 1\n  order: [1, 2]\n---\n# Plan: Add auth\n\n## Overview\n\n## Tasks\n\n### Task 1: Complete predecessor\n\n### Task 2: Test task\n\n## Done when\n\nThe serial work is complete.\n",
+  );
+  write(
+    changeDir,
+    "progress.md",
+    "---\nartifact: progress\nchange: add-auth\nstatus: in-progress\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n  - id: 1\n    title: Complete predecessor\n    status: pending\n    progress: tasks/task-1/progress.md\n  - id: 2\n    title: Test task\n    status: pending\n    progress: tasks/task-2/progress.md\n---\n# Progress: Add auth\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Complete predecessor | pending | [details](tasks/task-1/progress.md) |\n| Task 2: Test task | pending | [details](tasks/task-2/progress.md) |\n",
+  );
+  write(
+    changeDir,
+    "tasks/task-1/progress.md",
+    "---\nartifact: task-progress\nchange: add-auth\ntask: 1\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 1 — Complete predecessor\n",
+  );
+  write(
+    changeDir,
+    "tasks/task-2/progress.md",
+    "---\nartifact: task-progress\nchange: add-auth\ntask: 2\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 2 — Test task\n",
+  );
+  write(repo, "src/reserved.ts", "export const reserved = 'initial'\n");
+  const initialBase = commitAll(repo, "initialize serial task fixture");
+  write(
+    changeDir,
+    "progress.md",
+    "---\nartifact: progress\nchange: add-auth\nstatus: in-progress\nupdated: 2026-09-13\ndecision: accepted\ntasks:\n  - id: 1\n    title: Complete predecessor\n    status: done\n    progress: tasks/task-1/progress.md\n  - id: 2\n    title: Test task\n    status: pending\n    progress: tasks/task-2/progress.md\n---\n# Progress: Add auth\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Complete predecessor | done | [details](tasks/task-1/progress.md) |\n| Task 2: Test task | pending | [details](tasks/task-2/progress.md) |\n",
+  );
+  write(
+    changeDir,
+    "tasks/task-1/progress.md",
+    "---\nartifact: task-progress\nchange: add-auth\ntask: 1\nstatus: done\nupdated: 2026-09-13\ndecision: accepted\n---\n# Task Progress: Task 1 — Complete predecessor\n\n## Attempt 1 — 2026-09-13\n\n- Outcome: done\n",
+  );
+  write(repo, "src/reserved.ts", "export const reserved = 'predecessor'\n");
+  let implementation = commitAll(repo, "complete predecessor source");
+  const feedbackPath = ".kepler/changes/add-auth/tasks/task-1/feedback.md";
+  const feedbackPathInChange = Path.join(changeDir, "tasks/task-1/feedback.md");
+  write(
+    changeDir,
+    "tasks/task-1/feedback.md",
+    `---\nartifact: feedback\nchange: add-auth\ntask: 1\ncreated: 2026-09-13\nstatus: resolved\ndecision: accepted\n---\n# Code Feedback: Task 1 — Complete predecessor\n\n## Pass 1 — 2026-09-13\nBase: ${initialBase}\nHead: ${implementation}\nVerdict: approved\n\n### Blocking\n- None.\n\n### Suggestions\n- None.\n`,
+  );
+  const approval = commitPaths(repo, "approve predecessor", feedbackPath);
+  if (options.predecessorAttemptAfterApproval) {
+    const predecessorProgress = Path.join(changeDir, "tasks/task-1/progress.md");
+    Fs.writeFileSync(
+      predecessorProgress,
+      `${Fs.readFileSync(predecessorProgress, "utf8")}\n## Attempt 2 — 2026-09-14\n\n- Outcome: done\n`,
+    );
+    write(repo, "src/other.ts", "export const other = 'updated predecessor'\n");
+    implementation = commitAll(repo, "update predecessor source");
+  }
+  if (options.latestChangesRequested) {
+    Fs.writeFileSync(
+      feedbackPathInChange,
+      Fs.readFileSync(feedbackPathInChange, "utf8")
+        .replace("status: resolved", "status: open")
+        .replace("decision: accepted", "decision: rejected") +
+        `\n## Pass 2 — 2026-09-14\nBase: ${initialBase}\nHead: ${implementation}\nVerdict: changes-requested\n\n### Blocking\n- [src/reserved.ts:1] id: pass-2-blocking-1; kind: code-defect; Recheck the predecessor change (violates: approval freshness)\n\n### Suggestions\n- None.\n`,
+    );
+    commitPaths(repo, "request predecessor changes", feedbackPath);
+  }
+  const taskProgress = Path.join(changeDir, "tasks/task-2/progress.md");
+  Fs.writeFileSync(
+    taskProgress,
+    Fs.readFileSync(taskProgress, "utf8").replace(
+      "decision: accepted\n",
+      "decision: accepted\nscope_expansions:\n  - id: checkpoint-recovery\n    attempt: 1\n    prerequisite: Recover the task checkpoint\n    necessity: Legacy scope history needs its approved predecessor baseline\n    evidence: The predecessor changed the shared path before the reservation\n    paths:\n      - src/reserved.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+    ),
+  );
+  commitAll(repo, "reserve before task source");
+  Fs.writeFileSync(
+    taskProgress,
+    `${Fs.readFileSync(taskProgress, "utf8").replace("status: pending", "status: done")}\n## Attempt 1 — 2026-09-14\n\n- Outcome: done\n`,
+  );
+  write(repo, "src/task.ts", "export const task = true\n");
+  commitAll(repo, "implement successor task");
+  return { repo, changeDir, approval };
+};
+
 afterEach(() => {
   process.chdir(originalDirectory);
   cleanupRepos();
@@ -334,6 +422,24 @@ describe("diff checkpoint recording", () => {
     const source = sourceDiff(repo, changeDir, 2);
     expect(source.status, source.stdout + source.stderr).toBe(0);
     expect(source.stdout).toContain(`Base: ${expectedBase}`);
+  });
+
+  it("rejects a source CLI diff when the latest predecessor pass requests changes", () => {
+    const fixture = createSerialReservationFixture({ latestChangesRequested: true });
+    const result = sourceDiff(fixture.repo, fixture.changeDir, 2);
+
+    expect(result.status, result.stdout + result.stderr).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("reserved path changed before its reservation");
+  });
+
+  it("rejects a source CLI diff when approval omits the latest predecessor implementation", () => {
+    const fixture = createSerialReservationFixture({ predecessorAttemptAfterApproval: true });
+    const result = sourceDiff(fixture.repo, fixture.changeDir, 2);
+
+    expect(result.status, result.stdout + result.stderr).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("reserved path changed before its reservation");
   });
 
   it("rejects a source CLI diff when task production precedes a reservation after task metadata", () => {

@@ -204,48 +204,103 @@ const legacySerialApprovalBase = async (
   const predecessorProgressPath = `${changePath}/tasks/task-${predecessor}/progress.md`;
   const feedbackHistory = await git.pathHistory(root, feedbackPath);
   if (feedbackHistory.status !== 0) return undefined;
+  const reachable: string[] = [];
   for (const candidate of feedbackHistory.stdout.split(/\r?\n/).filter(Boolean)) {
-    if (!fullCommit(candidate) || (await isAncestor(git, root, candidate, reservation)) !== true)
-      continue;
-    const changed = await git.changedPaths(root, candidate);
-    if (changed.status !== 0 || changed.stdout.split("\0").filter(Boolean).join("\n") !== feedbackPath)
-      continue;
-    const feedbackBlob = await git.blobAt(root, candidate, feedbackPath);
-    const ledgerBlob = await git.blobAt(root, candidate, ledgerPath);
-    if (feedbackBlob.status !== 0 || ledgerBlob.status !== 0) continue;
-    const feedbackArtifact = recognized(
-      await createArtifactReader({ readFile: () => feedbackBlob.stdout })(feedbackPath),
-    );
-    const ledgerArtifact = recognized(
-      await createArtifactReader({ readFile: () => ledgerBlob.stdout })(ledgerPath),
-    );
-    const feedback = feedbackArtifact === undefined ? undefined : validateArtifact(feedbackArtifact);
-    const ledger = ledgerArtifact === undefined ? undefined : validateArtifact(ledgerArtifact);
-    if (feedbackArtifact === undefined || ledgerArtifact === undefined || feedback?._tag !== "valid" || feedback.artifact !== "feedback" || ledger?._tag !== "valid" || ledger.artifact !== "progress")
-      continue;
-    const predecessorEntry = Array.isArray(ledger.metadata.tasks)
-      ? ledger.metadata.tasks.find((entry) =>
-        typeof entry === "object" && entry !== null && (entry as Record<string, unknown>).id === predecessor,
-      ) as Record<string, unknown> | undefined
-      : undefined;
-    if (predecessorEntry?.status !== "done") continue;
-    const passes = parseReviewPasses(feedbackArtifact);
-    if (passes.diagnostics.length > 0 || passes.latest?.verdict !== "approved") continue;
-    const ranges = await readTaskFeedbackRanges(feedbackPath, feedbackBlob.stdout, change, predecessor);
-    if (ranges.kind !== "valid") continue;
-    const checkpoint = await resolveTaskCheckpoint(
-      historyAt(git, root, candidate),
-      root,
-      predecessorProgressPath,
-      predecessor,
-      change,
-      candidate,
-      ranges.ranges,
-    );
-    if (checkpoint.kind === "verified" && checkpoint.base === ranges.ranges.at(-1)?.base)
-      return candidate;
+    if (!fullCommit(candidate)) return undefined;
+    const relation = await isAncestor(git, root, candidate, reservation);
+    if (relation === undefined) return undefined;
+    if (relation) reachable.push(candidate);
   }
-  return undefined;
+  const latestCandidates: string[] = [];
+  for (const candidate of reachable) {
+    let latest = true;
+    for (const other of reachable) {
+      if (candidate === other) continue;
+      const follows = await isAncestor(git, root, candidate, other);
+      if (follows === undefined) return undefined;
+      if (follows) {
+        latest = false;
+        break;
+      }
+    }
+    if (latest) latestCandidates.push(candidate);
+  }
+  if (latestCandidates.length !== 1) return undefined;
+  const candidate = latestCandidates[0];
+  if (candidate === undefined) return undefined;
+  const changed = await git.changedPaths(root, candidate);
+  if (changed.status !== 0 || changed.stdout.split("\0").filter(Boolean).join("\n") !== feedbackPath)
+    return undefined;
+  const feedbackBlob = await git.blobAt(root, candidate, feedbackPath);
+  const ledgerBlob = await git.blobAt(root, candidate, ledgerPath);
+  if (feedbackBlob.status !== 0 || ledgerBlob.status !== 0) return undefined;
+  const feedbackArtifact = recognized(
+    await createArtifactReader({ readFile: () => feedbackBlob.stdout })(feedbackPath),
+  );
+  const ledgerArtifact = recognized(
+    await createArtifactReader({ readFile: () => ledgerBlob.stdout })(ledgerPath),
+  );
+  const feedback = feedbackArtifact === undefined ? undefined : validateArtifact(feedbackArtifact);
+  const ledger = ledgerArtifact === undefined ? undefined : validateArtifact(ledgerArtifact);
+  if (feedbackArtifact === undefined || ledgerArtifact === undefined || feedback?._tag !== "valid" || feedback.artifact !== "feedback" || ledger?._tag !== "valid" || ledger.artifact !== "progress")
+    return undefined;
+  const predecessorEntry = Array.isArray(ledger.metadata.tasks)
+    ? ledger.metadata.tasks.find((entry) =>
+      typeof entry === "object" && entry !== null && (entry as Record<string, unknown>).id === predecessor,
+    ) as Record<string, unknown> | undefined
+    : undefined;
+  if (predecessorEntry?.status !== "done") return undefined;
+  const passes = parseReviewPasses(feedbackArtifact);
+  if (passes.diagnostics.length > 0 || passes.latest?.verdict !== "approved") return undefined;
+  const ranges = await readTaskFeedbackRanges(feedbackPath, feedbackBlob.stdout, change, predecessor);
+  if (ranges.kind !== "valid") return undefined;
+  const latestRange = ranges.ranges.at(-1);
+  if (latestRange === undefined) return undefined;
+  const boundaryLedgerBlob = await git.blobAt(root, reservation, ledgerPath);
+  if (boundaryLedgerBlob.status !== 0) return undefined;
+  const boundaryLedgerArtifact = recognized(
+    await createArtifactReader({ readFile: () => boundaryLedgerBlob.stdout })(ledgerPath),
+  );
+  const boundaryLedger = boundaryLedgerArtifact === undefined ? undefined : validateArtifact(boundaryLedgerArtifact);
+  const boundaryEntry = boundaryLedger?._tag === "valid" && boundaryLedger.artifact === "progress" && boundaryLedger.metadata.change === change && Array.isArray(boundaryLedger.metadata.tasks)
+    ? boundaryLedger.metadata.tasks.find((entry) =>
+      typeof entry === "object" && entry !== null && (entry as Record<string, unknown>).id === predecessor,
+    ) as Record<string, unknown> | undefined
+    : undefined;
+  if (boundaryEntry?.status !== "done") return undefined;
+  const boundaryProgressBlob = await git.blobAt(root, reservation, predecessorProgressPath);
+  if (boundaryProgressBlob.status !== 0) return undefined;
+  const boundaryProgressArtifact = recognized(
+    await createArtifactReader({ readFile: () => boundaryProgressBlob.stdout })(predecessorProgressPath),
+  );
+  const boundaryProgress = boundaryProgressArtifact === undefined ? undefined : validateArtifact(boundaryProgressArtifact);
+  if (boundaryProgress?._tag !== "valid" || boundaryProgress.artifact !== "task-progress" || boundaryProgress.metadata.change !== change || boundaryProgress.metadata.task !== predecessor || boundaryProgress.metadata.status !== "done")
+    return undefined;
+  const predecessorHistory = await historyAt(git, root, reservation).pathHistory(root, predecessorProgressPath);
+  if (predecessorHistory.status !== 0) return undefined;
+  const predecessorAttempts = await taskAttemptCommits(
+    git,
+    root,
+    predecessorProgressPath,
+    predecessor,
+    change,
+    predecessorHistory.stdout.split(/\r?\n/).filter(Boolean),
+  );
+  if (typeof predecessorAttempts === "string" || predecessorAttempts.length === 0) return undefined;
+  for (const attempt of predecessorAttempts)
+    if (await isAncestor(git, root, attempt, latestRange.head) !== true) return undefined;
+  const checkpoint = await resolveTaskCheckpoint(
+    historyAt(git, root, candidate),
+    root,
+    predecessorProgressPath,
+    predecessor,
+    change,
+    candidate,
+    ranges.ranges,
+  );
+  return checkpoint.kind === "verified" && checkpoint.base === latestRange.base
+    ? candidate
+    : undefined;
 };
 
 const legacyScopePreparationBase = async (

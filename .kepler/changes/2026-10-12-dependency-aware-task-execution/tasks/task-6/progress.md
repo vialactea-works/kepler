@@ -326,3 +326,46 @@ scope_expansions:
 ### Result
 
 - Outcome: done
+
+## Attempt 7 — 2026-10-13
+
+- Modified: `packages/cli/src/workbench/task-checkpoint.ts`, `tests/workbench/diff.test.ts`, and this task progress artifact. The root `progress.md` Task 6 metadata and row were temporarily set to `in-progress` before Red and restored to `done` at final synchronization; its final diff is empty. No files were created or deleted.
+- Scope: corrected only Pass 5 finding `pass-5-blocking-1`. Reused Task 6's existing `task6-scoped-checkpoint-recovery` reservation for `task-checkpoint.ts` and `diff.test.ts`; retained the same two reservations and four-path limit. No plan, requirement, feedback, review, sibling task, `.hamilton`, installed resource, finish, shipping, or installation change was made.
+- Preconditions: expected child session `01a1372d-a021-75b0-8d72-52873f432f5c` matched the first type:session record ID and admitted cwd in `steps[0].sessionFile`; Bash `$PPID` 66360 matched live status PID 66360 and status run ID `bd7517f1-d164-4c49-96f2-8d63da2ac2f6`. The dispatch identity arguments matched admitted HEAD `6439d64bba632b89baa2c3a4232249508b9a6c6f`, source `refs/heads/fix/finish-work-gates`, target `refs/heads/main`, repository `/Users/caioferreira/workspace/vialactea-works/kepler/.worktrees/fix/finish-work-gates`, and Git directory `/Users/caioferreira/workspace/vialactea-works/kepler/.git/worktrees/finish-work-gates`; `workbench isolate --check` reported `isolated: yes`.
+- Artifact/checkpoint baseline: existing source CLI lint passed before mutation. `workbench context` reported `format: split`, verified serial execution order `1, 2, 3, 4, 5, 6`, current Task 6 inputs and formal intent `approved-reference` (approval reference remains an owner-held assertion). Context reported Task 6 feedback as current `changes-requested`. The pre-edit `workbench diff --record --task 6` returned original Base `5a6472d329b54459cc9f63aa1b1cb70f7713969b`; `.base` remained ignored with SHA-256 `ac3d4c7d9d8927492a311e5dc1c3e0bf0b4b6ab7d85f6cc2206dcf8a2f56f6fb`. The existing Base resolves and is an ancestor of admitted HEAD and all five Task 6 feedback Heads. Its first-attempt parent is the existing first scope-reservation commit, whose parent is the Base; no checkpoint reconstruction or replacement was attempted. Task 6 plan revision `2086bccc5cc9f407a119483db305fd45d28094b4` and definition digest `227370f2e10fcf03beb430b9bebda7fbb89f6064b75704ca8b89ef4d0c792182` remained unchanged.
+
+### Red
+
+- The first draft put approved and changes-requested passes into one commit and did not discriminate the historic state; the test passed. Corrected the fixture so Pass 1 approval and the newer Pass 2 changes-requested artifact are separate feedback-only commits, then repeated Red before production edits.
+- `bun --bun vitest run tests/workbench/diff.test.ts -t 'rejects a source CLI diff when task production precedes a reservation after task metadata|rejects a source CLI diff when the latest predecessor pass requests changes'` → failed as intended: the new real-Git/source-CLI regression got exit 0 and packaged a task diff whose Base was the older approved feedback commit, despite the newer changes-requested pass before the successor reservation; the existing production-before-reservation control passed.
+- After adding the separate approval-Head coverage fixture, replayed both new tests against the admitted committed `task-checkpoint.ts` with a temporary baseline overlay; `bun --bun vitest run tests/workbench/diff.test.ts -t 'rejects a source CLI diff when the latest predecessor pass requests changes|rejects a source CLI diff when approval omits the latest predecessor implementation'` → expected Red: 2 tests failed because source CLI exited 0 and packaged from the old approval. The patched source was restored byte-for-byte (SHA-256 matched its pre-overlay copy).
+
+### Green
+
+- Bound predecessor feedback candidates to commits reachable from the reservation first, selected a unique physically latest candidate by ancestry, and stopped scanning backward. The exact candidate must be a durable feedback-only commit with a structurally valid physically latest `approved` pass and no blocking findings; otherwise the existing conservative earliest verified task-progress baseline is used.
+- At the reservation boundary, require the predecessor root and local task states to remain `done`, validate its committed attempt history, and require the latest approval Head to contain every predecessor attempt committed by that boundary. This prevents an older approval from authorizing a cropped Base after later predecessor implementation.
+- Added real-Git/source-CLI regressions for a newer changes-requested feedback-only pass and an approved pass whose Head omits a later predecessor attempt. `bun --bun vitest run tests/workbench/diff.test.ts -t 'recovers a legacy checkpoint from a scope-only preparation after approved predecessor work|rejects a source CLI diff when the latest predecessor pass requests changes|rejects a source CLI diff when approval omits the latest predecessor implementation|rejects a source CLI diff when task production precedes a reservation after task metadata'` → passed: 4 tests, including the existing legitimate approved-predecessor positive and Task-owned production negative controls. Both stale controls fail closed with `reserved path changed before its reservation` and emit no packaged stdout.
+
+### Refactor
+
+- Reviewed the new selection and validation at the existing checkpoint boundary. It uses existing typed Git/artifact helpers, introduces no comments/dependencies or alternate state, preserves the legacy approved-predecessor path, original Base, version-2 recovery and lifetime reservation accounting; no additional behavior-preserving code cleanup was needed.
+- `bun --bun vitest run tests/workbench/diff.test.ts tests/workbench/context.test.ts tests/workbench/scope-expansion-history.test.ts tests/workbench/task-ledger-history.test.ts tests/workbench/task-state.test.ts` → passed: 123 tests across 5 files.
+- `bun --bun vitest run tests/docs tests/templates` → passed: 80 tests across 6 files.
+
+### Verify
+
+- `bun --bun vitest run` → passed: 1180 tests across 62 files in 216.07 seconds with default settings; no test timeout, concurrency, assertion or suite configuration was changed.
+- `bun run build` → passed: core and CLI builds.
+- `git diff --check` → passed.
+- `bun packages/cli/src/cli/main.ts workbench lint --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed after Task 6 progress and the root row were synchronized to `done` (`lint: success`).
+- `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed after the correction commit: `format: split`, verified serial order `1, 2, 3, 4, 5, 6`, `6/6` implementation done, current Task 6 input context, and Task 6 feedback `changes-requested (stale)`.
+- `bun packages/cli/src/cli/main.ts workbench diff --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed after the correction commit and reported original Base `5a6472d329b54459cc9f63aa1b1cb70f7713969b` with a 25-file task package; the ignored `.base` SHA-256 remained `ac3d4c7d9d8927492a311e5dc1c3e0bf0b4b6ab7d85f6cc2206dcf8a2f56f6fb`.
+- `pi-lens` LSP found no source diagnostics; two auxiliary nested-ternary warnings are on unchanged lines 460–461, attributed by `git blame` to commits before admitted HEAD.
+
+### Quality context
+
+- The new tests use the checkout's source CLI, real temporary Git repositories and distinct feedback-only commits. The existing approved-predecessor positive and task-owned pre-reservation negative remain intact. The candidate-selection logic explicitly handles `git pathHistory` commits after the reservation and fails closed on ambiguous reachable feedback ancestry.
+
+### Result
+
+- Outcome: done
