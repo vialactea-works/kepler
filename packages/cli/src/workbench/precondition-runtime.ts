@@ -107,6 +107,8 @@ export interface HistoricalAdmissionSource {
 }
 
 export interface PreconditionRuntime {
+  readonly ledgerHistory?: import("./task-ledger-history.js").TaskLedgerHistory;
+  readonly workerIdentity?: () => string | undefined;
   readonly admissionSource?: HistoricalAdmissionSource;
   readonly cwd: () => string;
   readonly process: ProcessPort;
@@ -129,6 +131,7 @@ export const createPreconditionRuntime = (
     process: overrides.process,
   });
   return {
+    workerIdentity: () => process.env.PI_SESSION_ID,
     cwd: runtime.cwd,
     process: runtime.process,
     fileSystem: overrides.fileSystem ?? {

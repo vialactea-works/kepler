@@ -6,6 +6,7 @@ import type {
 } from "ajv";
 import type { RecognizedArtifact } from "./artifact-reader.js";
 import { scopeExpansionPathPattern, validateScopeExpansions } from "./scope-expansions.js";
+import { taskAdmissionSchema, validateTaskAdmission } from "./task-admission.js";
 import {
   enumValues,
   requiredFields,
@@ -287,6 +288,29 @@ const taskMetadata: ArtifactMetadataSchema = {
       enum: ["pending", "in-progress", "blocked", "done"],
     },
     progress: nonEmptyString,
+    admission: taskAdmissionSchema,
+    publication: {
+      type: "object",
+      required: ["version", "taskHead", "integratedHead", "outcome", "verification"],
+      additionalProperties: false,
+      properties: {
+        version: { const: 1 },
+        taskHead: { type: "string", pattern: "^[0-9a-f]{40}$" },
+        integratedHead: { type: "string", pattern: "^[0-9a-f]{40}$" },
+        outcome: { enum: ["done", "blocked"] },
+        verification: {
+          anyOf: [{ type: "null" }, {
+            type: "object", required: ["command", "exitCode"], additionalProperties: false,
+            properties: { command: nonEmptyString, exitCode: { const: 0 } },
+          }],
+        },
+      },
+      allOf: [{
+        if: { properties: { outcome: { const: "done" } } },
+        then: { properties: { verification: { type: "object" } } },
+        else: { properties: { verification: { type: "null" } } },
+      }],
+    },
   },
 };
 
@@ -769,6 +793,14 @@ export const validateArtifactMetadataSchema = (
       const scope = validateScopeExpansions(artifact.metadata.scope_expansions);
       if (scope.kind === "invalid")
         return [diagnostic(artifact, "invalid-value", scope.reason, { field: "scope_expansions" })];
+    }
+    if (kind === "progress" && Array.isArray(artifact.metadata.tasks)) {
+      for (const [index, task] of artifact.metadata.tasks.entries()) {
+        if (typeof task === "object" && task !== null && Object.hasOwn(task, "admission")) {
+          const admission = validateTaskAdmission((task as Record<string, unknown>).admission);
+          if (admission.kind === "invalid") return [diagnostic(artifact, "invalid-value", admission.reason, { field: `tasks[${String(index)}].admission` })];
+        }
+      }
     }
     return [];
   }

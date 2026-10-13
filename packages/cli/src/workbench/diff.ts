@@ -759,15 +759,16 @@ const recordCheckpoint = async (
     return failure(operation, `task checkpoint is unverified: ${historical.reason}`);
   let base: string;
   const outputs: string[] = [];
+  if (historical.kind === "not-started" && historical.admissionRequired) return failure(operation, "Dependency-mode checkpoint requires guarded admission before dispatch");
   if (checkpointExists) {
     const checked = await readCheckpoint(runtime, operation, checkpoint, root);
     if (typeof checked !== "string") return checked;
-    if (historical.kind === "verified" && checked !== historical.base)
+    if (historical.base !== undefined && checked !== historical.base)
       return failure(
         operation,
         `task checkpoint conflicts with historical Base ${historical.base}; preserving existing checkpoint`,
       );
-    base = historical.kind === "verified" ? historical.base : checked;
+    base = historical.base ?? checked;
     const head = await fullCommit(
       runtime,
       operation,
@@ -783,7 +784,7 @@ const recordCheckpoint = async (
         `task checkpoint is not an ancestor of HEAD: ${base}`,
         ancestor,
       );
-  } else if (historical.kind === "verified") {
+  } else if (historical.base !== undefined) {
     base = historical.base;
   } else {
     const first = await canRecordFirst(runtime, root, change, task);
@@ -885,16 +886,17 @@ const packageTask = async (
   if (historical.kind === "unverified")
     return failure(operation, `task checkpoint is unverified: ${historical.reason}`);
   let base: string;
+  if (historical.kind === "not-started" && historical.admissionRequired) return failure(operation, "Dependency-mode checkpoint requires guarded admission before dispatch");
   if (checkpointExists) {
     const checked = await readCheckpoint(runtime, operation, checkpoint, root);
     if (typeof checked !== "string") return checked;
-    if (historical.kind === "verified" && checked !== historical.base)
+    if (historical.base !== undefined && checked !== historical.base)
       return failure(
         operation,
         `task checkpoint conflicts with historical Base ${historical.base}; preserving existing checkpoint`,
       );
-    base = historical.kind === "verified" ? historical.base : checked;
-  } else if (historical.kind === "verified") {
+    base = historical.base ?? checked;
+  } else if (historical.base !== undefined) {
     base = historical.base;
   } else {
     return negative(
@@ -906,7 +908,7 @@ const packageTask = async (
     runtime,
     operation,
     root,
-    "HEAD",
+    historical.kind === "verified" ? historical.head ?? "HEAD" : "HEAD",
     "cannot resolve HEAD",
   );
   if (typeof head !== "string") return head;

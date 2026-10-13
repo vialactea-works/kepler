@@ -1,3 +1,4 @@
+import { collectTaskLedgerHistory } from "./task-ledger-history.js";
 import * as Path from "node:path";
 import { createArtifactReader } from "./artifact-reader.js";
 import { validateArtifact, type ArtifactContractResult } from "./artifact-contracts.js";
@@ -30,6 +31,7 @@ import {
 import type { PreconditionRuntime } from "./precondition-runtime.js";
 import { inspectExecutionTransition, inspectInputImpact, taskTitleAbandoned, type InputImpactInspection, type PlanHistoryRuntime } from "./plan-history.js";
 import { legacyCompletedDefinitionProblems, legacyInputConfirmationMetadataProblems } from "./legacy-input-confirmation.js";
+import { inspectTaskWorkspace } from "./task-workspace.js";
 export { taskTitleAbandoned } from "./plan-history.js";
 import {
   readTaskFeedbackRanges,
@@ -719,7 +721,10 @@ export const inspectTaskInputContext = async (
         problems.push(`Task ${task} historical input-impact handoff is unverified: ${originalImpact.problems.join("; ")}`);
     }
   }
-  if (repositoryIdentity === undefined || context.repository !== repositoryIdentity)
+  const taskRepository = plan.body.workflow.plan?.execution?.version === 2 && context.repository !== repositoryIdentity && currentHead
+    ? await inspectTaskWorkspace({ process: runtime.process, realpath: runtime.fileSystem.realpath, git: checkpointGit(runtime), worker: runtime.workerIdentity }, root, relativePath(root, Path.join(changeDir, "progress.md")), task, Path.basename(changeDir), currentHead, context.repository)
+    : repositoryIdentity;
+  if (taskRepository === undefined || context.repository !== taskRepository)
     problems.push(`Task ${task} input context belongs to a different repository`);
   if (context.intentCommit.startsWith("tactical:")) {
     if (taskApprovals.size > 0)
@@ -809,6 +814,7 @@ const inspectCritiqueDisposition = async (
 };
 
 const checkpointGit = (runtime: PreconditionRuntime): TaskCheckpointGit => ({
+  ledgerHistory: runtime.ledgerHistory,
   changedPaths: (root, commit) => runtime.git.changedPaths?.(root, commit) ?? gitCommand(runtime, ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", "-z", commit], root),
   pathChanges: (root, base, head, paths) => runtime.git.pathChanges?.(root, base, head, paths) ?? gitCommand(runtime, ["log", "--full-history", "--format=%H", `${base}..${head}`, "--", ...paths], root),
   pathHistory: (root, sourcePath) => gitPathHistory(runtime, root, sourcePath),
@@ -940,6 +946,10 @@ export const inspectTasks = async (
     problems.push("plan and progress ledgers do not match");
   if (!progressLedgerMatches(progressArtifact.metadata.tasks, progressRecords))
     problems.push("progress metadata ledger does not match");
+  if (intentInspection.currentHead) {
+    const ledgerHistory = await collectTaskLedgerHistory(checkpointGit(runtime), root, relativePath(root, Path.join(changeDir, "progress.md")), intentInspection.currentHead, activePlans.map((record) => relativePath(root, Path.join(changeDir, `tasks/task-${record.number}/progress.md`))));
+    runtime = { ...runtime, ledgerHistory };
+  }
   const tasks: TaskEvidence[] = [];
   for (const record of activePlans) {
     const task = record.number ?? 0;

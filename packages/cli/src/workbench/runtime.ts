@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 
 export interface ProcessResult {
@@ -89,12 +89,34 @@ const productionProcess: ProcessPort = {
   },
 };
 
+let activeReads = 0;
+const waitingReads: (() => void)[] = [];
+
+export const nativeReadProcess: ProcessPort = {
+  run: async (command, args, cwd) => {
+    if (activeReads < 4) activeReads += 1;
+    else await new Promise<void>((resolve) => { waitingReads.push(resolve); });
+    try {
+      return await new Promise<ProcessResult>((resolve) => {
+        execFile(command, [...args], { cwd, encoding: "utf8", env: environment }, (error, stdout, stderr) => {
+          resolve({ status: error === null ? 0 : typeof error.code === "number" ? error.code : -1, stdout, stderr });
+        });
+      });
+    } finally {
+      const next = waitingReads.shift();
+      if (next) next();
+      else activeReads -= 1;
+    }
+  },
+};
+
 const productionRun = productionProcess.run;
+const nativeReadRun = nativeReadProcess.run;
 
 export const nativeProcessEnvironment = (
   port: ProcessPort,
 ): Readonly<Record<string, string | undefined>> | undefined =>
-  port === productionProcess && port.run === productionRun ? environment : undefined;
+  (port === productionProcess && port.run === productionRun) || (port === nativeReadProcess && port.run === nativeReadRun) ? environment : undefined;
 
 const productionFileSystem: IsolationFileSystemPort = {
   pathExists: async (sourcePath) => {

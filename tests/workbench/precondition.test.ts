@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
+import { createHash } from "node:crypto";
 import * as Path from "node:path";
 import { createArtifactReader } from "../../packages/cli/src/workbench/artifact-reader.js";
 import { parseReviewPasses } from "../../packages/cli/src/workbench/review-passes.js";
@@ -21,6 +22,7 @@ import {
   cleanupRepos,
   commitAll,
   commitPaths,
+  fixtureProcess,
   git,
   runCommand,
   makeChangeDir,
@@ -34,7 +36,7 @@ const fixtureTargetBranch = "refs/remotes/origin/main";
 
 const runPrecondition = (
   args: PreconditionArguments,
-  runtime: PreconditionRuntime = createPreconditionRuntime(),
+  runtime: PreconditionRuntime = createPreconditionRuntime({ process: fixtureProcess }),
 ) => new PreconditionService(runtime).execute(args);
 
 const evidencePath = (slug: string, file: string): string =>
@@ -157,12 +159,12 @@ const makeEvidence = (
 } => {
   git(repository, "update-ref", fixtureTargetBranch, "HEAD");
   const changeDir = makeChangeDir(repository, "demo");
-  const base = git(repository, "rev-parse", "HEAD");
+  let base = git(repository, "rev-parse", "HEAD");
   const taskTitle = options.taskTitle ?? "Implement";
   const metadataTitle = options.metadataTitle ?? taskTitle;
   const displayTitle = taskTitle.replaceAll("|", "\\|");
   const taskDefinition = options.dependencyMode
-    ? `### Task 1: ${taskTitle}\n\n- Goal: Deliver ${taskTitle.toLowerCase()}.\n- Depends on: none\n- Acceptance:\n  - The ${taskTitle.toLowerCase()} is verified.\n- Steps:\n  1. Verify the task behavior.\n- Verify: bun --bun vitest run\n- Commit: feat: ${taskTitle.toLowerCase()}`
+    ? `### Task 1: ${taskTitle}\n\n- Goal: Deliver ${taskTitle.toLowerCase()}.\n- Depends on: none\n- Acceptance:\n  - The ${taskTitle.toLowerCase()} is verified.\n- Steps:\n  1. Verify the task behavior.\n- Verify: test -f .kepler/changes/demo/tasks/task-1/progress.md\n- Commit: feat: ${taskTitle.toLowerCase()}`
     : `### Task 1: ${taskTitle}\n\n- Depends on: none`;
   const inputContext = JSON.stringify({
     version: 1,
@@ -190,7 +192,44 @@ const makeEvidence = (
     evidencePath("demo", "tasks/task-1/progress.md"),
     `---\nartifact: task-progress\nchange: demo\ntask: 1\nstatus: ${options.taskProgressStatus ?? "done"}\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 1 — ${taskTitle}\n\n## Attempt 1 — 2026-09-12\n${options.taskOutcomeField ?? "- Outcome: done"}\n`,
   );
-  const material = commitAll(repository, "material");
+  let material: string;
+  if (options.dependencyMode) {
+    const ledgerPath = evidencePath("demo", "progress.md");
+    const taskPath = evidencePath("demo", "tasks/task-1/progress.md");
+    const terminalLedger = Fs.readFileSync(Path.join(repository, ledgerPath), "utf8");
+    const terminalTask = Fs.readFileSync(Path.join(repository, taskPath), "utf8");
+    const pendingLedger = terminalLedger.replace("status: complete", "status: in-progress").replace("    status: done", "    status: pending").replace("| done |", "| pending |");
+    write(repository, ledgerPath, pendingLedger);
+    write(repository, taskPath, terminalTask.replace("status: done", "status: pending").split("\n## Attempt")[0] + "\n");
+    write(repository, ".gitignore", ".lanes/\n");
+    base = commitAll(repository, "dependency scaffold");
+    const lane = Path.join(repository, ".lanes/task-1");
+    git(repository, "worktree", "add", "-q", "-b", "fixture-task-1", lane, base);
+    const admission = {
+      version: 1, base, sourceHead: base, planCommit: base,
+      planDigest: createHash("sha256").update(Fs.readFileSync(Path.join(repository, evidencePath("demo", "plan.md")))).digest("hex"),
+      taskDefinition: taskDefinitionDigest(taskDefinition), worker: "fixture-worker", coordinator: "fixture-coordinator",
+      lane: "refs/heads/fixture-task-1", worktree: Fs.realpathSync(lane),
+      gitDirectory: Fs.realpathSync(git(lane, "rev-parse", "--absolute-git-dir")),
+      repository: Fs.realpathSync(repository), commonDirectory: Fs.realpathSync(git(repository, "rev-parse", "--path-format=absolute", "--git-common-dir")),
+      source: git(repository, "symbolic-ref", "HEAD"), target: fixtureTargetBranch, prerequisites: [],
+    };
+    const admittedLedger = pendingLedger.replace("    status: pending", "    status: in-progress").replace("| pending |", "| in-progress |").replace("\n---\n# Progress", `\n    admission: ${JSON.stringify(admission)}\n---\n# Progress`);
+    write(repository, ledgerPath, admittedLedger);
+    const admitted = commitPaths(repository, "admit dependency fixture", ledgerPath);
+    git(lane, "merge", "--ff-only", admitted);
+    write(lane, taskPath, terminalTask);
+    const taskHead = commitAll(lane, "material");
+    git(repository, "merge", "--no-ff", "--no-edit", taskHead);
+    material = git(repository, "rev-parse", "HEAD");
+    const verify = "test -f .kepler/changes/demo/tasks/task-1/progress.md";
+    expect(runCommand("sh", ["-lc", verify], repository).status).toBe(0);
+    const publication = { version: 1, taskHead, integratedHead: material, outcome: "done", verification: { command: verify, exitCode: 0 } };
+    write(repository, ledgerPath, terminalLedger.replace("\n---\n# Progress", `\n    admission: ${JSON.stringify(admission)}\n    publication: ${JSON.stringify(publication)}\n---\n# Progress`));
+    commitPaths(repository, "publish dependency fixture", ledgerPath);
+  } else {
+    material = commitAll(repository, "material");
+  }
   write(
     repository,
     evidencePath("demo", "tasks/task-1/feedback.md"),
@@ -1153,8 +1192,8 @@ const makeDependencyModeTransitionEvidence = (
   progressSource = progressSource
     .replace("status: complete", "status: in-progress")
     .replace(
-      "    progress: tasks/task-1/progress.md\n---",
-      "    progress: tasks/task-1/progress.md\n  - id: 2\n    title: Prerequisite\n    status: pending\n    progress: tasks/task-2/progress.md\n---",
+      "\n---\n# Progress: Demo",
+      "\n  - id: 2\n    title: Prerequisite\n    status: pending\n    progress: tasks/task-2/progress.md\n---\n# Progress: Demo",
     )
     .replace(
       "| Task 1: Implement | done | [details](tasks/task-1/progress.md) |\n",
@@ -3702,7 +3741,7 @@ describe("route finalization repair boundary", () => {
 describe("finalization repair admission", () => {
   it.each([false, true])("admits historical delivery without replay after source removal (linked=%s)", async (linked) => {
     const fixture = await makeDeliveredFinish(linked);
-    const runtime = createPreconditionRuntime({ cwd: () => fixture.repository });
+    const runtime = createPreconditionRuntime({ cwd: () => fixture.repository, process: fixtureProcess });
     const before = git(fixture.repository, "rev-parse", "HEAD");
     const source = Fs.readFileSync(Path.join(fixture.repository, fixture.finishPath), "utf8");
     const ordinary = await runPrecondition(fixture.args, runtime);

@@ -8,6 +8,9 @@ import { validateArtifactBody } from "./artifact-body.js";
 import type { ProcessResult } from "./runtime.js";
 import { parseReviewPasses } from "./review-passes.js";
 import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
+import { taskCheckpointHistoryAt, taskLedgerHistoryAt } from "./task-ledger-history.js";
+import { inspectTaskAdmissionHistory, type TaskAdmissionHistory } from "./task-admission-history.js";
+import { inspectTaskPublicationHistory } from "./task-publication-history.js";
 
 export interface TaskFeedbackRange {
   readonly base: string;
@@ -19,15 +22,17 @@ export type TaskFeedbackRangesResult =
   | { readonly kind: "unverified"; readonly reason: string };
 
 export type TaskCheckpointResult =
-  | { readonly kind: "not-started" }
+  | { readonly kind: "not-started"; readonly base?: string; readonly admissionRequired?: true }
   | {
       readonly kind: "verified";
       readonly base: string;
       readonly attempt: string;
+      readonly head?: string;
     }
   | { readonly kind: "unverified"; readonly reason: string };
 
 export interface TaskCheckpointGit {
+  readonly ledgerHistory?: import("./task-ledger-history.js").TaskLedgerHistory;
   readonly changedPaths?: (root: string, commit: string) => ProcessResult | Promise<ProcessResult>;
   readonly pathChanges?: (root: string, base: string, head: string, paths: readonly string[]) => ProcessResult | Promise<ProcessResult>;
   readonly pathHistory: (
@@ -156,11 +161,39 @@ export const resolveTaskCheckpoint = async (
   currentHead: string,
   feedbackRanges: readonly TaskFeedbackRange[] = [],
 ): Promise<TaskCheckpointResult> => {
+  git = taskCheckpointHistoryAt(git, root, sourcePath, currentHead);
   if (!fullCommit(currentHead))
     return { kind: "unverified", reason: "current HEAD is unresolved" };
   const resolvedHead = await git.resolveCommit(root, currentHead);
   if (resolvedHead.status !== 0 || text(resolvedHead) !== currentHead)
     return { kind: "unverified", reason: "current HEAD is unresolved" };
+  const planPath = sourcePath.replace(/\/tasks\/task-[1-9][0-9]*\/progress\.md$/, "/plan.md");
+  const planBlob = await git.blobAt(root, currentHead, planPath);
+  let admission: TaskAdmissionHistory | undefined;
+  if (planBlob.status === 0) {
+    const planRead = await createArtifactReader({ readFile: () => planBlob.stdout })(planPath);
+    if (planRead._tag === "recognized" && planRead.metadata.artifact === "plan" && typeof planRead.metadata.execution === "object" && planRead.metadata.execution !== null && (planRead.metadata.execution as Record<string, unknown>).version === 2) {
+      const plan = validateArtifact(planRead);
+      if (plan._tag !== "valid" || plan.body.workflow.plan?.execution?.version !== 2) return { kind: "unverified", reason: "committed dependency-mode plan is unverified" };
+      admission = await inspectTaskAdmissionHistory(git, root, planPath.replace(/plan\.md$/, "progress.md"), task, change, currentHead);
+      if (admission.kind === "unverified") return admission;
+    }
+  }
+  if (admission === undefined && planBlob.status === 0) {
+    const ledgerPath = planPath.replace(/plan\.md$/, "progress.md");
+    const collected = taskLedgerHistoryAt(git, root, ledgerPath, currentHead);
+    const ledgerHistory = collected?.history ?? await git.pathHistory(root, ledgerPath);
+    if (ledgerHistory.status === 0) for (const revision of ledgerHistory.stdout.trim().split(/\r?\n/).filter(Boolean)) {
+      const ledger = collected?.blobs.get(revision) ?? await git.blobAt(root, revision, ledgerPath);
+      if (ledger.status !== 0 || !ledger.stdout.includes("admission")) continue;
+      const read = await createArtifactReader({ readFile: () => ledger.stdout })(ledgerPath);
+      const contract = validateArtifact(read);
+      const entry = contract._tag === "valid" && contract.artifact === "progress" && Array.isArray(contract.metadata.tasks)
+        ? contract.metadata.tasks.find((candidate: unknown) => typeof candidate === "object" && candidate !== null && (candidate as Record<string, unknown>).id === task) as Record<string, unknown> | undefined
+        : undefined;
+      if (entry && Object.hasOwn(entry, "admission")) return { kind: "unverified", reason: "admitted dependency-mode plan was downgraded; original authority is required" };
+    }
+  }
   const history = await git.pathHistory(root, sourcePath);
   if (history.status !== 0)
     return { kind: "unverified", reason: "task progress history is unavailable" };
@@ -172,7 +205,7 @@ export const resolveTaskCheckpoint = async (
     ...git,
     changedPaths: git.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
     pathChanges: git.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
-  }, root, sourcePath, task, change, currentHead);
+  }, root, sourcePath, task, change, currentHead, undefined, admission?.kind === "verified" ? admission.original.base : undefined);
   if (scopes.kind === "unverified") return scopes;
   const attempts = await taskAttemptCommits(
     git,
@@ -186,11 +219,12 @@ export const resolveTaskCheckpoint = async (
     return { kind: "unverified", reason: attempts };
   if (attempts.length === 0)
     return feedbackRanges.length === 0
-      ? { kind: "not-started" }
+      ? admission?.kind === "verified" ? { kind: "not-started", base: admission.original.base } : admission?.kind === "absent" ? { kind: "not-started", admissionRequired: true } : { kind: "not-started" }
       : {
           kind: "unverified",
           reason: "feedback exists without a committed task attempt",
         };
+  if (admission?.kind === "absent") return { kind: "unverified", reason: "dependency-mode attempt lacks original admission authority" };
   const earliest = [] as string[];
   for (const candidate of attempts) {
     let hasAttemptAncestor = false;
@@ -243,7 +277,7 @@ export const resolveTaskCheckpoint = async (
       reason: "current task progress does not preserve its attempt history",
     };
   const parentResult = await git.firstParent(root, attempt);
-  const base = text(parentResult);
+  const base = admission?.kind === "verified" ? admission.original.base : text(parentResult);
   if (parentResult.status !== 0 || !fullCommit(base))
     return {
       kind: "unverified",
@@ -268,7 +302,13 @@ export const resolveTaskCheckpoint = async (
       kind: "unverified",
       reason: "historical task Base is not an ancestor of current HEAD",
     };
+  const publication = admission?.kind === "verified"
+    ? await inspectTaskPublicationHistory(git, root, planPath.replace(/plan\.md$/, "progress.md"), task, change, currentHead, admission.commit)
+    : undefined;
+  if (publication?.kind === "unverified") return publication;
+  const integratedHead = publication?.kind === "verified" ? publication.publication.integratedHead : undefined;
   for (const range of feedbackRanges) {
+    if (integratedHead && (await git.isAncestor(root, integratedHead, range.head)).status !== 0) return { kind: "unverified", reason: "feedback Head omits the actual integrated task range" };
     if (!fullCommit(range.base) || !fullCommit(range.head))
       return {
         kind: "unverified",
@@ -304,5 +344,5 @@ export const resolveTaskCheckpoint = async (
         reason: "feedback Head does not contain the historical task range",
       };
   }
-  return { kind: "verified", base, attempt };
+  return { kind: "verified", base, attempt, ...(integratedHead ? { head: integratedHead } : {}) };
 };

@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
-import { execFile } from "node:child_process";
+import { nativeReadProcess } from "./runtime.js";
 import {
   createArtifactReader,
   type ArtifactFileSystem,
@@ -39,6 +39,8 @@ import { parseReviewPasses } from "./review-passes.js";
 import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
 import { projectTaskReadiness, type TaskReadinessEvidence, type TaskReadinessProjection } from "./task-readiness.js";
 import { inspectInitialScaffold, inspectIntentApprovals, inspectTaskInputContext } from "./precondition-artifacts.js";
+import { collectTaskLedgerHistory } from "./task-ledger-history.js";
+import { inspectTaskWorkspace } from "./task-workspace.js";
 import type { PreconditionRuntime } from "./precondition-runtime.js";
 import type { ProcessPort, ProcessResult } from "./runtime.js";
 import { resolveProjectDataPath } from "./project-data-path.js";
@@ -150,6 +152,8 @@ export interface ContextGitPort {
 }
 
 export interface ContextRuntime {
+  readonly ledgerHistory?: import("./task-ledger-history.js").TaskLedgerHistory;
+  readonly workerIdentity?: () => string | undefined;
   readonly process?: ProcessPort;
   readonly cwd: () => string;
   readonly fileSystem: ContextFileSystemPort;
@@ -291,19 +295,7 @@ const ARTIFACTS = [
   "finish.md",
   "critique.md",
 ] as const;
-const environment = {
-  ...process.env,
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-};
-
-const productionProcess: ProcessPort = {
-  run: (command, args, cwd) => new Promise<ProcessResult>((resolve) => {
-    execFile(command, [...args], { cwd, encoding: "utf8", env: environment }, (error, stdout, stderr) => {
-      resolve({ status: error === null ? 0 : typeof error.code === "number" ? error.code : -1, stdout, stderr });
-    });
-  }),
-};
+const productionProcess = nativeReadProcess;
 
 const productionFileSystem: ContextFileSystemPort = {
   readFile: (sourcePath) => Fs.readFile(sourcePath, "utf8"),
@@ -411,6 +403,7 @@ export const createContextRuntime = (
   const processPort = overrides.process ?? productionProcess;
   return {
     cwd: overrides.cwd ?? (() => process.cwd()),
+    workerIdentity: () => process.env.PI_SESSION_ID,
     process: processPort,
     fileSystem: overrides.fileSystem ?? productionFileSystem,
     git: overrides.git ?? createGitPort(processPort),
@@ -515,6 +508,7 @@ const safeRepositoryPath = (value: string): boolean =>
   value.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 
 const contextTaskCheckpointGit = (runtime: ContextRuntime): TaskCheckpointGit => ({
+  ledgerHistory: runtime.ledgerHistory,
   changedPaths: runtime.git.changedPaths,
   pathChanges: runtime.git.pathChanges,
   pathHistory: (root, path) => runtime.git.pathHistory(root, path),
@@ -2172,6 +2166,11 @@ const latestReview = async (
   return `${String(verdict)} (${standing === "fresh" ? "range-fresh; clearance-unverified" : standing})`;
 };
 
+export const contextEvidenceRuntime = (runtime: ContextRuntime): PreconditionRuntime | undefined => runtime.process === undefined ? undefined : {
+  cwd: runtime.cwd, workerIdentity: runtime.workerIdentity, process: runtime.process, fileSystem: runtime.fileSystem,
+  git: { ...runtime.git, blobAt: runtime.git.fileAt },
+};
+
 const enrichSplit = async (
   runtime: ContextRuntime,
   change: ContextChange,
@@ -2197,6 +2196,11 @@ const enrichSplit = async (
   const plan = await readArtifact(runtime, Path.join(change.path, "plan.md"));
   const planContractResult = "exitCode" in plan ? undefined : metadataContract(plan.artifact);
   const planContract = planContractResult?._tag === "valid" ? planContractResult.body.workflow.plan : undefined;
+  if (planContract?.execution?.version === 2) {
+    const head = text(await runtime.git.currentHead(root));
+    const ledgerHistory = await collectTaskLedgerHistory(contextTaskCheckpointGit(runtime), root, relative(root, Path.join(change.path, "progress.md")), head, taskPaths);
+    runtime = { ...runtime, ledgerHistory };
+  }
   const states = [];
   const feedbackInspections = new Map<number, ContextFeedbackInspection>();
   const inspectRow = async (row: LedgerRow) => {
@@ -2225,6 +2229,7 @@ const enrichSplit = async (
     expectedTitle,
   );
   const taskInputs: NonNullable<ContextChange["taskInputs"]>[number][] = [];
+  const taskRepositories = new Map<number, string | undefined>();
   if (planContract) {
     let repositoryIdentity: string | undefined;
     try {
@@ -2264,7 +2269,11 @@ const enrichSplit = async (
         continue;
       }
       const changedPaths: string[] = [];
-      const repositoryChanged = repositoryIdentity !== input.repository;
+      const taskRepository = planContract.execution?.version === 2 && repositoryIdentity !== input.repository && runtime.process
+        ? await inspectTaskWorkspace({ process: runtime.process, realpath: runtime.fileSystem.realpath, git: contextTaskCheckpointGit(runtime), worker: runtime.workerIdentity }, root, relative(root, Path.join(change.path, "progress.md")), task.id, change.name, text(await runtime.git.currentHead(root)), input.repository)
+        : repositoryIdentity;
+      taskRepositories.set(task.id, taskRepository);
+      const repositoryChanged = taskRepository !== input.repository;
       if (repositoryChanged) changedPaths.push("repository");
       for (const item of input.inputs) {
         const current = await runtime.git.headBlob(root, item.path);
@@ -2325,10 +2334,7 @@ const enrichSplit = async (
   const dependencyMode = planContract?.execution?.version === 2 && planContract.execution.mode === "dependencies";
   if (dependencyMode && planContract) {
     const currentHead = text(await runtime.git.currentHead(root));
-    const evidenceRuntime: PreconditionRuntime | undefined = runtime.process === undefined ? undefined : {
-      cwd: runtime.cwd, process: runtime.process, fileSystem: runtime.fileSystem,
-      git: { ...runtime.git, blobAt: runtime.git.fileAt },
-    };
+    const evidenceRuntime = contextEvidenceRuntime(runtime);
     const intent = evidenceRuntime && planContractResult?._tag === "valid"
       ? await inspectIntentApprovals(evidenceRuntime, root, change.path, planContractResult)
       : undefined;
@@ -2336,7 +2342,6 @@ const enrichSplit = async (
       ? await inspectInitialScaffold(evidenceRuntime, root, change.path, planContractResult, currentHead, false)
       : ["initialization proof cannot be verified"];
     const impact = await inspectInputImpact(contextHistoryRuntime(runtime), root, change.path, planContract);
-    const repositoryIdentity = await runtime.fileSystem.realpath(root);
     const planVerified = intent !== undefined && intent.problems.length === 0 && scaffoldProblems.length === 0 &&
       await durableArtifact(runtime, root, Path.join(change.path, "plan.md")) &&
       change.executionTransitionStanding?.status === "verified" && impact.problems.length === 0 &&
@@ -2388,7 +2393,7 @@ const enrichSplit = async (
       const input = taskInputs.find((entry) => entry.task === task.id);
       const inputProblems = evidenceRuntime && intent && planContractResult?._tag === "valid"
         ? await inspectTaskInputContext(evidenceRuntime, root, change.path, planContractResult, task.id,
-            checkpoint.kind === "verified" ? checkpoint.base : undefined, repositoryIdentity,
+            "base" in checkpoint ? checkpoint.base : undefined, taskRepositories.get(task.id),
             intent.approvals, currentHead, impact,
             checkpoint.kind === "verified" ? checkpoint : { kind: "unverified", reason: "task has no committed attempt" })
         : ["input evidence ports are unavailable"];
@@ -2411,7 +2416,7 @@ const enrichSplit = async (
           const resolved = fullCommit(cache) ? await runtime.git.resolveCommit(root, cache) : undefined;
           cacheValid = resolved !== undefined && successful(resolved) && text(resolved) === cache &&
             successful(await runtime.git.isAncestor(root, cache, currentHead)) &&
-            (checkpoint.kind !== "verified" || checkpoint.base === cache);
+            (!("base" in checkpoint) || checkpoint.base === cache);
         } catch {
           cacheValid = false;
         }

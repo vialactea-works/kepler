@@ -241,6 +241,7 @@ export interface PlanTaskContract {
   readonly files: readonly string[];
   readonly definitionDigest: string;
   readonly schedulingDigest: string;
+  readonly verify?: string;
   readonly goal?: string;
   readonly acceptance?: readonly string[];
   readonly inputContext?: TaskInputContext;
@@ -254,6 +255,23 @@ export interface ScopeExpansion {
   readonly evidence: string;
   readonly paths: readonly string[];
   readonly verify: string;
+}
+
+export interface TaskPublication {
+  readonly version: 1;
+  readonly taskHead: string;
+  readonly integratedHead: string;
+  readonly outcome: "done" | "blocked";
+  readonly verification: { readonly command: string; readonly exitCode: 0 } | null;
+}
+
+export interface RootProgressTaskEntry {
+  readonly id: number;
+  readonly title: string;
+  readonly status: "pending" | "in-progress" | "blocked" | "done";
+  readonly progress: string;
+  readonly admission?: import("./task-admission.js").TaskAdmission;
+  readonly publication?: TaskPublication;
 }
 
 export interface TaskOrderEntry {

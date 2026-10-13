@@ -1,38 +1,75 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import * as Fs from "node:fs";
+import * as Path from "node:path";
+import { createHash } from "node:crypto";
+import type { TaskAdmission } from "../../packages/cli/src/workbench/task-admission.js";
+import type { TaskPublication } from "../../packages/cli/src/workbench/artifact-types.js";
 import { ContextService, createContextRuntime } from "../../packages/cli/src/workbench/context.js";
 import { PreconditionService } from "../../packages/cli/src/workbench/precondition.js";
 import { createPreconditionRuntime } from "../../packages/cli/src/workbench/precondition-runtime.js";
 import { taskBreakdownDigestFromDefinitions, taskDefinitionDigest } from "../../packages/cli/src/workbench/artifact-body.js";
-import { cleanupRepos, commitAll, commitPaths, git, makeChangeDir, makeRepo, write } from "./helpers.js";
+import { cleanupRepos, commitAll, commitPaths, fixtureProcess, git, makeChangeDir, makeRepo, runCommand, write } from "./helpers.js";
 
 const fixture = (dependencies: readonly (readonly number[])[] = [[], [4], [2], [1]], mode: "dependencies" | "serial" | "legacy" = "dependencies") => {
   const root = makeRepo();
   const changeDir = makeChangeDir(root, "ready");
   write(root, "AGENTS.md", "Use verified Bun checks.\n");
-  const base = commitPaths(root, "Commit standards before scaffold", "AGENTS.md");
+  write(root, ".gitignore", ".lanes/\n");
+  const base = commitPaths(root, "Commit standards before scaffold", "AGENTS.md", ".gitignore");
+  git(root, "branch", "fixture-target");
   const blob = git(root, "rev-parse", "HEAD:AGENTS.md");
   const tasks = dependencies.map((dependsOn, index) => {
     const id = index + 1;
-    const definition = `### Task ${id}: Task goal ${id}\n\n- Goal: Complete outcome ${id}.\n- Depends on: ${dependsOn.length === 0 ? "none" : dependsOn.map((task) => `Task ${task}`).join(", ")}\n- Acceptance:\n  - Outcome ${id} is verified.\n- Steps:\n  1. Red — observe failure.\n  2. Green — implement and verify.\n  3. Refactor — preserve the outcome.\n- Verify: bun --bun vitest run\n- Commit: feat: complete outcome ${id}`;
+    const verify = `test "$(cat src/outcome-${id}.txt)" = "${id}"`;
+    const definition = `### Task ${id}: Task goal ${id}\n\n- Goal: Complete outcome ${id}.\n- Depends on: ${dependsOn.length === 0 ? "none" : dependsOn.map((task) => `Task ${task}`).join(", ")}\n- Acceptance:\n  - Outcome ${id} is verified.\n- Steps:\n  1. Red — observe failure.\n  2. Green — implement and verify.\n  3. Refactor — preserve the outcome.\n- Verify: ${verify}\n- Commit: feat: complete outcome ${id}`;
     const input = { version: 1, repository: root, intentCommit: "tactical:readiness-fixture", taskDefinition: taskDefinitionDigest(definition), inputs: [{ path: "AGENTS.md", blob }] };
-    return { id, title: `Task goal ${id}`, dependsOn, definitionDigest: taskDefinitionDigest(definition), block: `${definition}\n- Notes: ${JSON.stringify(input)}` };
+    return { id, title: `Task goal ${id}`, dependsOn, verify, definitionDigest: taskDefinitionDigest(definition), block: `${definition}\n- Notes: ${JSON.stringify(input)}` };
   });
   const initialization = { version: 1, base, authority: "requester:readiness-fixture", breakdown: taskBreakdownDigestFromDefinitions(tasks.map((task) => task.id), tasks), taskIds: tasks.map((task) => task.id) };
   const plan = `---\nartifact: plan\nchange: ready\nstatus: approved\ncreated: 2026-10-13\nauthor: Fixture\ndecision: accepted\nroute_unit: null\n${mode === "dependencies" ? "execution: {version: 2, mode: dependencies}\n" : mode === "serial" ? `execution: {version: 1, order: [${tasks.map((task) => task.id).join(", ")}]}\n` : ""}initialization: ${JSON.stringify(initialization)}\n---\n# Plan: Ready\n\n## Overview\n\nVerify dependency scheduling.\n\n## Tasks\n\n${tasks.map((task) => task.block).join("\n\n")}\n\n## Done when\n\nAll outcomes are fully gated.\n`;
   const statuses = tasks.map(() => "pending");
-  const progress = () => `---\nartifact: progress\nchange: ready\nstatus: in-progress\nupdated: 2026-10-13\ndecision: accepted\ntasks: ${JSON.stringify(tasks.map((task, index) => ({ id: task.id, title: task.title, status: statuses[index], progress: `tasks/task-${task.id}/progress.md` })))}\n---\n# Progress: Ready\n\n| Task | Status | Progress |\n| --- | --- | --- |\n${tasks.map((task, index) => `| Task ${task.id}: ${task.title} | ${statuses[index]} | [details](tasks/task-${task.id}/progress.md) |`).join("\n")}\n`;
+  const admissions = new Map<number, TaskAdmission>();
+  const publications = new Map<number, TaskPublication>();
+  const progress = () => `---\nartifact: progress\nchange: ready\nstatus: in-progress\nupdated: 2026-10-13\ndecision: accepted\ntasks: ${JSON.stringify(tasks.map((task, index) => ({ id: task.id, title: task.title, status: statuses[index], progress: `tasks/task-${task.id}/progress.md`, ...(admissions.has(task.id) ? { admission: admissions.get(task.id) } : {}), ...(publications.has(task.id) ? { publication: publications.get(task.id) } : {}) })))}\n---\n# Progress: Ready\n\n| Task | Status | Progress |\n| --- | --- | --- |\n${tasks.map((task, index) => `| Task ${task.id}: ${task.title} | ${statuses[index]} | [details](tasks/task-${task.id}/progress.md) |`).join("\n")}\n`;
   write(changeDir, "plan.md", plan);
   write(changeDir, ".gitignore", "tasks/task-*/.base\n");
   write(changeDir, "progress.md", progress());
   for (const task of tasks) write(changeDir, `tasks/task-${task.id}/progress.md`, `---\nartifact: task-progress\nchange: ready\ntask: ${task.id}\nstatus: pending\nupdated: 2026-10-13\ndecision: accepted\n---\n# Task Progress: Task ${task.id} — ${task.title}\n`);
   commitAll(root, "Initialize committed dependency plan");
-  const context = () => new ContextService(createContextRuntime({ cwd: () => root })).execute({ changeDir });
+  const context = () => new ContextService(createContextRuntime({ cwd: () => root, process: fixtureProcess })).execute({ changeDir });
   const complete = (task: number, outcome: "done" | "blocked" = "done") => {
     const base = git(root, "rev-parse", "HEAD");
+    let lane = root;
+    const definition = tasks[task - 1];
+    if (!definition) throw new Error("Task is absent");
+    if (mode === "dependencies") {
+      lane = Path.join(root, ".lanes", `task-${task}`);
+      git(root, "worktree", "add", "-q", "-b", `task-${task}`, lane);
+      const admission: TaskAdmission = {
+        version: 1, base, sourceHead: base, planCommit: git(root, "log", "-1", "--format=%H", "--", ".kepler/changes/ready/plan.md"), planDigest: createHash("sha256").update(Fs.readFileSync(Path.join(changeDir, "plan.md"), "utf8")).digest("hex"), taskDefinition: definition.definitionDigest,
+        worker: `fixture-${task}`, lane: git(lane, "symbolic-ref", "HEAD"), worktree: lane, gitDirectory: git(lane, "rev-parse", "--absolute-git-dir"), repository: root, commonDirectory: git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"), coordinator: "fixture-controller", source: git(root, "symbolic-ref", "HEAD"), target: "refs/heads/fixture-target",
+        prerequisites: definition.dependsOn.map((dependency) => ({ task: dependency, feedbackCommit: git(root, "log", "-1", "--format=%H", "--", `.kepler/changes/ready/tasks/task-${dependency}/feedback.md`) })),
+      };
+      admissions.set(task, admission);
+      statuses[task - 1] = "in-progress";
+      write(changeDir, "progress.md", progress());
+      const admissionCommit = commitPaths(root, `Admit Task ${task}`, ".kepler/changes/ready/progress.md");
+      git(lane, "merge", "--ff-only", admissionCommit);
+    }
+    const localChange = Path.join(lane, ".kepler", "changes", "ready");
+    write(localChange, `tasks/task-${task}/progress.md`, `---\nartifact: task-progress\nchange: ready\ntask: ${task}\nstatus: ${outcome}\nupdated: 2026-10-13\ndecision: accepted\n---\n# Task Progress: Task ${task} — Task goal ${task}\n\n## Attempt 1 — 2026-10-13\n\n- Outcome: ${outcome}\n`);
+    if (outcome === "done") write(lane, `src/outcome-${task}.txt`, `${task}\n`);
+    const taskHead = commitAll(lane, `Complete Task ${task}`);
+    let head = taskHead;
+    if (mode === "dependencies") {
+      git(root, "merge", "--no-ff", "--no-edit", taskHead);
+      head = git(root, "rev-parse", "HEAD");
+      if (outcome === "done") expect(runCommand("sh", ["-lc", definition.verify], root).status).toBe(0);
+      publications.set(task, { version: 1, taskHead, integratedHead: head, outcome, verification: outcome === "done" ? { command: definition.verify, exitCode: 0 } : null });
+    }
     statuses[task - 1] = outcome;
     write(changeDir, "progress.md", progress());
-    write(changeDir, `tasks/task-${task}/progress.md`, `---\nartifact: task-progress\nchange: ready\ntask: ${task}\nstatus: ${outcome}\nupdated: 2026-10-13\ndecision: accepted\n---\n# Task Progress: Task ${task} — Task goal ${task}\n\n## Attempt 1 — 2026-10-13\n\n- Outcome: ${outcome}\n`);
-    const head = commitAll(root, `Complete Task ${task}`);
+    commitPaths(root, `Publish Task ${task}`, ".kepler/changes/ready/progress.md");
     return { base, head };
   };
   const feedback = (task: number, base: string, head: string, verdict = "approved", committed = true) => {
@@ -46,24 +83,34 @@ const fixture = (dependencies: readonly (readonly number[])[] = [[], [4], [2], [
 afterEach(cleanupRepos);
 
 describe("verified dependency readiness context", () => {
-  it("keeps an all-done implementation count distinct from full clearance", async () => {
-    const f = fixture([[], []]);
-    const first = f.complete(1);
-    f.feedback(1, first.base, first.head);
-    f.complete(2);
-    const context = await f.context();
-    expect(context.changes[0]).toMatchObject({ tasks: { done: 2, total: 2 }, readiness: { fullyGated: [1], ready: [] } });
+  describe("all-done implementation count", () => {
+    let f: ReturnType<typeof fixture>;
+    beforeEach(() => {
+      f = fixture([[], []]);
+      const first = f.complete(1);
+      f.feedback(1, first.base, first.head);
+      f.complete(2);
+    });
+    it("keeps full clearance distinct", async () => {
+      const context = await f.context();
+      expect(context.changes[0]).toMatchObject({ tasks: { done: 2, total: 2 }, readiness: { fullyGated: [1], ready: [] } });
+    });
   });
 
-  it.each([false, true])("keeps finish closed with missing feedback when freshness waiver is %s", async (wholeChangeWaived) => {
-    const f = fixture([[], []]);
-    git(f.root, "checkout", "-q", "-b", "implementation");
-    const first = f.complete(1);
-    f.feedback(1, first.base, first.head);
-    f.complete(2);
-    const result = await new PreconditionService(createPreconditionRuntime({ cwd: () => f.root })).execute({ changeDir: f.changeDir, testCommand: "true", targetBranch: "refs/heads/main", wholeChangeWaived });
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stdout).toContain("[FAIL] Reviews (Task 2 feedback missing");
+  describe("finish with missing feedback", () => {
+    let f: ReturnType<typeof fixture>;
+    beforeEach(() => {
+      f = fixture([[], []]);
+      git(f.root, "checkout", "-q", "-b", "implementation");
+      const first = f.complete(1);
+      f.feedback(1, first.base, first.head);
+      f.complete(2);
+    });
+    it.each([false, true])("keeps finish closed when freshness waiver is %s", async (wholeChangeWaived) => {
+      const result = await new PreconditionService(createPreconditionRuntime({ cwd: () => f.root, process: fixtureProcess })).execute({ changeDir: f.changeDir, testCommand: "true", targetBranch: "refs/heads/main", wholeChangeWaived });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).toContain("[FAIL] Reviews (Task 2 feedback missing");
+    });
   });
 
   describe.each([

@@ -1475,6 +1475,7 @@ const readPlanProjection = (
       files: parsedFiles.files,
       definitionDigest: digest,
       schedulingDigest,
+      ...(dependencyMode && verify !== "" ? { verify } : {}),
       ...(goal === "" ? {} : { goal }),
       ...(acceptance.length === 0 ? {} : { acceptance }),
       ...(inputContext === undefined ? {} : { inputContext }),
