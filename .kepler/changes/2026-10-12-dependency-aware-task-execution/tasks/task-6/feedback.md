@@ -38,3 +38,17 @@ Verdict: changes-requested
 ### Suggestions
 
 - None.
+
+## Pass 3 — 2026-10-13
+
+Base: 5a6472d329b54459cc9f63aa1b1cb70f7713969b
+Head: 2d0f9f3b333ae5172bc4b4a6ee236c7b7d8c31a5
+Verdict: changes-requested
+
+### Blocking
+
+- [`packages/cli/src/workbench/context.ts:1804-1812`] `formatChange` validates scope-expansion chronology before checkpoint recovery and supplies only `feedbackRanges.at(-1)?.base`. At the first Task 6 reservation commit `3d8de5c0b7eb2df2f6778ef521be90dc09801466`, no feedback artifact exists, so the inspector falls back to the earliest Task 6 progress snapshot and treats Task 2's legitimate predecessor change to the shared reserved `packages/cli/src/workbench/scope-expansions.ts` at `e1637cf91c0aa6b723e6cf6a37a53c982ee5c6f9` as Task 6 production before its reservation. Reproduced with the current source CLI against a disposable clone at `3d8de5c0b7eb2df2f6778ef521be90dc09801466`: it exits 0 with `format: invalid` and `artifact-diagnostic: Task 6 scope history: reserved path changed before its reservation`. This holds a first-run actor before independent feedback can exist, despite the reservation itself being Task-6-progress-only and its parent being the original Base. Restore a verified original-Base chronology source for the no-feedback first-reservation case without cropping actual Task-owned earlier production; add real Git/CLI coverage for this legitimate predecessor positive case and retain the existing production-before-reservation negative case. (violates Task 6 acceptance 6; `requirements/execution.md` Bounded prerequisite expansions and Stable checkpoint authority; `requirements/workbench.md` Invalid graph or evidence.)
+
+### Suggestions
+
+- None.
