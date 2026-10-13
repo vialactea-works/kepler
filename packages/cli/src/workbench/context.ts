@@ -1785,22 +1785,47 @@ const formatChange = async (
         const scopedRoot = text(scopedRootResult);
         const scopedGit = contextTaskCheckpointGit(runtime);
         const entries = scopeContract.body.workflow.scopeExpansions ?? [];
-        const scopeHistory = entries.length === 0
-          ? await inspectScopeExpansionHistory({
-              ...scopedGit,
-              changedPaths: scopedGit.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
-              pathChanges: scopedGit.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
-            }, scopedRoot, relative(scopedRoot, taskPath), Number(task.task), name, text(await runtime.git.currentHead(scopedRoot)), entries)
-          : await resolveTaskCheckpoint(
-              scopedGit,
-              scopedRoot,
-              relative(scopedRoot, taskPath),
-              Number(task.task),
-              name,
-              text(await runtime.git.currentHead(scopedRoot)),
-            );
+        const taskRelativePath = relative(scopedRoot, taskPath);
+        const scopeGit = {
+          ...scopedGit,
+          changedPaths: scopedGit.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
+          pathChanges: scopedGit.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
+        };
+        const scopeHead = text(await runtime.git.currentHead(scopedRoot));
+        let feedbackRanges: readonly TaskFeedbackRange[] = [];
+        const feedbackPath = Path.join(dir, "tasks", `task-${task.task}`, "feedback.md");
+        if (await runtime.fileSystem.pathExists(feedbackPath)) {
+          const feedbackRead = await readArtifact(runtime, feedbackPath);
+          if (!("exitCode" in feedbackRead)) {
+            const parsedRanges = await readTaskFeedbackRanges(feedbackPath, feedbackRead.source, name, Number(task.task));
+            if (parsedRanges.kind === "valid") feedbackRanges = parsedRanges.ranges;
+          }
+        }
+        const scopeHistory = await inspectScopeExpansionHistory(
+          scopeGit,
+          scopedRoot,
+          taskRelativePath,
+          Number(task.task),
+          name,
+          scopeHead,
+          entries,
+          feedbackRanges.at(-1)?.base,
+        );
         if (scopeHistory.kind === "unverified")
           return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${scopeHistory.reason}`] }, sources };
+        if (entries.length > 0) {
+          const checkpoint = await resolveTaskCheckpoint(
+            scopedGit,
+            scopedRoot,
+            taskRelativePath,
+            Number(task.task),
+            name,
+            scopeHead,
+            feedbackRanges,
+          );
+          if (checkpoint.kind === "unverified")
+            return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${checkpoint.reason}`] }, sources };
+        }
       } else if (Object.hasOwn(taskRead.artifact.metadata, "scope_expansions"))
         return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} reservation history requires a Git repository`] }, sources };
     }

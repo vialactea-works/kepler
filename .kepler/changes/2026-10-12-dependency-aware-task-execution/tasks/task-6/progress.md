@@ -189,3 +189,45 @@ scope_expansions:
 ### Result
 
 - Outcome: done
+
+## Attempt 4 — 2026-10-13
+
+- Modified: `packages/cli/src/workbench/context.ts`, `tests/workbench/context.test.ts`, this task progress artifact, and the matching Task 6 root ledger state.
+- Created: none.
+- Deleted: none.
+
+### Red
+
+- `bun --bun vitest run tests/workbench/context.test.ts -t 'rejects production committed before a pre-attempt reservation'` → failed as intended: 1 failed and 52 skipped; context returned `split` instead of rejecting the reservation whose production path had already been committed.
+
+### Green
+
+- Added the real-Git context regression and ran the same command: `bun --bun vitest run tests/workbench/context.test.ts -t 'rejects production committed before a pre-attempt reservation'` → passed: 1 passed and 52 skipped; context reports `reserved path changed before its reservation`.
+- Corrected the positive pre-attempt fixture so the reservation commit precedes its production change. `bun --bun vitest run tests/workbench/context.test.ts -t 'validates pre-attempt reservations against the recovered preparation Base'` → passed: 1 passed and 52 skipped.
+- `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed on the current change: `format: split`, execution history verified, Task 6 feedback remains `changes-requested (fresh)`; the legitimate two-reservation history is accepted.
+- `bun packages/cli/src/cli/main.ts workbench diff --record --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed; original Base remains `5a6472d329b54459cc9f63aa1b1cb70f7713969b`.
+
+### Refactor
+
+- Context now performs the existing scope-history inspection before checkpoint recovery, anchored to the latest parsed feedback Base when present and otherwise to the earliest committed task-progress snapshot. Reservation-bearing tasks still pass through `resolveTaskCheckpoint` with parsed feedback ranges; no-reservation behavior is unchanged. No further behavior-preserving cleanup was needed.
+- `bun --bun vitest run tests/workbench/context.test.ts tests/workbench/diff.test.ts tests/workbench/task-ledger-history.test.ts tests/workbench/scope-expansion-history.test.ts tests/workbench/scope-expansions.test.ts tests/workbench/task-state.test.ts` → passed: 158 tests across 6 files, including before-edit, reverted-edit, legitimate recovery, lifetime bounds, and dependency-mode controls.
+
+### Verify
+
+- `bun --bun vitest run tests/docs tests/templates` → passed: 79 tests across 6 files.
+- `bun --bun vitest run` → passed: 1175 tests across 62 files, default settings, 213.21 seconds; no concurrency, timeout, or assertion overrides.
+- `bun run build` → passed: core and CLI builds.
+- `bun packages/cli/src/cli/main.ts workbench lint --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed after synchronized Task 6 local/root `done` status.
+- Final `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed: `format: split`, history verified, tasks `6/6 done`; Task 6 feedback is `changes-requested (stale)` because this new implementation attempt is not yet included in its reviewed range. Whole-change review remains not reviewed.
+- Final `bun packages/cli/src/cli/main.ts workbench diff --record --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed; original Base remains `5a6472d329b54459cc9f63aa1b1cb70f7713969b` and ignored `.base` SHA-256 remains `ac3d4c7d9d8927492a311e5dc1c3e0bf0b4b6ab7d85f6cc2206dcf8a2f56f6fb`.
+- Final `git diff --check` → passed after artifact synchronization.
+
+### Corrections and acceptance reconciliation
+
+- Causal correction: `formatChange` previously sent reservation-bearing tasks directly through `resolveTaskCheckpoint`; its recovered legacy Base could be the reservation commit's first parent, cropping production already committed before the reservation. Context now independently checks chronology against the parsed feedback Base when available, while retaining conservative Git-history checking and the canonical checkpoint validation.
+- The owner-held assertion from Attempt 3 remains the sole scope decision: requester, verbatim, “Apply a direct fix and just document it in the change; we don't have time for a proposal/plan loop”. It authorizes the direct `context.ts` caller fix and focused `context.test.ts` regression only; this is not authenticated approval. No third reservation, requirement/plan change, chronology relaxation, or limit change was made.
+- Quality context: retained the existing typed Git/runtime boundary and pure scope-history policy; no comments, dependencies, global resources, or installed configuration were changed. Existing earlier-reverted, legitimate-pre-attempt, two/four-limit, and v2 controls passed.
+
+### Result
+
+- Outcome: done
