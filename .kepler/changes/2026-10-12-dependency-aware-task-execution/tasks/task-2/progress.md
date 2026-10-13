@@ -23,3 +23,17 @@ decision: accepted
 - Quality constraints: metadata validation and accounting use typed domain records; application history uses injected Git reads and the existing artifact reader/body parser. Signed real Git fixtures cover commitment before production, same-commit and earlier/reverted production, erased/rewritten/reordered reservations, correction without refund, uncommitted records, historical attempt preservation, and goal-serving unlisted paths. Reservations alone do not manufacture an attempt or terminal outcome. No comment, dependency, new result vocabulary, separate persistence, or fake success fallback was added.
 - Decision context: the fixed lifetime allowance is two reservations with at most four concrete paths each. Necessity and approved-intent claims remain reviewer/owner judgment. This task validates accounting/history; guarded mutation/admission and coordinator publication belong to Task 4, so these helpers are not represented as an implemented mutation command.
 - Outcome: done
+
+## Attempt 2 — 2026-10-13
+
+- Base: a8af61e64d05f0a5bdcb23816cafdd6c0cf21cde
+- Created: none.
+- Modified: `tests/workbench/scope-expansion-history.test.ts` and this task log. Production source and the original attempt remain byte-for-byte unchanged.
+- Deleted: none.
+- Red: feedback Pass 1 requested replacing the full-history Git range query because it allegedly rejects existing files unchanged after Base. A conventional failing test for that claimed behavior was not available: the distinguishing signed real Git fixture passed against the unchanged implementation. The fixture commits source before task Base, proves the file exists at Base, leaves it untouched before reservation, observes the exact range query return status 0 with empty output, and verifies that history accepts the reservation. This evidence preceded any production edits; none were needed. The reviewer supplied no executable reproducer. Log: `/tmp/kepler-dependency-recovery.3PAkG7/task-2-review-discriminator.log`.
+- Green: all 12 real Git history tests passed, including the new pre-existing-file control and the unchanged same-commit, earlier, and earlier-reverted production rejection cases. The proposed endpoint tree comparison alone would lose the already-verified reverted-edit boundary, so the parent retained the working history query and requests independent disposition of `pass-1-blocking-1` using these executable controls.
+- Refactor: kept the additional control in the existing signed temporary Git fixture helper, with an optional pre-task source seed. No parallel parser, production change, prior feedback rewrite, or assertion weakening was needed.
+- Verify: `bun --bun vitest run` passed 57 files and 1046 tests with default settings, 360.08 seconds. `bun run build` passed both packages; `git diff --check` passed. Logs: `/tmp/kepler-dependency-recovery.3PAkG7/task-2-evidence-full.log`, `task-2-evidence-build.log`.
+- Quality constraints: treat independent feedback as a falsifiable claim, preserve the before-edit and reverted-history invariants, and prove actual Git behavior instead of substituting an untested query. The new committed test makes the requested existing-file case durable.
+- Decision context: this is verification evidence for the unchanged approved Task 2 goal. It does not convert an unconfirmed review assertion into a production defect or silently waive the independent feedback barrier. Task 3 remains held until fresh approved feedback.
+- Outcome: done

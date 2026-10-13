@@ -26,7 +26,7 @@ const reservation = (id = "expansion-1", path = "tooling/test-file.ts"): ScopeEx
   evidence: "Missing test-file selector", paths: [path], verify: "bun tooling/verify.ts",
 });
 const blocked = "\n## Attempt 1 — 2026-10-12\n\n### Red\n\nThe prescribed check cannot load its test file.\n\n### Green\n\nNot reached.\n\n### Refactor\n\nNot reached.\n\n### Verification\n\nThe observed blocker remains.\n\n- Outcome: blocked\n";
-const fixture = async () => {
+const fixture = async (sourcePredatesTask = false) => {
   const root = Path.join(temporary, `repo-${sequence++}`);
   await Fs.mkdir(Path.join(root, Path.dirname(sourcePath)), { recursive: true });
   await Fs.mkdir(Path.join(root, "tooling"));
@@ -43,9 +43,10 @@ const fixture = async () => {
     checked(root, ["commit", "-m", message]);
     return checked(root, ["rev-parse", "HEAD"]);
   };
-  await write([]);
   await Fs.writeFile(Path.join(root, "tooling/test-file.ts"), "export const testFile = 'missing';\n");
   await Fs.writeFile(Path.join(root, "src/display.ts"), "export const display = 'old';\n");
+  if (sourcePredatesTask) commit("Existing repository files before task Base");
+  await write([]);
   const base = commit("Initialize task fixture");
   const git: ScopeExpansionHistoryGit = {
     pathHistory: (_root, path) => run(root, ["log", "--full-history", "--format=%H", "HEAD", "--", path]),
@@ -77,6 +78,18 @@ describe("real Git reservation history", () => {
     f.commit("Repair prescribed check");
     await f.write([reservation()], blocked);
     f.commit("Record terminal attempt without refund");
+    expect(await f.inspect([reservation()])).toMatchObject({ kind: "valid", reservationCommits: [reserved] });
+  });
+
+  it("excludes existing-file ancestors before Base from the reservation range", async () => {
+    const f = await fixture(true);
+    const existed = run(f.root, ["cat-file", "-e", `${f.base}:tooling/test-file.ts`]);
+    expect(existed.status).toBe(0);
+    await f.write([reservation()]);
+    const reserved = f.commit("Reserve an unchanged pre-existing file");
+    const changes = await f.git.pathChanges(f.root, f.base, reserved, reservation().paths);
+    expect(changes.status).toBe(0);
+    expect(changes.stdout).toBe("");
     expect(await f.inspect([reservation()])).toMatchObject({ kind: "valid", reservationCommits: [reserved] });
   });
 
