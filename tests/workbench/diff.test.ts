@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
 import * as Os from "node:os";
 import * as Path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   createDiffRuntime,
   DiffService,
@@ -13,6 +15,8 @@ import {
 import {
   cleanupRepos,
   commitAll,
+  commitPaths,
+  fixtureEnvironment,
   git,
   makeChangeDir,
   makeRepo,
@@ -20,6 +24,36 @@ import {
 } from "./helpers.js";
 
 const originalDirectory = process.cwd();
+const sourceCli = fileURLToPath(new URL("../../packages/cli/src/cli/main.ts", import.meta.url));
+
+const sourceDiff = (cwd: string, changeDir: string, task: number) => {
+  const result = spawnSync(
+    "bun",
+    [sourceCli, "workbench", "diff", "--task", `${task}`, "--change-dir", changeDir],
+    { cwd, encoding: "utf8", env: fixtureEnvironment },
+  );
+  return {
+    status: result.status ?? -1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
+};
+
+const sourceCliTsconfig = (repository: string) => {
+  write(
+    repository,
+    "tsconfig.json",
+    JSON.stringify({
+      compilerOptions: {
+        target: "ES2024",
+        experimentalDecorators: true,
+        emitDecoratorMetadata: true,
+        module: "Node16",
+        moduleResolution: "node16",
+      },
+    }),
+  );
+};
 
 afterEach(() => {
   process.chdir(originalDirectory);
@@ -233,16 +267,58 @@ describe("diff checkpoint recording", () => {
     expect(Fs.existsSync(basePath(changeDir, 2))).toBe(false);
   });
 
-  it("recovers a legacy checkpoint from a scope-only preparation", async () => {
+  it("recovers a legacy checkpoint from a scope-only preparation after approved predecessor work", async () => {
     const repo = inDirectory(makeRepo());
+    sourceCliTsconfig(repo);
     const changeDir = makeChangeDir(repo, "add-auth");
-    prepareTask(repo, changeDir, 2);
+    write(
+      changeDir,
+      "plan.md",
+      "---\nartifact: plan\nchange: add-auth\nstatus: approved\ncreated: 2026-09-12\nauthor: Test\ndecision: accepted\nroute_unit: null\nexecution:\n  version: 1\n  order: [1, 2]\n---\n# Plan: Add auth\n\n## Overview\n\n## Tasks\n\n### Task 1: Complete predecessor\n\n### Task 2: Test task\n\n## Done when\n\nThe serial work is complete.\n",
+    );
+    write(
+      changeDir,
+      "progress.md",
+      "---\nartifact: progress\nchange: add-auth\nstatus: in-progress\nupdated: 2026-09-12\ndecision: accepted\ntasks:\n  - id: 1\n    title: Complete predecessor\n    status: pending\n    progress: tasks/task-1/progress.md\n  - id: 2\n    title: Test task\n    status: pending\n    progress: tasks/task-2/progress.md\n---\n# Progress: Add auth\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Complete predecessor | pending | [details](tasks/task-1/progress.md) |\n| Task 2: Test task | pending | [details](tasks/task-2/progress.md) |\n",
+    );
+    write(
+      changeDir,
+      "tasks/task-1/progress.md",
+      "---\nartifact: task-progress\nchange: add-auth\ntask: 1\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 1 — Complete predecessor\n",
+    );
+    write(
+      changeDir,
+      "tasks/task-2/progress.md",
+      "---\nartifact: task-progress\nchange: add-auth\ntask: 2\nstatus: pending\nupdated: 2026-09-12\ndecision: accepted\n---\n# Task Progress: Task 2 — Test task\n",
+    );
+    write(repo, "src/reserved.ts", "export const reserved = 'initial'\n");
+    const scaffold = commitAll(repo, "initialize serial task fixture");
+    write(
+      changeDir,
+      "progress.md",
+      "---\nartifact: progress\nchange: add-auth\nstatus: in-progress\nupdated: 2026-09-13\ndecision: accepted\ntasks:\n  - id: 1\n    title: Complete predecessor\n    status: done\n    progress: tasks/task-1/progress.md\n  - id: 2\n    title: Test task\n    status: pending\n    progress: tasks/task-2/progress.md\n---\n# Progress: Add auth\n\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Complete predecessor | done | [details](tasks/task-1/progress.md) |\n| Task 2: Test task | pending | [details](tasks/task-2/progress.md) |\n",
+    );
+    write(
+      changeDir,
+      "tasks/task-1/progress.md",
+      "---\nartifact: task-progress\nchange: add-auth\ntask: 1\nstatus: done\nupdated: 2026-09-13\ndecision: accepted\n---\n# Task Progress: Task 1 — Complete predecessor\n\n## Attempt 1 — 2026-09-13\n\n- Outcome: done\n",
+    );
     write(repo, "src/reserved.ts", "export const reserved = 'predecessor'\n");
-    const expectedBase = commitAll(repo, "complete predecessor source");
+    const implementation = commitAll(repo, "complete predecessor source");
+    write(
+      changeDir,
+      "tasks/task-1/feedback.md",
+      `---\nartifact: feedback\nchange: add-auth\ntask: 1\ncreated: 2026-09-13\nstatus: resolved\ndecision: accepted\n---\n# Code Feedback: Task 1 — Complete predecessor\n\n## Pass 1 — 2026-09-13\nBase: ${scaffold}\nHead: ${implementation}\nVerdict: approved\n### Blocking\n- None.\n### Suggestions\n- None.\n`,
+    );
+    const expectedBase = commitPaths(
+      repo,
+      "approve predecessor",
+      ".kepler/changes/add-auth/tasks/task-1/feedback.md",
+    );
     const progress = Path.join(changeDir, "tasks/task-2/progress.md");
     Fs.writeFileSync(progress, Fs.readFileSync(progress, "utf8").replace(
       "decision: accepted\n",
-      "decision: accepted\nscope_expansions:\n  - id: checkpoint-recovery\n    attempt: 1\n    prerequisite: Recover the task checkpoint\n    necessity: Legacy scope history needs its preparation baseline\n    evidence: The initial scaffold predates the predecessor source change\n    paths:\n      - src/reserved.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+      "decision: accepted\nscope_expansions:\n  - id: checkpoint-recovery\n    attempt: 1\n    prerequisite: Recover the task checkpoint\n    necessity: Legacy scope history needs its approved predecessor baseline\n    evidence: The predecessor completed the shared source before approval\n    paths:\n      - src/reserved.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
     ));
     commitAll(repo, "reserve checkpoint recovery before task source");
     write(repo, "src/reserved.ts", "export const reserved = 'task'\n");
@@ -255,6 +331,43 @@ describe("diff checkpoint recording", () => {
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout).toContain(`Base: ${expectedBase}`);
     expect(Fs.readFileSync(output, "utf8")).toContain("reserved = 'task'");
+    const source = sourceDiff(repo, changeDir, 2);
+    expect(source.status, source.stdout + source.stderr).toBe(0);
+    expect(source.stdout).toContain(`Base: ${expectedBase}`);
+  });
+
+  it("rejects a source CLI diff when task production precedes a reservation after task metadata", () => {
+    const repo = inDirectory(makeRepo());
+    sourceCliTsconfig(repo);
+    const changeDir = makeChangeDir(repo, "add-auth");
+    addTask(changeDir, 2);
+    write(repo, "src/reserved.ts", "export const reserved = 'initial'\n");
+    commitAll(repo, "initialize legacy task");
+    write(repo, "src/reserved.ts", "export const reserved = 'task-before-reservation'\n");
+    commitAll(repo, "commit task production before reservation");
+    const progress = Path.join(changeDir, "tasks/task-2/progress.md");
+    Fs.writeFileSync(
+      progress,
+      Fs.readFileSync(progress, "utf8").replace("updated: 2026-09-12", "updated: 2026-09-13"),
+    );
+    commitAll(repo, "record task metadata before reservation");
+    Fs.writeFileSync(progress, Fs.readFileSync(progress, "utf8").replace(
+      "decision: accepted\n",
+      "decision: accepted\nscope_expansions:\n  - id: prerequisite\n    attempt: 1\n    prerequisite: Prepare fixture\n    necessity: Required correction\n    evidence: Recorded test failure\n    paths:\n      - src/reserved.ts\n    verify: bun --bun vitest run tests/workbench/diff.test.ts\n",
+    ));
+    commitAll(repo, "reserve after task production");
+    Fs.writeFileSync(
+      progress,
+      `${Fs.readFileSync(progress, "utf8").replace("status: pending", "status: done")}\n## Attempt 1 — 2026-09-13\n\n- Outcome: done\n`,
+    );
+    write(repo, "src/task.ts", "export const task = true\n");
+    commitAll(repo, "record task attempt");
+
+    const result = sourceDiff(repo, changeDir, 2);
+
+    expect(result.status, result.stdout + result.stderr).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("reserved path changed before its reservation");
   });
 
   it("recovers the first task Base with a later legitimate reservation", async () => {

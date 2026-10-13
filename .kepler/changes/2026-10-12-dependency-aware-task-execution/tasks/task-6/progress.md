@@ -273,3 +273,56 @@ scope_expansions:
 ### Result
 
 - Outcome: done
+
+## Attempt 6 — 2026-10-13
+
+- Modified: `packages/cli/src/workbench/task-checkpoint.ts`, `tests/workbench/diff.test.ts`, `docs/skills.md`, `tests/docs/workbench-docs.test.ts`, this task progress artifact, and the matching Task 6 root ledger state.
+- Created: none.
+- Deleted: none.
+- Scope: reused Task 6's committed `task6-scoped-checkpoint-recovery` reservation for `task-checkpoint.ts` and `diff.test.ts`; `docs/skills.md` and its listed documentation test are ordinary Task 6 files. No third reservation was created, the two/four lifetime bound was not changed, and the original `.base` remains `5a6472d329b54459cc9f63aa1b1cb70f7713969b` with SHA-256 `ac3d4c7d9d8927492a311e5dc1c3e0bf0b4b6ab7d85f6cc2206dcf8a2f56f6fb`.
+- Owner scope assertion: the requester previously said, “Apply a direct fix and just document it in the change; we don't have time for a proposal/plan loop”. This remains an owner-held assertion, not authenticated approval. It authorized only the earlier `context.ts` caller correction and did not authorize this checkpoint or documentation correction; this work stays within the already committed Task 6 reservation and listed documentation scope.
+
+### Preconditions
+
+- The seven-argument dispatch identity gate passed with admitted HEAD `3f0465ae6def76be2d0ef7cac92ec63d8a938897`, source `refs/heads/fix/finish-work-gates`, target `refs/heads/main`, canonical root/Git directory, and independently observed child session `01a13708-413f-7730-8f3f-1fe82b2646b4` matching the expected identity.
+- `bun packages/cli/src/cli/main.ts workbench isolate --check --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed: `isolated: yes`.
+- Source artifact lint, context, and `workbench diff --record --task 6` passed before implementation; context reported serial order `1, 2, 3, 4, 5, 6`, verified history, current Task 6 inputs, and the preserved Base `5a6472d329b54459cc9f63aa1b1cb70f7713969b`. Task 5's artifact-only approval commit `5a6472d329b54459cc9f63aa1b1cb70f7713969b` has a valid SSH signature, changes only its feedback artifact, is an ancestor of the admitted HEAD, and records `decision: accepted`.
+
+### Red
+
+- `bun --bun vitest run tests/workbench/diff.test.ts tests/docs/workbench-docs.test.ts -t 'rejects a source CLI diff when task production precedes a reservation after task metadata|states lifetime scope-expansion bounds per task'` → failed as intended: the documentation assertion found the incorrect plan-wide wording, and the clean disposable real-Git/source-CLI fixture exited 0 and emitted a cropped Base after task production, an intervening task-progress-only metadata commit, reservation, and Attempt 1. The command had 2 failing tests and 51 skipped tests; its fixture includes a decorator-enabled local `tsconfig.json`, so the failure observed the checkpoint behavior rather than a CLI harness error.
+
+### Green
+
+- Updated checkpoint recovery to use a verified, artifact-only approved serial predecessor commit as the pre-production baseline when available, otherwise the earliest pre-reservation task-progress snapshot. Scope chronology now sees task-owned production before a reservation while retaining a legitimate predecessor-owned shared-path edit.
+- Added the real-Git/source-CLI regression for the intervening metadata-only commit and the paired approved-predecessor source-CLI positive check. Added a documentation assertion for the per-task two/four limit and changed the reader-facing sentence accordingly.
+- The same focused Red command → passed: 2 passed and 51 skipped; the negative source CLI returns `reserved path changed before its reservation` and the documentation contract requires the per-task statement.
+
+### Refactor
+
+- The first complete `bun --bun vitest run tests/workbench/diff.test.ts` after Green failed only because its old positive fixture represented a predecessor source edit without the required durable approval. Updated that fixture to commit a valid version-1 serial Task 1 implementation and artifact-only approved feedback before Task 2's first reservation; no product behavior was loosened.
+- `bun --bun vitest run tests/workbench/diff.test.ts` → passed: 26 tests, including source-CLI positive and negative chronology controls, ordinary legacy recovery, and no-feedback first-reservation recovery.
+- `bun --bun vitest run tests/workbench/context.test.ts tests/workbench/diff.test.ts tests/workbench/task-ledger-history.test.ts tests/workbench/scope-expansion-history.test.ts tests/workbench/scope-expansions.test.ts tests/workbench/task-state.test.ts` → passed: 160 tests across 6 files, retaining predecessor, earlier/reverted, lifetime-limit, and version-2 admission controls.
+- Code-quality review found no new dependency, comment, public API, quota, chronology relaxation, plan, requirement, feedback, review, finish, `.hamilton`, or installed-resource change. LSP found no TypeScript error; its two `ast-grep` nested-ternary warnings are pre-existing lines blamed to commits before the admitted HEAD and were not changed.
+
+### Verify
+
+- `bun --bun vitest run tests/docs tests/templates` → passed: 80 tests across 6 files.
+- `bun --bun vitest run` → passed: 1178 tests across 62 files in 215.31 seconds with default settings and no timeout, concurrency, or assertion override.
+- `bun run build` → passed: core and CLI builds.
+- `bun packages/cli/src/cli/main.ts workbench lint --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed while Task 6 was staged `in-progress`; final synchronized lint is recorded after the root transition.
+- `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → `format: split`, verified serial order, current Task 6 inputs, Task 5 fresh approval, and Task 6 `in-progress` before final synchronization.
+- `bun packages/cli/src/cli/main.ts workbench diff --record --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed with the preserved original Base and unchanged ignored `.base` hash.
+- `git diff --check` → passed before final evidence synchronization.
+- Final post-synchronization `bun packages/cli/src/cli/main.ts workbench lint --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed: `lint: success`.
+- Final post-synchronization `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → `format: split`, verified serial order `1, 2, 3, 4, 5, 6`, `6/6` implementation done, current Task 6 inputs, and Task 6 feedback `changes-requested (stale)`; no feedback/review/finish action was taken.
+- Final post-synchronization `bun packages/cli/src/cli/main.ts workbench diff --record --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed with original Base `5a6472d329b54459cc9f63aa1b1cb70f7713969b`; ignored `.base` SHA-256 remains `ac3d4c7d9d8927492a311e5dc1c3e0bf0b4b6ab7d85f6cc2206dcf8a2f56f6fb`.
+- Final post-synchronization `git diff --check` → passed.
+
+### Quality context
+
+- The correction fails closed at the checkpoint/diff consumer rather than relying on the separately fixed context caller. It accepts predecessor-owned shared-path history only after a validated serial plan/order, predecessor `done` ledger state, artifact-only approved feedback, reachable feedback range, and verified predecessor checkpoint; otherwise the earliest task-progress snapshot remains the conservative baseline. This distinguishes approved predecessor work from current task-owned pre-reservation production without changing the two/four lifetime accounting or version-2 admission-backed Base.
+
+### Result
+
+- Outcome: done

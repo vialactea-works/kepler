@@ -153,17 +153,113 @@ const isAncestor = async (
   return undefined;
 };
 
+const historyAt = (
+  git: TaskCheckpointGit,
+  root: string,
+  head: string,
+): TaskCheckpointGit => ({
+  ...git,
+  pathHistory: async (directory, source) => {
+    const history = await git.pathHistory(directory, source);
+    if (history.status !== 0 || directory !== root) return history;
+    const commits: string[] = [];
+    for (const candidate of history.stdout.split(/\r?\n/).filter(Boolean)) {
+      const relation = await isAncestor(git, root, candidate, head);
+      if (relation === undefined)
+        return {
+          status: 2,
+          stdout: "",
+          stderr: "task progress history cannot be bounded to its approval",
+        };
+      if (relation) commits.push(candidate);
+    }
+    return { ...history, stdout: commits.join("\n") };
+  },
+});
+
+const legacySerialApprovalBase = async (
+  git: TaskCheckpointGit,
+  root: string,
+  sourcePath: string,
+  task: number,
+  change: string,
+  reservation: string,
+): Promise<string | undefined> => {
+  const planPath = sourcePath.replace(/\/tasks\/task-[1-9][0-9]*\/progress\.md$/, "/plan.md");
+  const planBlob = await git.blobAt(root, reservation, planPath);
+  if (planBlob.status !== 0) return undefined;
+  const planArtifact = recognized(
+    await createArtifactReader({ readFile: () => planBlob.stdout })(planPath),
+  );
+  const plan = planArtifact === undefined ? undefined : validateArtifact(planArtifact);
+  if (plan?._tag !== "valid" || plan.artifact !== "plan" || plan.body.workflow.plan?.execution?.version === 2)
+    return undefined;
+  const position = plan.body.workflow.plan?.executionOrder.indexOf(task) ?? -1;
+  if (position < 1) return undefined;
+  const predecessor = plan.body.workflow.plan?.executionOrder[position - 1];
+  if (predecessor === undefined || git.changedPaths === undefined) return undefined;
+  const changePath = sourcePath.replace(/\/tasks\/task-[1-9][0-9]*\/progress\.md$/, "");
+  const ledgerPath = `${changePath}/progress.md`;
+  const feedbackPath = `${changePath}/tasks/task-${predecessor}/feedback.md`;
+  const predecessorProgressPath = `${changePath}/tasks/task-${predecessor}/progress.md`;
+  const feedbackHistory = await git.pathHistory(root, feedbackPath);
+  if (feedbackHistory.status !== 0) return undefined;
+  for (const candidate of feedbackHistory.stdout.split(/\r?\n/).filter(Boolean)) {
+    if (!fullCommit(candidate) || (await isAncestor(git, root, candidate, reservation)) !== true)
+      continue;
+    const changed = await git.changedPaths(root, candidate);
+    if (changed.status !== 0 || changed.stdout.split("\0").filter(Boolean).join("\n") !== feedbackPath)
+      continue;
+    const feedbackBlob = await git.blobAt(root, candidate, feedbackPath);
+    const ledgerBlob = await git.blobAt(root, candidate, ledgerPath);
+    if (feedbackBlob.status !== 0 || ledgerBlob.status !== 0) continue;
+    const feedbackArtifact = recognized(
+      await createArtifactReader({ readFile: () => feedbackBlob.stdout })(feedbackPath),
+    );
+    const ledgerArtifact = recognized(
+      await createArtifactReader({ readFile: () => ledgerBlob.stdout })(ledgerPath),
+    );
+    const feedback = feedbackArtifact === undefined ? undefined : validateArtifact(feedbackArtifact);
+    const ledger = ledgerArtifact === undefined ? undefined : validateArtifact(ledgerArtifact);
+    if (feedbackArtifact === undefined || ledgerArtifact === undefined || feedback?._tag !== "valid" || feedback.artifact !== "feedback" || ledger?._tag !== "valid" || ledger.artifact !== "progress")
+      continue;
+    const predecessorEntry = Array.isArray(ledger.metadata.tasks)
+      ? ledger.metadata.tasks.find((entry) =>
+        typeof entry === "object" && entry !== null && (entry as Record<string, unknown>).id === predecessor,
+      ) as Record<string, unknown> | undefined
+      : undefined;
+    if (predecessorEntry?.status !== "done") continue;
+    const passes = parseReviewPasses(feedbackArtifact);
+    if (passes.diagnostics.length > 0 || passes.latest?.verdict !== "approved") continue;
+    const ranges = await readTaskFeedbackRanges(feedbackPath, feedbackBlob.stdout, change, predecessor);
+    if (ranges.kind !== "valid") continue;
+    const checkpoint = await resolveTaskCheckpoint(
+      historyAt(git, root, candidate),
+      root,
+      predecessorProgressPath,
+      predecessor,
+      change,
+      candidate,
+      ranges.ranges,
+    );
+    if (checkpoint.kind === "verified" && checkpoint.base === ranges.ranges.at(-1)?.base)
+      return candidate;
+  }
+  return undefined;
+};
+
 const legacyScopePreparationBase = async (
   git: TaskCheckpointGit,
   root: string,
   sourcePath: string,
   task: number,
   change: string,
+  currentHead: string,
   commits: readonly string[],
 ): Promise<string | undefined | { readonly reason: string }> => {
-  const preceding = [] as RecognizedArtifact[];
+  const preceding: { readonly artifact: RecognizedArtifact; readonly commit: string }[] = [];
   const chronological = commits.toReversed();
-  for (const [index, commit] of chronological.entries()) {
+  for (const commit of chronological) {
     const blob = await git.blobAt(root, commit, sourcePath);
     if (blob.status !== 0) continue;
     const artifact = recognized(
@@ -171,7 +267,7 @@ const legacyScopePreparationBase = async (
     );
     if (artifact === undefined) continue;
     if (!Object.hasOwn(artifact.metadata, "scope_expansions")) {
-      preceding.push(artifact);
+      preceding.push({ artifact, commit });
       continue;
     }
     if (
@@ -186,21 +282,21 @@ const legacyScopePreparationBase = async (
     if (entries.kind !== "valid")
       return { reason: "scope preparation authority is malformed" };
     if (entries.entries.length === 0) {
-      preceding.push(artifact);
+      preceding.push({ artifact, commit });
       continue;
     }
     if (preceding.length === 0)
       return { reason: "scope preparation lacks preceding task history" };
     for (const earlier of preceding) {
       if (
-        earlier.metadata.artifact !== "task-progress" ||
-        earlier.metadata.change !== change ||
-        earlier.metadata.task !== task ||
-        artifactContracts["task-progress"].validate(earlier).length > 0
+        earlier.artifact.metadata.artifact !== "task-progress" ||
+        earlier.artifact.metadata.change !== change ||
+        earlier.artifact.metadata.task !== task ||
+        artifactContracts["task-progress"].validate(earlier.artifact).length > 0
       )
         return { reason: "scope preparation authority is malformed" };
       if (
-        validateArtifactBody(earlier, "task-progress", "historical").workflow.records.some(
+        validateArtifactBody(earlier.artifact, "task-progress", "historical").workflow.records.some(
           (record) => record.kind === "attempt",
         )
       )
@@ -212,15 +308,24 @@ const legacyScopePreparationBase = async (
     const paths = changed.stdout.split("\0").filter(Boolean);
     if (changed.status !== 0 || paths.length !== 1 || paths[0] !== sourcePath)
       return { reason: "scope preparation is not task-progress-only" };
-    const parent = await git.firstParent(root, commit);
-    const base = text(parent);
-    if (parent.status !== 0 || !fullCommit(base))
-      return { reason: "scope preparation has no resolvable first parent" };
+    const fallback = preceding[0]?.commit;
+    const base = await legacySerialApprovalBase(
+      git,
+      root,
+      sourcePath,
+      task,
+      change,
+      commit,
+    ) ?? fallback;
+    if (base === undefined || !fullCommit(base))
+      return { reason: "scope preparation has no resolvable pre-production baseline" };
     const resolved = await git.resolveCommit(root, base);
     if (resolved.status !== 0 || text(resolved) !== base)
-      return { reason: "scope preparation parent is unresolved" };
+      return { reason: "scope preparation baseline is unresolved" };
     if ((await isAncestor(git, root, base, commit)) !== true)
       return { reason: "scope preparation ancestry is invalid" };
+    if ((await isAncestor(git, root, base, currentHead)) !== true)
+      return { reason: "scope preparation baseline is not on current history" };
     return base;
   }
   return undefined;
@@ -276,7 +381,7 @@ export const resolveTaskCheckpoint = async (
     .map((commit) => commit.trim())
     .filter(Boolean);
   const legacyBase = admission === undefined
-    ? await legacyScopePreparationBase(git, root, sourcePath, task, change, commits)
+    ? await legacyScopePreparationBase(git, root, sourcePath, task, change, currentHead, commits)
     : undefined;
   if (typeof legacyBase === "object") return { kind: "unverified", reason: legacyBase.reason };
   const originalBase = admission?.kind === "verified" ? admission.original.base : legacyBase;

@@ -37,6 +37,13 @@ describe("workbench documentation", () => {
     expect(content["docs/skills.md"]).toMatch(/readiness.*admission.*implementation done.*fully gated/is);
   });
 
+  it("states lifetime scope-expansion bounds per task", () => {
+    const skills = content["docs/skills.md"];
+
+    expect(skills).toMatch(/Each task may reserve at most two lifetime expansions, each naming at most four concrete paths/i);
+    expect(skills).not.toMatch(/A plan may reserve at most two lifetime expansions/i);
+  });
+
   it("gives readers mode-qualified dependency execution boundaries", () => {
     const readerDocs = [
       content["README.md"],
