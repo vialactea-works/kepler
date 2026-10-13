@@ -1,7 +1,7 @@
 ---
 artifact: progress
 change: 2026-10-12-dependency-aware-task-execution
-status: complete
+status: in-progress
 updated: 2026-10-13
 decision: accepted
 tasks:
@@ -27,7 +27,7 @@ tasks:
     progress: tasks/task-5/progress.md
   - id: 6
     title: "Document and exercise the new task contract"
-    status: done
+    status: blocked
     progress: tasks/task-6/progress.md
 ---
 
@@ -40,4 +40,4 @@ tasks:
 | Task 3: Project verified dependency readiness | done | [details](tasks/task-3/progress.md) |
 | Task 4: Guard task admission and publication | done | [details](tasks/task-4/progress.md) |
 | Task 5: Update goal-driven workflow resources | done | [details](tasks/task-5/progress.md) |
-| Task 6: Document and exercise the new task contract | done | [details](tasks/task-6/progress.md) |
+| Task 6: Document and exercise the new task contract | blocked | [details](tasks/task-6/progress.md) |

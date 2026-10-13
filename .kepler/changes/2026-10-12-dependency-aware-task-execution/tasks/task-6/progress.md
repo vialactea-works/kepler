@@ -2,7 +2,7 @@
 artifact: task-progress
 change: 2026-10-12-dependency-aware-task-execution
 task: 6
-status: in-progress
+status: blocked
 updated: 2026-10-13
 decision: accepted
 scope_expansions:
@@ -97,3 +97,48 @@ scope_expansions:
 - `tests/workbench/scope-expansion-history.test.ts`
 - `tests/workbench/scope-expansions.test.ts`
 - `tests/workbench/task-state.test.ts`
+
+## Attempt 2 — 2026-10-13
+
+- Modified: `packages/cli/src/workbench/task-checkpoint.ts`, `tests/workbench/diff.test.ts`, this task progress artifact, and the matching Task 6 root ledger state. The interrupted checkpoint candidate was preserved and completed only within its existing reservation.
+- Created: none.
+- Deleted: none.
+
+### Red
+
+- `bun --bun vitest run tests/workbench/diff.test.ts` → 1 failed, 24 passed, 25 total. The new real-Git correction-reservation case failed for the intended reason: legacy checkpoint recovery treated a legitimate later reservation as invalid preparation history (`scope preparation follows a task attempt`).
+- `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → failed: `Task 6 scope history: reserved path changed before its reservation`. This exposed a separate context caller that validates reservations without the history-derived legacy Base.
+
+### Green
+
+- Changed legacy preparation recovery to select the earliest valid pre-attempt reservation's first parent, while leaving later legitimate reservations on the ordinary first-attempt Base path. `bun --bun vitest run tests/workbench/diff.test.ts` → passed: 25 tests.
+- `bun packages/cli/src/cli/main.ts workbench diff --record --task 6 --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed and returned the preserved Base `5a6472d329b54459cc9f63aa1b1cb70f7713969b`.
+
+### Refactor
+
+- `bun --bun vitest run tests/workbench/diff.test.ts tests/workbench/task-ledger-history.test.ts tests/workbench/scope-expansion-history.test.ts` → passed: 42 tests across 3 files, including real-Git chronology and existing legacy/v2 recovery controls.
+- Refactor review found that `context.ts` separately calls `inspectScopeExpansionHistory` without the recovered legacy Base. A safe fix requires an unreserved source path; supervisor adjudication explicitly prohibited that scope expansion and prohibited inferring authority in the reserved shared helper because it would mask edits before a reservation. No unreserved source was changed.
+
+### Verify
+
+- `bun packages/cli/src/cli/main.ts workbench lint --change-dir .kepler/changes/2026-10-12-dependency-aware-task-execution` → passed before final blocked metadata synchronization; rerun after synchronization is recorded below.
+- `bun packages/cli/src/cli/main.ts workbench context .kepler/changes/2026-10-12-dependency-aware-task-execution` → blocked: still invalid for `Task 6 scope history: reserved path changed before its reservation`; this separate caller cannot be repaired within the approved reservation.
+- `bun --bun vitest run` and `bun run build` → not run for this correction because required context verification remains blocked. The prior Attempt 1 full-suite/build results predate the candidate and are not final evidence.
+- Original Base remains `5a6472d329b54459cc9f63aa1b1cb70f7713969b`; `tasks/task-6/.base` was not rewritten. No third reservation was added.
+
+### Corrections to Attempt 1 citations
+
+- `task-6-docs-source-green.log` records 1 failed and 74 passed (75 total), not a passing Green. The later `task-6-reader-docs-green.log` records the successful 78-test reader cycle.
+- Native detail evidence is `task-6-native-records-details-green.log`, which records 131 tests across 8 files; the prior “13/18 files” summary was incorrect.
+- These corrections are append-only; Attempt 1 remains verbatim. The actual native scenario records remain at `tests/skills/dependency-execution-scenarios.md`; no new agent run or scenario is claimed in this correction.
+
+### Quality context
+
+- Preserved the historical version-1 serial plan, original Base, immutable prior attempt, two consumed reservations, and fail-closed chronology. Evidence: `task-checkpoint.ts` and real-Git cases in `tests/workbench/diff.test.ts` pass targeted recovery checks; the remaining context failure demonstrates the exact unreserved integration gap rather than permission to bypass lint.
+
+### Result
+
+- Outcome: blocked
+- Blocker: context's independent scope-history call needs a history-derived legacy Base, but that caller is outside both approved reservation path sets. Supervisor directed no unreserved edit, third reservation, or chronology relaxation. The owner must resolve scope/intent before this task can be completed.
+- Implementation candidate paths intentionally remain uncommitted and unstaged: `packages/cli/src/workbench/task-checkpoint.ts` and `tests/workbench/diff.test.ts`.
+- Verification: source artifact lint after final metadata synchronization passed. The first `git diff --check` found a trailing blank line in this new evidence; after removing it, `git diff --check` passed.
