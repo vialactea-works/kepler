@@ -23,7 +23,7 @@ files. This skill produces planning artifacts only. **It never writes production
 - A change directory at `.kepler/changes/<YYYY-MM-DD-title>/`. Create it if missing —
   `plan.md` always lives inside one, even when the pipeline starts at this step.
 - Rich path: `design.md` and `requirements/` already exist — plan from them.
-- Minimal path: only a user request. Capture the why/what in the plan's Overview and proceed.
+- Minimal path: only a user request that preserves domain, subdomain and bounded-context contracts. Capture the why/what in the plan's Overview. Changes to those contracts require `kepler-propose` before planning.
 - Project standards: `AGENTS.md`, for test/build commands, project structure, code style,
   and boundaries. Read it — do not guess conventions.
 - The project's canonical specs (`.kepler/specs/`): the current, consolidated requirement
@@ -223,7 +223,7 @@ verification and another feedback pass. This handoff belongs to the driver, not 
    path, where no per-change `requirements/` exists, the specs are your primary source of existing
    behavior; write a two-line why/what for the Overview.
 
-   Before decomposing, compare the requested externally observable behavior with the canonical spec for each touched capability. Record a `Spec impact` decision in the plan `Overview`: either the approved minimal `requirements/<capability>.md` delta for changed behavior, or `no canonical behavior change` with its rationale. A behavior-changing tactical task still needs that requirement delta and explicit requester approval tied to the exact committed revision before code dispatch. Internal implementation changes that leave the canonical contract unchanged need no delta or heavyweight proposal; do not label changed behavior internal. If classification is unresolved, stop and ask the requester before finalizing the plan. A missing or stale approval for a required delta follows the formal-input gate below.
+   Before decomposing, compare the requested behavior with the canonical specs and established domain, subdomain and bounded-context contracts. If it changes those contracts, go through `kepler-propose`'s main flow for approved proposal, requirements and design before continuing. Pass the existing change directory, affected capabilities, requested behavior and any route/source-revision binding; preserve ownership and history. Record a `Spec impact` decision in the plan `Overview`: either the approved `requirements/<capability>.md` deltas, or `no canonical behavior change` with its rationale. Internal implementation changes that preserve those contracts may stay on the minimal path; do not label changed behavior internal. If classification is unresolved, stop and ask the requester before finalizing the plan.
 
    If `plan.md` exists and all initialized root/task paths are present, run
    `kepler workbench lint --change-dir <change-dir>` before interpreting it or its linked artifacts.
@@ -241,11 +241,9 @@ verification and another feedback pass. This handoff belongs to the driver, not 
    planning, verify each input is explicitly approved and committed, obtain its requester-held
    reference from the approved handoff, and record the path/reference/full commit in the new plan.
    A lint-valid draft, template default, plan status, or `decision: accepted` alone does not
-   authorize formal intent. If approval is missing or stale, return to `kepler-propose`: use its
-   requirements-only tactical path for a bounded behavior delta that needs no broader proposal or
-   design; use its full path when scope or design requires it. Never approve formal intent during
-   planning.
-   Tactical absence is valid. Authorized unattended planning may self-review the breakdown and
+   authorize formal intent. If approval is missing or stale, return to `kepler-propose`'s main flow.
+   Never approve formal intent during planning.
+   Tactical absence is valid only when domain, subdomain and bounded-context contracts remain unchanged. Authorized unattended planning may self-review the breakdown and
    record assumptions but cannot manufacture formal approval.
 6. **Explore (read-only).** Map the files and modules involved, the patterns to follow,
    and the test setup. Make no edits. Test each recalled decision against current source,

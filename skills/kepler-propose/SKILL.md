@@ -1,43 +1,23 @@
 ---
 name: kepler-propose
-description: "Prepare approved proposal, requirements, and design artifacts for substantive changes, or approve a bounded requirements-only delta routed from kepler-plan for a tactical behavior change."
+description: "Turn an idea into a change's proposal, requirements, and design through collaborative dialogue — proposal.md (why), requirements/ (what), design.md (how). The heavyweight front door; tactical changes skip it and start at kepler-plan."
 ---
 
 # Proposing a change
 
-Turn an idea into a well-formed change by writing its proposal (why), requirements (what),
-and design (how) — refined with the user through dialogue before any implementation begins.
-
-The **seven-stage core pipeline** is Kepler's fixed spec-driven sequence: init → propose → plan → code →
-code-feedback → review → finish-work. Each step is a skill a person or an agent can run. This
-skill is **step 1** — the optional heavyweight front door that produces the PRD, the SRS, and
-the SDD. A change that does not warrant that depth skips this step and starts at
-`kepler-plan`. When `kepler-plan` identifies a bounded behavior-changing tactical task that needs
-only a minimal requirements delta, use the requirements-only path below; it does not require a
-proposal or design. Wayfinder and `kepler-critique` are optional and remain outside the seven-step
-core count.
-
-**Gate.** In the full path, do not hand off to `kepler-plan` or code until every formal artifact is
-explicitly requester-approved over its exact committed revision and the design clears the
-`references/code-quality.md` self-review. The requirements-only path creates no proposal or design;
-do not return to planning or code until every required delta has explicit requester approval over its
-exact committed revision. A draft/default decision, lint result, critique verdict, or unattended
-planning authorization cannot create formal approval. For a non-trivial full-path design, an
-unresolved structural smell blocks the gate (see step 11).
+- Refine the change with the user before implementation: proposal (why), requirements (what), and design (how).
+- This is step 1 of the seven-stage core pipeline: init → propose → plan → code → code-feedback → review → finish-work. Wayfinder and `kepler-critique` remain optional, outside the core sequence.
+- Tactical changes may start at `kepler-plan` when they preserve domain, subdomain and bounded-context contracts. Changes to those contracts follow this skill's main flow.
+- **Gate:** Every formal artifact needs explicit requester approval over its exact committed revision before handoff to `kepler-plan` or code. Draft/default decisions, lint, critique and unattended planning authorization cannot create approval.
+- **Design quality:** Apply `references/code-quality.md`; an unresolved structural smell blocks a non-trivial design (step 11).
 
 ## What it produces
 
 In `.kepler/changes/<YYYY-MM-DD-title>/`, using the templates at `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/`:
 
-The full path produces:
-
-- `proposal.md` — the PRD: why, what changes, the sourced domain language, involved subdomains and bounded contexts, capability scope, and affected boundaries.
+- `proposal.md` — the PRD: why, what changes, and the capabilities affected.
 - `requirements/<capability>.md` — the SRS (delta form) for each capability.
-- `design.md` — the SDD: the change's domain model, architectural boundaries, package responsibilities, ports and adapters, code attribution, and supporting decisions.
-
-The requirements-only path produces only the minimal approved
-`requirements/<capability>.md` delta files needed for a bounded tactical behavior change. It does
-not create `proposal.md` or `design.md`.
+- `design.md` — the SDD: how it will be built.
 
 ## Inputs
 
@@ -48,8 +28,7 @@ not create `proposal.md` or `design.md`.
 - The canonical glossary (`.kepler/specs/glossary.md`) — the main source of context-scoped project language, created by `kepler-init`. Read it when present; for older projects without it, use established project documentation with explicit source references.
 - Relevant domain and architecture documentation — supplementary definitions, responsibilities and context boundaries.
 - Project standards (`AGENTS.md`).
-- For requirements-only mode, an explicit `kepler-plan` handoff naming the exact change directory,
-  touched existing capabilities, requested behavior, and any selected route/source-revision context.
+- When returning from `kepler-plan`, its handoff naming the existing change directory, affected capabilities, requested behavior and any route/source-revision binding. Preserve that change identity, ownership and task history through the main flow.
 
 ## Domain language and capability scope
 
@@ -59,9 +38,9 @@ Surface any terminology conflict to the requester; do not silently redefine cano
 
 A capability is a cohesive, durable area of responsibility with a clear boundary and an observable contract. It can represent a domain, subdomain or bounded context, including infrastructure responsibilities. A domain is the overall subject area, a subdomain is a problem area within it, and a bounded context defines where a particular model and language apply. Capability is Kepler's specification unit, not a synonym for those concepts. Identify the chosen scope and the related subdomains and contexts; their relationship is not necessarily one-to-one.
 
-For example, `rest-api` can represent an infrastructure bounded context with its own external request/response model, vocabulary, translation into domain operations, and compatibility obligations. State which domain contexts retain business rules and data ownership. REST alone does not establish a bounded context: an HTTP adapter may belong to an existing context. A package, deployment unit or endpoint is not automatically a context or capability. Do not create overlapping parent and child capabilities that duplicate the same contracts.
+For example, a `rest-api` capability qualifies as an infrastructure bounded context when it owns a distinct external request/response model, vocabulary, translation boundary and compatibility obligations. If it only exposes an existing context's model over HTTP, it is an adapter within that context. The distinction depends on model and contract ownership, not the use of REST. State which domain contexts retain business rules and data ownership. A package, deployment unit or endpoint is not automatically a context or capability. Do not create overlapping parent and child capabilities that duplicate the same contracts.
 
-Preserve existing capability slugs, frontmatter metadata and the file mapping from `requirements/<capability>.md` to `.kepler/specs/<capability>.md`. Record scope in prose, not new mandatory metadata. Historical proposals and specs remain valid under their existing lint contract; do not rewrite approved history to add these sections or classifications. New full-path proposals use the expanded authoring contract below. The glossary is shared vocabulary support, not automatically a capability requiring a new delta.
+Preserve existing capability slugs, frontmatter metadata and the file mapping from `requirements/<capability>.md` to `.kepler/specs/<capability>.md`. Record scope in prose, not new mandatory metadata. Historical proposals and specs remain valid under their existing lint contract; do not rewrite approved history to add these sections or classifications. New proposals use the expanded authoring contract below. The glossary is shared vocabulary support, not automatically a capability requiring a new delta.
 
 ## Design authoring contract
 
@@ -75,45 +54,6 @@ Describe the change in its project's domain and architectural language before ex
 - **Proportionate coverage:** Keep the seven lint-required headings from the design template, with concise explanations when no facts apply. Omit optional sections and tables when prose or upstream references provide the relevant coverage. Do not invent events, states, interfaces, layers or definitions to fill the outline; missing material evidence remains a question. Historical lint-valid designs are not invalid for lacking the new model or mapping sections. These are semantic authoring and review expectations, not new CLI schema requirements.
 
 Architectural realization leads into the decisions and trade-offs that support it. Tie testing to contracts, state transitions and invariant owners: core tests substitute outbound capabilities, while adapter checks exercise translation and failure boundaries.
-
-## Tactical requirements-only approval
-
-Use this path only when called from an explicit `kepler-plan` handoff for a bounded externally
-observable behavior change on existing capabilities and the requester needs a minimal requirements
-delta without a broader proposal or design. Internal-only changes need no delta. A new capability, unresolved
-behavior, architecture choice, or request spanning independent subsystems needs the full path; do
-not narrow it to fit this shortcut.
-
-1. Confirm the exact change directory, affected capability/spec names, request, and any route
-   binding or source revision supplied by `kepler-plan`. Read the current canonical specs, glossary
-   when present, and `AGENTS.md`. Apply the language-source rules above without creating a proposal or a domain-context artifact. Preserve existing authors, approved artifacts, task history, and
-   change identity. Do not create or suffix a change to evade ownership.
-2. Draft or revise only the required `requirements/<capability>.md` files from the installed
-   requirements-change template. State the whole changed behavior in normative requirements with
-   testable WHEN/THEN scenarios. Do not create or edit `proposal.md`, `design.md`, `plan.md`, task
-   progress, or route-claim state. If an existing formal artifact is stale, preserve it and follow
-   its normal revision-bound approval gate.
-3. Before writing, verify the configured Git author identity and resolve any existing owner or route
-   conflict using the handoff and current workbench context. This path never creates or transfers a
-   route claim. For map-aware work, retain the exact selected unit/source revision; the designated
-   controller serializes ownership during the handoff, and `kepler-plan` revalidates owner, unit,
-   target, and route-source revision before its normal claim/scaffold write. Stop on changed or
-   competing ownership.
-4. Run scoped workbench lint after each delta mutation. Keep unapproved bytes as `status: draft` and
-   `decision: skipped`. Prepare the exact final candidate bytes with `status: approved` and
-   `decision: accepted`, show those bytes to the requester, and wait for explicit approval of that
-   exact revision. If the requester asks for a change, revise the draft and present a new exact
-   candidate. Only after approval, write the approved bytes, rerun lint, and commit them. Record the
-   requester-held approval reference for each path; one commit may bind multiple deltas. Never
-   invent approval or its reference. Any later content change requires fresh approval and a commit.
-5. If no formal delta is needed after clarification, return to `kepler-plan` without creating one.
-   If the requester is unavailable, leave formal inputs draft and stop; authorized unattended
-   planning cannot approve them. Do not dispatch code while a required delta is draft, uncommitted,
-   stale, or lacks its exact requester-held approval reference.
-6. Return to `kepler-plan` with every requirements path, the full approval commit, and its requester
-   reference. The planner reruns context, verifies current bytes against that commit, and records an
-   `intent_approvals` entry per formal path before code dispatch. Route ownership remains subject to
-   the normal planning revalidation and claim gate.
 
 ## References
 
@@ -144,7 +84,7 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 
 ## Process
 
-1. **Goal discovery.** Derive a kebab-case title from the request — unless the request points
+1. **Goal discovery.** For a `kepler-plan` handoff, resume its existing change and verified route/unit binding; do not select a new unit or derive a new change identity. Otherwise, derive a kebab-case title from the request — unless the request points
    at a `.kepler/maps/<effort>/` folder containing a `route.md`, in which case enter
    map-aware mode: resolve the canonical route under this project, require its file-scoped lint
    and compiled route/body identity checks to pass, and read its synthesized body as the semantic
@@ -230,8 +170,8 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    owner, and selected route-source revision before writing. Fill `route_unit` with the canonical
    route path and unit number. In the existing proposal Overview, record the owning change and
    owner, named source and normalized target identities, base/input revision, and exact route-source
-   revision used for selection. Then flip only that unit from `pending` to `in-progress` in the
-   source branch's route copy. Treat map status as an aggregate summary; update it to `shipping`
+   revision used for selection. For a new claim, flip only that unit from `pending` to `in-progress` in the
+   source branch's route copy; preserve an existing verified claim for the same change. Treat map status as an aggregate summary; update it to `shipping`
    only when its rule holds, and stop on contradictory unit/map state. After each route/map
    mutation, run `kepler workbench lint --file <path>`; then run scoped change-directory lint before
    the next mutation. Commit the claim with the initial change scaffolding. The visible
@@ -277,7 +217,7 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 11. **Self-review each artifact.** First confirm the workspace: `git rev-parse --show-toplevel`
     ends in `.worktrees/<title>` (or you were legitimately working in place per step 3) and every
     artifact was written under that root, not the default checkout. Then scan for placeholders,
-    contradictions, scope creep, and ambiguity; fix in place. For a new full-path proposal, verify every goal uses sourced, context-scoped terms, every capability has a supported scope and responsibility, and affected contexts and boundaries are covered without duplicate contracts. Missing material domain context is a failed semantic gate even when structural lint passes. For the design candidate, verify sourced language, model ownership, package roles, provided/required contracts, adapter translation and code attribution against the inputs and repository. Check relevant transitions and invariants, current versus proposed claims, and removed responsibilities. Missing material ownership or contracts and unsupported claims are a failed semantic gate even if lint passes; omitted irrelevant tables are not. Then run `design.md` against `references/code-quality.md`.
+    contradictions, scope creep, and ambiguity; fix in place. For a new proposal, verify every goal uses sourced, context-scoped terms, every capability has a supported scope and responsibility, and affected contexts and boundaries are covered without duplicate contracts. Missing material domain context is a failed semantic gate even when structural lint passes. For the design candidate, verify sourced language, model ownership, package roles, provided/required contracts, adapter translation and code attribution against the inputs and repository. Check relevant transitions and invariants, current versus proposed claims, and removed responsibilities. Missing material ownership or contracts and unsupported claims are a failed semantic gate even if lint passes; omitted irrelevant tables are not. Then run `design.md` against `references/code-quality.md`.
     **Blocking:** for a non-trivial change — one that adds or restructures units, not a
     mechanical or single-file edit — an unresolved structural smell (a unit with more than one
     reason to change, a leaked boundary, a hard-wired dependency with no testable seam) is a
@@ -302,23 +242,18 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 
 ## Output
 
-- Full path: approved `proposal.md`, `requirements/<capability>.md` files, and `design.md`, ready
-  for `kepler-plan`.
-- Requirements-only path: only the approved and committed `requirements/<capability>.md` delta
-  files, with each full approval commit and requester-held reference, ready for the explicit
-  `kepler-plan` handoff. No proposal or design is created.
+Approved and committed `proposal.md`, `requirements/<capability>.md` files, and `design.md`,
+with each full approval commit and requester-held reference, ready for `kepler-plan`.
 
 ## Handoff
 
 - **Disclose the workspace.** If step 3 created a worktree for this change, state its path
   (`.worktrees/<title>`) and branch — the artifacts, and all the work to come, live there, not
   in the original checkout. If you worked in place, name that branch.
-- **Name the next step.** After full-path artifacts pass step 12, or requirements-only deltas are
-  approved and committed, the next step is `kepler-plan`.
-- **Hand back the decision.** Never invoke `kepler-plan` yourself. In the full path, ask whether to
-  proceed after approval. In requirements-only mode, return the exact delta paths, approval commit,
-  and requester-held references to the explicit planning handoff. Running unattended, keep required
-  deltas draft, report the missing approval, and stop.
+- **Name the next step.** After the artifacts pass step 12, the next step is `kepler-plan`.
+- **Hand back the decision.** Never invoke `kepler-plan` yourself. Ask whether to proceed after
+  approval, and provide the artifact paths, approval commits and requester-held references.
+  Running unattended, keep unapproved artifacts draft, report the missing approval, and stop.
 
 ## Process flow
 
@@ -335,9 +270,6 @@ digraph kepler_propose {
     "Design — how\n(chosen approach -> design.md)" [shape=box];
     "Self-review each artifact" [shape=box];
     "Approved?" [shape=diamond];
-    "kepler-plan handoff\n(bounded behavior delta)" [shape=box];
-    "Requirements-only tactical path (explicit kepler-plan handoff)" [shape=box];
-    "Delta approved and committed?" [shape=diamond];
     "Ready for kepler-plan" [shape=doublecircle];
 
     "Goal discovery\n(title + map-aware route read)" -> "Ensure isolated workspace\n(worktree; map-aware: flip unit in-progress)";
@@ -352,10 +284,6 @@ digraph kepler_propose {
     "Self-review each artifact" -> "Approved?";
     "Approved?" -> "Ask clarifying questions" [label="changes requested"];
     "Approved?" -> "Ready for kepler-plan" [label="approved"];
-    "kepler-plan handoff\n(bounded behavior delta)" -> "Requirements-only tactical path (explicit kepler-plan handoff)";
-    "Requirements-only tactical path (explicit kepler-plan handoff)" -> "Delta approved and committed?";
-    "Delta approved and committed?" -> "Requirements-only tactical path (explicit kepler-plan handoff)" [label="changes requested"];
-    "Delta approved and committed?" -> "Ready for kepler-plan" [label="approved"];
 }
 ```
 

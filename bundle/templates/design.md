@@ -4,7 +4,7 @@ change: <YYYY-MM-DD-change-title>
 status: draft
 created: <YYYY-MM-DD>
 author: <Name <email>>
-decision: skipped
+decision: accepted | rejected | skipped
 route_unit: null
 ---
 
