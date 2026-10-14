@@ -13,12 +13,10 @@ decision: accepted | rejected | skipped
   Lives at: .kepler/changes/<change>/tasks/task-N/progress.md
   Keep the task status index in root progress.md.
   Initialize this log with `status: pending` and no attempts.
-  Record exactly one terminal `- Outcome: done` or `- Outcome: blocked` per new attempt.
-  Record corrections in a new attempt; never add another Outcome to a historical attempt.
-  Preserve supported historical unbulleted Outcome fields without rewriting them.
-  Optional immutable `scope_expansions` records reserve prerequisite paths before edits.
-  In each attempt, record the applicable quality constraint and decision context and how they
-  shaped the implementation or check. If they do not apply, explain why.
+
+  Give each new attempt exactly one terminal `- Outcome: done` or `- Outcome: blocked`. Record corrections in a new attempt; never add another Outcome to a historical attempt. Preserve supported historical unbulleted Outcome fields without rewriting them.
+
+  Optional immutable `scope_expansions` records reserve prerequisite paths before edits. In each attempt, record the applicable quality constraint and decision context, explaining how they shaped the implementation or check. If they do not apply, explain why.
   Delete this instruction block and every inline hint before finalizing.
 -->
 

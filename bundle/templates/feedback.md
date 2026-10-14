@@ -8,21 +8,17 @@ decision: accepted | rejected | skipped
 ---
 
 <!--
-  Code Feedback — review history for one plan task.
+  Code Feedback: review history for one plan task.
   Produced by: kepler-code-feedback (step 4).
   Lives at: .kepler/changes/<change>/tasks/task-N/feedback.md
   Whole-branch review belongs in review.md.
   Delete this instruction block and every inline hint before finalizing.
 
-  Fresh files use identity and lifecycle-only frontmatter with complete pass-local Base, Head, and
-  Verdict fields. For the first append to a legacy-global history, validate the legacy-global history
-  before one atomic mutation: preserve every existing pass body byte-for-byte, remove exactly the
-  global `base`, `head`, and `verdict` fields, and append the next complete pass-local record at the
-  physical end in the same mutation. Never copy global provenance into historical passes. Never retain
-  global provenance beside an explicit suffix. A fieldless prefix followed by an explicit suffix is
-  already transitioned; append normally to that suffix. Fail closed for partial globals, mixed
-  global-plus-explicit evidence, missing legacy globals without an explicit suffix, or any fieldless
-  pass after the explicit suffix. Never create feedback-<k>.md.
+  New files keep only identity and lifecycle metadata in frontmatter. Each pass records complete Base, Head and Verdict fields.
+
+  Before the first append to a legacy-global history, validate that history. In one atomic mutation, preserve every existing pass body byte-for-byte, remove exactly the global `base`, `head` and `verdict` fields, and append the next complete pass-local record at the file's end. Never copy global provenance into historical passes or retain it beside an explicit suffix.
+
+  A fieldless prefix followed by an explicit suffix has already transitioned; append normally to that suffix. Stop for partial globals, mixed global-plus-explicit evidence, missing legacy globals without an explicit suffix, or any fieldless pass after the explicit suffix. Never create feedback-<k>.md.
 -->
 
 # Code Feedback: Task N — <title> <!-- hint: replace with the exact plan task id and title -->

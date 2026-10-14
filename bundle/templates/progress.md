@@ -13,8 +13,7 @@ tasks:
 
 <!--
   Progress: root task index for a change.
-  Produced by: kepler-plan (step 2). kepler-code updates legacy serial root rows;
-  the coordinator publishes dependency-mode root state.
+  Produced by: kepler-plan (step 2). kepler-code updates legacy serial root rows; the coordinator publishes dependency-mode root state.
   Lives at: .kepler/changes/<change>/progress.md
   Keep detailed execution history in the linked task progress files.
   Allowed task statuses: pending | in-progress | blocked | done
@@ -25,12 +24,9 @@ tasks:
 
 # Progress: <Change Title>
 
-<!-- Add one `tasks` frontmatter entry and one matching row per active task in numeric identity order.
-     Omit admission on pending scaffolds. Only the guarded coordinator operation may add a version-1
-     admission object with the exact fields in task-admission.ts; a template example grants no authority.
-     The orchestrator's optional execution sequence does not change this ledger's physical order.
-     Escape `|` in display titles as `\|`. The frontmatter and table must describe exactly the same tasks and values,
-     accounting for display escaping. Keep task details in the linked files. -->
+<!-- Add one `tasks` frontmatter entry and one matching table row per active task, in numeric identity order. Scheduling does not change this ledger's physical order. Escape `|` in display titles as `\|`. The frontmatter and table must contain the same tasks and values, accounting for display escaping. Keep task details in the linked files.
+
+     Omit admission on pending scaffolds. Only the guarded coordinator operation may add a version-1 admission object with the exact fields in task-admission.ts; a template example grants no authority. -->
 
 | Task | Status | Progress |
 | --- | --- | --- |
