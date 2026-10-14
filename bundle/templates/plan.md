@@ -102,10 +102,11 @@ initialization:
 
 ## Tasks
 
-<!-- Number tasks for stable identity, such as "Task 3". Keep headings, directories and both
-     root-ledger representations in numeric identity order. Declare prerequisites in "Depends on".
-     Context derives ready/held/fully-gated states; the coordinator admits compatible isolated lanes.
-     Numeric IDs identify tasks, not their execution order. -->
+<!-- Number tasks for stable identity, such as "Task 3". Keep headings, directories and both root-ledger representations in numeric identity order; IDs do not imply execution order.
+     Build the graph from each task's outputs and required inputs. Add an edge only when the task needs another task's completed result to implement or verify its Goal and Acceptance. Explain each prerequisite result and why it must exist first in the consuming task's Goal.
+     Write "Depends on: none" for independent tasks or comma-space-separated Task N IDs for prerequisites. These declarations are the graph's single source of truth; do not duplicate it in frontmatter.
+     Record shared-file/resource conflicts as coordination constraints in the affected tasks' Steps, not as dependencies unless one task needs the other's result. Context derives readiness; the coordinator admits compatible isolated lanes.
+     Check for missing or inactive prerequisites, self-dependencies, cycles and unnecessary edges. Do not chain independent tasks or repeat transitive ordering without a directly needed result. Resolve cycles by revising task boundaries or extracting a shared prerequisite. -->
 
 ### Task 1: <imperative title>
 
@@ -130,7 +131,7 @@ initialization:
 
 ### Task 2: <imperative title>
 
-- Goal: <observable result and reason>
+- Goal: <observable result and reason; identify the result needed from Task 1 and why it must exist first>
 - Depends on: Task 1
 - Files: optional guidance
   - Created: <paths, or none>

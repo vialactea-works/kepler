@@ -99,7 +99,15 @@ Do not invoke feedback in task Steps during implementation: `kepler-code` owns t
 
    For an existing plan, require every present formal proposal/design/requirements input to have `status: approved`, `decision: accepted`, an exact `intent_approvals` entry with its owner-held reference and full commit ID, and current bytes matching that committed revision. On first planning, verify each input is explicitly approved and committed, obtain its requester-held reference from the approved handoff, and record the path/reference/full commit in the new plan. A lint-valid draft, template default, plan status, or `decision: accepted` alone does not authorize formal intent. If approval is missing or stale, return to `kepler-propose`'s main flow. Never approve formal intent during planning. Formal artifacts may be absent only for tactical changes that preserve domain, subdomain and bounded-context contracts. Authorized unattended planning may self-review the breakdown and record assumptions but cannot manufacture formal approval.
 6. **Explore (read-only).** Map the files and modules involved, the patterns to follow, and the test setup. Make no edits. Test each recalled decision against current source, approved intent and standards. Carry only applicable constraints into the exact task that needs them; record stale or conflicting advice as rejected context with its current-source reason. Do not add abstractions for an inapplicable rubric principle.
-7. **Decompose.** Break the work into TDD-sized tasks and mark logical dependencies. Dependencies drive derived readiness, and the coordinator dispatches only compatible ready work into isolated lanes. For each task, put the applicable structural quality constraint and verified decision/source in that task block, not only in Overview. If no relevant memory is available, state that and use current repository context. A coder receives one task at a time and will not infer sibling task constraints from plan-wide notes. Prefer more small tasks over few large ones. Cut the seams along the design's boundaries so each task lands one cohesive unit — a task you cannot describe without "and" is usually two.
+7. **Decompose and build the task graph.** Break the work into TDD-sized tasks along the design's boundaries. Each task should deliver one cohesive, independently verifiable result. Before specifying the tasks:
+
+   - Identify what each task produces and which results it needs from other tasks to implement or verify its Goal and Acceptance.
+   - Add a dependency only when the consuming task requires another task's completed result. Explain each dependency in the consuming task's Goal: name the needed result and why it must exist first.
+   - Use `Depends on: none` for independent tasks. Otherwise list prerequisites as `Task N` IDs separated by comma-space. Keep these task-level declarations as the graph's single source of truth; do not duplicate it in frontmatter or infer edges from task numbering.
+   - Treat shared-file or shared-resource conflicts as coordination constraints, not automatic dependencies. Record those constraints in the affected tasks' Steps for the coordinator to consider during admission. Add an edge only if one task needs the other's result.
+   - Check for missing prerequisites, self-dependencies, cycles and unnecessary edges. Do not chain independent tasks for convenience or add transitive edges solely to repeat ordering already implied by the graph. Retain a direct edge when the task directly consumes that prerequisite's result. If tasks form a cycle, revise their boundaries or extract a shared prerequisite; do not invent an order.
+
+   Dependencies drive readiness; the coordinator admits only compatible ready work into isolated lanes. Put each task's applicable quality constraint and verified decision/source in its own block, not only in Overview. If no relevant memory is available, state that and use repository context. Each coder receives one task and must not need sibling task details to understand its required inputs.
 8. **Specify each task.** Capture Goal, Acceptance, Depends on, Steps, Verify and Commit; Files may be omitted or supplied as optional guidance. Make Acceptance testable, cite requirement scenarios when available, and cover errors and edge cases. Order Steps as Red → Green → Refactor (or a technically justified alternative Red), followed by targeted tests and fresh LSP diagnostics with explicit expected results. In Red, run the check and observe the intended failure before production edits; in Green, rerun that check; in Refactor, rerun relevant tests after cleanup. Include the correction rule from **TDD task contract** in each task block, since the coder reads no sibling block or plan-wide instructions. Code snippets illustrate design and standards under bounded judgment; model the clean shape from `references/code-quality.md`.
 9. **Confirm or auto-reflect.** If working with a person, present the task breakdown and confirm it before finalizing. If running unattended with explicit authority to plan, self-review against the checklist below and record assumptions inline in the plan. This approval covers only the breakdown; it never creates approval for formal proposal/design/requirements inputs.
 10. **Write `plan.md` and initialize execution progress.** Instantiate the installed `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/plan.md`, `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/progress.md`, and `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/task-progress.md` templates. Fill their placeholders and remove opening instruction blocks and inline hints before writing.
@@ -176,7 +184,8 @@ Before finishing, confirm:
 - Each task includes the conditional correction cycle and its own task-local phase evidence; no task Step invokes `kepler-code-feedback` or edits sibling evidence. The driver obtains fresh approval before dependent work advances.
 - Steps permit bounded judgment within Goal, Acceptance, approved intent, design and standards; Files is optional guidance rather than an allowlist.
 - Each acceptance criterion ties to a requirement scenario where one exists.
-- Dependencies are correct and acyclic.
+- Every task declares `Depends on`, using `none` for independent tasks. Each edge has a concrete prerequisite result and a reason in the consuming task's Goal. All referenced tasks exist and are active; there are no self-dependencies, cycles or missing prerequisites.
+- Independent tasks are not chained by numbering or convenience. Shared-file/resource conflicts are recorded as coordination constraints, and no edge exists solely to serialize conflicting work or repeat transitive ordering.
 - The task seams follow the design's boundaries; no task bundles unrelated changes, and each lands a unit that can be tested in isolation (`references/code-quality.md`, proportional to the change).
 - Code snippets model the clean shape as design/standards examples under bounded judgment.
 - "Done when" requires all tasks `done`, related tests passing, no LSP errors in the affected scope, fresh committed `approved` feedback for every task before dependent work advances, and an approved whole-branch review. Leave full-suite tests and full builds to later workflow stages.
@@ -206,7 +215,7 @@ digraph kepler_plan {
     "Locate / create change dir\n(no route mutation before ownership/binding checks)" [shape=box];
     "Gather context\n(upstream artifacts + canonical specs + standards)" [shape=box];
     "Explore code (read-only)" [shape=box];
-    "Decompose into TDD-sized tasks" [shape=box];
+    "Decompose into TDD-sized tasks\n(build dependency graph)" [shape=box];
     "Specify each task\n(files, acceptance, steps, verify, commit)" [shape=box];
     "Interactive?" [shape=diamond];
     "Confirm breakdown with user" [shape=box];
@@ -217,8 +226,8 @@ digraph kepler_plan {
     "Ensure isolated workspace\n(worktree if on default branch)" -> "Locate / create change dir\n(no route mutation before ownership/binding checks)";
     "Locate / create change dir\n(no route mutation before ownership/binding checks)" -> "Gather context\n(upstream artifacts + canonical specs + standards)";
     "Gather context\n(upstream artifacts + canonical specs + standards)" -> "Explore code (read-only)";
-    "Explore code (read-only)" -> "Decompose into TDD-sized tasks";
-    "Decompose into TDD-sized tasks" -> "Specify each task\n(files, acceptance, steps, verify, commit)";
+    "Explore code (read-only)" -> "Decompose into TDD-sized tasks\n(build dependency graph)";
+    "Decompose into TDD-sized tasks\n(build dependency graph)" -> "Specify each task\n(files, acceptance, steps, verify, commit)";
     "Specify each task\n(files, acceptance, steps, verify, commit)" -> "Interactive?";
     "Interactive?" -> "Confirm breakdown with user" [label="yes"];
     "Interactive?" -> "Auto-reflect + record assumptions" [label="no"];
