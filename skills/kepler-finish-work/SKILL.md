@@ -104,9 +104,7 @@ requirements to lint. It must validate all of these facts and close with `gate: 
   the unchanged task definition, canonical repository, current committed inputs/approval, owner and
   independent-review references, and rationale. This is a current scope confirmation, not historical
   proof, authentication, semantic review, or a waiver. All task-feedback, intent, review, cleanliness,
-  test, and whole-change gates still apply. An explicit serial execution transition is committed,
-  verified, and obeyed by task history; completed tasks retain numeric identity order and immutable
-  definitions.
+  test, and whole-change gates still apply. Any declared execution transition must be committed, verified and consistent with task history. Preserve numeric identity order in the ledger and keep completed task definitions immutable; ledger order does not prescribe execution order.
 - Every present formal proposal/design/requirements input has explicit `approved` / `accepted`
   metadata, an exact full-commit plan reference and requester-held approval reference, and current
   bytes matching that committed revision. Tactical absence is valid; a plan's status/default or
