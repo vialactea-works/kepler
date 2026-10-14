@@ -140,7 +140,7 @@ describe("domain-language artifact templates", () => {
 
   it("allows a proportionate design without optional model, flow or architecture tables", async () => {
     const template = readTemplate("design.md");
-    expect(template.replace(/\s+/g, " ")).toMatch(/keep the seven lint-required headings.*omit optional sections and subsections/i);
+    expect(template.replace(/\s+/g, " ")).toMatch(/keep the seven lint-required headings.*omit irrelevant optional sections/i);
     expect(template).not.toContain("Delete a section that does not apply");
     expect(template).not.toContain("Omit the section if none");
     const optionalSections = ["Domain Model", "Data & Flow", "Error Handling & Edge Cases", "Migration / Rollout", "Open Questions"];

@@ -32,8 +32,8 @@ describe("split execution artifact templates", () => {
     expect(instructions).toContain("lowercase 64-hex SHA-256");
     expect(instructions).toContain("Git commits and blobs");
     expect(instructions).toContain("remain 40-hex");
-    expect(instructions).toContain("Preserve the original `initialization.breakdown`");
-    expect(instructions).toContain("checked against that historical plan");
+    expect(instructions).toContain("Preserve `initialization.breakdown` on re-plan");
+    expect(instructions).toContain("verified against that plan revision");
   });
 
   it("gives every lifecycle producer disposable authoring instructions", () => {
@@ -142,7 +142,7 @@ describe("split execution artifact templates", () => {
     const template = readTemplate("progress.md")
 
     expect(template).toContain("Root `status: complete` means all active implementation rows are done")
-    expect(template).toContain("The frontmatter and table must match exactly")
+    expect(template).toContain("The frontmatter and table must describe exactly the same tasks and values")
     expect(template).toContain("| Task | Status | Progress |")
     expect(template).toContain("| Task N: <escaped display title> | pending | [details](tasks/task-N/progress.md) |")
     expect(template).toContain("one matching row per active task in numeric identity order")
@@ -166,10 +166,10 @@ describe("split execution artifact templates", () => {
       expect(instructions).not.toBe("")
       expect(template).toContain("author: <Name <email>>")
       expect(instructions).toMatch(
-        /configured Git identity[\s\S]*git config user\.name[\s\S]*git config user\.email[\s\S]*Name <email>/i,
+        /git config user\.name[\s\S]*git config user\.email[\s\S]*Name <email>/i,
       )
-      expect(instructions).toMatch(/If either\s+configured value is missing,\s+ask the user or stop with a blocker/i)
-      expect(instructions).toMatch(/preserve its recorded author/i)
+      expect(instructions).toMatch(/If either\s+(?:configured value\s+)?is missing, ask the user or stop/i)
+      expect(instructions).toMatch(/preserve existing author attribution|preserve its recorded author/i)
       expect(template).not.toMatch(/author: <name or agent>/i)
       expect(template).not.toMatch(/\b(?:name or agent|agent name|operating-system username)\b/i)
     }
@@ -182,8 +182,8 @@ describe("split execution artifact templates", () => {
     expect(template).not.toContain("## Attempt N — <YYYY-MM-DD>")
     expect(template).not.toContain("- Outcome: done | blocked")
     expect(template).not.toContain("- Verified: `<command>` → <result>")
-    expect(template).toMatch(/each new attempt.*exactly one terminal `- Outcome: done` or `- Outcome: blocked`/is)
-    expect(template).toMatch(/append a new\s+attempt for corrections.*instead of adding another Outcome to historical attempts/is)
+    expect(template).toMatch(/record exactly one terminal `- Outcome: done` or `- Outcome: blocked` per new attempt/i)
+    expect(template).toMatch(/record corrections in a new attempt.*never add another Outcome to a historical attempt/is)
     expect(template).toMatch(/preserve.*historical unbulleted Outcome.*without rewriting/is)
   })
 

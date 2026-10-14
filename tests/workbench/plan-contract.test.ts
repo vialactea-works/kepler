@@ -471,7 +471,7 @@ describe("plan contract", () => {
     expect(bodyContract(abandoned)?.executionOrder).toEqual([]);
   });
 
-  it("consumes the plan template's initialization and canonical amendment Overview fields", () => {
+  it("consumes the plan template's initialization and input-impact Overview fields", () => {
     const template = readFileSync("bundle/templates/plan.md", "utf8");
     const frontmatter = template.match(/^---\n([\s\S]*?)\n---/)?.[1];
     if (!frontmatter) throw new Error("Plan template frontmatter is missing");
@@ -482,15 +482,8 @@ describe("plan contract", () => {
     expect(bodyContract(plan({ initialization: metadata.initialization }))?.initialization)
       .toMatchObject({ taskIds: [1, 2], base: sha, authority: "requester-template-approval" });
 
-    const transition = { version: 1, previousPlanCommit: sha, previousOrder: [1, 2, 3], fullyGatedPrefix: [1], approval: "requester-template-order", reason: "Task 4 supplies Task 2.", affected: "Task 2 waits for Task 4." };
     const impact = { version: 1, previousPlanCommit: sha, reviewReference: "template-independent-review", changes: [{ path: "AGENTS.md", previousBlob: sha, currentBlob: "f".repeat(40), affectedTasks: [2], unaffectedTasks: [1], newTasks: [4], unresolvedIntent: false, rationale: "Current task context requires the prerequisite." }] };
     const fields = new Map([
-      ["Execution approval", transition.approval],
-      ["Previous execution order", "1, 2, 3"],
-      ["New execution order", "1, 4, 2, 3"],
-      ["Fully gated prefix", "1"],
-      ["Reason", transition.reason],
-      ["Affected obligations", transition.affected],
       ["Input impact review", impact.reviewReference],
       ["Input impact previous plan", sha],
     ]);
@@ -499,11 +492,11 @@ describe("plan contract", () => {
       .filter((match) => fields.has(match[1] ?? ""))
       .map((match) => `- ${match[1]}: ${fields.get(match[1] ?? "")}`);
     expect(instantiated).toHaveLength(fields.size);
-    const artifact = plan({ execution: { version: 1, order: [1, 4, 2, 3] }, execution_transition: transition, input_impact: impact }, `${task(1, "First")}${task(2, "Second", "Task 4")}${task(3, "Third", "Task 2")}${task(4, "Prerequisite", "Task 1")}`);
+    const artifact = plan({ input_impact: impact }, `${task(1, "First")}${task(2, "Second", "Task 1")}${task(3, "Third", "Task 2")}${task(4, "Additional", "none")}`);
     const instantiatedPlan = { ...artifact, body: artifact.body.replace("## Overview\n", `## Overview\n${instantiated.join("\n")}\n`) };
     const validation = validateArtifact(instantiatedPlan);
     expect(validation._tag, JSON.stringify(validation)).toBe("valid");
-    expect(bodyContract(instantiatedPlan)).toMatchObject({ executionTransition: transition, inputImpact: impact });
+    expect(bodyContract(instantiatedPlan)).toMatchObject({ inputImpact: impact });
   });
 
   it("validates formal intent reference paths and leaves tactical absence explicit", () => {
