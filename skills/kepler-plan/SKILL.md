@@ -5,157 +5,70 @@ description: "Turn a change into plan.md — an ordered ledger of small, TDD-siz
 
 # Planning a change
 
-Turn a change — whether it already has a design and requirements, or is just a
-request — into `plan.md`: an ordered ledger of small, independently verifiable tasks that
-a coder (human or agent) implements one at a time.
+Turn a change — whether it already has a design and requirements, or is just a request — into `plan.md`: an ordered ledger of small, independently verifiable tasks. Each coder (human or agent) implements one assigned task at a time.
 
-The **seven-stage core pipeline** is Kepler's fixed spec-driven sequence: init → propose → plan → code →
-code-feedback → review → finish-work. Each step is a skill that a person or an agent can run.
-This skill is **step 2**, the plan step. Wayfinder and `kepler-critique` are optional and
-remain outside the seven-step core count.
+The **seven-stage core pipeline** is Kepler's fixed spec-driven sequence: init → propose → plan → code → code-feedback → review → finish-work. Each step is a skill that a person or an agent can run. This skill is **step 2**, the plan step. Wayfinder and `kepler-critique` are optional and remain outside the seven-step core count.
 
-`plan.md` is the required planning artifact and the handoff contract between planning and
-coding. Finalizing it also initializes the split execution ledger and task-local evidence
-files. This skill produces planning artifacts only. **It never writes production code.**
+`plan.md` is the required planning artifact and the handoff contract between planning and coding. Finalizing it also initializes the split execution ledger and task-local evidence files. This skill produces planning artifacts only. **It never writes production code.**
 
 ## Inputs
 
-- A change directory at `.kepler/changes/<YYYY-MM-DD-title>/`. Create it if missing —
-  `plan.md` always lives inside one, even when the pipeline starts at this step.
+- A change directory at `.kepler/changes/<YYYY-MM-DD-title>/`. Create it if missing — `plan.md` always lives inside one, even when the pipeline starts at this step.
 - Rich path: `design.md` and `requirements/` already exist — plan from them.
 - Minimal path: only a user request that preserves domain, subdomain and bounded-context contracts. Capture the why/what in the plan's Overview. Changes to those contracts require `kepler-propose` before planning.
-- Project standards: `AGENTS.md`, for test/build commands, project structure, code style,
-  and boundaries. Read it — do not guess conventions.
-- The project's canonical specs (`.kepler/specs/`): the current, consolidated requirement
-  truth for each capability. Read the specs the change touches so the plan stays consistent
-  with established behavior and prior decisions — especially on the minimal path, where no
-  per-change `requirements/` exists and the specs are your only view of existing behavior.
-- Relevant project decision history, when the harness provides a memory search. Search only
-  for decisions and failure modes relevant to this change; memory is optional context, never
-  approval or lifecycle evidence.
+- Project standards: `AGENTS.md`, for targeted test commands, diagnostic tooling, project structure, code style, and boundaries. Read it — do not guess conventions.
+- The project's canonical specs (`.kepler/specs/`): the current, consolidated requirement truth for each capability. Read the specs the change touches so the plan stays consistent with established behavior and prior decisions — especially on the minimal path, where no per-change `requirements/` exists and the specs are your only view of existing behavior.
+- Relevant project decision history, when the harness provides a memory search. Search only for decisions and failure modes relevant to this change; memory is optional context, never approval or lifecycle evidence.
 
 ## References
 
-This skill ships with a `references/` folder. Read reference files using the Read tool on
-the skill's own directory — they are co-located with this SKILL.md, **not** at
-`${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/` or `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/`.
+This skill ships with a `references/` folder. Read reference files using the Read tool on the skill's own directory — they are co-located with this SKILL.md, **not** at `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/` or `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/`.
 
 - `references/code-quality.md` — the self-review rubric for plan quality.
 
+## Plan format
+
+Write and edit only plans declaring `execution: {version: 2, mode: dependencies}`. This is the planning format, not an optional execution mode. Re-planning and scaffold recovery apply only to version 2 plans.
+
+Read version 1 plans (`execution: {version: 1, order: [...]}`) and unversioned serial plans only as historical context. Interpret their task order and Files/Steps under their recorded contract; do not edit, migrate, recover their scaffolds or dispatch work from them through this skill. If asked to revise one, preserve it and ask the requester how to establish a separate version 2 plan without changing existing ownership or history.
+
 ## Principles
 
-### Version 2 dependency-mode tasks
+### Task contract
 
-When the committed plan declares `execution: {version: 2, mode: dependencies}`, each task is governed by Goal, Acceptance, Depends on, Steps, Verify, and Commit. Files is optional guidance, not an allowlist. The Goal, Acceptance, approved intent, cited design and requirements, and project standards bind implementation. A coder may make goal-serving unlisted paths when needed to satisfy those constraints; unrelated edits and changes to public APIs, security policy, dependencies, or approved intent remain out of scope. Bind implementation to task-local context and intent, not an inferred file whitelist.
+Each task is governed by Goal, Acceptance, Depends on, Steps, Verify, and Commit. Files is optional guidance, not an allowlist. The Goal, Acceptance, approved intent, cited design and requirements, and project standards bind implementation. A coder may edit goal-serving unlisted paths when needed to satisfy those constraints; unrelated edits and changes to public APIs, security policy, dependencies, or approved intent remain out of scope. Bind implementation to task-local context and intent, not an inferred file whitelist.
 
 Steps give the worker bounded judgment rather than specifying every edit verbatim. They preserve binding intent, design, and standards while allowing related checks and TDD cycles to establish the right solution. Keep each cycle in Red → Green → Refactor order and include Verify after Refactor. Expected worker judgment does not authorize changing the goal, approval, or architecture boundaries.
 
-### Historical serial tasks
-
-For plans without dependency-mode v2, retain the historical serial task contract: execute task Steps verbatim, treat listed Files as the task boundary, use numeric identity order, and do not add design of your own. Never rewrite a frozen historical plan into v2 or infer v2 from current templates.
-
-- **Plan-first, read-only.** Explore the code you will touch before writing the plan.
-  Understand existing patterns and how tests run. Make no edits in this step.
-- **TDD-sized tasks.** Each task is small enough to implement and verify in isolation —
-  about one Red → Green → Refactor loop. "Build authentication" is too big; "add a
-  registration endpoint that validates email format" is right.
-- **One task at a time.** The coder consumes a single task and nothing else, so each task
-  must be self-contained: its files, acceptance, and verification stand alone.
-- **Task-specific execution contract.** Under v2, use the bounded-judgment contract above; under historical serial mode, Steps are executed verbatim and the coder does not add design. Specify the complete Red → Green → Refactor sequence, or a justified alternative Red when a conventional failing check is impossible. The coder cannot omit phases or treat Green as completion.
+- **Plan-first, read-only.** Explore the code you will touch before writing the plan. Understand existing patterns and how tests run. Make no edits in this step.
+- **TDD-sized tasks.** Each task is small enough to implement and verify in isolation — about one Red → Green → Refactor loop. "Build authentication" is too big; "add a registration endpoint that validates email format" is right.
+- **One task at a time.** The coder consumes a single task and nothing else, so each task must be self-contained: its files, acceptance, and verification stand alone.
+- **Task-specific execution contract.** Use the bounded-judgment contract above. Specify the complete Red → Green → Refactor sequence, or a justified alternative Red when a conventional failing check is impossible. The coder cannot omit phases or treat Green as completion.
 - **Reference, don't copy.** Point to `design.md` / `requirements/`; do not duplicate them.
-- **Honor the canonical specs.** Before decomposing, read the `.kepler/specs/` entries for
-  the capabilities the change touches. They record the conventions and decisions the project
-  has already committed to; a plan that quietly contradicts them regresses agreed behavior.
-  Follow them, or surface the conflict — do not plan around it silently.
-- **Plan for quality.** Binding design and standards apply in every mode; the plan should carry enough quality constraints for implementation while preserving bounded worker judgment in v2. Decompose so each task preserves the design's structure and stays independently testable, and make any code snippet model the clean shape rather than a shortcut the coder will copy. Judge the plan against `references/code-quality.md` (read it from this skill's references directory), proportional to the change's size.
-- **Detail scales to risk.** Include code or exact commands only where they remove
-  ambiguity. Otherwise state intent and let the coder think — do not pre-write the diff.
-- **Write flowing prose.** In `plan.md` — overviews, task descriptions, acceptance
-  criteria, and every other narrative field — let paragraphs run as continuous lines. Do
-  not hard-wrap text at ~80 characters or any fixed width; insert a line break only at a
-  real boundary (between paragraphs, list items, or headings). Code blocks and commands
-  keep their own formatting; soft-wrapping prose is the reader's job, not yours.
+- **Honor the canonical specs.** Before decomposing, read the `.kepler/specs/` entries for the capabilities the change touches. They record the conventions and decisions the project has already committed to; a plan that quietly contradicts them regresses agreed behavior. Follow them, or surface the conflict — do not plan around it silently.
+- **Plan for quality.** Binding design and standards govern implementation; carry enough quality constraints while preserving bounded worker judgment. Decompose so each task preserves the design's structure and stays independently testable, and make any code snippet model the clean shape rather than a shortcut the coder will copy. Judge the plan against `references/code-quality.md` (read it from this skill's references directory), proportional to the change's size.
+- **Detail scales to risk.** Include code or exact commands only where they remove ambiguity. Otherwise state intent and let the coder think — do not pre-write the diff.
+- **Write flowing prose.** In `plan.md` — overviews, task descriptions, acceptance criteria, and every other narrative field — let paragraphs run as continuous lines. Do not hard-wrap text at ~80 characters or any fixed width; insert a line break only at a real boundary (between paragraphs, list items, or headings). Code blocks and commands keep their own formatting; soft-wrapping prose is the reader's job, not yours.
 
 ## TDD task contract
 
-Plan each ordinary behavior-changing task as a complete Red → Green → Refactor cycle before
-its final Verify command. A task may need several related checks or cycles, but split independent
-behaviors into separate tasks. Write the phase actions in each task's Steps so a coder who reads
-only that block can execute them in order:
+Plan each ordinary behavior-changing task as a complete Red → Green → Refactor cycle before its final Verify command. A task may need several related checks or cycles, but split independent behaviors into separate tasks. Write the phase actions in each task's Steps so a coder who reads only that block can execute them in order:
 
-- **Red:** Write or update a failing behavioral check and run it before production edits. Name the
-  command and intended failure; an already-passing check or broken harness does not establish
-  Red. If a conventional failing behavioral check cannot be written, specify the
-  concrete technical reason before production edits and a repeatable alternative verification that
-  distinguishes the pre-change and post-change states. Run and record the alternative as Red
-  before production edits. Preference alone is not a valid exception.
-- **Green:** Make the smallest passing implementation and rerun the same check (or documented
-  alternative) until it passes for the intended reason. Green is not task completion.
-- **Refactor:** Specify behavior-preserving cleanup and rerun relevant tests after Green. If no
-  cleanup is needed, inspect for opportunities, record that decision, and still rerun the
-  relevant behavioral and regression checks; do not invent a cosmetic edit to satisfy the phase.
+- **Red:** Write or update a failing behavioral check and run it before production edits. Name the command and intended failure; an already-passing check or broken harness does not establish Red. If a conventional failing behavioral check cannot be written, specify the concrete technical reason before production edits and a repeatable alternative verification that distinguishes the pre-change and post-change states. Run and record the alternative as Red before production edits. Preference alone is not a valid exception.
+- **Green:** Make the smallest passing implementation and rerun the same check (or documented alternative) until it passes for the intended reason. Green is not task completion.
+- **Refactor:** Specify behavior-preserving cleanup and rerun relevant tests after Green. If no cleanup is needed, inspect for opportunities, record that decision, and still rerun the relevant behavioral and regression checks; do not invent a cosmetic edit to satisfy the phase.
 
-After Refactor, run the task's Verify command and the full test/build commands from `AGENTS.md`
-unless those standards explicitly scope a per-task suite. Require exact commands and observed
-results for every phase in task-local progress, including the technical reason and observations
-for an exceptional Red. If a phase fails for the wrong reason, Verify fails, or feedback is
-`changes-requested`, record the correction and repeat Red → Green → Refactor with relevant
-verification within the same task. If the correction falls outside the task's Files or acceptance
-boundaries, block for re-plan rather than improvise.
+After Refactor, Verify runs only tests related to the changed files and affected behavior, then checks fresh LSP diagnostics for the changed files and affected dependents. Record the targeted commands, diagnostic scope and observed results; an empty or stale diagnostic cache does not establish that there are no errors. If LSP coverage is unavailable, report the gap rather than claiming a clean result. Defer full-suite tests and full builds to later workflow stages; do not include them in task Verify. Require exact commands and observed results for every phase in task-local progress, including the technical reason and observations for an exceptional Red. If a phase fails for the wrong reason, Verify fails, or feedback is `changes-requested`, record the correction and repeat Red → Green → Refactor with relevant verification within the same task. If the correction exceeds Goal, Acceptance, approved intent, design or project standards, block for re-plan rather than improvise. Files remains optional guidance, not an allowlist.
 
-Do not invoke feedback in task Steps during implementation: `kepler-code` owns the task attempt
-and commit, and the driver dispatches `kepler-code-feedback` as the refactor-phase review
-afterward. A fresh durable `approved` pass is required before the next task or whole-branch
-review. `changes-requested` feedback returns the same task for a correction cycle with
-verification and another feedback pass. This handoff belongs to the driver, not the coder's Steps.
+Do not invoke feedback in task Steps during implementation: `kepler-code` owns the task attempt and commit, and the driver dispatches `kepler-code-feedback` as the refactor-phase review afterward. A fresh durable `approved` pass is required before dependent tasks or whole-branch review; independent ready tasks may proceed in compatible isolated lanes. `changes-requested` feedback returns the same task for a correction cycle with verification and another feedback pass. This handoff belongs to the driver, not the coder's Steps.
 
 ## Process
 
-1. **Detect map-aware mode and preserve existing bindings.** If the request points at a
-   `.kepler/maps/<effort>/` folder containing `route.md`, resolve the canonical route under this
-   project, require its file-scoped lint and route/body identity checks to pass, and read its
-   synthesized body as the semantic handoff. Map-level `open`, `cleared`, `shipping`, or `shipped`
-   status cannot replace this compiled route. Before selecting a unit, resolve any existing
-   change's `proposal.md` and `plan.md` bindings through `kepler workbench context`. A nonzero
-   route-conflict result stops. If `plan.md` exists, its `route_unit` owns the selection; any
-   non-null proposal reference must match it, including when the plan reference is null. If no
-   plan exists and the proposal has a non-null `route_unit`, preserve that proposal-bound unit
-   while creating the plan. For an existing binding, resume that exact unit for its owning change;
-   never replace it with another pending unit because the bound unit is already in progress or a
-   later unit is pending. If the bound unit, owner, or claim cannot be verified, stop for owner
-   adjudication. Only a new, unbound change selects the first `pending` unit in frontmatter order
-   and derives its title from that unit's `name`. If that first pending unit is blocked, report the
-   exact prerequisite and stop rather than selecting a later unit; a later-unit choice needs
-   explicit owner authorization. If there is no pending unit, resume only an existing in-progress
-   unit demonstrably owned by this change; otherwise stop without changing unit state. In every
-   case, verify each selected unit dependency is `shipped` **and** reachable from the actual
-   delivery base; if finished but unmerged, stop and ask the owner to merge it or deliberately
-   branch from its work.
-2. **Resolve visible claims and source role before writes.** The designated user/controller
-   serializes route-unit claims and delivery, with one owner per unit and one writer per
-   change/worktree. Before creating/suffixing a workspace or changing a route unit, scan known
-   change proposals/plans, local and visible remote branches, and `git worktree list --porcelain`
-   for the canonical route/unit reference. Prefer resuming its owner; a competing or ambiguous
-   claim requires owner-directed resume/transfer or a stop, never a suffix workaround. Transfer or
-   release requires explicit owner authorization, inspection of partial work and Git/provider
-   effects, preservation of history/work, and dependency revalidation. Retain shared, dirty, or
-   ambiguously owned workspaces. A local scan is not distributed exclusivity; concurrent
-   cross-clone claims/shipping are unsupported. Do not add a claim database, distributed lock, or
-   coordination service.
+1. **Detect map-aware mode and preserve existing bindings.** If the request points at a `.kepler/maps/<effort>/` folder containing `route.md`, resolve the canonical route under this project, require its file-scoped lint and route/body identity checks to pass, and read its synthesized body as the semantic handoff. Map-level `open`, `cleared`, `shipping`, or `shipped` status cannot replace this compiled route. Before selecting a unit, resolve any existing change's `proposal.md` and `plan.md` bindings through `kepler workbench context`. A nonzero route-conflict result stops. If `plan.md` exists, its `route_unit` owns the selection; any non-null proposal reference must match it, including when the plan reference is null. If no plan exists and the proposal has a non-null `route_unit`, preserve that proposal-bound unit while creating the plan. For an existing binding, resume that exact unit for its owning change; never replace it with another pending unit because the bound unit is already in progress or a later unit is pending. If the bound unit, owner, or claim cannot be verified, stop for owner adjudication. Only a new, unbound change selects the first `pending` unit in frontmatter order and derives its title from that unit's `name`. If that first pending unit is blocked, report the exact prerequisite and stop rather than selecting a later unit; a later-unit choice needs explicit owner authorization. If there is no pending unit, resume only an existing in-progress unit demonstrably owned by this change; otherwise stop without changing unit state. In every case, verify each selected unit dependency is `shipped` **and** reachable from the actual delivery base; if finished but unmerged, stop and ask the owner to merge it or deliberately branch from its work.
+2. **Resolve visible claims and source role before writes.** The designated user/controller serializes route-unit claims and delivery, with one owner per unit and one writer per change/worktree. Before creating/suffixing a workspace or changing a route unit, scan known change proposals/plans, local and visible remote branches, and `git worktree list --porcelain` for the canonical route/unit reference. Prefer resuming its owner; a competing or ambiguous claim requires owner-directed resume/transfer or a stop, never a suffix workaround. Transfer or release requires explicit owner authorization, inspection of partial work and Git/provider effects, preservation of history/work, and dependency revalidation. Retain shared, dirty, or ambiguously owned workspaces. A local scan is not distributed exclusivity; concurrent cross-clone claims/shipping are unsupported. Do not add a claim database, distributed lock, or coordination service.
 
-   Resolve the actual delivery target from route Shipping rules and the map's `branch:` (or the
-   project's explicit target rules for a non-route change). `isolate --check` reports workspace
-   shape only. Require a named source branch from `git symbolic-ref --quiet --short HEAD` and
-   verify normalized source/target branch identity through refs and configured local/remote
-   mapping, never tip SHAs. A detached linked worktree, non-default checkout, or `isolated: yes`
-   is insufficient. If the source is the target or identities are unresolved, stop for
-   owner-directed creation/switching and verify again before any plan, route, or code write.
-3. **Ensure an isolated workspace — then confirm you are inside it.** Run
-   `kepler workbench isolate --check`; its last line is only the workspace-shape result.
-   Once claim and target-role checks pass, `isolated: yes` permits use of that workspace; it does
-   not grant route or change ownership. `isolated: no` means derive a kebab-case title from the
-   change (its existing directory name, selected unit name, or the request on the minimal path)
-   and create one:
+   Resolve the actual delivery target from route Shipping rules and the map's `branch:` (or the project's explicit target rules for a non-route change). `isolate --check` reports workspace shape only. Require a named source branch from `git symbolic-ref --quiet --short HEAD` and verify normalized source/target branch identity through refs and configured local/remote mapping, never tip SHAs. A detached linked worktree, non-default checkout, or `isolated: yes` is insufficient. If the source is the target or identities are unresolved, stop for owner-directed creation/switching and verify again before any plan, route, or code write.
+3. **Ensure an isolated workspace — then confirm you are inside it.** Run `kepler workbench isolate --check`; its last line is only the workspace-shape result. Once claim and target-role checks pass, `isolated: yes` permits use of that workspace; it does not grant route or change ownership. `isolated: no` means derive a kebab-case title from the change (its existing directory name, selected unit name, or the request on the minimal path) and create one:
 
    ```bash
    kepler workbench isolate <title>   # last line: the new worktree's path
@@ -163,163 +76,29 @@ verification and another feedback pass. This handoff belongs to the driver, not 
    kepler workbench isolate --verify <title>
    ```
 
-   If create mode reports that `.worktrees/<title>` or branch `<title>` already exists, inspect
-   its owner and partial state. Resume only with that owner's authorization; never use a suffix to
-   bypass a visible claim. If the Kepler CLI is not installed (`kepler setup` has not run), create
-   or verify a named source branch only after the same ownership and target checks; workspace shape
-   can be inspected by hand if
-   `git rev-parse --git-dir` differs from `--git-common-dir` (a linked worktree, and you are not
-   in a submodule) or `git rev-parse --abbrev-ref HEAD` is not the default branch; otherwise
-   `git worktree add .worktrees/<title> -b <title>` under the git-ignored `.worktrees/`
-   directory, `cd` in, and confirm `git rev-parse --show-toplevel` ends in `.worktrees/<title>`.
+   If create mode reports that `.worktrees/<title>` or branch `<title>` already exists, inspect its owner and partial state. Resume only with that owner's authorization; never use a suffix to bypass a visible claim. If the Kepler CLI is not installed (`kepler setup` has not run), create or verify a named source branch only after the same ownership and target checks; workspace shape can be inspected by hand if `git rev-parse --git-dir` differs from `--git-common-dir` (a linked worktree, and you are not in a submodule) or `git rev-parse --abbrev-ref HEAD` is not the default branch; otherwise `git worktree add .worktrees/<title> -b <title>` under the git-ignored `.worktrees/` directory, `cd` in, and confirm `git rev-parse --show-toplevel` ends in `.worktrees/<title>`.
 
-   Creating the worktree does **not** move you into it — a fresh `git worktree add` leaves your
-   shell and every file tool rooted in the original checkout. You must `cd` into the worktree
-   and then **verify the switch took effect** before doing anything else. **Do not proceed to
-   step 4 until `--verify` succeeds.** If you skip this check you will silently plan and write on
-   the default branch — the exact failure this step exists to prevent.
+   Creating the worktree does **not** move you into it — a fresh `git worktree add` leaves your shell and every file tool rooted in the original checkout. You must `cd` into the worktree and then **verify the switch took effect** before doing anything else. **Do not proceed to step 4 until `--verify` succeeds.** If you skip this check you will silently plan and write on the default branch — the exact failure this step exists to prevent.
 
-   From here on, every path in this skill is relative to that worktree root: the change directory,
-   all code you explore, and `plan.md` are created **inside** `.worktrees/<title>/`, never in the
-   original checkout. When in doubt, use the absolute worktree path returned by
-   `git rev-parse --show-toplevel` as the base for file operations.
+   From here on, every path in this skill is relative to that worktree root: the change directory, all code you explore, and `plan.md` are created **inside** `.worktrees/<title>/`, never in the original checkout. When in doubt, use the absolute worktree path returned by `git rev-parse --show-toplevel` as the base for file operations.
 
 4. **Locate the change.** Find or create `.kepler/changes/<YYYY-MM-DD-title>/`.
-5. **Gather context.** When an existing plan is missing root progress or any initialized task
-   log, run read-only `kepler workbench context <change-dir>` before the normal existing-artifact
-   lint gate. Continue only if it reports `scaffold-recovery: eligible`; inspect the original
-   proof and every present file before writing. If the result is blocked, absent, malformed or
-   ambiguous, stop for owner evidence and preserve all files. Follow **Initial scaffold recovery**.
-   For a complete change directory, run normal scoped lint before interpreting its plan.
-   When the change directory already holds artifacts — the rich path, or a re-plan — open with
-   `kepler workbench context <change-dir>` to see which
-   exist, how large they are, and where the tasks and reviews stand, then read in full only what
-   it says is there. (If the Kepler CLI is not installed, list the directory instead.) On the minimal
-   path, where the directory is new and empty, skip straight to the reading.
-   Read upstream artifacts if present (proposal, design, requirements),
-   the canonical specs (`.kepler/specs/`) for the capabilities the change touches, and the
-   project standards (commands, structure, style, boundaries). In map-aware mode, read
-   the synthesized route body as the primary current context: Destination, Path chosen,
-   Shipping rules, and the selected unit's body, including its destination contribution,
-   goal, observable completion outcome, and binding constraints. Treat the destination and
-   those binding constraints as committed context while leaving implementation decomposition
-   to this planning step. Builder latitude may be resolved here only when the choice remains
-   local and cannot alter the destination; if the route cannot be satisfied, return to
-   Wayfinder rather than designing around the contradiction. If a `route_unit` field is
-   present in frontmatter, preserve it as the route path plus unit number and use it to
-   follow the selected unit's `backed_by` tickets for optional drill-down only. Ticket
-   Answers must not replace or require reconstruction of the destination from the
-   synthesized route.
-   In map-aware mode, preserve the selected route path and unit number in `route_unit`; it is
-   the provenance link finish-work uses to update the unit. Resolve proposal/plan bindings through
-   `kepler workbench context` and stop on a nonzero route-conflict result. The plan owns the
-   selected binding; any non-null proposal reference must agree, including when the plan reference
-   is null. A null proposal reference may accompany a valid planned binding. Preserve matching
-   legacy references, but never mix a modern null with a legacy body guess. Record the route-source
-   revision reported by context as the selection input, plus owner/change, named source branch,
-   actual target, and base/input revision in the existing Overview and dispatch handoff. The route
-   metadata is machine-readable frontmatter; the specs carry the conventions and decisions already
-   committed for those capabilities — follow them so the plan stays consistent. On the minimal
-   path, where no per-change `requirements/` exists, the specs are your primary source of existing
-   behavior; write a two-line why/what for the Overview.
+5. **Gather context.** If a plan exists, read its execution metadata first. Apply the read-only legacy note under **Plan format** before any re-plan, recovery or scaffold write. When an existing version 2 plan is missing root progress or any initialized task log, run read-only `kepler workbench context <change-dir>` before the normal existing-artifact lint gate. Continue only if it reports `scaffold-recovery: eligible`; inspect the original proof and every present file before writing. If the result is blocked, absent, malformed or ambiguous, stop for owner evidence and preserve all files. Follow **Initial scaffold recovery**. For a complete change directory, run normal scoped lint before interpreting its plan. When the change directory already holds artifacts — the rich path, or a re-plan — open with `kepler workbench context <change-dir>` to see which exist, how large they are, and where the tasks and reviews stand, then read in full only what it says is there. (If the Kepler CLI is not installed, list the directory instead.) On the minimal path, where the directory is new and empty, skip straight to the reading. Read upstream artifacts if present (proposal, design, requirements), the canonical specs (`.kepler/specs/`) for the capabilities the change touches, and the project standards (commands, structure, style, boundaries). In map-aware mode, read the synthesized route body as the primary current context: Destination, Path chosen, Shipping rules, and the selected unit's body, including its destination contribution, goal, observable completion outcome, and binding constraints. Treat the destination and those binding constraints as committed context while leaving implementation decomposition to this planning step. Builder latitude may be resolved here only when the choice remains local and cannot alter the destination; if the route cannot be satisfied, return to Wayfinder rather than designing around the contradiction. If a `route_unit` field is present in frontmatter, preserve it as the route path plus unit number and use it to follow the selected unit's `backed_by` tickets for optional drill-down only. Ticket Answers must not replace or require reconstruction of the destination from the synthesized route. In map-aware mode, preserve the selected route path and unit number in `route_unit`; it is the provenance link finish-work uses to update the unit. Resolve proposal/plan bindings through `kepler workbench context` and stop on a nonzero route-conflict result. The plan owns the selected binding; any non-null proposal reference must agree, including when the plan reference is null. A null proposal reference may accompany a valid planned binding. Preserve matching legacy references, but never mix a modern null with a legacy body guess. Record the route-source revision reported by context as the selection input, plus owner/change, named source branch, actual target, and base/input revision in the existing Overview and dispatch handoff. The route metadata is machine-readable frontmatter; the specs carry the conventions and decisions already committed for those capabilities — follow them so the plan stays consistent. On the minimal path, where no per-change `requirements/` exists, the specs are your primary source of existing behavior; summarize the why/what in two sentences in the Overview.
 
    Before decomposing, compare the requested behavior with the canonical specs and established domain, subdomain and bounded-context contracts. If it changes those contracts, go through `kepler-propose`'s main flow for approved proposal, requirements and design before continuing. Pass the existing change directory, affected capabilities, requested behavior and any route/source-revision binding; preserve ownership and history. Record a `Spec impact` decision in the plan `Overview`: either the approved `requirements/<capability>.md` deltas, or `no canonical behavior change` with its rationale. Internal implementation changes that preserve those contracts may stay on the minimal path; do not label changed behavior internal. If classification is unresolved, stop and ask the requester before finalizing the plan.
 
-   If `plan.md` exists and all initialized root/task paths are present, run
-   `kepler workbench lint --change-dir <change-dir>` before interpreting it or its linked artifacts.
-   For a missing initial path, use only the read-only `scaffold-recovery: eligible` result
-   described above, then run scoped lint after the complete recovered scaffold exists. Treat lint's
-   exit status as the single source
-   of truth for existing artifact format and schema; a successful lint must not be overridden
-   by a skill-specific layout or template comparison. On nonzero lint, report the findings
-   without mutating artifacts. Require the existing root ledger and task logs needed for
-   re-planning as inputs; name missing evidence separately, since lint does not check absent
-   files. A change without `plan.md` is pre-plan, not legacy.
-   For an existing plan, require every present formal proposal/design/requirements input to have
-   `status: approved`, `decision: accepted`, an exact `intent_approvals` entry with its owner-held
-   reference and full commit ID, and current bytes matching that committed revision. On first
-   planning, verify each input is explicitly approved and committed, obtain its requester-held
-   reference from the approved handoff, and record the path/reference/full commit in the new plan.
-   A lint-valid draft, template default, plan status, or `decision: accepted` alone does not
-   authorize formal intent. If approval is missing or stale, return to `kepler-propose`'s main flow.
-   Never approve formal intent during planning.
-   Tactical absence is valid only when domain, subdomain and bounded-context contracts remain unchanged. Authorized unattended planning may self-review the breakdown and
-   record assumptions but cannot manufacture formal approval.
-6. **Explore (read-only).** Map the files and modules involved, the patterns to follow,
-   and the test setup. Make no edits. Test each recalled decision against current source,
-   approved intent and standards. Carry only applicable constraints into the exact task that
-   needs them; record stale or conflicting advice as rejected context with its current-source
-   reason. Do not add abstractions for an inapplicable rubric principle.
-7. **Decompose.** Break the work into TDD-sized tasks and mark logical dependencies. Under v2, dependencies drive derived readiness and the coordinator dispatches only compatible ready work into isolated lanes. Historical serial mode remains one task lane in sequence.
-   For each task, put the applicable structural quality constraint and verified decision/source
-   in that task block, not only in Overview. If no relevant memory is available, state that and
-   use current repository context. A coder receives one task at a time and will not infer sibling
-   task constraints from plan-wide notes.
-   Prefer more small tasks over few large ones. Cut the seams along the design's boundaries so
-   each task lands one cohesive unit — a task you cannot describe without "and" is usually two.
-8. **Specify each task.** For every historical serial task capture complete Files (created /
-   modified / deleted), acceptance criteria (testable; cite the requirement scenario when one exists — and cover
-   the error/edge behavior, not just the happy path), Steps ordered Red → Green → Refactor
-   (or a technically justified alternative Red) followed by a Verify command with its expected
-   result, and a commit message. In Red, explicitly run the check and observe the intended failure before
-   production edits; in Green, rerun that check; in Refactor, rerun relevant tests after cleanup.
-   Include the correction rule from **TDD task contract** in each task block, since the coder reads
-   no sibling block or plan-wide instructions. For v2, capture Goal, Acceptance, Depends on, Steps,
-   Verify, and Commit; Files may be omitted or supplied as optional guidance. Where a step includes a code snippet, make it
-   model the clean shape from `references/code-quality.md`. In historical serial plans the coder
-   copies a binding snippet verbatim; in v2 it is a design/standards example under bounded judgment.
-9. **Confirm or auto-reflect.** If working with a person, present the task breakdown and
-   confirm it before finalizing. If running unattended with explicit authority to plan, self-review
-   against the checklist below and record assumptions inline in the plan. This approval covers only
-   the breakdown; it never creates approval for formal proposal/design/requirements inputs.
-10. **Write `plan.md` and initialize execution progress.** Instantiate the installed
-   `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/plan.md`, `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/progress.md`, and
-   `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/task-progress.md` templates as concrete cleaned artifacts: remove each
-   template's opening instruction block and every inline hint before writing it. For a new plan,
-   read the configured repository identity with `git config user.name` and `git config user.email`.
-   If either Git value is missing or an identity is unavailable, ask the user for it and stop;
-   do not invent or substitute an agent name, placeholder, or other identity. Populate `plan.md` frontmatter with
-   concrete `artifact`, `change`, `status`, `created`, `author`, `decision`, and `route_unit`
-   values, using `author: Name <email>` from both Git values and a valid lifecycle status. In
-   map-aware mode, resolve proposal/plan binding through context before writes and stop on conflict.
-   Record the canonical route and unit, owner/change, named source branch, actual delivery target,
-   base/input revision, and exact selected route-source revision in the existing plan Overview.
-   Before the first scaffold write, record the full current Git `HEAD` in `initialization.base`, an
-   explicit requester authority reference, the SHA-256 `taskBreakdownDigest`, and the original task IDs.
-   Preserve that initialization proof on every re-plan; it certifies only the initial breakdown.
-   An unattended self-review reference authorizes the planning breakdown only and cannot approve
-   formal proposal/design/requirements. On a re-plan, preserve the existing author exactly.
+   If `plan.md` exists and all initialized root/task paths are present, run `kepler workbench lint --change-dir <change-dir>` before interpreting it or its linked artifacts. For a missing initial path, use only the read-only `scaffold-recovery: eligible` result described above, then run scoped lint after the complete recovered scaffold exists. Treat lint's exit status as the single source of truth for existing artifact format and schema; a successful lint must not be overridden by a skill-specific layout or template comparison. On nonzero lint, report the findings without mutating artifacts. Require the existing root ledger and task logs needed for re-planning as inputs; name missing evidence separately, since lint does not check absent files. A change without `plan.md` is pre-plan, not legacy. For an existing plan, require every present formal proposal/design/requirements input to have `status: approved`, `decision: accepted`, an exact `intent_approvals` entry with its owner-held reference and full commit ID, and current bytes matching that committed revision. On first planning, verify each input is explicitly approved and committed, obtain its requester-held reference from the approved handoff, and record the path/reference/full commit in the new plan. A lint-valid draft, template default, plan status, or `decision: accepted` alone does not authorize formal intent. If approval is missing or stale, return to `kepler-propose`'s main flow. Never approve formal intent during planning. Tactical absence is valid only when domain, subdomain and bounded-context contracts remain unchanged. Authorized unattended planning may self-review the breakdown and record assumptions but cannot manufacture formal approval.
+6. **Explore (read-only).** Map the files and modules involved, the patterns to follow, and the test setup. Make no edits. Test each recalled decision against current source, approved intent and standards. Carry only applicable constraints into the exact task that needs them; record stale or conflicting advice as rejected context with its current-source reason. Do not add abstractions for an inapplicable rubric principle.
+7. **Decompose.** Break the work into TDD-sized tasks and mark logical dependencies. Dependencies drive derived readiness, and the coordinator dispatches only compatible ready work into isolated lanes. For each task, put the applicable structural quality constraint and verified decision/source in that task block, not only in Overview. If no relevant memory is available, state that and use current repository context. A coder receives one task at a time and will not infer sibling task constraints from plan-wide notes. Prefer more small tasks over few large ones. Cut the seams along the design's boundaries so each task lands one cohesive unit — a task you cannot describe without "and" is usually two.
+8. **Specify each task.** Capture Goal, Acceptance, Depends on, Steps, Verify and Commit; Files may be omitted or supplied as optional guidance. Make Acceptance testable, cite requirement scenarios when available, and cover errors and edge cases. Order Steps as Red → Green → Refactor (or a technically justified alternative Red), followed by targeted tests and fresh LSP diagnostics with explicit expected results. In Red, run the check and observe the intended failure before production edits; in Green, rerun that check; in Refactor, rerun relevant tests after cleanup. Include the correction rule from **TDD task contract** in each task block, since the coder reads no sibling block or plan-wide instructions. Code snippets illustrate design and standards under bounded judgment; model the clean shape from `references/code-quality.md`.
+9. **Confirm or auto-reflect.** If working with a person, present the task breakdown and confirm it before finalizing. If running unattended with explicit authority to plan, self-review against the checklist below and record assumptions inline in the plan. This approval covers only the breakdown; it never creates approval for formal proposal/design/requirements inputs.
+10. **Write `plan.md` and initialize execution progress.** Instantiate the installed `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/plan.md`, `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/progress.md`, and `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/task-progress.md` templates as concrete cleaned artifacts: remove each template's opening instruction block and every inline hint before writing it. For a new plan, read the configured repository identity with `git config user.name` and `git config user.email`. If either Git value is missing or an identity is unavailable, ask the user for it and stop; do not invent or substitute an agent name, placeholder, or other identity. Populate `plan.md` frontmatter with concrete `artifact`, `change`, `status`, `created`, `author`, `decision`, and `route_unit` values, using `author: Name <email>` from both Git values and a valid lifecycle status. Set `execution: {version: 2, mode: dependencies}`. In map-aware mode, resolve proposal/plan binding through context before writes and stop on conflict. Record the canonical route and unit, owner/change, named source branch, actual delivery target, base/input revision, and exact selected route-source revision in the existing plan Overview. Before the first scaffold write, record the full current Git `HEAD` in `initialization.base`, an explicit requester authority reference, the SHA-256 `taskBreakdownDigest`, and the original task IDs. Preserve that initialization proof on every re-plan; it certifies only the initial breakdown. An unattended self-review reference authorizes the planning breakdown only and cannot approve formal proposal/design/requirements. On a re-plan, preserve the existing author exactly.
 
-   Derive one ordered active-task list from the final plan and use that same ordered task list
-   for all three artifacts. Root `progress.md` frontmatter must contain concrete `artifact`, `change`, `status`,
-   `updated`, `decision`, and `tasks` values. Add one `tasks` metadata entry per active task in
-   numeric identity order with its numeric `id`, exact unescaped `title`, `status: pending`, and
-   `progress: tasks/task-N/progress.md`. The root Markdown table must contain exactly one row per
-   active task from that same ordered list, with columns `Task`, `Status`, and `Progress`; the
-   only status vocabulary is `pending`, `in-progress`, `blocked`, and `done`. Render each
-   identity as `Task N: <escaped display title>`, initialize it to `pending`, and use the
-   exact link `[details](tasks/task-N/progress.md)`. Apply standard Markdown table escaping to
-   display titles, including escaping `|` and other delimiters; identity is not derived from the title.
-   Derive the numeric identity and lowercase `task-N` directory from `Task N`, never from the title.
+   Derive one ordered active-task list from the final plan and use that same ordered task list for all three artifacts. Root `progress.md` frontmatter must contain concrete `artifact`, `change`, `status`, `updated`, `decision`, and `tasks` values. Add one `tasks` metadata entry per active task in numeric identity order with its numeric `id`, exact unescaped `title`, `status: pending`, and `progress: tasks/task-N/progress.md`. The root Markdown table must contain exactly one row per active task from that same ordered list, with columns `Task`, `Status`, and `Progress`; the only status vocabulary is `pending`, `in-progress`, `blocked`, and `done`. Render each identity as `Task N: <escaped display title>`, initialize it to `pending`, and use the exact link `[details](tasks/task-N/progress.md)`. Apply standard Markdown table escaping to display titles, including escaping `|` and other delimiters; identity is not derived from the title. Derive the numeric identity and lowercase `task-N` directory from `Task N`, never from the title.
 
-   Initialize each active `tasks/task-N/progress.md` from the cleaned task-progress template with
-   concrete `artifact`, `change`, numeric `task`, `status: pending`, `updated`, and `decision`
-   frontmatter, followed by the exact heading `# Task Progress: Task N — <title>` using the
-   unescaped title. Its creation portion must have matching change and task identities, no attempt
-   record (`## Attempt` or other execution-history record), and no template placeholder. Root progress
-   remains only the current task ledger: it contains no changed paths, commands, notes, attempts,
-   task feedback verdicts, whole-branch review summaries, or finish outcomes.
+   Initialize each active `tasks/task-N/progress.md` from the cleaned task-progress template with concrete `artifact`, `change`, numeric `task`, `status: pending`, `updated`, and `decision` frontmatter, followed by the exact heading `# Task Progress: Task N — <title>` using the unescaped title. Its creation portion must have matching change and task identities, no attempt record (`## Attempt` or other execution-history record), and no template placeholder. Root progress remains only the current task ledger: it contains no changed paths, commands, notes, attempts, task feedback verdicts, whole-branch review summaries, or finish outcomes.
 
-   After the complete scaffold of `plan.md`, root `progress.md`, and every active task log is
-   written, recheck the route-source revision and owner binding. For a new route claim, change only
-   the selected unit from `pending` to `in-progress`; resume an existing `in-progress` unit only
-   when its owner/change/branch match, and never reset a shipped unit. Update map status only as an
-   aggregate summary when its rule holds; contradictory state is a stop. After each route/map write,
-   run `kepler workbench lint --file <path>`, then run `kepler workbench lint --change-dir <change-dir>`.
-   Commit the matching route/map claim
-   with the complete change scaffold, then rerun context and include its exact route-source
-   revision in the handoff. Resolve every lint finding and rerun before handoff; do not invent an
-   attempt or otherwise mutate execution history to satisfy lint.
+   After the complete scaffold of `plan.md`, root `progress.md`, and every active task log is written, recheck the route-source revision and owner binding. For a new route claim, change only the selected unit from `pending` to `in-progress`; resume an existing `in-progress` unit only when its owner/change/branch match, and never reset a shipped unit. Update map status only as an aggregate summary when its rule holds; contradictory state is a stop. After each route/map write, run `kepler workbench lint --file <path>`, then run `kepler workbench lint --change-dir <change-dir>`. Commit the matching route/map claim with the complete change scaffold, then rerun context and include its exact route-source revision in the handoff. Resolve every lint finding and rerun before handoff; do not invent an attempt or otherwise mutate execution history to satisfy lint.
 
 ## Task-sizing heuristics
 
@@ -329,212 +108,74 @@ verification and another feedback pass. This handoff belongs to the driver, not 
 
 ## Re-plan mode
 
-When a plan defect surfaces mid-run — a mis-sliced task, a wrong step, a missing dependency —
-re-enter this skill in re-plan mode. Run the existing-artifact lint gate in Process step 5 before
-making changes. Do not reject a lint-valid artifact because it has additional frontmatter or
-body content. Read `plan.md` and the root `<change-dir>/progress.md` current-status table —
-`kepler workbench context <change-dir>` summarizes them in one call — and
-amend the plan without reading or rewriting sibling attempt histories.
+When a plan defect surfaces mid-run — a mis-sliced task, a wrong step, a missing dependency — re-enter this skill in re-plan mode for a version 2 plan only. Keep version 1 and unversioned plans read-only. Run the existing-artifact lint gate in Process step 5 before making changes. Do not reject a lint-valid artifact because it has additional frontmatter or body content. Read `plan.md` and the root `<change-dir>/progress.md` current-status table — `kepler workbench context <change-dir>` summarizes them in one call — and amend the plan without reading or rewriting sibling attempt histories.
 
-- Tasks the root ledger marks `done` are frozen: do not alter their task definition, title,
-  status row, identifier, link, directory, or task-local history.
-- Renumber nothing and never reuse an abandoned task id. Stable numeric task ids and
-  `tasks/task-N/` paths are the execution identity.
-- Preserve each surviving task's actual status in both the root frontmatter `tasks` metadata
-  entry and Markdown row, including frozen `done` tasks and existing non-done tasks. Keep their
-  exact numeric identity, title, link, directory, and append-only history.
-- Append each new active task with a new numeric id, add matching frontmatter metadata and root row
-  in amended plan order with status `pending`, and initialize its `tasks/task-N/progress.md` heading.
-  Give remediation tasks the same Red → Green → Refactor steps, exceptional Red rule, and feedback
-  handoff as ordinary tasks; an evidence-only task must observe a real pre-change defect, not
-  manufacture one.
-- Before renaming, inspect the assigned `tasks/task-N/feedback.md` path. If it exists, preserve
-  the task title, ID, path, task-progress heading and every feedback pass. Do not rewrite
-  reviewer-owned feedback. If a new identity is needed, explicitly abandon the unfinished task
-  with the canonical suffix and append a new max+1 ID, retaining all history. If feedback exists
-  but is incomplete or ambiguous, stop for owner diagnosis. Only a feedback-free non-done task may
-  use the existing synchronized rename transition; never rename a done task.
-- A renamed non-done task updates its root Markdown table display title with correct Markdown
-  escaping, while the exact unescaped title is written to its assigned root frontmatter metadata
-  entry, active plan heading, and task-progress heading. Preserve its current status in both root
-  representations, numeric id, exact path and link, and every existing append-only `## Attempt N`
-  block; leave done tasks byte-for-byte unchanged. After the complete amendment, run
-  `kepler workbench lint --change-dir <change-dir>`.
-- Preserve an existing plan's `author` attribution exactly across re-plans; do not replace it
-  with current Git values, an agent name, or a placeholder. If a new plan needs attribution and
-  either `git config user.name` or `git config user.email` is unavailable, ask the user instead of
-  inventing an identity.
-- Mark an abandoned task with the canonical heading
-  `### Task N: <title> (abandoned — <reason>)`. Only a heading that ends with this complete
-  canonical form and supplies a nonempty reason is abandoned. Headings that use
-  `(abandoned - reason)`, `(abandoned — )`, or `(abandoned — reason) trailing` do not match;
-  retain them as active unless lint rejects the plan. Remove an exactly abandoned task's row
-  from the active root table and retain its existing task directory and append-only history. Do not delete them or reuse the numeric id.
-- Do not make a new task edit a sibling's task progress, feedback, checkpoint, root metadata
-  entry, or status row. Each task owns only its listed implementation files and its own execution
-  evidence. If correcting a frozen task requires editing its owned evidence, report the
-  ownership conflict and stop for
-  adjudication instead of planning a task that `kepler-code` cannot execute.
-- Preserve all other existing task directories and append-only evidence, and record the reason
-  for the amendment in the plan's Overview.
+- Tasks the root ledger marks `done` are frozen: do not alter their task definition, title, status row, identifier, link, directory, or task-local history.
+- Renumber nothing and never reuse an abandoned task id. Stable numeric task ids and `tasks/task-N/` paths are the execution identity.
+- Preserve each surviving task's actual status in both the root frontmatter `tasks` metadata entry and Markdown row, including frozen `done` tasks and existing non-done tasks. Keep their exact numeric identity, title, link, directory, and append-only history.
+- Append each new active task with a new numeric id, add matching frontmatter metadata and root row in amended plan order with status `pending`, and initialize its `tasks/task-N/progress.md` heading. Give remediation tasks the same Red → Green → Refactor steps, exceptional Red rule, and feedback handoff as ordinary tasks; an evidence-only task must observe a real pre-change defect, not manufacture one.
+- Before renaming, inspect the assigned `tasks/task-N/feedback.md` path. If it exists, preserve the task title, ID, path, task-progress heading and every feedback pass. Do not rewrite reviewer-owned feedback. If a new identity is needed, explicitly abandon the unfinished task with the canonical suffix and append a new max+1 ID, retaining all history. If feedback exists but is incomplete or ambiguous, stop for owner diagnosis. Only a feedback-free non-done task may use the existing synchronized rename transition; never rename a done task.
+- A renamed non-done task updates its root Markdown table display title with correct Markdown escaping, while the exact unescaped title is written to its assigned root frontmatter metadata entry, active plan heading, and task-progress heading. Preserve its current status in both root representations, numeric id, exact path and link, and every existing append-only `## Attempt N` block; leave done tasks byte-for-byte unchanged. After the complete amendment, run `kepler workbench lint --change-dir <change-dir>`.
+- Preserve an existing plan's `author` attribution exactly across re-plans; do not replace it with current Git values, an agent name, or a placeholder. If a new plan needs attribution and either `git config user.name` or `git config user.email` is unavailable, ask the user instead of inventing an identity.
+- Mark an abandoned task with the canonical heading `### Task N: <title> (abandoned — <reason>)`. Only a heading that ends with this complete canonical form and supplies a nonempty reason is abandoned. Headings that use `(abandoned - reason)`, `(abandoned — )`, or `(abandoned — reason) trailing` do not match; retain them as active unless lint rejects the plan. Remove an exactly abandoned task's row from the active root table and retain its existing task directory and append-only history. Do not delete them or reuse the numeric id.
+- Do not make a new task edit a sibling's task progress, feedback, checkpoint, root metadata entry, or status row. Each task owns its goal-bounded implementation work and its own execution evidence; optional Files guidance does not authorize edits to sibling evidence. If correcting a frozen task requires editing its owned evidence, report the ownership conflict and stop for adjudication instead of planning a task that `kepler-code` cannot execute.
+- Preserve all other existing task directories and append-only evidence, and record the reason for the amendment in the plan's Overview.
 
-Re-plan mode is the one sanctioned way `plan.md` changes after coding begins; every other
-skill treats the plan as read-only.
+Re-plan mode is the one sanctioned way `plan.md` changes after coding begins; every other skill treats the plan as read-only.
 
 ## Input impact and task-local decision context
 
-At each planning handoff, capture the exact task definition and the selected relevant approved
-requirements/design/specs, route constraints, project standards and repository identity. Use
-`kepler workbench context <change-dir> --input <repository-relative-path>` for each selected input
-blob and record the resulting version-1 JSON handoff in that task's `Notes`: canonical repository
-identity, formal approval commit or explicit tactical authority reference, the task's SHA-256
-definition digest, selected input paths and full 40-hex Git blob IDs. Record an applicable `impactPlanCommit` only when that handoff is introduced by a committed input-impact plan. These hashes identify revisions; they do not judge semantic equivalence or authorize work.
+At each planning handoff, capture the exact task definition and the selected relevant approved requirements/design/specs, route constraints, project standards and repository identity. Use `kepler workbench context <change-dir> --input <repository-relative-path>` for each selected input blob and record the resulting version-1 input-context JSON handoff (a separate schema from the plan's execution version) in that task's `Notes`: canonical repository identity, formal approval commit or explicit tactical authority reference, the task's SHA-256 definition digest, selected input paths and full 40-hex Git blob IDs. Record an applicable `impactPlanCommit` only when that handoff is introduced by a committed input-impact plan. These hashes identify revisions; they do not judge semantic equivalence or authorize work.
 
-Before reusing prior tasks after a selected input changes, classify each change at the actual
-preceding plan revision. Record `input_impact` with prior/current blobs, affected unfinished
-tasks, unaffected tasks, new obligations, unresolved-intent state and a rationale. Require an
-independent review of the impact reasoning and preserve its owner-held reference; if no
-independent reviewer is available, stop before dispatch. Return unresolved formal intent to its
-owner. Revise affected unfinished work through planning, append new obligations under new IDs
-after frozen done tasks, and retain unaffected approvals and historical definitions. A completed
-task cannot be rewritten or reclassified as affected. Commit the impact classification first;
-then bind affected/new task Notes to that plan commit in a follow-up plan revision. Do not invent
-legacy snapshots or rerun unrelated tasks solely because an input blob changed.
+Before reusing prior tasks after a selected input changes, classify each change at the actual preceding plan revision. Record `input_impact` with prior/current blobs, affected unfinished tasks, unaffected tasks, new obligations, unresolved-intent state and a rationale. Require an independent review of the impact reasoning and preserve its owner-held reference; if no independent reviewer is available, stop before dispatch. Return unresolved formal intent to its owner. Revise affected unfinished work through planning, append new obligations under new IDs after frozen done tasks, and retain unaffected approvals and historical definitions. A completed task cannot be rewritten or reclassified as affected. Commit the impact classification first; then bind affected/new task Notes to that plan commit in a follow-up plan revision. Do not invent legacy snapshots or rerun unrelated tasks solely because an input blob changed.
 
-For a historical task whose versioned input provenance is genuinely absent, keep its existing task
-block, Notes, IDs, attempts, feedback, and approvals frozen. Never reconstruct historical hashes.
-Use a scoped current confirmation only when the committed plan at that task's implementation also
-has no versioned input context and the task definition is unchanged. Add one optional, version-1
-`legacy_input_confirmations` frontmatter record for that task, with its canonical repository path,
-current `taskDefinition` digest, current approved `intentCommit` (or `tactical:<ownerReference>`),
-selected current committed `inputs` and full Git blob IDs, `historicalInputs: "unknown"`, distinct
-`owner` and `reviewer` identities and references, and a concrete `rationale`. Capture each input
-with `kepler workbench context <change-dir> --input <repository-relative-path>`; require matching
-HEAD, index, and worktree bytes, and commit the confirmation in the plan authority. Context and the
-finish gate must report `legacy-current-confirmed` only while this exact scope remains current.
-These references are asserted evidence, not authentication or semantic review, and they waive no
-intent, task-feedback, whole-review, test, or finish gate. Missing, malformed, dirty, stale, mismatched,
-or unverifiable evidence stays held. If a known changed input affects a frozen task, append new
-obligations rather than confirming a rewritten task. Do not add this metadata to ordinary new plans.
+Within a version 2 plan, for a historical task whose versioned input provenance is genuinely absent, keep its existing task block, Notes, IDs, attempts, feedback, and approvals frozen. Never reconstruct historical hashes. Use a scoped current confirmation only when the committed plan at that task's implementation also has no versioned input context and the task definition is unchanged. Add one optional, version-1 `legacy_input_confirmations` frontmatter record for that task, with its canonical repository path, current `taskDefinition` digest, current approved `intentCommit` (or `tactical:<ownerReference>`), selected current committed `inputs` and full Git blob IDs, `historicalInputs: "unknown"`, distinct `owner` and `reviewer` identities and references, and a concrete `rationale`. Capture each input with `kepler workbench context <change-dir> --input <repository-relative-path>`; require matching HEAD, index, and worktree bytes, and commit the confirmation in the plan authority. Context and the finish gate must report `legacy-current-confirmed` only while this exact scope remains current. These references are asserted evidence, not authentication or semantic review, and they waive no intent, task-feedback, whole-review, test, or finish gate. Missing, malformed, dirty, stale, mismatched, or unverifiable evidence stays held. If a known changed input affects a frozen task, append new obligations rather than confirming a rewritten task. Do not add this metadata to ordinary new plans.
 
-Before code generation, its exact task block must carry concrete applicable quality constraints
-and their source, plus verified decision context or a reason it does not apply. Relevant memory,
-when available, must be checked against current source/approved intent; stale or conflicting
-advice is recorded as rejected context. Unavailable memory is non-fatal and does not replace
-repository-owned specs, standards or task constraints.
+Before code generation, its exact task block must carry concrete applicable quality constraints and their source, plus verified decision context or a reason it does not apply. Relevant memory, when available, must be checked against current source/approved intent; stale or conflicting advice is recorded as rejected context. Unavailable memory is non-fatal and does not replace repository-owned specs, standards or task constraints.
 
-## Serial execution order and prerequisite insertion
+## Prerequisite planning
 
-Use the serial `execution` metadata only when a newly discovered prerequisite cannot be completed
-within the existing plan order. First quiesce every current task writer. If the blocked task has
-partial production edits, do not dispatch another writer until its owner and requester authorize
-a scoped preservation/isolation method and a verifiable locator for restoration. Name the exact
-paths and method; verify the preserved bytes, do not stage or commit them, do not use a broad stash,
-and never discard them. If safe parking or restore authority is unavailable, stop for owner
-intervention. Reconcile the preserved work through its original task owner after the prerequisite
-clears, retaining the original task Base and history.
+A new task dependency requires owner-approved re-planning. Quiesce current task writers before amending the plan. If a blocked task has partial production edits, obtain its owner's and requester's approval for a scoped preservation method and a verifiable restoration locator before dispatching another writer. Name the paths and method, verify the preserved bytes, and do not stage, commit, broadly stash or discard them. If safe preservation or restoration authority is unavailable, stop for owner intervention. Reconcile the work through its original task owner after the prerequisite clears, retaining its original Base and history.
 
-Before adding `execution`, verify the installed context/lint reader supports it. Keep physical plan
-headings, task directories, root metadata/table rows and attempts in immutable numeric identity
-order. New task IDs are max+1; append the prerequisite's complete scope and initialize its own
-pending log. Preserve every old task definition/title/path/history and existing fully gated prefix.
-An authorized plan amendment records `execution: {version: 1, order: [1, 4, 2, 3]}` (or the actual
-validated serial sequence), `execution_transition` with the actual previous plan commit, previous
-order, derived fully-gated prefix, owner approval reference, reason and affected obligations, and
-the matching Overview evidence. Preserve surviving old IDs' relative order. Validate visible
-`Depends on` declarations against the schedule; all declared prerequisites must be active and
-earlier. Unknown versions, malformed explicit order, forward/cyclic dependencies and ambiguous
-prerequisites hold without numeric fallback. A genuine cycle returns to the owner. This is one
-serial lane, not a DAG or parallel scheduler.
+Keep `execution: {version: 2, mode: dependencies}`. Append prerequisites under new max+1 task IDs, initialize their pending logs, and declare their `Depends on` relationships. Follow the re-plan rules for affected unfinished tasks and preserve frozen definitions, approvals, initialization and history. Keep headings, directories and root-ledger rows in numeric identity order; scheduling follows dependencies, not that physical order. Reject missing prerequisites and cycles.
 
-When a changed input also requires input-impact classification, record the authorized input and
-execution transition together at the same actual preceding-plan boundary. Commit that amendment,
-then bind new/affected task handoffs to the introducing plan commit in a follow-up revision. Run
-context and scoped lint again; require `execution-history: verified` before dispatch. If the plan
-order, worker, branch or relevant repository identity changes after selection, invalidate the
-pending dispatch and recalculate from committed evidence.
-
-The driver selects the first task in the validated execution sequence that is not fully gated.
-Task status `done` alone is insufficient: every task still needs its latest durable fresh independent
-`approved` feedback before it or a later slot counts as gated. The predecessor is the prior sequence
-slot, not numeric ID N−1. Task 4 receives its own exact code/TDD/feedback cycle before Task 2 resumes;
-it cannot expand Task 2's Acceptance or Files, change Task 2's status, or approve Task 2. A direct
-human/code dispatch must obey the same authorized selected slot and preceding-gate contract.
+When inputs also change, apply the input-impact review and commit sequence above. Run scoped lint and derive readiness again through `kepler workbench context <change-dir>` before dispatch. Revalidate any pending dispatch when its task, inputs, worker, branch or repository identity changes. The coordinator admits compatible ready tasks; descendants stay held until their prerequisites have fresh approved feedback.
 
 ## Initial scaffold recovery
 
-Before first scaffold mutation, record the original full pre-scaffold `HEAD`, authorized breakdown
-digest/task IDs and owner authority in `plan.md` initialization proof. If interruption leaves any
-initial root or task file missing, distinguish recovery from re-plan and code. Run read-only
-`kepler workbench context <change-dir>` and proceed only when `scaffold-recovery: eligible`.
-Before writing, inspect that exact original revision, complete task definitions and IDs, and every
-present file. Inspect staged state as well as committed and working bytes. A staged scaffold, input, source or
-checkpoint path requires owner reconciliation; do not unstage it or overwrite it to obtain eligibility.
-Confirm all present state is pending and history-free, no attempt/feedback/checkpoint
-or task-owned work exists since the base, and no missing path has earlier execution-bearing history.
-Fill only missing files from the proven original task list; preserve every present byte, author and
-identity. If proof or a locator is unavailable, any task has begun, or deleted history is found,
-stop for owner diagnosis. Never synthesize an Attempt. Run full scoped lint on the complete scaffold
-and commit it before code dispatch. A truly empty new plan remains invalid; all-abandoned plans
-follow their separate existing path.
+For a version 2 plan, before first scaffold mutation, record the original full pre-scaffold `HEAD`, authorized breakdown digest/task IDs and owner authority in `plan.md` initialization proof. If interruption leaves any initial root or task file missing, distinguish recovery from re-plan and code. Run read-only `kepler workbench context <change-dir>` and proceed only when `scaffold-recovery: eligible`. Before writing, inspect that exact original revision, complete task definitions and IDs, and every present file. Inspect staged state as well as committed and working bytes. A staged scaffold, input, source or checkpoint path requires owner reconciliation; do not unstage it or overwrite it to obtain eligibility. Confirm all present state is pending and history-free, no attempt/feedback/checkpoint or task-owned work exists since the base, and no missing path has earlier execution-bearing history. Fill only missing files from the proven original task list; preserve every present byte, author and identity. If proof or a locator is unavailable, any task has begun, or deleted history is found, stop for owner diagnosis. Never synthesize an Attempt. Run full scoped lint on the complete scaffold and commit it before code dispatch. A truly empty new plan remains invalid; all-abandoned plans follow their separate existing path.
 
 ## Self-review
 
 Before finishing, confirm:
 
-- You are inside the intended worktree, not the default branch: `git rev-parse --show-toplevel`
-  ends in `.worktrees/<title>` (or you were legitimately working in place per step 3), and
-  `plan.md` was written under that root.
-- Every task is independently verifiable, with a concrete Verify command.
-- Each task's Steps run Red before production edits, rerun the same check to Green, and verify
-  behavior after Refactor. Any alternative Red has a concrete technical reason and repeatable
-  pre-change/post-change check; none is a preference-based omission.
-- Each task includes the conditional correction cycle and its own task-local phase evidence; no
-  task Step invokes `kepler-code-feedback` or edits sibling evidence. The driver obtains fresh
-  approval before advancing.
-- In historical serial plans, each task's Steps are explicit enough to follow with no further design,
-  and each Files list is complete (created / modified / deleted). In v2, Steps permit bounded
-  judgment within Goal, Acceptance, approved intent, design, and standards; Files is optional guidance rather than an allowlist.
+- You are inside the intended worktree, not the default branch: `git rev-parse --show-toplevel` ends in `.worktrees/<title>` (or you were legitimately working in place per step 3), and `plan.md` was written under that root.
+- The plan declares `execution: {version: 2, mode: dependencies}`; no legacy plan or its execution evidence was modified.
+- Every task is independently verifiable through tests scoped to changed files and affected behavior, plus fresh LSP diagnostics with no errors. Full-suite tests and full builds are deferred.
+- Each task's Steps run Red before production edits, rerun the same check to Green, and verify behavior after Refactor. Any alternative Red has a concrete technical reason and repeatable pre-change/post-change check; none is a preference-based omission.
+- Each task includes the conditional correction cycle and its own task-local phase evidence; no task Step invokes `kepler-code-feedback` or edits sibling evidence. The driver obtains fresh approval before dependent work advances.
+- Steps permit bounded judgment within Goal, Acceptance, approved intent, design and standards; Files is optional guidance rather than an allowlist.
 - Each acceptance criterion ties to a requirement scenario where one exists.
 - Dependencies are correct and acyclic.
-- The task seams follow the design's boundaries; no task bundles unrelated changes, and each
-  lands a unit that can be tested in isolation (`references/code-quality.md`, proportional to
-  the change).
-- Any code snippet in a task models the clean shape. In historical serial plans it is copied
-  verbatim; in v2 it is a design/standards example under bounded judgment.
-- "Done when" requires all tasks `done`, tests and build passing, fresh committed `approved`
-  feedback for every task before advancement, and an approved whole-branch review.
-- Root progress has exactly one correctly ordered row per active task, uses only `pending`,
-  `in-progress`, `blocked`, and `done`, and every link resolves to an initialized task progress
-  file.
+- The task seams follow the design's boundaries; no task bundles unrelated changes, and each lands a unit that can be tested in isolation (`references/code-quality.md`, proportional to the change).
+- Code snippets model the clean shape as design/standards examples under bounded judgment.
+- "Done when" requires all tasks `done`, related tests passing, no LSP errors in the affected scope, fresh committed `approved` feedback for every task before dependent work advances, and an approved whole-branch review. Leave full-suite tests and full builds to later workflow stages.
+- Root progress has exactly one correctly ordered row per active task, uses only `pending`, `in-progress`, `blocked`, and `done`, and every link resolves to an initialized task progress file.
 - Display titles are Markdown-escaped, while numeric ids and `tasks/task-N/` paths remain stable.
 
-**Blocking.** For a non-trivial change — one that adds or restructures units, not a mechanical
-or single-file edit — do not finalize `plan.md` while a task carries an unresolved structural
-smell (bundles unrelated changes, cannot be tested in isolation, or embeds a snippet with a
-shortcut the coder will copy). Re-slice the tasks, or record a deliberate exception in the
-plan's **Quality notes** (Overview). Historical serial coders add no design of their own; v2
-coders use bounded judgment only within Goal, Acceptance, approved intent, design, and standards.
+**Blocking.** For a non-trivial change — one that adds or restructures units, not a mechanical or single-file edit — do not finalize `plan.md` while a task carries an unresolved structural smell (bundles unrelated changes, cannot be tested in isolation, or embeds a snippet with a shortcut the coder will copy). Re-slice the tasks, or record a deliberate exception in the plan's **Quality notes** (Overview). Coders use bounded judgment only within Goal, Acceptance, approved intent, design and standards.
 
 ## Output
 
-`.kepler/changes/<change>/plan.md`, `<change-dir>/progress.md`, and one initialized
-`<change-dir>/tasks/task-N/progress.md` per active task, following the installed plan, root
-progress, and task-progress templates. Re-plan reconciles those artifacts without rewriting
-done tasks or append-only attempt history.
+`.kepler/changes/<change>/plan.md`, `<change-dir>/progress.md`, and one initialized `<change-dir>/tasks/task-N/progress.md` per active task, following the installed plan, root progress, and task-progress templates. Re-plan reconciles those artifacts without rewriting done tasks or append-only attempt history.
 
 ## Handoff
 
 Close by orienting the user, not by silently stopping.
 
-- **Disclose the workspace.** If step 3 created a worktree for this change, state its path
-  (`.worktrees/<title>`) and branch — `plan.md`, and all the code to come, live there, not in
-  the original checkout. If you were already isolated and worked in place, name that branch.
-- **Name the next step.** `plan.md` is the handoff contract; what follows is `kepler-code`
-  (one task at a time) or `kepler-orchestrate` (the whole plan in one session).
-- **Hand back the decision.** Working with a person, ask whether to proceed to implementation
-  rather than declaring you are "ready" — and never invoke the next skill yourself. Running
-  unattended, name the next step and return without asking; the driver owns the loop.
+- **Disclose the workspace.** If step 3 created a worktree for this change, state its path (`.worktrees/<title>`) and branch — `plan.md`, and all the code to come, live there, not in the original checkout. If you were already isolated and worked in place, name that branch.
+- **Name the next step.** `plan.md` is the handoff contract; what follows is `kepler-code` (one task at a time) or `kepler-orchestrate` (the whole plan in one session).
+- **Hand back the decision.** Working with a person, ask whether to proceed to implementation rather than declaring you are "ready" — and never invoke the next skill yourself. Running unattended, name the next step and return without asking; the driver owns the loop.
 
 ## Process flow
 
@@ -566,10 +207,8 @@ digraph kepler_plan {
 }
 ```
 
-## Dependency-mode planning
+## Readiness and scope reservations
 
-New plans use `execution: {version: 2, mode: dependencies}`. Every active task has Goal, Acceptance, explicit `Depends on`, Steps, Verify and Commit; Files is optional guidance, not an allowlist. The coder may inspect and edit goal-serving unlisted paths when they remain within approved intent, binding design, standards and Acceptance. Red, Green and Refactor remain ordered and several related cycles may serve one coherent goal.
-
-Derive readiness with `kepler workbench context <change-dir>`; it is a verified ready, fullyGated or held projection, not scheduling authority. Preserve unversioned numeric serial plans and `execution: {version: 1, order: [...]}` as legacy serial modes. Never convert a frozen plan, its initialization, approval, task definitions or history to version 2.
+Derive readiness with `kepler workbench context <change-dir>`; its verified ready, fullyGated or held projection informs coordinator admission but does not authorize scheduling on its own.
 
 A new prerequisite needs an immutable task-local `scope_expansions` reservation before production edits: at most two lifetime reservations and at most four concrete implementation, test or documentation paths each. It records id, attempt, prerequisite, necessity, evidence, paths and verify. Retries, abandonment and corrections do not refund it. A third reservation, more paths, new dependency, public contract or security-policy change is blocked for owner-approved re-planning.

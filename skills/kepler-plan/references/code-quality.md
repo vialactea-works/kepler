@@ -2,7 +2,7 @@
 
 A self-review rubric for **design and planning altitude** — the point where code
 quality is actually decided. The structure a design commits to, and the way a plan slices
-and sketches the work, constrain every later implementation. Binding design and standards remain authoritative, while dependency-mode v2 workers use bounded judgment to meet Goal and Acceptance rather than merely transcribing snippets; historical serial tasks retain their verbatim Steps contract. Catching a structural defect at review means paying to refactor code that already exists.
+and sketches the work, constrain every later implementation. Binding design and standards remain authoritative. Workers use bounded judgment to meet Goal and Acceptance rather than merely transcribing snippets. Catching a structural defect at review means paying to refactor code that already exists.
 Fix it here instead.
 
 ## How to use this
