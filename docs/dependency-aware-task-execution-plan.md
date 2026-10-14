@@ -309,7 +309,7 @@ Required cases:
 9. Every outcome-table row, including unavailable responses with recoverable artifacts and contradictory terminal evidence.
 10. Whole review and finish remain closed until all active tasks are fully gated.
 
-After approval, exercise representative skills with real agents in disposable repositories. Static wording tests do not prove worker behavior or parallel safety. Append new cases to `tests/skills/change-state-machine-scenarios.md` without changing historical scenario results.
+After approval, exercise representative skills with real agents in disposable repositories. Static wording checks do not prove worker behavior or parallel safety. Record only observed results from those runs; do not treat Markdown checklists as tests.
 
 Final gates: `bun --bun vitest run` and `bun run build`.
 

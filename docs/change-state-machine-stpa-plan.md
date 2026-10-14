@@ -1760,9 +1760,8 @@ evidence and labels whole-review range freshness as clearance-unverified. Initia
 also refuses staged evidence. Copyedited planning, orchestration, finish and template wording matches
 these boundaries.
 
-A10 now has [an opt-in T1–T39 checklist](../tests/skills/change-state-machine-scenarios.md), including
-fixture isolation, retained signing, resource/model/harness identity, dispatch and artifact observations,
-negative controls, provider evidence and cleanup ownership. Its rows remain `not-run`.
+A10 keeps native actor evaluation separate from mechanical checks. Selected cases require approval,
+and each case remains unverified until its behavior is directly observed.
 At the user's direction, no broad smoke/full suite, skill behavior/contract validation, native
 lifecycle evaluation, compiled repair replay or provider scenario was executed.
 

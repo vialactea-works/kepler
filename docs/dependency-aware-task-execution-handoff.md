@@ -173,7 +173,8 @@ The diff package at the recorded Head covers committed files, not the uncommitte
 Read-only checks confirmed:
 
 - 432 protected paths match Task 6's original Base.
-- The historical scenario prefix remains exactly 16,627 bytes.
+- At handoff, the historical scenario prefix measured exactly 16,627 bytes. The checklist was later
+  removed at the user's request.
 - All 17 previously bound non-metadata Task 6 paths still match their snapshot.
 - Task 6's ignored Base remains unchanged.
 
@@ -218,7 +219,7 @@ Preserve the committed Attempt 1 body; correct claims explicitly in append-only 
 - Approved plan and requirements: `<change-dir>/plan.md`, `<change-dir>/requirements/`
 - Task claims/history: `<change-dir>/tasks/task-6/progress.md`
 - Native evidence: `tests/skills/dependency-execution-scenarios.md`
-- Historical append-only scenario record: `tests/skills/change-state-machine-scenarios.md`
+- Scenario coverage: [STPA plan §8](change-state-machine-stpa-plan.md#8-cross-component-regression-matrix)
 
 ### Local recovery data
 

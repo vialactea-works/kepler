@@ -21,7 +21,7 @@ the current inventory supersedes their missing-implementation and current-checko
 | A7 | Journaled Attempt before effects, separate artifact-only pairs, immutable history, original admission revalidation, linked repair and changed retry evidence. |
 | A8 | Historical canonical shipping qualification, paired-delivery compatibility, exact named route/map effects and sibling preservation. |
 | A9 | Required full target ref and actual merge-base scope in ordinary admission; historical target for repair. |
-| A10 | Focused mechanical regressions and the opt-in T1–T39 checklist at `tests/skills/change-state-machine-scenarios.md`; execution remains deliberately deferred. |
+| A10 | Focused mechanical regressions; native actor evaluation remains separate and requires approval for selected cases. |
 | A11 | Revision-bound formal approval and critique disposition; tactical absence does not invent formal approval. |
 | A12 | Feedback-bearing identity freeze, immutable done history and abandon-plus-new-ID planning rules. |
 | A13 | Original pending/history-free initialization proof and missing-path-only recovery; staged scaffold/input/source/checkpoint state now holds for its owner. |

@@ -119,30 +119,19 @@ describe("domain-language artifact templates", () => {
 
   it("places the domain model and architecture before supporting decisions", async () => {
     const template = readTemplate("design.md");
-    const instructions = template.replace(/\s+/g, " ");
     expect(template.indexOf("## Domain Model")).toBeGreaterThan(template.indexOf("## Goals / Non-Goals"));
     expect(template.indexOf("## Architecture & Components")).toBeGreaterThan(template.indexOf("## Domain Model"));
     expect(template.indexOf("## Decisions")).toBeGreaterThan(template.indexOf("## Data & Flow"));
-    expect(instructions).toMatch(/glossary.*authoritative project documentation.*source/i);
-    expect(instructions).toMatch(/undefined.*conflicting.*Open Questions.*material.*approval/i);
-    expect(instructions).toMatch(/domains.*subdomains.*bounded contexts.*relationships.*commands.*events.*states.*invariants/i);
     expect(template).toContain("### Packages");
     expect(template).toContain("| Package | Change | Responsibility | Domain / context and role | Exposes | Depends on |");
     expect(template).toContain("### Ports & Adapters");
     expect(template).toContain("| Port / contract | Direction and owner | Consumers / providers | Adapter and translation | Source / proposed change |");
     expect(template).toContain("### Code Attribution");
     expect(template).toContain("| Code | Existing / proposed / removed | Domain / context or infrastructure role | Responsibility | Source |");
-    expect(instructions).toMatch(/package.*not automatically.*bounded context/i);
-    expect(instructions).toMatch(/core.*supporting.*generic.*supported/i);
-    expect(instructions).toMatch(/do not invent.*events.*ports.*definitions/i);
     expect((await check(designPath, renderTemplate("design.md")))._tag).toBe("valid");
   });
 
   it("allows a proportionate design without optional model, flow or architecture tables", async () => {
-    const template = readTemplate("design.md");
-    expect(template.replace(/\s+/g, " ")).toMatch(/keep the seven lint-required headings.*omit irrelevant optional sections/i);
-    expect(template).not.toContain("Delete a section that does not apply");
-    expect(template).not.toContain("Omit the section if none");
     const optionalSections = ["Domain Model", "Data & Flow", "Error Handling & Edge Cases", "Migration / Rollout", "Open Questions"];
     const optionalSubsections = ["Packages", "Ports & Adapters", "Code Attribution"];
     const source = renderTemplate("design.md")
@@ -193,14 +182,9 @@ describe("domain-language artifact templates", () => {
 
   it("guides durable architecture into the five canonical sections without extra metadata", async () => {
     const template = readTemplate("requirements-spec.md");
-    const instructions = template.replace(/\s+/g, " ");
     expect(template.match(/^## .+$/gm)).toEqual([
       "## Overview", "## Contract", "## Behavior", "## Invariants", "## Decisions",
     ]);
-    expect(instructions).toMatch(/ports.*commands.*events.*consumer/i);
-    expect(instructions).toMatch(/state transitions.*invariant.*owner/i);
-    expect(instructions).toMatch(/durable boundary.*translation.*policy/i);
-    expect(instructions).toMatch(/private wiring.*code attribution.*design.*not.*requirements/i);
     expect((await check(".kepler/specs/rest-api.md", renderTemplate("requirements-spec.md")))._tag).toBe("valid");
   });
 

@@ -65,7 +65,6 @@ describe("workbench documentation", () => {
 
   it("records native dependency outcomes separately from static controls", () => {
     const nativeEvidence = readFileSync(resolve(root, "tests/skills/dependency-execution-scenarios.md"), "utf8");
-    const checklist = readFileSync(resolve(root, "tests/skills/change-state-machine-scenarios.md"), "utf8");
 
     expect(nativeEvidence).toMatch(/three native outcomes/i);
     expect(nativeEvidence).toMatch(/\| Case \/ Goal binding \| Native session and runs \|/);
@@ -85,8 +84,6 @@ describe("workbench documentation", () => {
     expect(nativeEvidence).toMatch(/bun tooling\/verify\.ts && bun --bun vitest run && bun --bun tsc --noEmit/);
     expect(nativeEvidence).toMatch(/kepler workbench task-state --reserve/);
     expect(nativeEvidence).toMatch(/static.*not native proof/i);
-    expect(checklist).toMatch(/2026-10-13 actual native observations/i);
-    expect(checklist).toMatch(/does not backfill/i);
   });
 
   it("describes setup without installing helper scripts", () => {
