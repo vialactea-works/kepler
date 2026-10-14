@@ -12,22 +12,25 @@ tasks:
 ---
 
 <!--
-  Progress — root task index for a change.
-  Produced by: kepler-plan (step 2); legacy serial root rows are updated by kepler-code; dependency-mode root publication is coordinator-owned.
+  Progress: root task index for a change.
+  Produced by: kepler-plan (step 2). kepler-code updates legacy serial root rows;
+  the coordinator publishes dependency-mode root state.
   Lives at: .kepler/changes/<change>/progress.md
-  Detailed execution history belongs in each linked task progress artifact.
+  Keep detailed execution history in the linked task progress files.
   Allowed task statuses: pending | in-progress | blocked | done
-  Root `status: complete` means all active implementation rows are done; it does not
-  mean task feedback, whole-branch review, or finish-work passed.
+  Root `status: complete` means all active implementation rows are done.
+  It does not establish that task feedback, whole-branch review or finish-work passed.
   Delete this instruction block and every inline hint before finalizing.
 -->
 
 # Progress: <Change Title>
 
 <!-- Add one `tasks` frontmatter entry and one matching row per active task in numeric identity order.
-     Omit admission on pending scaffolds. Only the guarded coordinator operation adds a valid version-1 admission object with the exact fields in task-admission.ts; a template example is not authority. The orchestrator's optional execution sequence is separate from this ledger's physical order.
-     Escape `|` in display titles as `\|`. The frontmatter and table must match exactly;
-     task details remain in linked files. -->
+     Omit admission on pending scaffolds. Only the guarded coordinator operation may add a version-1
+     admission object with the exact fields in task-admission.ts; a template example grants no authority.
+     The orchestrator's optional execution sequence does not change this ledger's physical order.
+     Escape `|` in display titles as `\|`. The frontmatter and table must describe exactly the same tasks and values,
+     accounting for display escaping. Keep task details in the linked files. -->
 
 | Task | Status | Progress |
 | --- | --- | --- |

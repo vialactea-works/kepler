@@ -17,30 +17,30 @@ initialization:
 ---
 
 <!--
-  Plan — implementation ledger / "Steps"
+  Plan: implementation ledger / "Steps"
   Produced by: kepler-plan (step 2 of the seven-stage pipeline). Lives at:
   .kepler/changes/<change>/plan.md
-  REQUIRED artifact — the one document every change has. It is the handoff contract
-  between planning and coding, for a human OR a Kepler agent.
+  Required for every change. This is the handoff contract between planning and coding,
+  whether a person or a Kepler agent implements the tasks.
   Write and edit only execution version 2 plans. Version 1 and unversioned plans are read-only
   context; do not rewrite them with this template. initialization.version describes its own
   proof schema and remains 1; it is not the plan's execution version.
 
   Consumption contract:
-    - kepler-code (step 3) consumes ONE assigned task's block and its cited constraints; it must not inspect sibling details. Independent ready tasks may use isolated lanes, while each worker remains scoped to its own task evidence. Keep each task self-contained.
+    - kepler-code (step 3) reads one assigned task block and its cited constraints, never sibling details. Keep each task self-contained. Independent ready tasks may run in isolated lanes; each worker owns only its task evidence.
     - kepler-plan initializes the root task index in progress.md and each task's
       tasks/task-N/progress.md. The worker writes task-local evidence and its original commit only;
-      the coordinator owns actual guarded root publication. kepler-code-feedback (step 4) owns
+      the coordinator publishes root state through guarded operations. kepler-code-feedback (step 4) owns
       tasks/task-N/feedback.md.
     - Obtain `taskDefinitionDigest`, `taskBreakdownDigest`, recorded input context and current
       input probes from `kepler workbench context`; definition/breakdown digests use lowercase 64-hex SHA-256.
       Git commits and blobs, including `initialization.base` and input blob IDs,
-      remain 40-hex IDs. Preserve the original `initialization.breakdown` on re-plan; it
-      describes the initial authorized snapshot and is checked against that historical plan.
+      remain 40-hex IDs. Preserve `initialization.breakdown` on re-plan; it identifies the
+      initial authorized snapshot and is verified against that plan revision.
       `intent_approvals` binds each present formal input's exact repository-relative path, owner-held
       approval reference and full commit. `initialization` captures the original pre-scaffold base,
       explicit planning authority, task-breakdown digest and original IDs; keep it unchanged on re-plan.
-    - Optional `input_impact` and `legacy_input_confirmations` metadata are omitted unless an
+    - Omit optional `input_impact` and `legacy_input_confirmations` metadata unless an
       authorized revision needs them. Input-impact records bind changed input blobs, affected,
       unaffected and new task IDs, unresolved-intent state, rationale, previous plan commit and
       independent-review reference. Keep execution: {version: 2, mode: dependencies}; express
@@ -52,38 +52,33 @@ initialization:
       they do not reconstruct history or waive gates. See kepler-plan for the schema and admission rules.
     - kepler-review (step 5) owns the whole-branch review.md after all task feedback;
       kepler-finish-work (step 6) owns finish.md.
-    - Each task carries Goal, Acceptance, Depends on, Steps, Verify and Commit; Files is optional guidance, not an allowlist. Binding intent, cited design/requirements and standards bound implementation; necessary goal-serving unlisted edits are permitted. Each task is a TDD-sized unit with related Red → Green → Refactor cycles. Specify and execute Red before production edits,
-      Green on the same check, and behavior-preserving Refactor with relevant tests afterward.
+    - Each task carries Goal, Acceptance, Depends on, Steps, Verify and Commit; Files is optional guidance, not an allowlist. Approved intent, cited design and requirements, and project standards constrain implementation. Necessary goal-serving edits to unlisted paths are permitted. Keep each task TDD-sized, with related Red → Green → Refactor cycles. Run Red before production edits,
+      rerun the same check for Green, and verify behavior after Refactor.
       After Refactor, run only tests related to changed files and affected behavior, then obtain fresh
       LSP diagnostics for changed files and affected dependents. Require no errors; unavailable or stale
       diagnostics are not a clean result. Defer full-suite tests and full builds to later workflow stages.
       Record exact commands, diagnostic scope and observed results in task-local progress. "Build authentication"
       is too big; "add a user-registration endpoint that validates email format" is right.
-    - When a conventional failing behavioral check is technically impossible, the task's Red
-      step must give the concrete reason and a repeatable alternative verification that
-      distinguishes pre-change and post-change behavior before production edits. Preference
-      alone is not an exception. A no-op cleanup still gets a documented Refactor check.
+    - If a conventional failing behavioral check is technically impossible, explain why in Red
+      and specify a repeatable alternative that distinguishes pre-change and post-change behavior.
+      Run it before production edits. Preference alone does not justify an exception.
+      Document the Refactor check even when no cleanup is needed.
     - `kepler-code-feedback` supplies the refactor-phase review after the implementation
       commit; the task Steps must not invoke it. Requested changes return the same task to a
       verified Red → Green → Refactor correction cycle, not a new task by default.
-    - Reference upstream artifacts (design.md, requirements/) — do not copy them. Even
-      when the pipeline starts at this step, plan.md still lives in a change directory;
-      if there are no upstream docs, state the minimal why/what inline.
-    - Detail scales to risk and executor: include code or exact commands when they remove
-      ambiguity; otherwise state intent and let the coder think. Do not pre-write the
-      whole diff. Any snippet is a design/standards example under bounded judgment. Always model the clean shape
-      (cohesive, testable, no shortcut), never a throwaway.
-    - Task seams follow the design's structure: each task lands one cohesive unit that can be
-      tested in isolation, and its acceptance covers the error/edge behavior, not just the
-      happy path. A task you cannot state without "and" is usually two.
-  The initial `status: draft` and `decision: skipped` are placeholders, never approval. An attended
-  requester may confirm this plan's breakdown; an explicitly authorized unattended planner may
-  self-review it and record assumptions, but neither plan status nor decision approves formal intent.
-  Before creating this artifact, read the configured Git identity with `git config user.name` and
-  `git config user.email`, then write `author: Name <email>` using both configured values. If either
-  configured value is missing, ask the user or stop with a blocker rather than inventing an identity.
-  When revising an existing artifact, preserve its recorded author unless the user explicitly directs
-  an attribution change.
+    - Reference design.md and requirements/ rather than copying them. Keep plan.md in a change
+      directory even when the pipeline starts here. If upstream artifacts are absent, state the why/what inline.
+    - Scale detail to risk and executor. Include code or exact commands to resolve ambiguity;
+      otherwise state intent and leave implementation judgment to the coder. Do not pre-write the diff.
+      Snippets illustrate design and standards; keep them cohesive and testable, without shortcuts.
+    - Follow the design's boundaries: each task delivers one cohesive, independently testable unit.
+      Acceptance covers success, errors and edge cases. A task that needs "and" in its title is usually two.
+  Initial `status: draft` and `decision: skipped` values do not establish approval. The requester
+  may confirm the breakdown, or an explicitly authorized unattended planner may self-review it
+  and record assumptions. Neither plan status nor decision approves formal intent.
+  Before creating this artifact, read `git config user.name` and `git config user.email`.
+  Use both values in `author: Name <email>`. If either is missing, ask the user or stop;
+  never invent an identity. Preserve existing author attribution unless the user directs a change.
   Delete this comment block and inline hints before finalizing.
 -->
 
@@ -98,25 +93,19 @@ initialization:
 - Related tests: `<commands scoped to changed files and affected behavior>`
 - LSP diagnostics: <tool and affected-file scope; refresh diagnostics and require no errors>
 - Deferred verification: full-suite tests and full builds run in later workflow stages.
-- Context notes: <only the relevant slice — key constraints, files, patterns. Reference
-  AGENTS.md / design.md instead of duplicating them.>
-- Quality notes: <how the task breakdown preserves the design's structure, and any
-  structural smell accepted on purpose (with why). One line, or "none" for a trivial change.
-  This is the plan's blocking record — an unresolved smell that is neither re-sliced away nor
-  recorded here fails the self-review.>
-- Intent approvals: <for every formal artifact, exact requester-held approval reference and
-  full committed approved-input revision; omit when this is a tactical change with no formal
-  artifacts. These are recorded assertions, not authenticated authority.>
+- Context notes: <relevant constraints, files and patterns; reference AGENTS.md and design.md rather than duplicating them>
+- Quality notes: <how the tasks preserve the design's structure; any accepted structural smell and its reason. One line or "none" suffices for a trivial change. A smell that is neither fixed by re-slicing nor recorded here fails self-review.>
+- Intent approvals: <each formal artifact's exact requester-held approval reference and full approved-input commit; omit for tactical changes with no formal artifacts. These references record asserted approval, not authenticated authority.>
 <!-- Omit the following two fields unless input_impact is present; copy the exact metadata values. -->
 - Input impact review: <exact input_impact.reviewReference>
 - Input impact previous plan: <exact full input_impact.previousPlanCommit>
 
 ## Tasks
 
-<!-- Numbered for stable identity (kepler-code is pointed at "Task 3"). Keep headings, task
-     directories and both root-ledger representations in numeric identity order. "Depends on"
-     expresses logical prerequisites. Context derives ready/held/fully-gated tasks; coordinator
-     admission governs compatible isolated lanes. Numeric IDs identify tasks, not their execution order. -->
+<!-- Number tasks for stable identity, such as "Task 3". Keep headings, directories and both
+     root-ledger representations in numeric identity order. Declare prerequisites in "Depends on".
+     Context derives ready/held/fully-gated states; the coordinator admits compatible isolated lanes.
+     Numeric IDs identify tasks, not their execution order. -->
 
 ### Task 1: <imperative title>
 
@@ -158,11 +147,10 @@ initialization:
 
 ## Done when
 
-<!-- Plan-level definition of done — checked by kepler-finish-work.
-     Task completion is tracked by the root progress.md index and each linked task log,
-     not on the tasks here. -->
+<!-- kepler-finish-work checks this plan-level definition of done.
+     Track task completion in root progress.md and each linked task log, not in these task blocks. -->
 
-- Every active task has worker-owned task-local Red, Green and Refactor evidence (or justified alternative Red), an integrated original task commit and coordinator-published completion.
+- Every active task has worker-recorded Red, Green and Refactor evidence (or a justified alternative Red) in its task log, an integrated original task commit and coordinator-published completion.
 - Each task has fresh committed independent `approved` feedback before it is fully gated. Ready is not admitted and root done is not cleared; compatible isolated ready lanes may overlap, but descendants remain held until prerequisite approval. `changes-requested` returns the same task for correction and another pass.
 - Tests related to changed files and affected behavior pass; fresh LSP diagnostics report no errors in the affected scope. Full-suite tests and full builds remain deferred to later workflow stages.
 - Whole-branch review is approved with no blocking findings after every active task is fully gated with fresh feedback.
