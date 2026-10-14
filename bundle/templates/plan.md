@@ -103,10 +103,10 @@ initialization:
 ## Tasks
 
 <!-- Number tasks for stable identity, such as "Task 3". Keep headings, directories and both root-ledger representations in numeric identity order; IDs do not imply execution order.
-     Build the graph from each task's outputs and required inputs. Add an edge only when the task needs another task's completed result to implement or verify its Goal and Acceptance. Explain each prerequisite result and why it must exist first in the consuming task's Goal.
-     Write "Depends on: none" for independent tasks or comma-space-separated Task N IDs for prerequisites. These declarations are the graph's single source of truth; do not duplicate it in frontmatter.
-     Record shared-file/resource conflicts as coordination constraints in the affected tasks' Steps, not as dependencies unless one task needs the other's result. Context derives readiness; the coordinator admits compatible isolated lanes.
-     Check for missing or inactive prerequisites, self-dependencies, cycles and unnecessary edges. Do not chain independent tasks or repeat transitive ordering without a directly needed result. Resolve cycles by revising task boundaries or extracting a shared prerequisite. -->
+     Build the graph from task outputs and required inputs. Add a dependency only when a task needs another task's completed result to implement or verify its Goal and Acceptance. In the dependent task's Goal, name the result and explain why it must exist first.
+     Use "Depends on: none" for independent tasks; otherwise list Task N IDs separated by comma-space. These declarations are the graph's single source of truth. Do not duplicate the graph in frontmatter.
+     Record shared-file and shared-resource conflicts in the affected tasks' Steps as coordination constraints. Add a dependency only when one task needs the other's result. Context derives readiness; the coordinator admits compatible isolated lanes.
+     Check for missing or inactive prerequisites, self-dependencies, cycles and unnecessary edges. Do not chain independent tasks. Omit edges that merely repeat transitive ordering; retain direct dependencies on results the task consumes. Resolve cycles by revising task boundaries or extracting a shared prerequisite. -->
 
 ### Task 1: <imperative title>
 
@@ -131,7 +131,7 @@ initialization:
 
 ### Task 2: <imperative title>
 
-- Goal: <observable result and reason; identify the result needed from Task 1 and why it must exist first>
+- Goal: <observable result and reason; name the result needed from Task 1 and explain why it must exist first>
 - Depends on: Task 1
 - Files: optional guidance
   - Created: <paths, or none>
