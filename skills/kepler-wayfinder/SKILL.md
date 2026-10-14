@@ -10,11 +10,11 @@ Some goals are too big for one agent session — not because the work is hard, b
 
 ## The map
 
-The map is an **index**, not a store — it carries just enough to orient every session and points at the tickets that hold the detail. Six sections fix its shape: **Destination** (what reaching the end looks like), **Notes** (domain and standing preferences), **Operation rules** (per-session-binding instructions on how working sessions operate), **Decisions so far** (one line per resolved ticket, each linking back), **Not yet specified** (the fog), and **Out of scope** (work ruled beyond the destination). Notes holds standing context — the domain in one line and durable preferences; terminology belongs in the glossary, decisions in tickets. Operation rules holds prescriptive rules instead — e.g. commit after resolving a ticket, delegate a class of jobs to a named subagent — and may be left empty. The installed template provides the format; the skill fixes when to create it.
+The map is an **index**, not a store: it holds just enough to orient each session and points to tickets holding the detail. Six sections fix its shape: **Destination** (what reaching the end looks like), **Notes** (domain and standing preferences), **Operation rules** (per-session-binding instructions on how working sessions operate), **Decisions so far** (one line per resolved ticket, each linking back), **Not yet specified** (the fog), and **Out of scope** (work ruled beyond the destination). Notes holds standing context — the domain in one line and durable preferences; terminology belongs in the glossary, decisions in tickets. Operation rules holds prescriptive rules instead — e.g. commit after resolving a ticket, delegate a class of jobs to a named subagent — and may be left empty. The installed template provides the format; the skill fixes when to create it.
 
 ## Ticket types
 
-Every ticket has a type that promises how it gets answered, and each type delegates to a skill:
+Each ticket type defines how to answer it and delegates to a skill:
 
 - **research** (AFK) — a background investigation. Delegate to `kepler-wayfinder-research`, which reads primary sources and writes cited findings under the map.
 - **prototype** (HITL) — a throwaway artifact that answers one design question. Delegate to `kepler-wayfinder-prototype`.
@@ -39,7 +39,7 @@ Every grilling invocation supplies content and an exit condition (see grilling's
 
 ## Fog of war
 
-Not every decision can be stated sharply at the start. The fog of war is the dim view ahead — decisions you can tell are coming but cannot yet pin down, because they hang on questions still open. It lives in the map's Not yet specified, deliberately uncharted. The test separating fog from a ticket is whether the question can be stated precisely now, not whether it can be answered now. When a resolution makes a foggy question specifiable, the fog graduates: it clears from Not yet specified and becomes a new ticket.
+Not every decision can be stated sharply at the start. The fog of war covers decisions you can see coming but cannot yet pin down because they depend on open questions. It lives in the map's Not yet specified, deliberately uncharted. The test separating fog from a ticket is whether the question can be stated precisely now, not whether it can be answered now. When a resolution makes a foggy question specifiable, the fog graduates: it clears from Not yet specified and becomes a new ticket.
 
 ## Out of scope
 
@@ -61,12 +61,12 @@ Charting is one session's work and resolves no tickets — it names the destinat
 
 Working resolves only the tickets an explicit user request authorizes — invoking Wayfinder or loading the map is orientation, not authorization, and never starts a ticket on its own.
 
-1. **Load the map and absorb returned research.** Read its low-resolution view to orient: the destination, the decisions already made, and the fog still ahead. Read the frontmatter's `branch:` and the Operation rules section too, and apply each rule to the actions it covers as the session proceeds — a commit-after-resolution rule produces a commit when a ticket resolves; a subagent-delegation rule routes the named job to the named subagent rather than doing it inline. Then check for returned research: for each completed investigation, distill the findings into its ticket's `## Answer`, link the findings file from the ticket body, mark the ticket resolved, and gist it to the map. This absorbs a research ticket that was already explicitly authorized and dispatched — continuation of that prior authorization, not a new one — and does not authorize any other ticket.
+1. **Load the map and absorb returned research.** Read its low-resolution view to orient: the destination, the decisions already made, and the fog still ahead. Read the frontmatter's `branch:` and the Operation rules section; apply each rule to the actions it covers as the session proceeds — a commit-after-resolution rule produces a commit when a ticket resolves; a subagent-delegation rule routes the named job to the named subagent rather than doing it inline. Then check for returned research: for each completed investigation, distill the findings into its ticket's `## Answer`, link the findings file from the ticket body, mark the ticket resolved, and gist it to the map. This absorbs a research ticket that was already explicitly authorized and dispatched — continuation of that prior authorization, not a new one — and does not authorize any other ticket.
 2. **Establish the fixed authorization set, or stop.** If the user has not explicitly requested ticket work, report the orientation or the current frontier and stop: no ticket is claimed and no status changes. Invoking Wayfinder or loading the map does not authorize ticket work — an explicit user request is required before any ticket starts.
 3. **Resolve the request into identifiers.** For a request naming one ticket, or naming several as a batch, resolve each named identifier against the map; report and exclude any identifier that does not resolve to a ticket, without substituting another one. For a request for the current next frontier ticket, select the first open, unblocked, unclaimed ticket in file order; if none exists, report that no frontier ticket is available and stop without claiming or starting anything.
 4. **Form the fixed authorization set.** The resolved ticket — one named ticket, the selected next-frontier ticket, or the remaining members of a named batch — becomes the session's fixed authorization set for the rest of this loop. Order a batch by the map's ticket file order, regardless of the order named in the request; the set never grows or shrinks afterward.
 5. **Reread the next member at its turn.** Reread its current `status:` and every `blocked_by:` ticket's status immediately before its turn — state can have changed since an earlier authorized member resolved.
-6. **Claim an eligible member, or report and skip.** A member is eligible only when it is then `open`, unblocked, and unclaimed. Claim it — mark it in hand before any work begins, which removes the ticket from the frontier while leaving it unresolved. Report and skip, without substitution, a member that is resolved, claimed, or still blocked at its turn. A member blocked when requested stays authorized: in batch `[01, 02]`, ticket `02` blocked only by unresolved `01` becomes eligible and runs at its later turn once authorized `01` clears that blocker. Claiming is the start of resolution, not a handoff: the claiming session immediately takes an eligible member as far as its type allows — a HITL ticket resolves in this session; a research ticket is dispatched now and resolves when its findings return.
+6. **Claim an eligible member, or report and skip.** A member is eligible only when it is then `open`, unblocked, and unclaimed. Claim it — mark it in hand before any work begins. This removes the ticket from the frontier but leaves it unresolved. Report and skip, without substitution, a member that is resolved, claimed, or still blocked at its turn. A member blocked when requested stays authorized: in batch `[01, 02]`, ticket `02` blocked only by unresolved `01` becomes eligible and runs at its later turn once authorized `01` clears that blocker. Claiming is the start of resolution, not a handoff: the claiming session immediately takes an eligible member as far as its type allows — a HITL ticket resolves in this session; a research ticket is dispatched now and resolves when its findings return.
 7. **Resolve it.** The skill the ticket's type promises (see Skill dispatch) MUST be loaded before any resolution work, where the type names one — resolving a typed ticket without loading its skill is a contract violation. For a prototype ticket specifically, no prototype code exists before `kepler-wayfinder-prototype` is loaded and its branch gate has run.
 8. **Record the answer.** Append the resolution under a `## Answer` heading in the ticket, mark the ticket resolved, and append a one-line gist to the map's Decisions so far with a link back to the ticket.
 9. **Consistency pass.** Scan the map's Decisions so far for gists the new resolution contradicts. For each, open that ticket, move its old Answer to `## Outdated decisions` with a link to the superseding ticket, write the current truth into `## Answer`, and rewrite its gist line in the map. If the route exists, update the affected unit's decision line as well.
@@ -77,7 +77,7 @@ Working resolves only the tickets an explicit user request authorizes — invoki
 
 When the last ticket resolves, synthesize the current destination and the causal path that makes it necessary. State the point of departure from the goal and resolved ticket questions, not as a chronology of the map. Then synthesize a self-contained destination from the map's destination, current ticket answers, glossary terms, binding constraints, and out-of-scope boundaries. If that synthesis exposes a contradiction or essential ambiguity, keep the map open, resolve the gap through another ticket or user exchange, and do not write the route.
 
-The route is a static handoff written once as the map's closing act, from the installed template at `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/wayfinder/route.md`. Write its five core body sections below; a lint-valid existing route is not invalid merely because it includes other sections:
+Write the route once as the map's static handoff and closing act, using the installed template at `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/wayfinder/route.md`. Include its five core body sections below; a lint-valid existing route is not invalid merely because it includes other sections:
 
 1. **Point of departure** states the current situation and causal path from the goal and resolved ticket questions.
 2. **Destination** states the outcome, concrete shape where it removes meaningful ambiguity, guardrails, and builder latitude. Builder latitude is limited to local choices that cannot change the destination; unresolved product or architectural decisions keep the map open.
@@ -109,22 +109,14 @@ This section is the contract between the wayfinder methodology and its file-nati
 
 ## Artifact validation
 
-Canonical specs, maps, tickets, and routes are recognized Kepler artifacts. Research notes under
-`.kepler/maps/<effort>/research/` and prototype files are unrelated outputs and stay outside
-this lint gate. After each write or edit of a recognized artifact, run the narrowest file-scoped
-command for the artifact:
+Canonical specs, maps, tickets, and routes are recognized Kepler artifacts. Research notes under `.kepler/maps/<effort>/research/` and prototype files are unrelated outputs and stay outside this lint gate. After each write or edit of a recognized artifact, run the narrowest file-scoped command for the artifact:
 
 - `kepler workbench lint --file <spec-path>` for `.kepler/specs/glossary.md`.
 - `kepler workbench lint --file <map-path>` for `.kepler/maps/<effort>/map.md`.
 - `kepler workbench lint --file <ticket-path>` for `.kepler/maps/<effort>/tickets/NN-slug.md`.
 - `kepler workbench lint --file <route-path>` for `.kepler/maps/<effort>/route.md`.
 
-A nonzero lint result is a failed gate. Resolve the findings and rerun the matching command, or
-report the exact blocker without handing off, claiming resolution, or committing. Charting lints
-the map after creation, each ticket after creation or dependency edit, and the route after it is
-written. Route closing lints the canonical spec immediately after folding the working glossary.
-The work loop applies the same gate after every ticket answer, map gist, or route change before the
-next mutation or handoff.
+A nonzero lint result is a failed gate. Resolve the findings and rerun the matching command, or report the exact blocker without handing off, claiming resolution, or committing. Charting lints the map after creation, each ticket after creation or dependency edit, and the route after it is written. Route closing lints the canonical spec immediately after folding the working glossary. The work loop applies the same gate after every ticket answer, map gist, or route change before the next mutation or handoff.
 
 ## Process flow
 

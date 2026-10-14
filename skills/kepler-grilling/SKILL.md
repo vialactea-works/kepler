@@ -3,25 +3,25 @@ name: kepler-grilling
 description: "Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases."
 ---
 
-Interview me relentlessly about every aspect of this until we reach a shared understanding. Walk down each branch of the decision tree, resolving dependencies between decisions one-by-one. For each question, provide your recommended answer.
+Interview me relentlessly about every aspect of this until we reach a shared understanding. Work through each branch of the decision tree, resolving dependencies between decisions one at a time. For each question, provide your recommended answer.
 
-Ask the questions one at a time, waiting for feedback on each question before continuing. Asking multiple questions at once is bewildering.
+Ask one question at a time and wait for feedback before continuing. Asking multiple questions at once is bewildering.
 
-If a *fact* can be found by exploring the environment (filesystem, tools, etc.), look it up rather than asking me. The *decisions*, though, are mine — put each one to me and wait for my answer.
+Look up *facts* available in the environment (filesystem, tools, etc.) rather than asking me. The *decisions* are mine — put each one to me and wait for my answer.
 
 Do not act on it until I confirm we have reached a shared understanding.
 
-If the user reverses an earlier recorded decision, update the artifact that records it to state the current truth — never leave the stale version standing.
+If the user reverses a recorded decision, update its artifact to state the current truth — never leave the stale version standing.
 
-When the answer is written to a recognized ticket, map, or route, run the narrowest file-scoped command immediately after the mutation: `kepler workbench lint --file <ticket-path>`, `kepler workbench lint --file <map-path>`, or `kepler workbench lint --file <route-path>`. A nonzero lint result is a failed gate: resolve the finding and rerun lint, or report the exact blocker. The latest successful lint is required before handoff or commit. Do not lint conversation text or unrelated notes.
+Immediately after writing an answer to a recognized ticket, map, or route, run the narrowest file-scoped command: `kepler workbench lint --file <ticket-path>`, `kepler workbench lint --file <map-path>`, or `kepler workbench lint --file <route-path>`. A nonzero lint result is a failed gate: resolve the finding and rerun lint, or report the exact blocker. The latest successful lint is required before handoff or commit. Do not lint conversation text or unrelated notes.
 
 ## Challenge posture
 
-Evaluate every answer the user gives before moving on. If it has a concrete weakness — a failure scenario, a cost, a contradiction with a prior decision or the glossary — push back **once**, stating the objection specifically. If the user reaffirms, or marks the decision final, accept it: record their decision as the authoritative answer, note any reservation in one line, and drop the point for the rest of the session. The user owns decisions; you own making sure they were made with eyes open.
+Evaluate every answer the user gives before moving on. If it has a concrete weakness — a failure scenario, a cost, a contradiction with a prior decision or the glossary — push back **once** with a specific objection. If the user reaffirms or marks the decision final, accept it: record the decision as the authoritative answer, note any reservation in one line, and drop the point for the rest of the session. The user owns decisions; you own making sure they were made with eyes open.
 
 ## Invocation contract
 
-Other skills invoke grilling with two inputs: the **content** to grill (a plan, findings, approaches, open questions) and an **exit condition** (e.g. "intent is clear", "an approach is chosen", "every finding is validated"). Grill until the exit condition holds, record the answers where the caller directs (a ticket's `## Answer`, the artifact under revision), and return control. Invoked bare — with no content or exit condition — ask what to stress-test and grill until shared understanding.
+Other skills invoke grilling with two inputs: the **content** to grill (a plan, findings, approaches, open questions) and an **exit condition** (e.g. "intent is clear", "an approach is chosen", "every finding is validated"). Grill until the exit condition holds, record the answers where the caller directs (a ticket's `## Answer`, the artifact under revision), and return control. When invoked bare — with no content or exit condition — ask what to stress-test and grill until shared understanding.
 
 ## Process flow
 

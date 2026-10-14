@@ -17,7 +17,7 @@ A UI prototype is much easier to judge when it's **butting up against the rest o
 
 ### Sub-shape A — adjustment to an existing page (preferred)
 
-The route already exists. Variants are rendered **on the same route**, gated by a `?variant=` URL search param. The existing data fetching, params, and auth all stay — only the rendering swaps. This is the default; pick it unless there's a specific reason not to.
+The route already exists. Render variants **on the same route**, gated by a `?variant=` URL search param. Keep the existing data fetching, params, and auth; swap only the rendering. This is the default; pick it unless there's a specific reason not to.
 
 If the prototype is for something that doesn't yet have a page but *would naturally live inside one* (a new section of the dashboard, a new card on the settings screen, a new step in an existing flow) — that's still sub-shape A. Mount the variants inside the host page.
 
@@ -35,7 +35,7 @@ In both sub-shapes the floating bottom bar is identical.
 
 ### 1. State the question and pick N
 
-Default to **3 variants**. More than 5 stops being radically different and starts being noise — cap there.
+Default to **3 variants**. Cap at 5; more variants become noise rather than radically different.
 
 Write down the plan in one line, in the prototype's location or a top-of-file comment:
 
@@ -76,7 +76,7 @@ For sub-shape B (new page): the throwaway route under `/prototype/<name>` mounts
 
 ### 4. Build the floating switcher
 
-A small fixed-position bar at the bottom-centre of the screen with three pieces:
+Place a small fixed-position bar at the bottom-centre of the screen with three pieces:
 
 - **Left arrow** — cycles to the previous variant (wraps around).
 - **Variant label** — shows the current variant key and, if the variant exports a name, that name too. e.g. `B — Sidebar layout`.
@@ -86,7 +86,7 @@ Behaviour:
 
 - Clicking an arrow updates the URL search param (use the framework's router — `router.replace` on Next, `navigate` on React Router, etc) so the variant is shareable and reload-stable.
 - Keyboard: `←` and `→` arrow keys also cycle. Don't intercept arrow keys when an `<input>`, `<textarea>`, or `[contenteditable]` is focused.
-- Visually distinct from the page (e.g. high-contrast pill, subtle shadow) so it's obviously not part of the design being evaluated.
+- Make it visually distinct from the page (e.g. high-contrast pill, subtle shadow) so it's obviously not part of the design being evaluated.
 - Hidden in production builds — gate on `process.env.NODE_ENV !== 'production'` or an equivalent check, so a stray prototype merge can't ship the bar to users.
 
 Put the switcher in a single shared component so both sub-shapes can reuse it. Locate it wherever shared UI lives in the project.
@@ -102,7 +102,7 @@ Once a variant has won, capture the answer — which variant and why — then ca
 - **Sub-shape A** — fold the winner into the existing page; drop the losing variants and the switcher from main.
 - **Sub-shape B** — promote the winning variant to a real route; drop the throwaway route and the switcher from main.
 
-The full set of variants is the primary source, so it lands on the throwaway branch, not the bin — variant components and the switcher left in the main branch rot fast and confuse the next reader.
+Keep the full set of variants on the throwaway branch as the primary source, not in the bin — variant components and the switcher left on the main branch rot fast and confuse the next reader.
 
 ## Anti-patterns
 
