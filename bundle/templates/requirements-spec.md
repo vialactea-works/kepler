@@ -8,47 +8,35 @@ decision: accepted | rejected | skipped
 ---
 
 <!--
-  SRS (canonical) — the durable spec for one capability
+  SRS (canonical): the durable spec for one capability.
   Lives at: .kepler/specs/<capability>.md
-  The living source of truth for this capability. It always states CURRENT behavior.
+  This artifact is the source of truth for the capability's current behavior.
 
-  Written to READ LIKE DOCUMENTATION A HUMAN WROTE — plain prose and tables, at
-  altitude (what the capability guarantees, not the mechanism one commit used).
-  It does NOT use the change-side Requirement/SHALL/Scenario form; that stays in the
-  change's requirements/<capability>.md deltas.
+  Write readable documentation in plain prose and tables. Stay at altitude: describe the capability's guarantees, not one commit's implementation. Keep the Requirement/SHALL/Scenario form in the change's requirements/<capability>.md deltas.
 
-  Produced two ways:
-    - kepler-finish-work folds a change's structured requirement deltas into here.
-    - kepler-compose-spec authors it directly (reformat an old spec, or from code).
-  Both apply the altitude + skeleton rules in each skill's references/spec-altitude.md.
+  Two skills produce this artifact:
+    - kepler-finish-work incorporates a change's structured requirement deltas.
+    - kepler-compose-spec writes it directly by reformatting an old spec or examining code.
+  Both follow the altitude and skeleton rules in their references/spec-altitude.md.
 
-  Keep all five top-level sections: lint requires them. When a register has no applicable
-  facts, keep its section concise and omit optional subsections instead of inventing content.
-  Prefer flowing prose, but do not reject an existing lint-valid spec for its presentation.
-  Before creating this artifact, read the configured Git identity with `git config user.name`
-  and `git config user.email`, then write `author: Name <email>` using both
-  configured values. If either configured value is missing, ask the user or stop with a blocker rather
-  than inventing an identity. When revising an existing artifact, preserve its recorded author unless
-  the user explicitly directs an attribution change. Delete this comment block and inline hints before
-  finalizing.
+  Keep all five top-level sections; lint requires them. If a section has no applicable facts, keep it concise and omit optional subsections rather than inventing content. Prefer flowing prose, but accept any presentation in an existing spec that passes lint.
+
+  Before creating this artifact, read the configured Git identity with `git config user.name` and `git config user.email`, then set `author: Name <email>` using both values. If either value is missing, ask the user or stop with a blocker; never invent an identity. When revising an artifact, preserve its recorded author unless the user explicitly directs an attribution change.
+
+  Delete this comment block and inline hints before finalizing.
 -->
 
 # Capability: <capability-name>
 
 ## Overview
 
-<!-- One paragraph, plain prose: what this capability is responsible for and where it
-     sits. Orient a reader who has never seen it. -->
+<!-- Orient a new reader in one paragraph. Describe the capability's responsibility, represented scope (domain, subdomain, or bounded context), related contexts, and boundary ownership. Infrastructure scopes qualify when they own an observable contract, such as an external model and its translation into domain operations. Use scoped glossary meanings and distinguish evidenced boundaries from inferences. Keep scope in prose, preserve existing slugs and metadata, and do not force historical reclassification. Cite sources for language and ownership; flag unresolved meanings before publishing dependent claims. Keep private wiring and code attribution in design, not canonical requirements. -->
 
 ## Contract
 
-<!-- The concrete interface a consumer touches. Tables can clarify shaped contracts:
-     persisted schema, request/response bodies, event payloads, config keys, status
-     codes, error taxonomy. This is where a data-model capability shows its field
-     names and types, and an endpoint capability shows its routes.
-     Add domain subheadings (### <event type>, ### <endpoint>) as merge anchors when a
-     capability has several distinct contract surfaces. Keep this section even if there
-     is no separate consumer-facing interface; state that concisely. -->
+<!-- Describe the concrete interface consumers use. Tables can clarify persisted schemas, request/response bodies, event payloads, config keys, status codes, and error taxonomies. For a data-model capability, list field names and types; for an endpoint capability, list routes. Describe public ports, commands, and events through their inputs, outcomes, and error obligations. Avoid private interfaces, adapter classes, and injection tokens.
+
+     Add domain subheadings (### <event type>, ### <endpoint>) as merge anchors when a capability has several distinct contract surfaces. If it has no separate consumer-facing interface, retain this section and say so briefly. -->
 
 | field | type | notes |
 |-------|------|-------|
@@ -56,10 +44,7 @@ decision: accepted | rejected | skipped
 
 ## Behavior
 
-<!-- Narrative input->output prose, including edge and error paths. Then a compact,
-     greppable Examples block: each bullet an input/trigger -> observable outcome. The
-     Examples are this spec's conformance points (the distilled proto-tests) — keep
-     only ones that state durable, black-box behavior. -->
+<!-- Describe input->output behavior, including edge cases and error paths. Follow with a compact, greppable Examples block whose bullets pair each input/trigger with an observable outcome. These examples define conformance checks; include only durable, black-box behavior. Cover applicable state transitions, guards, and translation outcomes, and keep invariant ownership consistent with the named contexts. A proposed design does not prove that the behavior is implemented. -->
 
 **Examples**
 
@@ -67,15 +52,12 @@ decision: accepted | rejected | skipped
 
 ## Invariants
 
-<!-- Properties that hold across all states and over time. This is the one section
-     where MUST / NEVER earn their keep. If none are known, say so briefly. -->
+<!-- State properties that hold across all states and over time. Reserve MUST / NEVER for this section. Name the owning context for each rule when relevant. If no invariants are known, say so briefly. -->
 
 -
 
 ## Decisions
 
-<!-- Reusable design rules or deliberate decisions future work must follow ("policy,
-     not incident"). State the rule, not the one occurrence. Draw from design.md's
-     Decisions. If none are known, say so briefly. -->
+<!-- State reusable design rules or deliberate decisions that future work must follow. Describe policy, not an isolated occurrence. Draw from design.md's Decisions, including boundary, dependency-direction, and translation policies that survive reimplementation. Exclude adapter-specific wiring and package layout. If no such rules or decisions are known, say so briefly. -->
 
 -

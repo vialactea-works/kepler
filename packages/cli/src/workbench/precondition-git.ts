@@ -17,15 +17,73 @@ export const gitCommand = async (
   runtime: PreconditionRuntime,
   args: readonly string[],
   root: string,
-): Promise<ProcessResult> => runtime.process.run("git", args, root);
+): Promise<ProcessResult> => runtime.process.run(
+  "git",
+  runtime.admissionSource ? args.map((arg) => arg === "HEAD" ? runtime.admissionSource!.revision : arg.startsWith("HEAD:") ? `${runtime.admissionSource!.revision}${arg.slice(4)}` : arg) : args,
+  runtime.admissionSource?.repositoryRoot ?? root,
+);
 
 export const gitCurrentHead = async (
   runtime: PreconditionRuntime,
   root: string,
 ): Promise<ProcessResult> =>
-  runtime.git.currentHead
+  runtime.admissionSource
+    ? gitResolveCommit(runtime, root, runtime.admissionSource.revision)
+    : runtime.git.currentHead
     ? runtime.git.currentHead(root)
     : gitCommand(runtime, ["rev-parse", "HEAD"], root);
+
+export const gitCurrentBranch = async (
+  runtime: PreconditionRuntime,
+  root: string,
+): Promise<ProcessResult> =>
+  runtime.git.currentBranch
+    ? runtime.git.currentBranch(root)
+    : gitCommand(runtime, ["rev-parse", "--abbrev-ref", "HEAD"], root);
+
+export const gitWorktreeIdentity = async (
+  runtime: PreconditionRuntime,
+  root: string,
+): Promise<ProcessResult> =>
+  runtime.git.worktreeIdentity
+    ? runtime.git.worktreeIdentity(root)
+    : gitCommand(runtime, ["rev-parse", "--absolute-git-dir"], root);
+
+export const gitPathHistory = async (
+  runtime: PreconditionRuntime,
+  root: string,
+  sourcePath: string,
+): Promise<ProcessResult> =>
+  !runtime.admissionSource && runtime.git.pathHistory
+    ? runtime.git.pathHistory(root, sourcePath)
+    : gitCommand(runtime, ["log", "--format=%H", "--full-history", "HEAD", "--", sourcePath], root);
+
+export const gitBlobAt = async (
+  runtime: PreconditionRuntime,
+  root: string,
+  commit: string,
+  sourcePath: string,
+): Promise<ProcessResult> =>
+  runtime.git.blobAt
+    ? runtime.git.blobAt(root, commit, sourcePath)
+    : gitCommand(runtime, ["show", `${commit}:${sourcePath}`], root);
+
+export const gitBlobIdAt = async (
+  runtime: PreconditionRuntime,
+  root: string,
+  commit: string,
+  sourcePath: string,
+): Promise<ProcessResult> =>
+  gitCommand(runtime, ["rev-parse", "--verify", `${commit}:${sourcePath}`], root);
+
+export const gitFirstParent = async (
+  runtime: PreconditionRuntime,
+  root: string,
+  commit: string,
+): Promise<ProcessResult> =>
+  runtime.git.firstParent
+    ? runtime.git.firstParent(root, commit)
+    : gitCommand(runtime, ["rev-parse", "--verify", `${commit}^1`], root);
 
 export const gitResolveCommit = async (
   runtime: PreconditionRuntime,
@@ -55,7 +113,7 @@ export const gitHeadBlob = async (
   root: string,
   sourcePath: string,
 ): Promise<ProcessResult> =>
-  runtime.git.headBlob
+  !runtime.admissionSource && runtime.git.headBlob
     ? runtime.git.headBlob(root, sourcePath)
     : gitCommand(runtime, ["rev-parse", `HEAD:${sourcePath}`], root);
 
@@ -64,7 +122,9 @@ export const gitWorktreeBlob = async (
   root: string,
   sourcePath: string,
 ): Promise<ProcessResult> =>
-  runtime.git.worktreeBlob
+  runtime.admissionSource
+    ? gitBlobIdAt(runtime, root, runtime.admissionSource.revision, sourcePath)
+    : runtime.git.worktreeBlob
     ? runtime.git.worktreeBlob(root, sourcePath)
     : gitCommand(runtime, ["hash-object", "--", sourcePath], root);
 
@@ -73,7 +133,9 @@ export const gitStagedDiff = async (
   root: string,
   sourcePath: string,
 ): Promise<ProcessResult> =>
-  runtime.git.stagedDiff
+  runtime.admissionSource
+    ? gitCommand(runtime, ["diff", "--quiet", runtime.admissionSource.revision, runtime.admissionSource.revision, "--", sourcePath], root)
+    : runtime.git.stagedDiff
     ? runtime.git.stagedDiff(root, sourcePath)
     : gitCommand(
         runtime,
@@ -86,7 +148,7 @@ export const gitLatestCommit = async (
   root: string,
   sourcePath: string,
 ): Promise<ProcessResult> =>
-  runtime.git.latestCommit
+  !runtime.admissionSource && runtime.git.latestCommit
     ? runtime.git.latestCommit(root, sourcePath)
     : gitCommand(
         runtime,
@@ -113,7 +175,7 @@ export const gitLatestMaterialCommit = async (
   changePath: string,
   taskPaths: readonly string[],
 ): Promise<ProcessResult> => {
-  if (runtime.git.latestMaterialCommit)
+  if (!runtime.admissionSource && runtime.git.latestMaterialCommit)
     return runtime.git.latestMaterialCommit(root, changePath, taskPaths);
   const exclusions = [
     `:(exclude)${changePath}/progress.md`,
@@ -126,7 +188,7 @@ export const gitLatestMaterialCommit = async (
   ];
   return gitCommand(
     runtime,
-    ["log", "-1", "--format=%H", "HEAD", "--", ".", ...exclusions],
+    ["log", "-1", "--format=%H", runtime.admissionSource?.revision ?? "HEAD", "--", ".", ...exclusions],
     root,
   );
 };

@@ -30,6 +30,8 @@ Kepler stores global files under `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-wo
 
 See the **[Skills reference](docs/skills.md)** for what each skill does, its inputs, and its outputs,
 and the **[SDD framework](docs/sdd-framework.md)** for the design rationale.
+The **[Change state machine](docs/change-state-machine.md)** documents lifecycle states,
+skill ownership, and transition guards with their artifact-field inputs.
 
 ## Nest CLI migration
 
@@ -52,7 +54,9 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/
 The distributed `kepler workbench` command is the supported surface for workflow mechanics. Its
 operations are `kepler workbench isolate`, `kepler workbench diff`,
 `kepler workbench precondition`, `kepler workbench context`, and
-`kepler workbench prototype`. Artifact validation uses `kepler workbench lint`.
+`kepler workbench prototype`. `kepler workbench task-state` guards task admission (`--admit`),
+before-edit prerequisite reservations (`--reserve`), and integrated publication (`--publish`).
+Artifact validation uses `kepler workbench lint`. See the [task-state command reference](docs/skills.md#task-state) for required arguments.
 
 ```bash
 kepler setup          # bootstrap ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/ (preserves existing settings)
@@ -87,14 +91,15 @@ around those operations.
 
 The skills produce durable, per-project artifacts under `.kepler/`:
 
-```
+```text
 .kepler/
-  specs/                              # canonical capability truth (living)
+  specs/                              # canonical capability truth and project language
+    glossary.md                       # context-scoped ubiquitous language
     <capability>.md
   changes/
     <YYYY-MM-DD-title>/
       proposal.md                     # optional — why
-      design.md                       # optional — how
+      design.md                       # optional — domain model and architecture
       requirements/<capability>.md    # optional — what (delta form)
       plan.md                         # required — the handoff contract
       progress.md                     # required — current task ledger
@@ -107,7 +112,12 @@ The skills produce durable, per-project artifacts under `.kepler/`:
 ```
 
 Changes are ephemeral; specs are durable. When a change finishes, its requirement deltas fold into
-`specs/`, the project's always-current requirements truth.
+`specs/`, the project's always-current requirements truth. Init establishes the canonical glossary;
+new proposals use its scoped language and describe involved contexts and boundary impact. A capability
+may represent a domain, subdomain or bounded context, including infrastructure responsibilities.
+A design explains the relevant model, package responsibilities, ports and adapters, and code attribution
+before its supporting decisions. Coverage scales to the change; unresolved language is surfaced, not invented.
+See [domain language and capability scope](docs/skills.md#domain-language-and-capability-scope).
 
 When upgrading this workflow, first finish any active change with the Kepler generation that
 created it. Between changes, update the CLI and the agent-loaded skills together from one Kepler
@@ -115,6 +125,14 @@ generation, run `kepler setup`, verify `kepler workbench --help`, and then start
 Setup does not delete stale helper files from an older generation. `bun run purge` removes the local
 CLI symlink and `~/.kepler-dist/`, but preserves Kepler's global data. See the **[between-changes migration guidance](docs/sdd-framework.md#upgrading-to-the-split-workflow)**
 for the exact procedure. Never replace one part of the installed generation while a change is active.
+
+## Dependency-aware task execution
+
+New plans can opt into dependency mode with `execution: {version: 2, mode: dependencies}`. Each task has a coherent Goal, testable Acceptance, explicit `Depends on`, Steps, Verify, and Commit; Files is optional guidance, not an allowlist. A goal-serving unlisted edit stays within the task when it respects approved intent, design, and project standards. A new prerequisite instead needs a committed before-edit reservation: at most two over a task's lifetime and at most four concrete paths in each reservation. Removing, rewriting, reverting, retrying, or correcting work never resets or refunds that budget. A third reservation, a larger scope, a new public contract or dependency, or a public-security authority change requires owner-approved re-planning.
+
+Dependency readiness is a derived projection, not permission to edit. A guarded admission binds the original Base, plan revision, task definition, isolated worker/worktree, and prerequisite approvals; retries, rebinds, and a missing cache recover that original Base from admission history rather than guessing a newer checkpoint. A task's root `done` means its implementation was published, while fully gated also requires fresh independent approved feedback. When a prerequisite is blocked or uncleared, its descendants stay held; independent ready tasks may use compatible isolated lanes. The coordinator serializes original-commit integration, executes each task's exact Verify field after integration, and publishes the shared root result. This is not a distributed scheduler or a promise of concurrent execution.
+
+Version 1 and unversioned plans keep their historical numeric serial behavior. Unsupported execution versions or modes fail closed rather than falling back to serial behavior. `done` and `blocked` are completed actor outcomes; `interrupted` and `unavailable` are neutral observations that require artifact-based recovery, not invented terminal records. Whole-branch review begins only after every active task is fully gated, and finish remains closed until that review clears.
 
 ## Requirements
 
@@ -143,7 +161,7 @@ kepler setup                 # install bundle/{templates,guidelines}/ → ${XDG_
 #    the agent at the SKILL.md paths.
 
 # 3. In your project, run the skills through your agent, in order:
-#    kepler-init         → scaffold .kepler/ and write AGENTS.md (once)
+#    kepler-init         → standards + canonical glossary + .kepler/ workspace (once)
 #    kepler-propose      → proposal + requirements + design (optional)
 #    kepler-plan         → plan.md + root task ledger + task progress files
 #    kepler-code         → implement one task and record its attempt

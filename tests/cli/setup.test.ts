@@ -12,6 +12,7 @@ const TEMPLATE_FILES = [
   "design.md",
   "feedback.md",
   "finish.md",
+  "glossary.md",
   "plan.md",
   "progress.md",
   "proposal.md",
@@ -152,6 +153,23 @@ describe("SetupService filesystem integration", () => {
     }
   });
 
+  it("installs and refreshes the bundled design and canonical spec bytes", () => {
+    const templatesBase = Path.join(tmpHome, ".config/vialactea-works/kepler", "templates");
+    runSetup();
+    for (const file of ["design.md", "requirements-spec.md"]) {
+      const installedPath = Path.join(templatesBase, file);
+      const bundledPath = Path.join(process.cwd(), "bundle", "templates", file);
+      expect(Fs.readFileSync(installedPath)).toEqual(Fs.readFileSync(bundledPath));
+      Fs.writeFileSync(installedPath, "stale template\n");
+    }
+    runSetup();
+    for (const file of ["design.md", "requirements-spec.md"]) {
+      expect(Fs.readFileSync(Path.join(templatesBase, file))).toEqual(
+        Fs.readFileSync(Path.join(process.cwd(), "bundle", "templates", file)),
+      );
+    }
+  });
+
   it("copies wayfinder artifact templates", () => {
     runSetup();
 
@@ -201,6 +219,7 @@ describe("SetupService filesystem integration", () => {
     expect(result.templates).toContain("task-progress.md");
     expect(result.templates).toContain("feedback.md");
     expect(result.templates).toContain("finish.md");
+    expect(result.templates).toContain("glossary.md");
     expect(result.templates).toContain("wayfinder/map.md");
     expect(result.templates.length).toBeGreaterThan(0);
   });

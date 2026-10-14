@@ -20,9 +20,13 @@ const result = (
   _tag: "PreconditionResult",
   status: "success",
   exitCode: 0,
-  stdout: "gate: open\n",
+  stdout:
+    "verified-head: 1234567890123456789012345678901234567890\ngate: open\n",
   stderr: "",
-  lines: ["gate: open"],
+  lines: [
+    "verified-head: 1234567890123456789012345678901234567890",
+    "gate: open",
+  ],
   lastLine: "gate: open",
   ...overrides,
 });
@@ -114,6 +118,8 @@ describe("PreconditionCommand", () => {
       ".kepler/change",
       "--test-cmd",
       "bun --bun vitest run",
+      "--target-branch",
+      "refs/remotes/origin/main",
       "--whole-change-waived",
     ]);
 
@@ -121,12 +127,27 @@ describe("PreconditionCommand", () => {
       {
         changeDir: ".kepler/change",
         testCommand: "bun --bun vitest run",
+        targetBranch: "refs/remotes/origin/main",
         wholeChangeWaived: true,
       },
     ]);
     expect(harness.exitCode).toBe(0);
-    expect(harness.stdout).toBe("gate: open\n");
+    expect(harness.stdout).toBe(
+      "verified-head: 1234567890123456789012345678901234567890\ngate: open\n",
+    );
     expect(harness.stderr).toBe("");
+  });
+
+  it("forwards the repair identity without converting repair-open into ordinary admission", async () => {
+    const stdout = "admission: finalization-repair\nverified-head: 1234567890123456789012345678901234567890\ngate: repair-open\n";
+    const harness = await runCli([
+      "workbench", "precondition", "--change-dir", ".kepler/changes/demo", "--test-cmd", "full-tests && build",
+      "--target-branch", "refs/heads/main", "--recover-finish", "1",
+    ], result({ stdout, lines: stdout.trim().split("\n"), lastLine: "gate: repair-open" }));
+    expect(harness.calls).toEqual([{ changeDir: ".kepler/changes/demo", testCommand: "full-tests && build", targetBranch: "refs/heads/main", wholeChangeWaived: false, recoverFinish: 1 }]);
+    expect(harness.stdout).toBe(stdout);
+    expect(harness.stdout).not.toContain("gate: open\n");
+    expect(harness.exitCode).toBe(0);
   });
 
   it("preserves a closed gate result and its final line", async () => {
@@ -138,6 +159,8 @@ describe("PreconditionCommand", () => {
         ".kepler/change",
         "--test-cmd",
         "bun --bun vitest run",
+        "--target-branch",
+        "refs/remotes/origin/main",
       ],
       result({
         status: "negative",
@@ -153,6 +176,7 @@ describe("PreconditionCommand", () => {
       {
         changeDir: ".kepler/change",
         testCommand: "bun --bun vitest run",
+        targetBranch: "refs/remotes/origin/main",
         wholeChangeWaived: false,
       },
     ]);
@@ -170,7 +194,7 @@ describe("PreconditionCommand", () => {
           "--test-cmd",
           "bun --bun vitest run",
         ],
-        message: "Expected to find option: '--change-dir'\n",
+        message: "Expected to find option: '--change-dir'\n\nExpected to find option: '--target-branch'\n",
       },
       {
         arguments: [
@@ -179,12 +203,23 @@ describe("PreconditionCommand", () => {
           "--change-dir",
           ".kepler/change",
         ],
-        message: "Expected to find option: '--test-cmd'\n",
+        message: "Expected to find option: '--test-cmd'\n\nExpected to find option: '--target-branch'\n",
       },
       {
         arguments: ["workbench", "precondition"],
         message:
-          "Expected to find option: '--change-dir'\n\nExpected to find option: '--test-cmd'\n",
+          "Expected to find option: '--change-dir'\n\nExpected to find option: '--test-cmd'\n\nExpected to find option: '--target-branch'\n",
+      },
+      {
+        arguments: [
+          "workbench",
+          "precondition",
+          "--change-dir",
+          ".kepler/change",
+          "--test-cmd",
+          "bun --bun vitest run",
+        ],
+        message: "Expected to find option: '--target-branch'\n",
       },
     ];
 

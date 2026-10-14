@@ -5,32 +5,28 @@ change: <YYYY-MM-DD-change-title>
 status: draft
 created: <YYYY-MM-DD>
 author: <Name <email>>
-decision: accepted | rejected | skipped
+decision: skipped
 ---
 
 <!--
-  SRS (change delta) — Requirements / "What"   (ISO/IEC/IEEE 29148-inspired)
+  SRS (change delta): Requirements / "What" (ISO/IEC/IEEE 29148-inspired)
   Produced by: kepler-propose (step 1). One file per capability.
   Lives at: .kepler/changes/<change>/requirements/<capability>.md
 
-  This is the DELTA form: it describes how a change alters a capability.
-  kepler-finish-work folds these deltas into the canonical
-  .kepler/specs/<capability>.md (which uses the requirements-spec.md form).
+  This delta describes how a change alters a capability. kepler-finish-work folds it into the canonical .kepler/specs/<capability>.md, which uses requirements-spec.md.
 
-  Each requirement should be: necessary, unambiguous, verifiable, singular, feasible.
-  Scenarios (WHEN/THEN) are proto-conformance tests — write them so a test could be
-  derived directly. OPTIONAL artifact — skip when a change needs no formal requirements.
+  Each requirement should be necessary, unambiguous, verifiable, singular and feasible. Write WHEN/THEN scenarios from which tests can be derived directly. This artifact is optional; skip it when a change needs no formal requirements.
+
+  A draft or template decision default does not grant requester approval. Show the requester the exact final candidate bytes, including status: approved and decision: accepted. Wait for explicit approval of that revision before writing it, then commit exactly those bytes. Later intent edits require new approval.
+
+  Before creating this artifact, read the configured Git identity with `git config user.name` and `git config user.email`, then set `author: Name <email>` using both values. If either is missing, ask the user or stop with a blocker; never invent an identity. When revising an artifact, preserve its recorded author unless the user explicitly directs an attribution change.
+
   Delete this comment block and inline hints before finalizing.
-  Before creating this artifact, read the configured Git identity with `git config user.name` and
-  `git config user.email`, then write `author: Name <email>` using both configured values. If either
-  configured value is missing, ask the user or stop with a blocker rather than inventing an identity.
-  When revising an existing artifact, preserve its recorded author unless the user explicitly directs
-  an attribution change.
 -->
 
 # Capability: <capability-name>
 
-<!-- One-line statement of what this capability is responsible for. -->
+<!-- Describe the capability's responsibility, represented scope (domain, subdomain or bounded context) and relevant context boundary in prose. Infrastructure scopes qualify when they own a durable contract; a transport or endpoint alone does not establish a context. Use canonical glossary meanings and sourced project language. Preserve capability slugs and the delta-to-spec mapping; do not add mandatory scope metadata. -->
 
 ## ADDED Requirements
 
@@ -38,34 +34,27 @@ decision: accepted | rejected | skipped
 
 The system SHALL <one normative statement>.
 
-<!-- Use SHALL / MUST for normative rules. Avoid should/may. One requirement =
-     one obligation (singular). Split compound requirements into several. -->
+<!-- Use SHALL / MUST for normative rules; avoid should/may. Give each requirement one obligation. Split compound requirements. -->
 
 - Priority: must / should / could
-- Rationale: <optional — why this exists; helps future readers and sync>
+- Rationale: <optional: why this requirement exists; helps future readers and spec synchronization>
 
 #### Scenario: <name>
 
 - WHEN <trigger or precondition>
 - THEN <observable, testable outcome>
 
-<!-- Every requirement needs at least one scenario. Add scenarios for edge cases,
-     error paths, and boundaries — each is a candidate test case. -->
+<!-- Give every requirement at least one scenario. Cover edge cases, error paths and boundaries; each scenario is a candidate test case. -->
 
 ## MODIFIED Requirements
 
-<!-- The canonical .kepler/specs/<capability>.md is human-readable prose (Overview /
-     Contract / Behavior / Invariants / Decisions), NOT requirement blocks — there is
-     nothing to copy verbatim. Read the behavior the spec currently documents for this
-     area, then write the WHOLE changed behavior as a requirement block below. Name it
-     for the behavior it changes, so finish-work can locate the spec section to update.
-     State the entire new behavior, not just the diff. -->
+<!-- The canonical .kepler/specs/<capability>.md uses prose sections (Overview / Contract / Behavior / Invariants / Decisions), not requirement blocks to copy verbatim. Read the relevant current behavior, then write the complete new behavior as a requirement block below, not just the diff. Name the requirement for the behavior it changes so finish-work can locate the spec section to update. -->
 
 ## REMOVED Requirements
 
 ### Requirement: <name>
 
-- Reason: <why it is being removed>
+- Reason: <why this requirement is being removed>
 - Migration: <what consumers should do instead>
 
 ## RENAMED Requirements

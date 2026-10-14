@@ -62,7 +62,7 @@ const bodyFor = (artifact: string): string => {
       "| --- | --- | --- |",
       "| Task 1: Lint | done | [details](tasks/task-1/progress.md) |",
     ],
-    "task-progress": ["Attempt 1 — 2026-09-12"],
+    "task-progress": ["Attempt 1 — 2026-09-12\n\n- Outcome: done"],
     feedback: ["Pass 1 — 2026-09-12", "### Blocking", "### Suggestions"],
     review: ["Pass 1 — 2026-09-12", "### Blocking", "### Suggestions"],
     finish: [
@@ -336,6 +336,46 @@ const expectInvalid = (result: ArtifactContractResult, code: string) => {
 };
 
 describe("artifact metadata contracts", () => {
+  it("projects validated goal and acceptance from dependency-mode plans", () => {
+    const task = [
+      "### Task 1: Implement",
+      "",
+      "- Goal: Deliver the approved behavior.",
+      "- Depends on: none",
+      "- Acceptance:",
+      "  - The behavior is observable.",
+      "- Steps:",
+      "  1. Verify the behavior.",
+      "- Verify: bun --bun vitest run",
+      "- Commit: feat: implement behavior",
+    ].join("\n");
+    const metadata = {
+      artifact: "plan",
+      change: "demo",
+      status: "approved",
+      created: "2026-09-12",
+      author: "test",
+      decision: "accepted",
+      route_unit: null,
+      execution: { version: 2, mode: "dependencies" },
+    };
+    const result = validateArtifact(
+      recognized(
+        ".kepler/changes/demo/plan.md",
+        metadata,
+        `# Plan: Demo\n\n## Overview\n\n## Tasks\n\n${task}\n\n## Done when\n\nIt works.\n`,
+      ),
+    );
+
+    expect(result._tag).toBe("valid");
+    if (result._tag === "valid")
+      expect(result.body.workflow.plan?.tasks[0]).toMatchObject({
+        id: 1,
+        goal: "Deliver the approved behavior.",
+        acceptance: ["The behavior is observable."],
+      });
+  });
+
   it.each(validArtifacts)("accepts %s", (sourcePath, metadata) => {
     const result = validateArtifact(recognized(sourcePath, metadata));
     expect(result._tag).toBe("valid");
@@ -836,7 +876,23 @@ Head: ${sha}
     ]);
     const progress = recognized(
       ".kepler/changes/demo/progress.md",
-      validArtifacts[5][1],
+      {
+        ...validArtifacts[5][1],
+        tasks: [
+          {
+            id: 1,
+            title: "Lint",
+            status: "done",
+            progress: "tasks/task-1/progress.md",
+          },
+          {
+            id: 2,
+            title: "Ship",
+            status: "pending",
+            progress: "tasks/task-2/progress.md",
+          },
+        ],
+      },
       "# Progress: Demo\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Lint | done | [details](tasks/task-1/progress.md) |\n| Task 2: Ship | pending | [details](tasks/task-2/progress.md) |",
     );
     const progressBody = validateArtifactBody(progress, "progress");
@@ -895,7 +951,17 @@ Head: ${sha}
   it("parses escaped progress-table delimiters inside task titles", () => {
     const progress = recognized(
       ".kepler/changes/demo/progress.md",
-      { ...validArtifacts[5][1], tasks: [] },
+      {
+        ...validArtifacts[5][1],
+        tasks: [
+          {
+            id: 1,
+            title: "Parse A | B",
+            status: "done",
+            progress: "tasks/task-1/progress.md",
+          },
+        ],
+      },
       "# Progress: Demo\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Parse A \\| B | done | [details](tasks/task-1/progress.md) |",
     );
 
@@ -945,6 +1011,143 @@ Head: ${sha}
 
     expect(body.workflow.records).toEqual([]);
     expect(diagnostic?.location?.line).toBe(6);
+  });
+
+  it.each([
+    [
+      "status",
+      [
+        {
+          id: 1,
+          title: "Lint",
+          status: "pending",
+          progress: "tasks/task-1/progress.md",
+        },
+      ],
+      "| Task 1: Lint | done | [details](tasks/task-1/progress.md) |",
+    ],
+    [
+      "title",
+      [
+        {
+          id: 1,
+          title: "Other",
+          status: "done",
+          progress: "tasks/task-1/progress.md",
+        },
+      ],
+      "| Task 1: Lint | done | [details](tasks/task-1/progress.md) |",
+    ],
+    [
+      "id",
+      [
+        {
+          id: 2,
+          title: "Lint",
+          status: "done",
+          progress: "tasks/task-2/progress.md",
+        },
+      ],
+      "| Task 1: Lint | done | [details](tasks/task-1/progress.md) |",
+    ],
+    [
+      "order",
+      [
+        {
+          id: 2,
+          title: "Ship",
+          status: "pending",
+          progress: "tasks/task-2/progress.md",
+        },
+        {
+          id: 1,
+          title: "Lint",
+          status: "done",
+          progress: "tasks/task-1/progress.md",
+        },
+      ],
+      "| Task 1: Lint | done | [details](tasks/task-1/progress.md) |\n| Task 2: Ship | pending | [details](tasks/task-2/progress.md) |",
+    ],
+    [
+      "link",
+      [
+        {
+          id: 1,
+          title: "Lint",
+          status: "done",
+          progress: "tasks/task-2/progress.md",
+        },
+      ],
+      "| Task 1: Lint | done | [details](tasks/task-1/progress.md) |",
+    ],
+    [
+      "empty body ledger",
+      [
+        {
+          id: 1,
+          title: "Lint",
+          status: "pending",
+          progress: "tasks/task-1/progress.md",
+        },
+      ],
+      "",
+    ],
+  ] as const)(
+    "rejects progress metadata/body %s disagreement",
+    (_case, tasks, rows) => {
+      const progress = recognized(
+        ".kepler/changes/demo/progress.md",
+        { ...validArtifacts[5][1], tasks },
+        `# Progress: Demo\n| Task | Status | Progress |\n| --- | --- | --- |\n${rows}`,
+      );
+
+      const result = validateArtifact(progress);
+
+      expect(result._tag).toBe("invalid");
+      if (result._tag === "invalid")
+        expect(result.diagnostics.map((item) => item.message)).toContain(
+          "progress metadata ledger does not match",
+        );
+    },
+  );
+
+  it("preserves supported in-progress and correction task-log boundaries", () => {
+    const inProgress = validateArtifact(
+      recognized(
+        ".kepler/changes/demo/progress.md",
+        {
+          ...validArtifacts[5][1],
+          status: "in-progress",
+          tasks: [
+            {
+              id: 1,
+              title: "Lint",
+              status: "in-progress",
+              progress: "tasks/task-1/progress.md",
+            },
+          ],
+        },
+        "# Progress: Demo\n| Task | Status | Progress |\n| --- | --- | --- |\n| Task 1: Lint | in-progress | [details](tasks/task-1/progress.md) |",
+      ),
+    );
+    const pendingLog = validateArtifact(
+      recognized(
+        ".kepler/changes/demo/tasks/task-1/progress.md",
+        { ...validArtifacts[6][1], task: 1, status: "pending" },
+        "# Task Progress: Task 1 — Lint",
+      ),
+    );
+    const finalizedCorrectionLog = validateArtifact(
+      recognized(
+        ".kepler/changes/demo/tasks/task-1/progress.md",
+        { ...validArtifacts[6][1], task: 1, status: "done" },
+        "# Task Progress: Task 1 — Lint\n\n## Attempt 1 — 2026-09-12\n- Outcome: done",
+      ),
+    );
+
+    expect(inProgress._tag).toBe("valid");
+    expect(pendingLog._tag).toBe("valid");
+    expect(finalizedCorrectionLog._tag).toBe("valid");
   });
 
   it("accepts an empty pending task-progress artifact only", () => {
@@ -1106,6 +1309,68 @@ Head: ${sha}
       ),
       "invalid-record",
     );
+  });
+
+  it.each([
+    ["blocked then done", "- Outcome: blocked\n- Outcome: done"],
+    ["done then blocked", "- Outcome: done\n- Outcome: blocked"],
+    ["repeated done", "- Outcome: done\n- Outcome: done"],
+    ["mixed bulleted and legacy", "- Outcome: done\nOutcome: blocked"],
+    ["supported plus malformed legacy", "- Outcome: done\nOutcome:done"],
+    ["supported plus malformed bulleted", "- Outcome: done\n- Outcome : blocked"],
+  ])(
+    "rejects duplicate terminal outcomes in the latest task attempt: %s",
+    (_case, outcomes) => {
+      const result = validateArtifact(
+        recognized(
+          ".kepler/changes/demo/tasks/task-2/progress.md",
+          validArtifacts[6][1],
+          `# Task Progress: Task 2 — Validate\n\n## Attempt 1 — 2026-09-12\n${outcomes}`,
+        ),
+      );
+
+      expectInvalid(result, "invalid-record");
+      if (result._tag === "invalid")
+        expect(result.diagnostics.map((item) => item.message)).toContain(
+          "Latest task attempt must declare exactly one done or blocked Outcome",
+        );
+    },
+  );
+
+  it("ignores historical duplicate outcomes when the latest task attempt is unambiguous", () => {
+    const result = validateArtifact(
+      recognized(
+        ".kepler/changes/demo/tasks/task-2/progress.md",
+        validArtifacts[6][1],
+        "# Task Progress: Task 2 — Validate\n\n## Attempt 1 — 2026-09-11\n- Outcome: blocked\n- Outcome: done\n\n## Attempt 2 — 2026-09-12\n- Outcome: done",
+      ),
+    );
+
+    expect(result._tag).toBe("valid");
+  });
+
+  it.each(["done", "blocked"])("accepts one bulleted task Outcome: %s", (outcome) => {
+    const result = validateArtifact(
+      recognized(
+        ".kepler/changes/demo/tasks/task-2/progress.md",
+        validArtifacts[6][1],
+        `# Task Progress: Task 2 — Validate\n\n## Attempt 1 — 2026-09-12\n- Outcome: ${outcome}`,
+      ),
+    );
+
+    expect(result._tag).toBe("valid");
+  });
+
+  it("accepts one historical unbulleted task Outcome", () => {
+    const result = validateArtifact(
+      recognized(
+        ".kepler/changes/demo/tasks/task-2/progress.md",
+        validArtifacts[6][1],
+        "# Task Progress: Task 2 — Validate\n\n## Attempt 1 — 2026-09-12\nOutcome: done",
+      ),
+    );
+
+    expect(result._tag).toBe("valid");
   });
 
   it("reports malformed and non-monotonic records", () => {

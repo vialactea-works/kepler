@@ -28,6 +28,52 @@ describe("artifact metadata schemas", () => {
     expect(schema.required).toEqual(expect.arrayContaining(requiredFields[artifact]));
   });
 
+  it("validates dependency-mode execution and scheduling amendment metadata", () => {
+    const base = {
+      artifact: "plan",
+      change: "demo",
+      status: "approved",
+      created: "2026-09-12",
+      author: "test",
+      decision: "accepted",
+      route_unit: null,
+    };
+    const dependencyPlan = validateArtifactMetadataSchema(
+      recognized({ ...base, execution: { version: 2, mode: "dependencies" } }),
+      "plan",
+    );
+    const dependencyTransition = validateArtifactMetadataSchema(
+      recognized({
+        ...base,
+        execution: { version: 2, mode: "dependencies" },
+        execution_transition: {
+          version: 2,
+          previousPlanCommit: "0123456789abcdef0123456789abcdef01234567",
+          fullyGatedTasks: [1, 3],
+          approval: "requester-reference",
+          reason: "Add a scheduling prerequisite.",
+          affected: "Tasks 2 and 3.",
+        },
+      }),
+      "plan",
+    );
+
+    expect(dependencyPlan).toEqual([]);
+    expect(dependencyTransition).toEqual([]);
+    expect(
+      validateArtifactMetadataSchema(
+        recognized({ ...base, execution: { version: 2, order: [1] } }),
+        "plan",
+      ),
+    ).not.toEqual([]);
+    expect(
+      validateArtifactMetadataSchema(
+        recognized({ ...base, execution: { version: 3, mode: "dependencies" } }),
+        "plan",
+      ),
+    ).not.toEqual([]);
+  });
+
   it("maps nested task schema errors to stable diagnostic paths", () => {
     const diagnostics = validateArtifactMetadataSchema(
       recognized({

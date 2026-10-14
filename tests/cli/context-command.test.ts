@@ -142,7 +142,7 @@ describe("ContextCommand", () => {
     );
 
     expect(harness.calls).toEqual([
-      { all: false, changeDir: ".kepler/change" },
+      { all: false, changeDir: ".kepler/change", inputPaths: [] },
     ]);
     expect(harness.exitCode).toBe(1);
     expect(harness.stdout).toBe(
@@ -168,10 +168,35 @@ describe("ContextCommand", () => {
       serviceResult,
     );
 
-    expect(harness.calls).toEqual([{ all: true, changeDir: undefined }]);
+    expect(harness.calls).toEqual([{ all: true, changeDir: undefined, inputPaths: [] }]);
     expect(harness.exitCode).toBe(0);
     expect(harness.stdout).toBe(serviceResult.stdout);
     expect(harness.stderr).toBe("");
+  });
+
+  it("forwards repeatable current-input probes", async () => {
+    const serviceResult = result({ stdout: "plan-contract-data: {}\n" });
+    const harness = await runCli(
+      [
+        "workbench",
+        "context",
+        ".kepler/change",
+        "--input",
+        "AGENTS.md",
+        "--input",
+        "src/main.ts",
+      ],
+      serviceResult,
+    );
+
+    expect(harness.calls).toEqual([
+      {
+        all: false,
+        changeDir: ".kepler/change",
+        inputPaths: ["AGENTS.md", "src/main.ts"],
+      },
+    ]);
+    expect(harness.stdout).toBe(serviceResult.stdout);
   });
 
   it("rejects --all with a change directory before calling ContextService", async () => {

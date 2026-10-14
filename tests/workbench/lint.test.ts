@@ -818,6 +818,22 @@ describe("scoped artifact lint", () => {
     ]);
   });
 
+  it("lints dependency-mode task contracts and reports a missing acceptance criterion", async () => {
+    const directory = await temporaryDirectory();
+    const file = Path.join(directory, ".kepler", "changes", "demo", "plan.md");
+    const source = `---\nartifact: plan\nchange: demo\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\nexecution:\n  version: 2\n  mode: dependencies\n---\n# Plan: Demo\n\n## Overview\n\n## Tasks\n\n### Task 1: Implement\n\n- Goal: Deliver the behavior.\n- Depends on: none\n- Acceptance:\n  - The behavior is observable.\n- Steps:\n  1. Verify the behavior.\n- Verify: bun --bun vitest run\n- Commit: feat: implement behavior\n\n## Done when\n\nThe behavior is complete.\n`;
+    await Fs.mkdir(Path.dirname(file), { recursive: true });
+    await Fs.writeFile(file, source);
+    expectExit(await executeLint({ file }), 0);
+
+    await Fs.writeFile(file, source.replace("- Acceptance:\n  - The behavior is observable.\n", ""));
+    const invalid = await executeLint({ file });
+    expectExit(invalid, 1);
+    expect(renderLintResult(invalid)).toContain(
+      "Task 1 requires visible nonempty Acceptance",
+    );
+  });
+
   it("reports malformed recognized artifacts and all contract findings", async () => {
     const directory = await temporaryDirectory();
     const file = Path.join(directory, "proposal.md");

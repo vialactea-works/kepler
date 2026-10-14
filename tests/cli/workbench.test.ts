@@ -4,6 +4,10 @@ import * as Os from "node:os";
 import * as Path from "node:path";
 import { spawnSync } from "node:child_process";
 import { VERSION } from "../../src/index.js";
+import {
+  taskBreakdownDigestFromDefinitions,
+  taskDefinitionDigest,
+} from "../../packages/cli/src/workbench/artifact-body.js";
 
 const entrypoint = Path.resolve("packages/cli/src/cli/main.ts");
 
@@ -138,7 +142,7 @@ describe("workbench CLI", () => {
     ];
     const malformedCalls = [
       ["workbench", "extra"],
-      ["workbench", "diff", "--whole-change", "--out", diffOutput, "extra"],
+      ["workbench", "diff", "--whole-change", "--target-branch", "refs/remotes/origin/main", "--out", diffOutput, "extra"],
       [
         "workbench",
         "precondition",
@@ -146,6 +150,8 @@ describe("workbench CLI", () => {
         changeDirectory,
         "--test-cmd",
         `touch ${testMarker}`,
+        "--target-branch",
+        "refs/remotes/origin/main",
         "extra",
       ],
       ["workbench", "lint", "--file", file, "extra"],
@@ -353,6 +359,7 @@ describe("workbench CLI", () => {
     Fs.writeFileSync(Path.join(temporaryDirectory, "file.txt"), "initial\n");
     git(temporaryDirectory, "add", "file.txt");
     git(temporaryDirectory, "commit", "-qm", "initial");
+    git(temporaryDirectory, "update-ref", "refs/remotes/origin/main", "HEAD");
     git(temporaryDirectory, "switch", "-c", "feature");
     Fs.writeFileSync(Path.join(temporaryDirectory, "file.txt"), "changed\n");
     git(temporaryDirectory, "commit", "-am", "change");
@@ -362,6 +369,8 @@ describe("workbench CLI", () => {
       "workbench",
       "diff",
       "--whole-change",
+      "--target-branch",
+      "refs/remotes/origin/main",
     );
 
     expect(result.status).toBe(0);
@@ -385,6 +394,7 @@ describe("workbench CLI", () => {
     Fs.writeFileSync(Path.join(changeDirectory, "placeholder"), "content\n");
     git(temporaryDirectory, "add", ".");
     git(temporaryDirectory, "commit", "-qm", "initial");
+    git(temporaryDirectory, "update-ref", "refs/remotes/origin/main", "HEAD");
 
     const result = runCli(
       temporaryDirectory,
@@ -394,6 +404,8 @@ describe("workbench CLI", () => {
       changeDirectory,
       "--test-cmd",
       "true",
+      "--target-branch",
+      "refs/remotes/origin/main",
     );
 
     expect(result.status).toBe(1);
@@ -440,9 +452,33 @@ describe("workbench CLI", () => {
     write("seed", "seed\n");
     git(repositoryDirectory, "add", ".");
     git(repositoryDirectory, "commit", "-qm", "initial");
+    git(repositoryDirectory, "update-ref", "refs/remotes/origin/main", "HEAD");
     const base = gitOutput(repositoryDirectory, "rev-parse", "HEAD");
+    const seedBlob = gitOutput(repositoryDirectory, "rev-parse", "HEAD:seed");
     git(repositoryDirectory, "switch", "-c", "feature");
 
+    const taskDefinition = lines(
+      "### Task 1: Example",
+      "",
+      "- Depends on: none",
+      "- Files:",
+      "  - Created: none",
+      "  - Modified: src/example.ts",
+      "  - Deleted: none",
+      "- Acceptance:",
+      "  - Evidence consumers agree on the latest pass.",
+      "- Steps:",
+      "  1. Exercise the evidence consumers.",
+      "- Verify: true",
+      "- Commit: example",
+    );
+    const inputContext = JSON.stringify({
+      version: 1,
+      repository: Fs.realpathSync(repositoryDirectory),
+      intentCommit: "tactical:latest-pass-fixture",
+      taskDefinition: taskDefinitionDigest(taskDefinition),
+      inputs: [],
+    });
     write(
       ".kepler/changes/sample/plan.md",
       lines(
@@ -477,6 +513,7 @@ describe("workbench CLI", () => {
         "  1. Exercise the evidence consumers.",
         "- Verify: true",
         "- Commit: example",
+        `- Notes: ${inputContext}`,
         "",
         "## Done when",
         "",
@@ -674,6 +711,8 @@ describe("workbench CLI", () => {
       "workbench",
       "context",
       changeDirectory,
+      "--input",
+      "seed",
     );
     const preconditionValid = runCli(
       repositoryDirectory,
@@ -683,6 +722,8 @@ describe("workbench CLI", () => {
       changeDirectory,
       "--test-cmd",
       "true",
+      "--target-branch",
+      "refs/remotes/origin/main",
     );
 
     expect(lintValid.status).toBe(0);
@@ -694,6 +735,61 @@ describe("workbench CLI", () => {
     expect(contextValid.stdout).toContain(
       "whole change: approved",
     );
+    const planContractLine = contextValid.stdout
+      .split("\n")
+      .find((line) => line.startsWith("plan-contract-data: "));
+    expect(planContractLine).toBeDefined();
+    const planContractData = JSON.parse(
+      planContractLine?.slice("plan-contract-data: ".length) ?? "null",
+    ) as {
+      readonly version: number;
+      readonly repository: string | null;
+      readonly taskBreakdownDigest: string;
+      readonly tasks: readonly {
+        readonly id: number;
+        readonly taskDefinitionDigest: string;
+        readonly recordedInputContext: {
+          readonly repository: string;
+          readonly intentCommit: string;
+          readonly taskDefinition: string;
+        } | null;
+      }[];
+      readonly inputs: readonly {
+        readonly path: string;
+        readonly requested: boolean;
+        readonly recordedBy: readonly { readonly task: number; readonly blob: string }[];
+        readonly currentHeadBlob: string | null;
+        readonly headAvailable: boolean;
+        readonly currentWorktreeBlob: string | null;
+        readonly worktreeAvailable: boolean;
+      }[];
+    };
+    const expectedTaskDigest = taskDefinitionDigest(taskDefinition);
+    expect(planContractData.version).toBe(1);
+    expect(planContractData.repository).toBe(Fs.realpathSync(repositoryDirectory));
+    expect(planContractData.tasks).toEqual([
+      expect.objectContaining({ id: 1, taskDefinitionDigest: expectedTaskDigest }),
+    ]);
+    expect(planContractData.taskBreakdownDigest).toBe(
+      taskBreakdownDigestFromDefinitions(
+        [1],
+        [{ id: 1, definitionDigest: expectedTaskDigest }],
+      ),
+    );
+    expect(planContractData.tasks[0]?.recordedInputContext).toEqual(
+      expect.objectContaining({ repository: planContractData.repository, intentCommit: "tactical:latest-pass-fixture" }),
+    );
+    expect(planContractData.inputs).toEqual([
+      {
+        path: "seed",
+        requested: true,
+        recordedBy: [],
+        currentHeadBlob: seedBlob,
+        headAvailable: true,
+        currentWorktreeBlob: seedBlob,
+        worktreeAvailable: true,
+      },
+    ]);
     expect(preconditionValid.status).toBe(0);
     expect(preconditionValid.stdout).toContain("[PASS] Clean tree");
     expect(preconditionValid.stdout).not.toContain("feedback malformed");
@@ -730,6 +826,8 @@ describe("workbench CLI", () => {
       changeDirectory,
       "--test-cmd",
       "true",
+      "--target-branch",
+      "refs/remotes/origin/main",
     );
 
     expect(lintLegacy.status).toBe(0);
@@ -768,6 +866,8 @@ describe("workbench CLI", () => {
       changeDirectory,
       "--test-cmd",
       "true",
+      "--target-branch",
+      "refs/remotes/origin/main",
     );
 
     expect(lintMigrated.status).toBe(0);
@@ -813,6 +913,8 @@ describe("workbench CLI", () => {
       changeDirectory,
       "--test-cmd",
       "true",
+      "--target-branch",
+      "refs/remotes/origin/main",
     );
 
     expect(lintMalformed.status).toBe(1);

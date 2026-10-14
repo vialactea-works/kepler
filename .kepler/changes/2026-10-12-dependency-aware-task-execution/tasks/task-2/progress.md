@@ -1,0 +1,39 @@
+---
+artifact: task-progress
+change: 2026-10-12-dependency-aware-task-execution
+task: 2
+status: done
+updated: 2026-10-13
+decision: accepted
+---
+
+# Task Progress: Task 2 — Enforce lifetime prerequisite reservations
+
+## Attempt 1 — 2026-10-13
+
+- Base: a8af61e64d05f0a5bdcb23816cafdd6c0cf21cde
+- Created: `packages/cli/src/workbench/scope-expansions.ts`, `packages/cli/src/workbench/scope-expansion-history.ts`, `tests/workbench/scope-expansions.test.ts`, `tests/workbench/scope-expansion-history.test.ts`.
+- Modified: `packages/cli/src/workbench/artifact-types.ts`, `packages/cli/src/workbench/artifact-schemas.ts`, `packages/cli/src/workbench/artifact-body.ts`, `packages/cli/src/workbench/context.ts`, `packages/cli/src/workbench/task-checkpoint.ts`, `packages/cli/src/workbench/diff.ts`, `packages/cli/src/workbench/precondition-artifacts.ts`, `packages/cli/src/workbench/precondition-git.ts`, `packages/cli/src/workbench/precondition-runtime.ts`, this task log, and only Task 2's mirrored root status and the root update date.
+- Deleted: none.
+- Red: before production edits, `bun --bun vitest run tests/workbench/scope-expansions.test.ts tests/workbench/artifact-schemas.test.ts tests/workbench/artifact-contracts.test.ts tests/workbench/context.test.ts tests/workbench/precondition.test.ts tests/workbench/diff.test.ts` failed with 26 intended reservation-policy failures and 367 passes in six files, 342.85 seconds. The preliminary new-file check also demonstrated these 26 failures. Logs: `/tmp/kepler-dependency-recovery.3PAkG7/task-2-schema-red.log`, `task-2-red.log`.
+- Green: bounded native helper run `e7fce8d0-0147-4973-aa85-79025a1d5fff` implemented schema/accounting and passed the 27 new-file tests within its five-minute deadline. It did not run broad tests, commit, or mark this task complete. The parent retained implementation and integration ownership. Independent parent history checks then reproduced six intended failures in ancestry interpretation, post-reservation production, NUL-delimited paths, and unsafe paths before correcting that history policy. These checks passed after the correction; real signed temporary Git fixtures expanded verification to 45 passing tests across two files. Logs: `task-2-history-red.log`, `task-2-history-green.log` in the same preservation directory.
+- Refactor: reused one typed ScopeExpansion shape and one concrete-path predicate, separated artifact/history collection from finite accounting, and kept Git chronology behind typed existing runtime ports. Full-history path queries retain earlier and reverted production changes; unchanged reservation snapshots do not charge quota again. Context and checkpoint consumers enforce the same lifetime history. An initial integrated focused run exposed two legacy diagnostic regressions with 409 other passes; the parent fixed the cause by activating reservation-specific history checks only when a reservation exists, preserving original legacy checkpoint/confirmation checks and assertions. The two distinguishing regressions passed, then all 45 reservation tests passed again. Logs: `task-2-focused.log`, `task-2-compatibility-green.log`, `task-2-history-refactor.log`.
+- Verify: `bun --bun vitest run tests/workbench/scope-expansions.test.ts tests/workbench/scope-expansion-history.test.ts tests/workbench/artifact-schemas.test.ts tests/workbench/artifact-contracts.test.ts tests/workbench/context.test.ts tests/workbench/precondition.test.ts tests/workbench/diff.test.ts` passed seven files and 411 tests, 356.03 seconds. `bun --bun vitest run` passed 57 files and 1045 tests with default settings, 361.88 seconds. `bun run build` passed both packages. Logs: `task-2-final-focused.log`, `task-2-full.log`, `task-2-final-build.log` in the same preservation directory.
+- Verify: the source CLI `workbench context` reported the current split change and preserved execution/input contracts. Active LSP checks returned no error diagnostics, with four files confirmed clean and eight silent-on-clean checks unconfirmed; the completed TypeScript build supplies the compilation gate. `git diff --check` passed. Canonical specs, legacy sources, installed skills, and prepared native-actor fixtures remain untouched.
+- Quality constraints: metadata validation and accounting use typed domain records; application history uses injected Git reads and the existing artifact reader/body parser. Signed real Git fixtures cover commitment before production, same-commit and earlier/reverted production, erased/rewritten/reordered reservations, correction without refund, uncommitted records, historical attempt preservation, and goal-serving unlisted paths. Reservations alone do not manufacture an attempt or terminal outcome. No comment, dependency, new result vocabulary, separate persistence, or fake success fallback was added.
+- Decision context: the fixed lifetime allowance is two reservations with at most four concrete paths each. Necessity and approved-intent claims remain reviewer/owner judgment. This task validates accounting/history; guarded mutation/admission and coordinator publication belong to Task 4, so these helpers are not represented as an implemented mutation command.
+- Outcome: done
+
+## Attempt 2 — 2026-10-13
+
+- Base: a8af61e64d05f0a5bdcb23816cafdd6c0cf21cde
+- Created: none.
+- Modified: `tests/workbench/scope-expansion-history.test.ts` and this task log. Production source and the original attempt remain byte-for-byte unchanged.
+- Deleted: none.
+- Red: feedback Pass 1 requested replacing the full-history Git range query because it allegedly rejects existing files unchanged after Base. A conventional failing test for that claimed behavior was not available: the distinguishing signed real Git fixture passed against the unchanged implementation. The fixture commits source before task Base, proves the file exists at Base, leaves it untouched before reservation, observes the exact range query return status 0 with empty output, and verifies that history accepts the reservation. This evidence preceded any production edits; none were needed. The reviewer supplied no executable reproducer. Log: `/tmp/kepler-dependency-recovery.3PAkG7/task-2-review-discriminator.log`.
+- Green: all 12 real Git history tests passed, including the new pre-existing-file control and the unchanged same-commit, earlier, and earlier-reverted production rejection cases. The proposed endpoint tree comparison alone would lose the already-verified reverted-edit boundary, so the parent retained the working history query and requests independent disposition of `pass-1-blocking-1` using these executable controls.
+- Refactor: kept the additional control in the existing signed temporary Git fixture helper, with an optional pre-task source seed. No parallel parser, production change, prior feedback rewrite, or assertion weakening was needed.
+- Verify: `bun --bun vitest run` passed 57 files and 1046 tests with default settings, 360.08 seconds. `bun run build` passed both packages; `git diff --check` passed. Logs: `/tmp/kepler-dependency-recovery.3PAkG7/task-2-evidence-full.log`, `task-2-evidence-build.log`.
+- Quality constraints: treat independent feedback as a falsifiable claim, preserve the before-edit and reverted-history invariants, and prove actual Git behavior instead of substituting an untested query. The new committed test makes the requested existing-file case durable.
+- Decision context: this is verification evidence for the unchanged approved Task 2 goal. It does not convert an unconfirmed review assertion into a production defect or silently waive the independent feedback barrier. Task 3 remains held until fresh approved feedback.
+- Outcome: done

@@ -1,8 +1,14 @@
 import { marked, type Token } from "marked";
 import type { RecognizedArtifact } from "./artifact-reader.js";
+import { visibleMarkdownLines } from "./artifact-body.js";
+import { isFullTargetBranchReference } from "./git-reference.js";
 import type {
   ArtifactContractDiagnostic,
   ArtifactContractDiagnosticCode,
+  ReviewClearanceProvenance,
+  ReviewFinding,
+  ReviewFindingKind,
+  ReviewFindingResolution,
   ReviewPassEvidence,
   ReviewPassParseResult,
   ReviewPassRecord,
@@ -23,21 +29,47 @@ interface PassHeading {
   readonly parsed: { readonly number: number; readonly date: string } | null;
 }
 
+type PassFieldName =
+  | "Base"
+  | "Head"
+  | "Verdict"
+  | "Scope"
+  | "Target"
+  | "Parent pass"
+  | "Parent commit"
+  | "Delta base"
+  | "Resolutions";
+
 interface FieldOccurrence {
-  readonly name: "Base" | "Head" | "Verdict";
+  readonly name: PassFieldName;
   readonly value: string;
   readonly line: number;
 }
 
 const verdicts: readonly ReviewPassVerdict[] = [
   "approved",
+  "approved-remediation",
   "changes-requested",
   "skipped",
 ];
 
 const fields = ["Base", "Head", "Verdict"] as const;
+const clearanceFields = [
+  "Scope",
+  "Target",
+  "Parent pass",
+  "Parent commit",
+  "Delta base",
+  "Resolutions",
+] as const;
 
 const fullCommit = (value: string): boolean => /^[0-9a-f]{40}$/.test(value);
+
+const positiveNumber = (value: string): number | undefined => {
+  if (!/^[1-9][0-9]*$/.test(value)) return undefined;
+  const number = Number(value);
+  return Number.isSafeInteger(number) ? number : undefined;
+};
 
 const lineAtOffset = (source: string, offset: number): number =>
   source.slice(0, offset).split(/\r\n|\n|\r/).length;
@@ -88,7 +120,7 @@ const markdownHeadings = (source: string): readonly {
 };
 
 const readHeadings = (artifact: RecognizedArtifact): readonly ReviewHeading[] => {
-  const source = visibleBody(artifact.body);
+  const source = visibleBody(artifact.body).replace(/\r\n|\r/g, "\n");
   return markdownHeadings(source).map((heading) => {
     const line = lineAtOffset(source, heading.offset);
     return {
@@ -160,7 +192,7 @@ const passHeadings = (
     }));
 };
 
-const fieldPattern = /^[ \t]*(Base|Head|Verdict):[ \t]*(.*)$/;
+const fieldPattern = /^[ \t]*(Base|Head|Verdict|Scope|Target|Parent pass|Parent commit|Delta base|Resolutions):[ \t]*(.*)$/;
 
 const fieldOccurrences = (
   lines: readonly string[],
@@ -192,17 +224,16 @@ const commentedPassDiagnostics = (
   let match: RegExpExecArray | null;
   while ((match = comments.exec(artifact.body)) !== null) {
     const inner = match[0].replace(/^<!--/, "").replace(/-->$/, "");
-    for (const heading of markdownHeadings(inner)) {
+    const normalized = inner.replace(/\r\n|\r/g, "\n");
+    const commentLine = lineAtOffset(artifact.body, match.index) - 1;
+    for (const heading of markdownHeadings(normalized)) {
       if (heading.text.startsWith("Pass "))
         diagnostics.push(
           diagnostic(
             artifact,
             "invalid-record",
             "Pass records cannot be declared in HTML comments",
-            bodyLine(
-              artifact,
-              lineAtOffset(artifact.body, match.index + heading.offset) - 1,
-            ),
+            bodyLine(artifact, commentLine),
             {
               expected: "## Pass N — YYYY-MM-DD",
               actual: heading.text,
@@ -225,7 +256,7 @@ const fieldDiagnostic = (
     occurrence.line,
     {
       field: occurrence.name,
-      expected: "Base, Head, Verdict",
+      expected: "Base, Head, Verdict, then optional clearance provenance",
       actual: occurrence.value,
       actualPresent: true,
     },
@@ -379,8 +410,69 @@ const passFields = (
 };
 
 const completePassFields = (occurrences: readonly FieldOccurrence[]): boolean =>
-  occurrences.length === fields.length &&
+  occurrences.length >= fields.length &&
   fields.every((name, index) => occurrences[index]?.name === name);
+
+const orderedPassFields = (occurrences: readonly FieldOccurrence[]): boolean => {
+  if (!completePassFields(occurrences)) return false;
+  const optional = occurrences.slice(fields.length).map((field) => field.name);
+  const expected = clearanceFields.filter((field) => optional.includes(field));
+  return optional.length === expected.length && optional.every((field, index) => field === expected[index]);
+};
+
+const parseResolutions = (value: string): readonly ReviewFindingResolution[] | undefined => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(parsed)) return undefined;
+  const seen = new Set<string>();
+  const resolutions: ReviewFindingResolution[] = [];
+  for (const entry of parsed) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+    const record = entry as Record<string, unknown>;
+    if (Object.keys(record).sort().join(",") !== "evidence,finding,verification") return undefined;
+    if (
+      typeof record.finding !== "string" ||
+      !/^pass-[1-9][0-9]*-blocking-[1-9][0-9]*$/.test(record.finding) ||
+      seen.has(record.finding) ||
+      !Array.isArray(record.evidence) ||
+      record.evidence.length === 0 ||
+      !record.evidence.every((item) => typeof item === "string" && item.trim() !== "") ||
+      typeof record.verification !== "string" ||
+      record.verification.trim() === ""
+    ) return undefined;
+    seen.add(record.finding);
+    resolutions.push({
+      finding: record.finding,
+      evidence: record.evidence as string[],
+      verification: record.verification,
+    });
+  }
+  return resolutions;
+};
+
+const parseFinding = (
+  value: string,
+  passNumber: number,
+  ordinal: number,
+): ReviewFinding | undefined => {
+  const match = /^\[(.+)\] (.+)$/.exec(value);
+  if (match === null) return undefined;
+  const action = match[2] ?? "";
+  const idMatches = [...action.matchAll(/(?:^|;\s*)id:\s*([^;]+)/g)];
+  const kindMatches = [...action.matchAll(/(?:^|;\s*)kind:\s*([^;]+)/g)];
+  if (idMatches.length > 1 || kindMatches.length > 1) return undefined;
+  const idValue = idMatches[0]?.[1]?.trim();
+  const kindValue = kindMatches[0]?.[1]?.trim();
+  if (idValue !== undefined && !/^pass-[1-9][0-9]*-blocking-[1-9][0-9]*$/.test(idValue)) return undefined;
+  if (kindValue !== undefined && !/^(code-defect|evidence-gap|intent-defect)$/.test(kindValue)) return undefined;
+  const id = idValue ?? `pass-${passNumber}-blocking-${ordinal}`;
+  const kind = kindValue as ReviewFindingKind | undefined;
+  return { id, ...(kind === undefined ? {} : { kind }), text: value };
+};
 
 const reviewHistoryState = (
   globalCount: number,
@@ -579,13 +671,13 @@ const parsePass = (
           diagnostics.push(fieldDiagnostic(artifact, occurrence));
       }
     }
-    if (beforeFields.length === fields.length && fields.every((name) => (counts.get(name) ?? 0) === 1)) {
-      for (let index = 0; index < fields.length; index += 1) {
-        if (beforeFields[index]?.name !== fields[index])
-          diagnostics.push(
-            fieldDiagnostic(artifact, beforeFields[index] as FieldOccurrence),
-          );
-      }
+    if (fields.every((name) => (counts.get(name) ?? 0) === 1) && !orderedPassFields(beforeFields))
+      for (const occurrence of beforeFields)
+        diagnostics.push(fieldDiagnostic(artifact, occurrence));
+    for (const name of clearanceFields) {
+      if ((counts.get(name) ?? 0) > 1)
+        for (const occurrence of beforeFields.filter((field) => field.name === name).slice(1))
+          diagnostics.push(fieldDiagnostic(artifact, occurrence));
     }
   } else if (beforeFields.length > 0) {
     diagnostics.push(
@@ -751,6 +843,163 @@ const parsePass = (
         blocking.values,
       ),
     );
+  const valueByName = new Map(
+    beforeFields.map((occurrence) => [occurrence.name, occurrence.value]),
+  );
+  const scopeValue = valueByName.get("Scope");
+  const hasClearanceFields = clearanceFields.some((name) => valueByName.has(name));
+  let clearance: ReviewClearanceProvenance | undefined;
+  if (mode === "per-pass" && scopeValue === undefined && hasClearanceFields)
+    diagnostics.push(
+      sectionDiagnostic(
+        artifact,
+        "invalid-record",
+        "Review clearance provenance requires Scope",
+        candidate.heading.line,
+        "Scope: full or Scope: remediation",
+      ),
+    );
+  if (mode === "per-pass" && scopeValue !== undefined) {
+    const target = valueByName.get("Target");
+    if (!isFullTargetBranchReference(target ?? ""))
+      diagnostics.push(
+        sectionDiagnostic(
+          artifact,
+          "invalid-value",
+          "Target must be an explicit full branch reference",
+          beforeFields.find((field) => field.name === "Target")?.line ?? candidate.heading.line,
+          "refs/heads/<branch> or refs/remotes/<remote>/<branch>",
+          target,
+        ),
+      );
+    if (scopeValue === "full") {
+      if (clearanceFields.slice(2).some((name) => valueByName.has(name)))
+        diagnostics.push(
+          sectionDiagnostic(
+            artifact,
+            "invalid-record",
+            "Full review provenance cannot contain remediation fields",
+            candidate.heading.line,
+            "Scope, Target",
+          ),
+        );
+      if (isFullTargetBranchReference(target ?? "")) clearance = { scope: "full", target: target! };
+    } else if (scopeValue === "remediation") {
+      const parentPassValue = valueByName.get("Parent pass");
+      const parentCommit = valueByName.get("Parent commit");
+      const deltaBase = valueByName.get("Delta base");
+      const resolutionsValue = valueByName.get("Resolutions");
+      const parentPass = parentPassValue === undefined ? undefined : positiveNumber(parentPassValue);
+      const resolutions = resolutionsValue === undefined ? undefined : parseResolutions(resolutionsValue);
+      if (
+        parentPass === undefined ||
+        !fullCommit(parentCommit ?? "") ||
+        !fullCommit(deltaBase ?? "") ||
+        resolutions === undefined ||
+        !isFullTargetBranchReference(target ?? "")
+      )
+        diagnostics.push(
+          sectionDiagnostic(
+            artifact,
+            "invalid-value",
+            "Remediation clearance requires a full baseline, delta base, target, and valid resolutions array",
+            candidate.heading.line,
+            "Scope, Target, Parent pass, Parent commit, Delta base, Resolutions",
+          ),
+        );
+      else
+        clearance = {
+          scope: "remediation",
+          target: target!,
+          parentPass,
+          parentCommit: parentCommit!,
+          deltaBase: deltaBase!,
+          resolutions,
+        };
+    } else {
+      diagnostics.push(
+        sectionDiagnostic(
+          artifact,
+          "invalid-value",
+          "Scope must be full or remediation",
+          beforeFields.find((field) => field.name === "Scope")?.line ?? candidate.heading.line,
+          "full | remediation",
+          scopeValue,
+        ),
+      );
+    }
+  }
+  if (verdict === "approved-remediation") {
+    if (artifact.metadata.artifact !== "review")
+      diagnostics.push(
+        sectionDiagnostic(
+          artifact,
+          "invalid-value",
+          "approved-remediation is only valid for root whole-branch review",
+          candidate.heading.line,
+          "root review artifact",
+          artifact.metadata.artifact,
+        ),
+      );
+    if (clearance?.scope !== "remediation")
+      diagnostics.push(
+        sectionDiagnostic(
+          artifact,
+          "invalid-value",
+          "approved-remediation requires remediation scope provenance",
+          candidate.heading.line,
+          "Scope: remediation",
+        ),
+      );
+    if (!blockingIsNone)
+      diagnostics.push(
+        sectionDiagnostic(
+          artifact,
+          "invalid-value",
+          "Approved remediation passes cannot contain blocking findings",
+          blockingHeading?.line ?? candidate.heading.line,
+          "- None.",
+          blocking.values,
+        ),
+      );
+  }
+  if (scopeValue === "remediation" && verdict === "approved")
+    diagnostics.push(
+      sectionDiagnostic(
+        artifact,
+        "invalid-value",
+        "Remediation scope must use the approved-remediation or changes-requested verdict",
+        candidate.heading.line,
+        "approved-remediation | changes-requested | skipped",
+        verdict,
+      ),
+    );
+  const passNumber = candidate.parsed.number;
+  const findings = blocking.values.flatMap((value, index) => {
+    if (value === "None.") return [];
+    const finding = parseFinding(value, passNumber, index + 1);
+    if (finding === undefined)
+      diagnostics.push(
+        sectionDiagnostic(
+          artifact,
+          "invalid-value",
+          "Blocking finding identity or kind is malformed",
+          blockingHeading?.line ?? candidate.heading.line,
+          "[path:line] id: pass-N-blocking-M; kind: code-defect | evidence-gap | intent-defect; description",
+          value,
+        ),
+      );
+    return finding === undefined ? [] : [finding];
+  });
+  if (new Set(findings.map((finding) => finding.id)).size !== findings.length)
+    diagnostics.push(
+      sectionDiagnostic(
+        artifact,
+        "invalid-value",
+        "Blocking findings must have unique identities within a pass",
+        blockingHeading?.line ?? candidate.heading.line,
+      ),
+    );
   if (diagnostics.length > 0) return { diagnostics };
   return {
     record: {
@@ -759,6 +1008,8 @@ const parsePass = (
       base,
       head,
       verdict,
+      findings,
+      ...(clearance === undefined ? {} : { clearance }),
     },
     diagnostics,
   };
@@ -773,7 +1024,7 @@ export const parseReviewPasses = (
   artifact: RecognizedArtifact,
 ): ReviewPassParseResult => {
   const headings = readHeadings(artifact);
-  const lines = visibleBody(artifact.body).split(/\r\n|\n|\r/);
+  const lines = visibleMarkdownLines(artifact.body);
   const candidates = passHeadings(headings, lines.length);
   const diagnostics: ArtifactContractDiagnostic[] = [
     ...commentedPassDiagnostics(artifact),
@@ -917,18 +1168,75 @@ export const parseReviewPasses = (
     diagnostics.push(...parsed.diagnostics);
     if (parsed.record !== undefined) passes.push(parsed.record);
   }
+  const findingIdentityByText = new Map<string, string>();
+  const firstPassForFindingId = new Map<string, number>();
+  const stablePasses: ReviewPassRecord[] = passes.map((record) => {
+    const originalFindings = record.provenance === "structural"
+      ? record.blocking.map((value, index) => parseFinding(value, record.number, index + 1))
+      : record.findings;
+    const findings = originalFindings.flatMap((finding, index) => {
+      if (finding === undefined) return [];
+      const location = /^\[[^\]]+\]/.exec(finding.text)?.[0] ?? "";
+      const action = finding.text.slice(location.length).trim();
+      const explicit = /(?:^|;\s*)id:\s*(pass-[1-9][0-9]*-blocking-[1-9][0-9]*)(?=;|$)/.exec(action)?.[1];
+      const fingerprint = `${location} ${action
+        .split(";")
+        .map((part) => part.trim())
+        .filter((part) => !/^(?:id|kind):/.test(part))
+        .join("; ")}`.trim();
+      const existingIdentity = findingIdentityByText.get(fingerprint);
+      const id = explicit ?? existingIdentity ?? finding.id;
+      const firstPass = firstPassForFindingId.get(id);
+      if (explicit !== undefined && firstPass === undefined && explicit !== `pass-${record.number}-blocking-${index + 1}`)
+        diagnostics.push(
+          sectionDiagnostic(
+            artifact,
+            "invalid-record",
+            "A new finding identity must name its first physical pass and blocking position",
+            record.line,
+            `pass-${record.number}-blocking-${index + 1}`,
+            explicit,
+          ),
+        );
+      if (existingIdentity !== undefined && explicit !== undefined && existingIdentity !== explicit)
+        diagnostics.push(
+          sectionDiagnostic(
+            artifact,
+            "invalid-record",
+            "A carried finding must retain its first-occurrence identity",
+            record.line,
+            existingIdentity,
+            explicit,
+          ),
+        );
+      if (firstPass === undefined) firstPassForFindingId.set(id, record.number);
+      if (existingIdentity === undefined) findingIdentityByText.set(fingerprint, id);
+      return [{ ...finding, id }];
+    });
+    if (record.provenance === "structural") return record;
+    if (new Set(findings.map((finding) => finding.id)).size !== findings.length)
+      diagnostics.push(
+        sectionDiagnostic(
+          artifact,
+          "invalid-value",
+          "Blocking findings must have unique identities after first-occurrence normalization",
+          record.line,
+        ),
+      );
+    return { ...record, findings };
+  });
   const physicalLastPass = lastPass?.number ?? undefined;
-  const lastRecord = passes.at(-1);
+  const lastRecord = stablePasses.at(-1);
   const latest: ReviewPassEvidence | undefined =
     diagnostics.length === 0 &&
-    passes.length === candidates.length &&
+    stablePasses.length === candidates.length &&
     lastRecord !== undefined &&
     lastRecord.number === physicalLastPass &&
     lastRecord.provenance !== "structural"
       ? lastRecord
       : undefined;
   return {
-    passes,
+    passes: stablePasses,
     diagnostics,
     ...(physicalLastPass === undefined ? {} : { physicalLastPass }),
     ...(latest === undefined ? {} : { latest }),

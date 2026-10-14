@@ -1,5 +1,13 @@
 # Skills reference (Assisted mode)
 
+## Dependency-aware task execution
+
+In dependency-mode v2, readiness is a derived projection, admission is guarded, implementation done is not feedback approval, and fully gated requires fresh approved task feedback. Every task states Goal, Acceptance, Depends on, Steps, Verify, and Commit; Files is optional guidance, not an allowlist. Necessary goal-serving unlisted edits are allowed within approved intent and project policy. Preserve strict Red → Green → Refactor and repeat the complete cycle for corrections.
+
+Each task may reserve at most two lifetime expansions, each naming at most four concrete paths; reserve before edits. Quota is not reset or refunded by removing/revising records or reverting edits. Re-plan when the bounded scope is insufficient; do not add dependencies implicitly or weaken public/security policies. A pending ready task enters a lane only through guarded admission; in-progress and implementation-done-but-uncleared prerequisites keep descendants held while independent ready work can use isolated compatible lanes. A single coordinator serializes original-commit integration, executes the exact integrated Verify command, and performs guarded root publication. In v2 workers own task-local evidence and original commits, not root publication. `kepler workbench context` derives state; it does not schedule work.
+
+Keep v1 and unversioned plans serial. Unknown modes fail closed; do not promise distributed scheduling. Preserve original-Base admission across retries, rebinds, and cache loss. Actor observation is not signer identity; owner-held intent references do not replace fresh artifact-only feedback. `done` and `blocked` are actor outcomes; `interrupted` and `unavailable` are neutral observations. Whole-branch review starts only after every active task is fully gated. See the [dependency execution example](examples/dependency-task-execution.md).
+
 > **Kepler is in ALPHA.** These skills are the one layer you can rely on today — but the shape
 > of the artifacts and the pipeline can still change without notice.
 
@@ -11,6 +19,8 @@ editor and a coding agent.
 
 For the design rationale behind the pipeline, see **[SDD framework](./sdd-framework.md)**. For how
 this layer is installed and what the CLI does, see **[modes](./modes.md)**.
+See the **[Change state machine](./change-state-machine.md)** for lifecycle states,
+skill-controlled transitions, and the artifact fields each gate reads.
 
 ## The pipeline
 
@@ -21,9 +31,11 @@ init ──▶ [ propose ] ──▶ plan ──▶ ( code ◀──▶ code-fee
 ```
 
 Seven core skills run in fixed sequence, with an optional pre-change planning stage (Wayfinder).
-`kepler-init` runs once per project. `kepler-propose` is the optional heavyweight
-front door — a tactical change skips it and starts at `kepler-plan`, which creates the required
-plan. For every task, `code` and `code-feedback` loop until that task passes; one whole-branch
+`kepler-init` runs once per project. `kepler-propose` is the optional heavyweight front door;
+a tactical change starts at `kepler-plan`. If planning finds a bounded behavior change that needs
+a requirements delta, `kepler-propose` handles only that approved delta, then returns the exact
+committed revision for planning to revalidate. For every task, `code` and `code-feedback` loop until
+that task passes; one whole-branch
 `review` follows after all tasks pass, then `finish-work` closes the change. `kepler-orchestrate`
 drives that sequence in one session using subagents. `kepler-critique` is an optional design-phase
 gate before planning. Neither Wayfinder nor critique is part of the seven-skill core line.
@@ -75,9 +87,10 @@ The distributed `kepler workbench` command is the supported workflow-mechanics s
 these skills. Its subcommands are:
 
 - `kepler workbench isolate` — check, create, or verify an isolated workspace.
-- `kepler workbench diff` — record checkpoints and package task or change diffs.
-- `kepler workbench precondition` — evaluate finish-work gates.
+- `kepler workbench diff` — record checkpoints and package task or change diffs. Whole-change packaging requires an explicit `--target-branch refs/remotes/<remote>/<branch>` or `refs/heads/<branch>`.
+- `kepler workbench precondition` — evaluate finish-work gates against the explicit `--target-branch` reference; the command never infers a default branch.
 - `kepler workbench context` — inspect change artifacts and lifecycle state.
+- `kepler workbench task-state` — guard task admission (`--admit`), before-edit reservations (`--reserve`), and integrated publication (`--publish`).
 - `kepler workbench prototype` — create, resume, or verify prototype branches.
 - `kepler workbench lint` — validate one file or one change directory.
 
@@ -109,6 +122,26 @@ different accepted layout, or differs from the installed template. A missing fil
 uncommitted feedback, stale review, or unmet acceptance criterion remains a separate workflow
 or evidence gate; lint does not check those conditions.
 
+### Task-state
+
+Select exactly one of `--admit`, `--reserve`, or `--publish`. Each operation takes
+`--task <number>` and `--expected-head <full-commit>`; use `--change-dir <directory>`
+when running outside the change directory.
+
+- `--admit` requires `--worker <identity>`, `--worktree <directory>`, and an explicit
+  `--target-branch refs/heads/<branch>` or `refs/remotes/<remote>/<branch>`. Optional
+  `--retry` rebinds eligible recovery without resetting the original Base.
+- `--reserve` requires `--reservation '<json>'` containing `id`, `attempt`, `prerequisite`,
+  `necessity`, `evidence`, `paths`, and `verify`. An owner reservation before admission also
+  requires `--target-branch <ref>`. Commit the reservation before editing its paths.
+- `--publish` requires `--task-head <full-commit>`. A `done` implementation also requires
+  `--verify '<exact task Verify command>'`; the coordinator executes it after integration
+  before publishing root status. Optional `--response` accepts `done`, `blocked`,
+  `interrupted`, or `unavailable`; neutral responses do not publish an implementation outcome.
+
+Admission binds eligible dependency-mode work to an isolated lane. These operations guard
+local state transitions; they do not schedule work or grant feedback clearance.
+
 ## The skills
 
 Each skill's authoritative definition is its own `SKILL.md` — this table is a map, not a
@@ -122,8 +155,8 @@ Prepares an existing repository for the pipeline.
 - **Inputs:** an existing git repository; anything you want emphasized in the standards.
 - **Produces:** `AGENTS.md` at the project root (the standing standards every later step reads,
   covering commands, testing, structure, code style, git workflow, and boundaries) and the
-  `.kepler/` workspace (`specs/`, `changes/`).
-- **Notes:** read-only exploration first; idempotent; never clobbers an existing `AGENTS.md`.
+  `.kepler/` workspace (`specs/`, `changes/`) and canonical `.kepler/specs/glossary.md`.
+- **Notes:** read-only exploration first; idempotent; preserves existing standards and glossary content, including migrated language. Init seeds sourced, context-scoped terms, lints the glossary and holds readiness on material ambiguity.
 - Source: [`skills/kepler-init/SKILL.md`](../skills/kepler-init/SKILL.md)
 
 ### `kepler-wayfinder` — chart the route before a change *(optional pre-change planning stage)*
@@ -151,14 +184,15 @@ needed to understand what will be true, why this path was chosen, and how delive
 ### `kepler-propose` — idea → proposal, requirements, design *(step 1, optional)*
 
 The heavyweight front door. Turns an idea into a well-formed change through collaborative dialogue,
-gating on approval before any implementation.
+gating on approval before any implementation. Tactical changes start at `kepler-plan`; when planning
+finds a bounded behavior change that needs a requirements delta, this skill also supports a
+requirements-only approval path with no proposal or design, then returns the committed delta to
+planning for revalidation.
 
 - **When:** for a change that warrants a spec; skip it for a tactical change.
-- **Inputs:** a change idea; the project's existing specs (`.kepler/specs/`); `AGENTS.md`.
-- **Produces**, in `.kepler/changes/<YYYY-MM-DD-title>/`: `proposal.md` (why), `requirements/<capability>.md`
-  (what, in delta form), `design.md` (how).
-- **Notes:** one question at a time; proposes 2–3 approaches with trade-offs; the design must clear a
-  code-quality self-review before the gate opens. On handoff it discloses the worktree it created
+- **Inputs:** a change idea; the canonical glossary and existing specs (`.kepler/specs/`); relevant domain and architecture documentation; `AGENTS.md`.
+- **Produces**, in `.kepler/changes/<YYYY-MM-DD-title>/`: `proposal.md` (why, sourced language, domain scope and boundary impact), `requirements/<capability>.md` (what, in delta form), `design.md` (domain model, architectural realization and supporting decisions). New full-path proposals name involved subdomains and bounded contexts and identify each capability's represented scope. Older projects may use sourced project documentation when the glossary is absent.
+- **Notes:** one question at a time; proposes 2–3 approaches with trade-offs; design explains affected package roles, ports/adapters and code attribution using sourced language, with relevant commands, states and invariants. It must clear semantic coverage and a code-quality self-review before the gate opens. On handoff it discloses the worktree it created
   and, when working with a person, asks before proceeding to `kepler-plan`.
 - Source: [`skills/kepler-propose/SKILL.md`](../skills/kepler-propose/SKILL.md)
 
@@ -174,9 +208,7 @@ design-phase counterpart to `kepler-review`. Returns a numbered findings report 
   codebase (to ground every reference); the canonical specs (`.kepler/specs/`); `AGENTS.md`.
 - **Produces:** a verdict (`approved` / `changes-requested`) and a numbered, located findings list —
   printed to chat and persisted to `critique.md` in the change directory.
-- **Notes:** checks logical consistency, semantic coherence (ubiquitous language), and — the load-
-  bearing step — that every referenced type/function/file/example actually exists in the codebase
-  and nothing is planned against code the change removes. Applies the same `references/code-quality.md`
+- **Notes:** checks scoped terminology, domain-model coverage, package roles, ports/adapters, code attribution and boundary ownership alongside logical consistency. Existing references must match the codebase; clearly proposed additions need supported ownership and contracts, and surviving consumers must not depend on removed code. Checks scale to relevant responsibilities rather than requiring every optional table. Applies the same `references/code-quality.md`
   rubric `kepler-propose` self-reviews against, capturing a Quality Lens. Its single `decision`
   field records whether the user accepted an approval, applied requested changes, rejected the
   critique, or skipped the decision. Accepted, applied, and rejected critiques are settled and do
@@ -335,18 +367,29 @@ Drives an entire `plan.md` through task implementation, task feedback, and one w
 Writes or rewrites `.kepler/specs/<capability>.md` outside the change pipeline, in two modes:
 **reformat** (an existing spec → the human-readable skeleton) and **from-code** (explore the
 application read-only and write specs from what it does). The front door for canonical specs — every
-other path creates a spec only when `kepler-finish-work` distills a completed change.
+other capability-behavior path creates a spec when `kepler-finish-work` distills a completed change. Init establishes the separate canonical glossary.
 
 - **When:** adopting Kepler on an existing codebase (bootstrap specs from code), or migrating specs
   written in the older `Requirement:` / `Scenario:` form into the current shape.
-- **Inputs:** the mode and its target (spec files to reformat, or the code to document); the existing
-  `.kepler/specs/`; `AGENTS.md`.
+- **Inputs:** the mode and its target (spec files to reformat, or the code to document); existing `.kepler/specs/`, the canonical glossary and authoritative domain/architecture documentation; `AGENTS.md`.
 - **Produces:** canonical specs in the skeleton (`## Overview` / `## Contract` / `## Behavior` +
   Examples / `## Invariants` / `## Decisions`), at altitude, in human-readable prose.
 - **Notes:** reads code and writes specs only — never edits application code, never creates a change
   directory. Reformat preserves every durable fact; from-code documents what the code actually does,
-  flagging inferred behavior rather than inventing guarantees.
+  flagging inferred behavior rather than inventing guarantees. Both modes retain supported responsibility, public model contracts, invariant ownership and durable boundary policies in the five canonical sections. Private wiring and code attribution remain in design, and a proposed design is not proof of current behavior.
 - Source: [`skills/kepler-compose-spec/SKILL.md`](../skills/kepler-compose-spec/SKILL.md)
+
+## Domain language and capability scope
+
+`.kepler/specs/glossary.md` is the main source of project language, established by init. Terms have definitions, context scope, aliases or terms to avoid, and source references. Established project documentation supplements missing meanings; a conflict requires requester resolution, not a silent rewrite. Working map glossaries remain effort-local and are created lazily. Closing an effort promotes confirmed language by context without replacing a committed meaning merely because a working term is newer.
+
+A capability is a cohesive, durable responsibility with a clear boundary and observable contract. It may represent a domain, subdomain or bounded context, including infrastructure responsibilities. A subdomain describes a problem area; a bounded context delimits a model and language. Capability is the specification unit, not a synonym for either. Name the represented scope and avoid duplicate parent/child contracts.
+
+For example, `rest-api` may represent an infrastructure context that owns the external model and translation into domain operations while domain contexts retain business rules. REST alone does not establish a bounded context; an HTTP adapter may belong within an existing one. A package or endpoint is not automatically a context or capability.
+
+New proposals add Domain Context (Ubiquitous Language; Subdomains and Bounded Contexts) and Affected Boundaries under Impact. Goals use the sourced meanings, capability entries identify scope and responsibility, and Impact explains ownership, contract, trust and coordination changes. Design explains the domain model and architecture: affected packages, provided/required contracts, ports and adapters, code attribution, relevant model behavior and supporting decisions. Distinguish existing, proposed and removed references; cite ownership and language sources instead of deriving contexts from folders. Keep the seven lint-required design headings concise and omit optional tables or sections when prose or upstream references provide coverage. Material unknown language, ownership or contracts remain approval blockers. These semantic authoring checks are not new schema gates; historical lint-valid designs are not invalid for missing the new model or mapping sections. Historical proposals and specs remain valid and unchanged. Capability slugs, metadata and `requirements/<capability>.md` → `specs/<capability>.md` mappings stay stable. The requirements-only path still creates no proposal or design.
+
+Canonical specs express responsibility and related contexts in Overview, public ports/commands/events in Contract, observable transitions in Behavior, lasting rules and owners in Invariants, and reusable boundary policies in Decisions. Preserve durable facts during reformat and verify current behavior in from-code; private wiring and code attribution are not canonical requirements. See [design examples](./sdd-framework.md#design-examples) for a multi-context change and a small change with intact boundaries.
 
 ## Artifacts and layout
 
@@ -354,14 +397,15 @@ Templates are global; artifacts are per-project. The canonical templates ship in
 `bundle/templates/` and are installed to `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/` by `kepler setup`. Every change's
 artifacts live under the project's `.kepler/` directory:
 
-```
+```text
 .kepler/
-  specs/                              # canonical capability truth (living, no delta markers)
+  specs/                              # canonical capability truth and project language
+    glossary.md                       # context-scoped ubiquitous language, established by init
     <capability>.md
   changes/
     <YYYY-MM-DD-title>/
       proposal.md                     # optional — why
-      design.md                       # optional — how
+      design.md                       # optional — domain model and architecture
       requirements/<capability>.md    # optional — what (delta form)
       critique.md                     # optional — design-phase review of the propose artifacts
       plan.md                         # required — the handoff contract

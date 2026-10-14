@@ -17,10 +17,11 @@ taken in spirit (right-sized), not by conformance.
 
 | Template | Document | Owns | Instance path | Produced or updated by |
 | --- | --- | --- | --- | --- |
-| `proposal.md` | PRD | Why | `<change>/proposal.md` | kepler-propose |
+| `glossary.md` | Canonical glossary | Context-scoped language | `.kepler/specs/glossary.md` | kepler-init / domain modeling / Wayfinder closing act |
+| `proposal.md` | PRD | Why, domain scope and boundary impact | `<change>/proposal.md` | kepler-propose |
 | `requirements-change.md` | SRS (delta) | What | `<change>/requirements/<capability>.md` | kepler-propose |
-| `requirements-spec.md` | SRS (canonical) | What | `.kepler/specs/<capability>.md` | kepler-finish-work |
-| `design.md` | SDD | How | `<change>/design.md` | kepler-propose |
+| `requirements-spec.md` | SRS (canonical) | What | `.kepler/specs/<capability>.md` | kepler-finish-work / kepler-compose-spec |
+| `design.md` | SDD | Domain model and architectural realization | `<change>/design.md` | kepler-propose |
 | `plan.md` | Plan | Steps | `<change>/plan.md` | kepler-plan |
 | `progress.md` | Task index | Current task status | `<change>/progress.md` | kepler-plan (initialize) / kepler-code (update assigned row) |
 | `task-progress.md` | Task Progress | Task execution history | `<change>/tasks/task-N/progress.md` | kepler-plan (initialize) / kepler-code (append attempts) |
@@ -30,6 +31,14 @@ taken in spirit (right-sized), not by conformance.
 
 The two SRS forms are the same content in two states: `requirements-change.md` is the
 delta a change proposes; `requirements-spec.md` is the consolidated truth it folds into.
+
+`glossary.md` reuses requirements-spec metadata and the five canonical sections for lint compatibility, with vocabulary entries under Contract. It is language support, not an automatic application capability. Preserve an existing glossary rather than regenerating it from the new template.
+
+New full-path proposals add Domain Context (scoped language and involved subdomains/contexts) and Affected Boundaries under Impact. Capability entries identify their domain, subdomain or bounded-context scope, including infrastructure responsibilities with a durable contract. Scope remains prose; slugs and delta-to-spec mappings stay unchanged. These authoring rules do not retroactively invalidate historical lint-valid proposals or require a proposal on the tactical path.
+
+New designs explain sourced goals, the relevant domain model, current and proposed boundaries, affected package roles, provided/required ports, adapters and code attribution before supporting decisions. Keep the seven lint-required headings concise; optional sections and tables are aids, not a mandatory architecture catalog. Undefined meanings and material ownership gaps need requester resolution, not invented definitions. These semantic authoring expectations do not add schema fields or invalidate historical lint-valid designs.
+
+Canonical specs preserve durable model contracts, ownership and boundary policies in their existing five sections. Private wiring, package inventories and source-code attribution remain in design rather than becoming canonical requirements.
 
 ## Required vs optional
 
@@ -71,9 +80,10 @@ read the installed copy at `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/ke
 
 Per-project, under the project's `.kepler/` directory (created by `kepler-init`):
 
-```
+```text
 .kepler/
   specs/
+    glossary.md
     <capability>.md
   changes/
     <YYYY-MM-DD-change-title>/
@@ -93,10 +103,15 @@ Per-project, under the project's `.kepler/` directory (created by `kepler-init`)
 
 `plan.md` is the declarative task contract authored up front. Kepler-plan initializes the root
 `progress.md` current-task ledger and each linked task progress file from the installed templates.
-Kepler-code updates only its assigned root row and appends implementation attempts to that task's
-progress file. Task feedback is kept alongside task progress, while `review.md` and `finish.md`
-remain change-level artifacts.
+In historical serial mode, Kepler-code updates only its assigned root row and appends implementation
+attempts to that task's progress file. In dependency-mode v2, workers write task-local evidence only;
+the coordinator publishes root status through guarded publication. Task feedback is kept alongside
+task progress, while `review.md` and `finish.md` remain change-level artifacts.
 
 `requirements/*.md` inside a change use delta headers (ADDED / MODIFIED / REMOVED /
 RENAMED). `kepler-finish-work` folds those deltas into the canonical
 `.kepler/specs/<capability>.md`, which holds no delta markers.
+
+## Dependency-mode execution
+
+New plans use version 2 dependency execution. Their task Files lists are optional guidance; Goal, Acceptance, approved intent and standards bound implementation. Root admission metadata is coordinator-owned provenance, while task-local `scope_expansions` preserves up to two lifetime before-edit reservations of at most four concrete paths. Existing serial artifacts remain historical and are not rewritten.

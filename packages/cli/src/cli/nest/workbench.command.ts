@@ -6,6 +6,7 @@ import { IsolateCommand } from "./isolate.command.js";
 import { LintCommand } from "./lint.command.js";
 import { PreconditionCommand } from "./precondition.command.js";
 import { PrototypeCommand } from "./prototype.command.js";
+import { TaskStateCommand } from "./task-state.command.js";
 
 @Command({
   name: "workbench",
@@ -17,6 +18,7 @@ import { PrototypeCommand } from "./prototype.command.js";
     ContextCommand,
     PrototypeCommand,
     LintCommand,
+    TaskStateCommand,
   ],
 })
 export class WorkbenchCommand extends CommandRunner {

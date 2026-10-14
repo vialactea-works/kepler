@@ -9,6 +9,9 @@ through a fixed sequence of steps, each captured as a **skill** and backed by du
 **artifacts**. The same skills are used by a person working in an editor or by a coding agent —
 a person authors the spec and hands execution to the agent.
 
+See the **[Change state machine](./change-state-machine.md)** for lifecycle states,
+skill ownership, and artifact-based transition guards.
+
 ## Philosophy
 
 AI coding agents are capable but unanchored. Left with a broad prompt they drift, skip
@@ -42,8 +45,10 @@ the agent's instructions.
 
 **Start at planning when appropriate.** `plan.md` is the required declarative artifact. Planning
 also initializes the required root task ledger and task progress files. The heavyweight front door
-— proposal, requirements, design — is optional; a tactical change starts at the plan step, which
-uses richer upstream artifacts when present and otherwise works from the raw request.
+(proposal, requirements, and design) is optional; a tactical change starts at the plan step, which
+uses richer upstream artifacts when present and otherwise works from the raw request. If planning
+finds a bounded behavior change that requires a requirements delta, it returns to `kepler-propose`
+for requirements-only requester approval, then revalidates the committed delta before planning.
 
 **The orchestrator owns the loops.** Steps are linear on paper, but task feedback sends one task
 back to code and whole-branch findings send the change back to planning. The person or workflow
@@ -97,8 +102,8 @@ artifacts; code and finish-work build and ship them.
 
 | Step | Skill | Role |
 | ------ | ------- | ------ |
-| 0 | `kepler-init` | Set up the project: write `AGENTS.md`, scaffold `.kepler/` |
-| 1 | `kepler-propose` | Idea → proposal (why), requirements (what), design (how) |
+| 0 | `kepler-init` | Set up the project: standards, canonical glossary and `.kepler/` workspace |
+| 1 | `kepler-propose` | Idea → proposal, requirements, and design; or requirements-only approval for a bounded tactical behavior delta |
 | 2 | `kepler-plan` | Design → `plan.md`: small, TDD-sized, independently verifiable tasks |
 | 3 | `kepler-code` | Implement one task, then enter its `code` ↔ `code-feedback` loop |
 | 4 | `kepler-code-feedback` | Judge that task's stable diff; approve it or loop back to `code` |
@@ -112,14 +117,15 @@ init ──▶ [ propose ] ──▶ plan ──▶ ( code ◀──▶ code-fee
 ```
 
 **kepler-init** explores the project read-only and writes `AGENTS.md` across the six
-standing areas — the project's standards that every later step reads. It scaffolds
-`.kepler/specs/` and `.kepler/changes/`. It is idempotent and never clobbers an existing
-`AGENTS.md`.
+standing areas, scaffolds `.kepler/specs/` and `.kepler/changes/`, and establishes `.kepler/specs/glossary.md` from sourced project terminology. Legacy migration precedes glossary creation. Init preserves existing standards and glossaries, lints the canonical glossary and holds readiness while material language or required project facts remain unresolved.
 
 **kepler-propose** is the optional front door. Through dialogue — clarifying questions one
 at a time, then two or three alternative approaches with trade-offs — it produces the
 proposal, the per-capability requirements, and the design, and gates on approval before any
-implementation. A change that does not warrant this depth skips it.
+implementation. New proposals use context-scoped project language, identify involved subdomains and bounded contexts, and describe affected ownership and contract boundaries. Design realizes that scope through package responsibilities, ports/adapters and code attribution, with relevant model behavior and supporting decisions. A change that does not warrant this depth starts at planning. When planning finds
+a bounded tactical behavior change that needs a requirements delta, propose has a requirements-only
+approval path: it creates no proposal or design and returns the exact committed delta to planning
+for revalidation.
 
 **kepler-plan** produces the required declarative `plan.md` handoff contract. It explores the code
 read-only, then decomposes the work into TDD-sized tasks, each with its files, acceptance criteria,
@@ -132,6 +138,37 @@ task id) or as an inline task block — following its steps as written. It never
 never touches sibling tasks, runs a code-quality self-review, and commits. It transitions only its
 assigned row in root `progress.md` and appends detailed attempt evidence only to
 `tasks/task-N/progress.md`. It never edits `plan.md`.
+
+### Dependency-mode v2 tasks
+
+A dependency-mode v2 plan declares `execution: {version: 2, mode: dependencies}`. Each
+active task supplies Goal, Acceptance, Depends on, Steps, Verify, and Commit; Files is optional
+guidance, not an allowlist. A necessary goal-serving unlisted edit remains ordinary implementation
+latitude when it follows approved intent, design, and project standards, without re-planning. A separate prerequisite is different: reserve it in committed task-local evidence
+before editing it, with at most two lifetime reservations and at most four concrete paths in each.
+The record is lifetime accounting: retrying, correcting, removing, or reverting work does not reset
+or refund it. The next prerequisite after either bound, or one that changes approved public/security
+authority or adds a dependency, blocks for owner-approved re-planning.
+
+Dependency readiness is a computed projection; guarded admission is the mutation that binds a ready
+task to its original Base, current plan and task definition, isolated worker/worktree, and prerequisite
+approvals. On retry, rebind, integration, or cache loss, recover that original Base from verified
+admission history rather than a later attempt parent. A pending ready task is admitted only through
+the guarded workbench operation. `done` records integrated implementation completion, not clearance;
+fully gated additionally needs fresh independent approved feedback. A blocked or uncleared prerequisite
+holds its descendants, while independent compatible tasks may use isolated lanes. Workers produce only
+task-local evidence and original commits. The coordinator serializes ancestry-preserving integration,
+executes the task's exact Verify field after integration, and publishes the shared root state. For
+publication, Verify is one executable command string, such as `bun --bun vitest run tests/docs && bun run build`; expected results belong in Acceptance or explanatory prose, not inside that field.
+
+The strict TDD order remains Red, Green, Refactor, then Verify. A correction repeats Red, Green,
+Refactor, and Verify; it is not a shortcut around a failed check. Version 1 and unversioned plans
+remain serial in their historical numeric order. An unsupported version or mode fails closed rather
+than silently choosing serial execution. The CLI exposes guarded operations; it is not a distributed
+scheduler and does not promise concurrent execution. `done` and `blocked` are actor outcomes, while
+`interrupted` and `unavailable` are neutral observations. Owner-held intent and observed worker identity
+do not authenticate a signer or replace independent artifact-only feedback. Whole-branch review starts
+only after every active task is fully gated.
 
 **kepler-code-feedback** is the per-task tactical gate. It reviews one stable task diff from the
 task's unchanged checkpoint through the implementation Head, checks the task's acceptance and
@@ -178,7 +215,58 @@ delta into the section it belongs to rather than copying requirement blocks by n
 directly, in two modes: *reformat* an existing spec into the current skeleton, or write specs
 *from the application code*. It is the front door for canonical specs — every pipeline path
 produces a spec only as a by-product of finishing a change — and the tool a project uses to
-bootstrap specs on adoption or migrate an older spec format.
+bootstrap capability behavior specs on adoption or migrate an older spec format. Init establishes the separate canonical glossary.
+
+## Domain language and capability scope
+
+The canonical `.kepler/specs/glossary.md` is the main source of ubiquitous language. Entries identify the term, definition, bounded context, aliases or terms to avoid, and source. The same word may have distinct meanings in different contexts. Established project documentation supplements missing meanings, including in older projects without a glossary; contradictions require explicit requester resolution. Proposals consume language rather than silently changing canonical definitions.
+
+A capability is a cohesive, durable area of responsibility with a clear boundary and an observable contract. It can represent a domain, subdomain or bounded context, including infrastructure responsibilities. A domain is the overall subject area, a subdomain is a problem area, and a bounded context defines where a particular model and language apply. Capability is Kepler's specification unit; these concepts need not map one-to-one.
+
+An infrastructure capability such as `rest-api` may own an external model, command/result translation and compatibility obligations. Its specification names the domain contexts that retain business rules and data ownership. REST alone does not establish a bounded context; a transport adapter may belong to an existing context. Avoid endpoint/file fragments and duplicate parent/child contracts, without rejecting infrastructure responsibilities as a category.
+
+New full-path proposals add Domain Context with Ubiquitous Language and Subdomains and Bounded Contexts, identify each capability's scope, and add Affected Boundaries under Impact. Boundary descriptions cover responsibility, data ownership, interactions, contracts, trust and coordination; detailed classes, ports and adapters remain in design. A material unresolved meaning or owner blocks approval. Lint checks artifact structure, not domain correctness.
+
+These authoring requirements leave historical lint-valid artifacts unchanged. Scope stays in prose: existing capability slugs, metadata and delta-to-spec mappings remain stable. The tactical requirements-only path consumes the same language without creating a proposal or domain-context artifact. The canonical glossary retains the requirements-spec envelope and five required sections; it is vocabulary support, not an automatic application capability or implementation specification.
+
+### Architectural design coverage
+
+`design.md` explains the change's domain model and architecture before supporting decisions. Source goals and scoped meanings from the glossary or authoritative project documents. Cover relevant domains, subdomains, bounded contexts, relationships, commands, events, states and invariants, with rule ownership and cross-context translation. Record undefined terms, conflicting sources and uncertain owners in Open Questions; material uncertainty blocks approval and unattended work remains draft.
+
+Describe affected packages, their responsibilities and domain/application/infrastructure roles, ports and adapters, and code attribution. For each created, modified or removed package, name provided and required contracts and trace responsibility transfers or retirements. Carry callers' success and failure outcomes into replacement contracts and requirements unless the change explicitly changes them. Map affected code as existing, proposed or removed to its owner and role. Existing references must match source; proposed names need explicit contracts and ownership, not an already-implemented claim. Keep dependencies toward the application core and distinguish them from runtime flow. A package or transport alone does not establish a context.
+
+Retain the seven existing lint-required headings: Context, Goals / Non-Goals, Decisions, Architecture & Components, Testing Strategy, Constraints & Boundaries, and Risks / Trade-offs. Keep concise explanations when no facts apply; optional Domain Model, flow sections and architecture tables may be omitted when prose or references provide the relevant coverage. Do not invent events, layers or interfaces for the outline. These are semantic authoring and review checks, not new schema requirements. Historical lint-valid designs are not invalid for lacking the new model or mapping sections. Architectural boundaries describe system ownership; Constraints & Boundaries describes change-specific agent operating rules.
+
+Canonical specs use the same language and ownership model at altitude: responsibility and related contexts in Overview; consumer-visible ports, commands and events in Contract; observable transitions and translation in Behavior; lasting rules and their owner in Invariants; reusable boundary policies in Decisions. Private wiring and code attribution stay in design. From-code documents current behavior, not an unimplemented design; reformat preserves durable facts and flags uncertain scope. See [the design template](../bundle/templates/design.md) and [the skills reference](./skills.md#domain-language-and-capability-scope).
+
+### Design examples
+
+These are illustrative excerpts for fictional projects, not complete artifacts or claims about Kepler's implementation. Each project's cited documents are the assumed confirmed sources; an actual author must read and verify their own sources.
+
+#### Multi-context change
+
+**Context and goal:** The commerce project's `glossary.md` defines an Order in Ordering as a purchase request, and an Order in Billing as a billable reference to a submitted purchase. `docs/commerce.md` assigns purchase rules to Ordering and invoice rules to Billing. The requested change lets a submitted Ordering Order be cancelled before dispatch, while preserving Billing's existing reference and invoice rules. Those meanings translate at the integration boundary; they are not one global definition.
+
+**Model:** Ordering owns the proposed `CancelOrder` command, Submitted → Cancelled transition, and `OrderCancelled` outcome. The guard requires an existing submitted Order that has not dispatched. Billing retains ownership of its invoice invariants. No message broker follows from naming the domain event; transport remains an adapter choice.
+
+**Architecture:** The new `packages/console` adapter is created, `packages/ordering` is modified, and `packages/legacy-submit` is removed. The console provides user command parsing and requires Ordering's submit/cancel use cases; ordering owns the rules, exposes those inbound contracts and depends on its existing outbound `OrderStore` capability. The existing storage adapter implements that port. Legacy-submit's parsing responsibility transfers to console, with consumers moved before retirement. No package is equated automatically with a bounded context.
+
+| Code reference | Status | Owner and responsibility |
+| --- | --- | --- |
+| `submitOrder` | existing | Ordering application use case; preserves submission rules |
+| proposed `cancelOrder` | proposed | Ordering application use case; enforces the cancellation guard |
+| console command parser | proposed | Infrastructure adapter; translates user input into Ordering commands |
+| legacy-submit parser | removed | Parsing moves to console; no surviving caller depends on it |
+
+**Decision and verification:** Reuse `OrderStore` rather than adding a second persistence abstraction. Verify the guard through the Ordering port with substituted storage; exercise console translation separately. Confirm the legacy callers migrate and Billing's unchanged contracts still hold. The canonical spec keeps the cancellation contract, observable transition and invariant owner, not the parser filenames or storage wiring.
+
+#### Small change with intact boundaries
+
+**Context and goal:** A single-package CLI has no glossary; its `README.md#commands` defines command names and help behavior. The change corrects one help description to match that documented command. No additional domain classification is established or needed for this wording correction.
+
+**Architecture and attribution:** The existing help formatter in the CLI package is an infrastructure presentation responsibility. Its command input and rendered-help output remain unchanged. There are no new or changed ports, adapters, events, state transitions or data ownership; Domain Model and the package/port tables can be omitted. Cite the README and formatter as evidence instead of inventing a context or interface.
+
+**Decision and verification:** No new architectural choice. Check the corrected help output and preserve command parsing behavior. Keep the seven required headings, using brief explanations for unchanged boundaries, ordinary project operating rules and the limited risk. If the documented command meaning conflicts with code, record the conflict for requester resolution rather than silently choosing a definition.
 
 ## Artifacts and layout
 
@@ -188,14 +276,15 @@ installed copy, so there is one definition of each artifact's shape.
 
 **Artifacts are per-project**, under the project's `.kepler/` directory:
 
-```
+```text
 .kepler/
-  specs/                              # canonical capability truth (living)
+  specs/                              # canonical capability truth and project language
+    glossary.md                       # canonical context-scoped terminology
     <capability>.md                   # no delta markers — current behavior
   changes/
     <YYYY-MM-DD-title>/
       proposal.md                     # optional — PRD (why)
-      design.md                       # optional — SDD (how)
+      design.md                       # optional — SDD (domain model and architecture)
       requirements/<capability>.md    # optional — SRS delta (what)
       plan.md                         # required — the handoff contract
       progress.md                     # required — current task ledger
@@ -211,10 +300,11 @@ The document set and the standards it borrows from:
 
 | Artifact | Document | Owns | Inspiration |
 | ---------- | ---------- | ------ | ------------- |
-| `proposal.md` | PRD | Why | — |
+| `specs/glossary.md` | Canonical glossary | Context-scoped language | Canonical artifact envelope |
+| `proposal.md` | PRD | Why, domain scope and boundary impact | — |
 | `requirements/<capability>.md` | SRS (delta) | What | ISO/IEC/IEEE 29148 |
 | `specs/<capability>.md` | SRS (canonical) | What | ISO/IEC/IEEE 29148 |
-| `design.md` | SDD | How | IEEE 1016 |
+| `design.md` | SDD | Domain model and architectural realization | IEEE 1016 |
 | `plan.md` | Plan | Steps | — |
 | `progress.md` | Task ledger | Current implementation status and task-history links | — |
 | `tasks/task-N/progress.md` | Task progress | Implementation attempts | — |

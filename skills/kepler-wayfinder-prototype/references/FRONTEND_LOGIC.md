@@ -2,7 +2,7 @@
 
 A single, self-contained HTML file — a **shareable demo** — that lets anyone drive a state model by clicking buttons. Use this when the question is about **business logic, state transitions, or data shape** — the kind of thing that looks reasonable on paper but only feels wrong once you push it through real cases.
 
-Because it's one file with nothing to install, you can hand it to a non-developer — a designer, a PM, a domain expert — and let them feel the model for themselves. So it speaks their language, not the code's.
+With nothing to install, hand the file to a non-developer — a designer, a PM, a domain expert — so they can feel the model for themselves. Use their language, not the code's.
 
 ## When this is the right shape
 
@@ -17,11 +17,11 @@ If the question is "what should this look like" — wrong branch. Use [FRONTEND_
 
 ### 1. State the question
 
-Before writing code, write down what state model and what question you're prototyping. One paragraph, at the top of the demo (in a visible intro, not just a comment). A logic prototype that answers the wrong question is pure waste — make the question explicit so it can be checked later, whether the user is watching now or returning to it AFK.
+Before writing code, describe the state model and the question you are prototyping in one paragraph at the top of the demo (in a visible intro, not just a comment). A logic prototype that answers the wrong question is wasted work — make the question explicit so it can be checked later, whether the user is watching now or returning to it AFK.
 
 ### 2. Isolate the logic in a portable module
 
-Put the actual logic — the bit that's answering the question — in a single `<script>` block written as a small, pure module that could be lifted out and dropped into the real codebase later. The page around it is throwaway; this module isn't.
+Put the actual logic — the bit that's answering the question — in a single `<script>` block written as a small, pure module that could be lifted out and dropped into the real codebase later. The page around it is throwaway; this module is not.
 
 The right shape depends on the question:
 
@@ -30,13 +30,13 @@ The right shape depends on the question:
 - **A small set of pure functions** over a plain data type. Good when there's no implicit current state — just transformations.
 - **A class or module with a clear method surface** when the logic genuinely owns ongoing internal state.
 
-Pick whichever shape best fits the question being asked, *not* whichever is easiest to wire to a page. Keep it pure: no DOM, no `document`, no button handlers reaching inside it. The page calls into it; nothing flows the other direction. This is what makes the prototype useful past its own lifetime: once the question's answered, the validated reducer / machine / function set lifts into the real module on its own.
+Pick the shape that best fits the question, *not* the one easiest to wire to a page. Keep it pure: no DOM, no `document`, no button handlers reaching inside it. The page calls into it; nothing flows the other direction. This keeps the prototype useful after its own lifetime: once the question is answered, the validated reducer / machine / function set lifts into the real module on its own.
 
 ### 3. Build the shareable HTML file
 
-One file, plain HTML/CSS/JS — no framework, no bundler, no server, everything inline so it opens by double-click and survives being emailed around. Anyone should be able to run it by opening it.
+Use one file of plain HTML/CSS/JS, with everything inline and no framework, bundler, or server, so it opens by double-click and survives being emailed around.
 
-Write it for a non-developer. Every label is in **domain language**, not code — buttons and state read like the business, not the reducer. Explain in plain words what's happening.
+Write it for a non-developer. Use **domain language**, not code, for every label: buttons and state should read like the business, not the reducer. Explain in plain words what's happening.
 
 Lay it out with a clean hierarchy, top to bottom:
 

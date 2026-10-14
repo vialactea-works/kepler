@@ -23,7 +23,17 @@ import {
   type PreconditionRuntime,
 } from "./precondition-runtime.js";
 import type { ProcessResult } from "./runtime.js";
+import {
+  fullCommit,
+  gitCurrentBranch,
+  gitCurrentHead,
+  gitWorktreeIdentity,
+  successful,
+  text,
+} from "./precondition-git.js";
 import { resolveProjectDataPath } from "./project-data-path.js";
+import { createPreconditionSnapshotRuntime } from "./precondition-snapshot.js";
+import { inspectFinishHistory, inspectFinishRepair, type FinishInspection } from "./finish-repair.js";
 
 export {
   createPreconditionRuntime,
@@ -68,7 +78,9 @@ export class PreconditionService {
   ) {}
 
   async execute(args: PreconditionArguments): Promise<PreconditionResult> {
-    const runtime = this.runtime;
+    const runtime = createPreconditionSnapshotRuntime(this.runtime);
+    if (args.recoverFinish !== undefined && (!Number.isSafeInteger(args.recoverFinish) || args.recoverFinish < 1))
+      return result("error", 2, "", "error: --recover-finish requires a positive attempt number\n");
     let resolvedArgs: PreconditionArguments;
     try {
       resolvedArgs = {
@@ -96,6 +108,19 @@ export class PreconditionService {
     output += initial.output;
     if (!initial.clean) failures += 1;
 
+    const verifiedHeadResult = await gitCurrentHead(runtime, target);
+    const verifiedHead = text(verifiedHeadResult);
+    if (!successful(verifiedHeadResult) || !fullCommit(verifiedHead))
+      return result("error", 2, output, "error: Unable to resolve verification HEAD\n");
+    const verifiedBranchResult = await gitCurrentBranch(runtime, target);
+    const verifiedBranch = text(verifiedBranchResult);
+    if (!successful(verifiedBranchResult) || verifiedBranch === "")
+      return result("error", 2, output, "error: Unable to resolve verification branch\n");
+    const verifiedWorktreeResult = await gitWorktreeIdentity(runtime, target);
+    const verifiedWorktree = text(verifiedWorktreeResult);
+    if (!successful(verifiedWorktreeResult) || verifiedWorktree === "")
+      return result("error", 2, output, "error: Unable to resolve verification worktree\n");
+
     const execution = await runTestCommand(
       runtime,
       resolvedArgs.testCommand,
@@ -115,30 +140,25 @@ export class PreconditionService {
     output += after.output;
     if (!after.clean) failures += 1;
 
-    const tasks: TaskInspection = await inspectTasks(
-      runtime,
-      target,
-      Path.resolve(resolvedArgs.changeDir),
-    );
-    output += tasks.output;
-    if (!tasks.passed) failures += 1;
-    const reviews: ReviewInspection = await inspectReviews(
-      runtime,
-      target,
-      Path.resolve(resolvedArgs.changeDir),
-      tasks,
-    );
-    output += reviews.output;
-    if (!reviews.passed) failures += 1;
-    const freshness = await inspectFreshness(
-      runtime,
-      target,
-      tasks,
-      reviews,
-      resolvedArgs.wholeChangeWaived === true,
-    );
-    output += freshness.output;
-    if (!freshness.passed) failures += 1;
+    let finish: FinishInspection;
+    if (resolvedArgs.recoverFinish !== undefined) {
+      finish = await inspectFinishRepair(runtime, target, resolvedArgs.changeDir, resolvedArgs);
+      output += finish.output;
+      if (!finish.passed) failures += 1;
+    } else {
+      finish = await inspectFinishHistory(runtime, target, resolvedArgs.changeDir);
+      output += finish.output;
+      if (!finish.passed) failures += 1;
+      const tasks: TaskInspection = await inspectTasks(runtime, target, Path.resolve(resolvedArgs.changeDir));
+      output += tasks.output;
+      if (!tasks.passed) failures += 1;
+      const reviews: ReviewInspection = await inspectReviews(runtime, target, Path.resolve(resolvedArgs.changeDir), tasks, resolvedArgs.targetBranch);
+      output += reviews.output;
+      if (!reviews.passed) failures += 1;
+      const freshness = await inspectFreshness(runtime, target, tasks, reviews, resolvedArgs.wholeChangeWaived === true);
+      output += freshness.output;
+      if (!freshness.passed) failures += 1;
+    }
 
     if (failures === 0) {
       const final = await cleanTree(runtime, target, "Final clean tree");
@@ -147,8 +167,43 @@ export class PreconditionService {
       if (!final.clean) failures += 1;
     }
 
+    const currentHeadResult = await gitCurrentHead(runtime, target);
+    const currentHead = text(currentHeadResult);
+    if (!successful(currentHeadResult) || !fullCommit(currentHead))
+      return result("error", 2, output, "error: Unable to resolve verification HEAD after checks\n");
+    const currentBranchResult = await gitCurrentBranch(runtime, target);
+    const currentBranch = text(currentBranchResult);
+    if (!successful(currentBranchResult) || currentBranch === "")
+      return result("error", 2, output, "error: Unable to resolve verification branch after checks\n");
+    const currentWorktreeResult = await gitWorktreeIdentity(runtime, target);
+    const currentWorktree = text(currentWorktreeResult);
+    if (!successful(currentWorktreeResult) || currentWorktree === "")
+      return result("error", 2, output, "error: Unable to resolve verification worktree after checks\n");
+    const currentRoot = await runtime.git.repositoryRoot(target);
+    if (!successful(currentRoot))
+      return result("error", 2, output, "error: Unable to resolve verification target after checks\n");
+    if (currentHead !== verifiedHead) {
+      output += "[FAIL] Verified HEAD changed during admission\n";
+      failures += 1;
+    }
+    if (currentBranch !== verifiedBranch) {
+      output += "[FAIL] Verified branch changed during admission\n";
+      failures += 1;
+    }
+    if (currentWorktree !== verifiedWorktree || text(currentRoot) !== target) {
+      output += "[FAIL] Verified worktree or target changed during admission\n";
+      failures += 1;
+    }
+
     if (failures === 0) {
-      output += "gate: open\n";
+      if (resolvedArgs.recoverFinish !== undefined) {
+        output += "admission: finalization-repair\n";
+        output += `repair-of: ${resolvedArgs.recoverFinish}\n`;
+        output += `remaining-effects: ${JSON.stringify(finish.remaining)}\n`;
+        if (finish.retryEvidence) output += `retry-evidence: ${JSON.stringify(finish.retryEvidence)}\n`;
+      }
+      output += `verified-head: ${verifiedHead}\n`;
+      output += resolvedArgs.recoverFinish === undefined ? "gate: open\n" : "gate: repair-open\n";
       return result("success", 0, output);
     }
     output += `gate: closed (${failures} failing)\n`;

@@ -9,25 +9,25 @@ A prototype is **a throwaway artifact that answers one design question** — in 
 
 ## Pick the shape
 
-First identify the *question* — from the user's prompt, the surrounding code, or by asking if the user is around. Two broad flavours:
+First identify the *question* from the user's prompt or surrounding code, or ask the user if available. Two broad flavours:
 
 - **"Does this logic / state model feel right?"** — the question has a logic or state-model feel. You want to push real cases through a model and see where it breaks.
 - **"What should this look like?"** — the question is about appearance, layout, or structure. You want to generate alternatives and compare them side by side.
 
-Outside software the same two flavours apply — "does this argument structure hold?" vs. "which of these three outlines lands?".
+Outside software, the same two flavours apply — "does this argument structure hold?" vs. "which of these three outlines lands?".
 
-Then pick a throwaway shape appropriate to the project's *domain and stack* — the shape that lets someone push the real cases and see the state change with the least ceremony:
+Then pick a throwaway shape for the project's *domain and stack* that lets someone push real cases and see the state change with the least ceremony:
 
 - **Frontend projects** — two detailed guides:
   - [FRONTEND_LOGIC.md](references/FRONTEND_LOGIC.md) — a single shareable HTML file driving a state model: free-play buttons plus tabbed guided walkthroughs, pushable by a non-developer.
   - [FRONTEND_UI.md](references/FRONTEND_UI.md) — several radically different UI variations on a single route, switchable via a URL search param and a floating bottom bar.
 - **Other domains** (backend, data, CLI, etc.) — pick the equivalent throwaway shape: a script, a notebook, a CLI harness, whatever lets someone push the real cases and see the state change. The same two flavours apply — a logic probe vs. a structural comparison — but the artifact is whatever the stack makes trivial to run and throw away.
 
-The two flavours produce very different artifacts — getting this wrong wastes the whole prototype. If the question is genuinely ambiguous and the user isn't reachable, default to the shape that best matches the surrounding code (a backend module → a logic/script shape; a page or component → a UI shape) and state the assumption at the top of the prototype.
+The two flavours produce different artifacts — choosing the wrong one wastes the prototype. If the question is genuinely ambiguous and the user isn't reachable, default to the shape that best matches the surrounding code (a backend module → a logic/script shape; a page or component → a UI shape) and state the assumption at the top of the prototype.
 
 ## Branch gate
 
-Before any prototype artifact is written, create or resume the prototype branch from the current branch. **No prototype code exists before this gate has run.**
+Create or resume the prototype branch from the current branch before writing any prototype artifact. **No prototype code exists before this gate has run.**
 
 - Resolving a map ticket: `kepler workbench prototype <map-name> <ticket-name>`, where `<map-name>` is the effort's slug and `<ticket-name>` is the ticket file's `NN-slug`. This creates (or resumes) `prototype/<map-name>/<ticket-name>` and switches to it.
 - Invoked standalone, with no map ticket in play: `kepler workbench prototype --standalone <question-slug>`, creating or resuming `prototype/<question-slug>`.

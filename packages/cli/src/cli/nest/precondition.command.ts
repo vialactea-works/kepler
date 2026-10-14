@@ -36,6 +36,24 @@ export class PreconditionCommand extends CommandRunner {
   }
 
   @Option({
+    flags: "--target-branch <reference>",
+    name: "targetBranch",
+    description: "Validate review scope against this target branch",
+  })
+  parseTargetBranch(reference: string): string {
+    return reference;
+  }
+
+  @Option({
+    flags: "--recover-finish <attempt>",
+    name: "recoverFinish",
+    description: "Admit only remaining finalization effects for a blocked delivered attempt",
+  })
+  parseRecoverFinish(attempt: string): number {
+    return /^[1-9][0-9]*$/.test(attempt) ? Number(attempt) : Number.NaN;
+  }
+
+  @Option({
     flags: "--whole-change-waived",
     name: "wholeChangeWaived",
     description: "Waive whole-change freshness requirements",
@@ -54,13 +72,18 @@ export class PreconditionCommand extends CommandRunner {
       typeof options?.testCommand === "string"
         ? options.testCommand
         : undefined;
-    if (changeDir === undefined || testCommand === undefined) {
+    const targetBranch =
+      typeof options?.targetBranch === "string" ? options.targetBranch : undefined;
+    if (changeDir === undefined || testCommand === undefined || targetBranch === undefined) {
       const missingOptions = [
         ...(changeDir === undefined
           ? ["Expected to find option: '--change-dir'"]
           : []),
         ...(testCommand === undefined
           ? ["Expected to find option: '--test-cmd'"]
+          : []),
+        ...(targetBranch === undefined
+          ? ["Expected to find option: '--target-branch'"]
           : []),
       ];
       this.reporter.report({
@@ -74,7 +97,11 @@ export class PreconditionCommand extends CommandRunner {
     const args: PreconditionArguments = {
       changeDir,
       testCommand,
+      targetBranch,
       wholeChangeWaived: options?.wholeChangeWaived === true,
+      ...(options?.recoverFinish === undefined ? {} : {
+        recoverFinish: typeof options.recoverFinish === "number" ? options.recoverFinish : Number.NaN,
+      }),
     };
     const result = await this.preconditionService.execute(args);
     this.reporter.report({

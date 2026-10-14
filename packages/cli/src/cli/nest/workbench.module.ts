@@ -35,6 +35,9 @@ import { IsolateCommand } from "./isolate.command.js";
 import { LintCommand } from "./lint.command.js";
 import { PreconditionCommand } from "./precondition.command.js";
 import { PrototypeCommand } from "./prototype.command.js";
+import { TaskStateCommand } from "./task-state.command.js";
+import { TaskStateService } from "../../workbench/task-state.js";
+import { createTaskStateRuntime, TASK_STATE_RUNTIME } from "../../workbench/task-state-runtime.js";
 import { ResultModule } from "./result.module.js";
 import { WorkbenchCommand } from "./workbench.command.js";
 
@@ -48,16 +51,19 @@ import { WorkbenchCommand } from "./workbench.command.js";
     PreconditionCommand,
     PrototypeCommand,
     LintCommand,
+    TaskStateCommand,
     IsolateService,
     DiffService,
     PreconditionService,
     ContextService,
     PrototypeService,
     LintService,
+    TaskStateService,
     { provide: ISOLATION_RUNTIME, useFactory: createRuntime },
     { provide: DIFF_RUNTIME, useFactory: createDiffRuntime },
     { provide: PRECONDITION_RUNTIME, useFactory: createPreconditionRuntime },
     { provide: CONTEXT_RUNTIME, useFactory: createContextRuntime },
+    { provide: TASK_STATE_RUNTIME, useFactory: createTaskStateRuntime },
     { provide: PROTOTYPE_RUNTIME, useFactory: createPrototypeRuntime },
     {
       provide: LINT_DEPENDENCIES,
@@ -71,10 +77,12 @@ import { WorkbenchCommand } from "./workbench.command.js";
     ContextService,
     PrototypeService,
     LintService,
+    TaskStateService,
     ISOLATION_RUNTIME,
     DIFF_RUNTIME,
     PRECONDITION_RUNTIME,
     CONTEXT_RUNTIME,
+    TASK_STATE_RUNTIME,
     PROTOTYPE_RUNTIME,
     LINT_DEPENDENCIES,
   ],

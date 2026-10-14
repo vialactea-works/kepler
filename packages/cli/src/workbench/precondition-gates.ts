@@ -5,6 +5,7 @@ import {
   type PreconditionResult,
   type PreconditionRuntime,
 } from "./precondition-runtime.js";
+import { isFullTargetBranchReference } from "./git-reference.js";
 
 export interface CleanTreeGate {
   readonly output: string;
@@ -113,6 +114,8 @@ export const resolveTarget = async (
     return failure(
       "--test-cmd is required (take it from AGENTS.md or plan.md; this operation will not guess)",
     );
+  if (!isFullTargetBranchReference(args.targetBranch))
+    return failure("--target-branch is required as an explicit full branch reference");
   if (!(await runtime.fileSystem.directoryExists(args.changeDir)))
     return failure(`change dir does not exist: ${args.changeDir}`);
   let changeDir: string;

@@ -8,11 +8,16 @@ decision: accepted | rejected | skipped
 ---
 
 <!--
-  Task Progress — execution history for one plan task.
+  Task Progress: execution history for one plan task.
   Produced by: kepler-plan (step 2); updated by kepler-code (step 3).
   Lives at: .kepler/changes/<change>/tasks/task-N/progress.md
-  The root progress.md remains the task status index.
+  Keep the task status index in root progress.md.
+  Initialize this log with `status: pending` and no attempts.
+
+  Give each new attempt exactly one terminal `- Outcome: done` or `- Outcome: blocked`. Record corrections in a new attempt; never add another Outcome to a historical attempt. Preserve supported historical unbulleted Outcome fields without rewriting them.
+
+  Optional immutable `scope_expansions` records reserve prerequisite paths before edits. In each attempt, record the applicable quality constraint and decision context, explaining how they shaped the implementation or check. If they do not apply, explain why.
   Delete this instruction block and every inline hint before finalizing.
 -->
 
-# Task Progress: Task N — <title> <!-- hint: replace with the exact plan task id and title -->
+# Task Progress: Task N — <exact unescaped plan task title>

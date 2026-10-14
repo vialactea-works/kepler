@@ -5,6 +5,8 @@ import type {
   ValidateFunction,
 } from "ajv";
 import type { RecognizedArtifact } from "./artifact-reader.js";
+import { scopeExpansionPathPattern, validateScopeExpansions } from "./scope-expansions.js";
+import { taskAdmissionSchema, validateTaskAdmission } from "./task-admission.js";
 import {
   enumValues,
   requiredFields,
@@ -34,6 +36,10 @@ const sha: ArtifactMetadataSchema = {
   type: "string",
   pattern: "^[0-9a-f]{40}$",
 };
+const sha256: ArtifactMetadataSchema = {
+  type: "string",
+  pattern: "^[0-9a-f]{64}$",
+};
 
 const routeUnit: ArtifactMetadataSchema = {
   anyOf: [
@@ -43,6 +49,232 @@ const routeUnit: ArtifactMetadataSchema = {
       pattern: "^\\.kepler/maps/[^/]+/route\\.md — unit [1-9][0-9]*$",
     },
   ],
+};
+
+const executionContract: ArtifactMetadataSchema = {
+  anyOf: [
+    {
+      type: "object",
+      required: ["version", "order"],
+      additionalProperties: false,
+      properties: {
+        version: { const: 1 },
+        order: { type: "array", items: positiveInteger, uniqueItems: true },
+      },
+    },
+    {
+      type: "object",
+      required: ["version", "mode"],
+      additionalProperties: false,
+      properties: {
+        version: { const: 2 },
+        mode: { const: "dependencies" },
+      },
+    },
+  ],
+};
+
+const inputImpactContract: ArtifactMetadataSchema = {
+  type: "object",
+  required: ["version", "previousPlanCommit", "reviewReference", "changes"],
+  additionalProperties: false,
+  properties: {
+    version: { const: 1 },
+    previousPlanCommit: sha,
+    reviewReference: nonEmptyString,
+    changes: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        required: [
+          "path",
+          "previousBlob",
+          "currentBlob",
+          "affectedTasks",
+          "unaffectedTasks",
+          "newTasks",
+          "unresolvedIntent",
+          "rationale",
+        ],
+        additionalProperties: false,
+        properties: {
+          path: nonEmptyString,
+          previousBlob: { anyOf: [sha, { type: "null" }] },
+          currentBlob: { anyOf: [sha, { type: "null" }] },
+          affectedTasks: { type: "array", items: positiveInteger, uniqueItems: true },
+          unaffectedTasks: { type: "array", items: positiveInteger, uniqueItems: true },
+          newTasks: { type: "array", items: positiveInteger, uniqueItems: true },
+          unresolvedIntent: { type: "boolean" },
+          rationale: nonEmptyString,
+        },
+      },
+    },
+  },
+};
+
+const executionTransitionContract: ArtifactMetadataSchema = {
+  anyOf: [
+    {
+      type: "object",
+      required: [
+        "version",
+        "previousPlanCommit",
+        "previousOrder",
+        "fullyGatedPrefix",
+        "approval",
+        "reason",
+        "affected",
+      ],
+      additionalProperties: false,
+      properties: {
+        version: { const: 1 },
+        previousPlanCommit: sha,
+        previousOrder: { type: "array", items: positiveInteger, uniqueItems: true },
+        fullyGatedPrefix: { type: "array", items: positiveInteger, uniqueItems: true },
+        approval: nonEmptyString,
+        reason: nonEmptyString,
+        affected: nonEmptyString,
+      },
+    },
+    {
+      type: "object",
+      required: [
+        "version",
+        "previousPlanCommit",
+        "fullyGatedTasks",
+        "approval",
+        "reason",
+        "affected",
+      ],
+      additionalProperties: false,
+      properties: {
+        version: { const: 2 },
+        previousPlanCommit: sha,
+        fullyGatedTasks: { type: "array", items: positiveInteger, uniqueItems: true },
+        approval: nonEmptyString,
+        reason: nonEmptyString,
+        affected: nonEmptyString,
+      },
+    },
+  ],
+};
+
+const intentApprovalReference: ArtifactMetadataSchema = {
+  type: "object",
+  required: ["path", "reference", "commit"],
+  additionalProperties: false,
+  properties: {
+    path: nonEmptyString,
+    reference: nonEmptyString,
+    commit: sha,
+  },
+};
+
+const scopeExpansion: ArtifactMetadataSchema = {
+  type: "object",
+  required: ["id", "attempt", "prerequisite", "necessity", "evidence", "paths", "verify"],
+  additionalProperties: false,
+  properties: {
+    id: nonEmptyString,
+    attempt: positiveInteger,
+    prerequisite: nonEmptyString,
+    necessity: nonEmptyString,
+    evidence: nonEmptyString,
+    paths: {
+      type: "array",
+      minItems: 1,
+      maxItems: 4,
+      uniqueItems: true,
+      items: {
+        type: "string",
+        minLength: 1,
+        pattern: scopeExpansionPathPattern,
+      },
+    },
+    verify: nonEmptyString,
+  },
+};
+
+const initialScaffoldProof: ArtifactMetadataSchema = {
+  type: "object",
+  required: ["version", "base", "authority", "breakdown", "taskIds"],
+  additionalProperties: false,
+  properties: {
+    version: { const: 1 },
+    base: sha,
+    authority: nonEmptyString,
+    breakdown: sha256,
+    taskIds: { type: "array", items: positiveInteger, minItems: 1, uniqueItems: true },
+  },
+};
+
+export const taskInputContextSchema: ArtifactMetadataSchema = {
+  type: "object",
+  required: ["version", "repository", "intentCommit", "taskDefinition", "inputs"],
+  additionalProperties: false,
+  properties: {
+    version: { const: 1 },
+    repository: nonEmptyString,
+    intentCommit: {
+      anyOf: [sha, { type: "string", pattern: "^tactical:\\S.+$" }],
+    },
+    taskDefinition: sha256,
+    inputs: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["path", "blob"],
+        additionalProperties: false,
+        properties: { path: nonEmptyString, blob: sha },
+      },
+    },
+    impactPlanCommit: sha,
+  },
+};
+
+const legacyInputConfirmation: ArtifactMetadataSchema = {
+  type: "object",
+  required: [
+    "version",
+    "task",
+    "repository",
+    "taskDefinition",
+    "intentCommit",
+    "inputs",
+    "historicalInputs",
+    "owner",
+    "ownerReference",
+    "reviewer",
+    "reviewReference",
+    "rationale",
+  ],
+  additionalProperties: false,
+  properties: {
+    version: { const: 1 },
+    task: positiveInteger,
+    repository: nonEmptyString,
+    taskDefinition: sha256,
+    intentCommit: {
+      anyOf: [sha, { type: "string", pattern: "^tactical:\\S.+$" }],
+    },
+    inputs: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        required: ["path", "blob"],
+        additionalProperties: false,
+        properties: { path: nonEmptyString, blob: sha },
+      },
+    },
+    historicalInputs: { const: "unknown" },
+    owner: nonEmptyString,
+    ownerReference: nonEmptyString,
+    reviewer: nonEmptyString,
+    reviewReference: nonEmptyString,
+    rationale: nonEmptyString,
+  },
 };
 
 const taskMetadata: ArtifactMetadataSchema = {
@@ -56,6 +288,29 @@ const taskMetadata: ArtifactMetadataSchema = {
       enum: ["pending", "in-progress", "blocked", "done"],
     },
     progress: nonEmptyString,
+    admission: taskAdmissionSchema,
+    publication: {
+      type: "object",
+      required: ["version", "taskHead", "integratedHead", "outcome", "verification"],
+      additionalProperties: false,
+      properties: {
+        version: { const: 1 },
+        taskHead: { type: "string", pattern: "^[0-9a-f]{40}$" },
+        integratedHead: { type: "string", pattern: "^[0-9a-f]{40}$" },
+        outcome: { enum: ["done", "blocked"] },
+        verification: {
+          anyOf: [{ type: "null" }, {
+            type: "object", required: ["command", "exitCode"], additionalProperties: false,
+            properties: { command: nonEmptyString, exitCode: { const: 0 } },
+          }],
+        },
+      },
+      allOf: [{
+        if: { properties: { outcome: { const: "done" } } },
+        then: { properties: { verification: { type: "object" } } },
+        else: { properties: { verification: { type: "null" } } },
+      }],
+    },
   },
 };
 
@@ -126,6 +381,32 @@ const schemaProperties = (artifact: SupportedArtifact) => {
   }
   if (artifact === "critique")
     properties.decision = { enum: ["accepted", "applied", "rejected", "skipped"] };
+  if (artifact === "design" || artifact === "requirements-change")
+    properties.status = { enum: ["draft", "approved"] };
+  if (artifact === "task-progress") {
+    properties.scope_expansions = {
+      type: "array",
+      maxItems: 2,
+      items: scopeExpansion,
+      uniqueItems: true,
+    };
+  }
+  if (artifact === "plan") {
+    properties.execution = executionContract;
+    properties.execution_transition = executionTransitionContract;
+     properties.input_impact = inputImpactContract;
+     properties.legacy_input_confirmations = {
+       type: "array",
+       minItems: 1,
+       items: legacyInputConfirmation,
+     };
+     properties.intent_approvals = {
+      type: "array",
+      items: intentApprovalReference,
+      uniqueItems: true,
+    };
+    properties.initialization = initialScaffoldProof;
+  }
   return properties;
 };
 
@@ -162,6 +443,19 @@ export const artifactMetadataSchemas: Readonly<
 export const artifactSchemas = artifactMetadataSchemas;
 
 const ajv = new Ajv({ allErrors: true, strict: false });
+const taskInputContextValidator = ajv.compile(taskInputContextSchema);
+
+export const validateTaskInputContextSchema = (
+  value: unknown,
+): readonly string[] => {
+  if (taskInputContextValidator(value)) return [];
+  return (taskInputContextValidator.errors ?? []).map((error) => {
+    const field = fieldPath(error.instancePath, String(error.params.missingProperty ?? ""));
+    return field === ""
+      ? "task input context is malformed"
+      : `task input context ${field} is invalid`;
+  });
+};
 
 const validators: Readonly<Record<SupportedArtifact, ValidateFunction>> = {
   proposal: ajv.compile(artifactMetadataSchemas.proposal),
@@ -391,13 +685,21 @@ const mapSchemaError = (
       { field, line: artifact.locations.metadata.startLine },
     );
   }
-  if (error.keyword === "const")
-    return diagnostic(artifact, "invalid-value", `artifact must be ${kind}`, {
-      field: "artifact",
-      expected: kind,
-      actual: metadata.artifact,
-      actualPresent: true,
+  if (error.keyword === "const") {
+    if (field === "artifact")
+      return diagnostic(artifact, "invalid-value", `artifact must be ${kind}`, {
+        field: "artifact",
+        expected: kind,
+        actual: metadata.artifact,
+        actualPresent: true,
+      });
+    return diagnostic(artifact, "invalid-value", `${field} is invalid`, {
+      field,
+      expected: String(error.params.allowedValue),
+      actual: value.value,
+      actualPresent: value.found,
     });
+  }
   if (error.keyword === "enum") {
     const allowed = Array.isArray(error.params.allowedValues)
       ? error.params.allowedValues.map(String).join(" | ")
@@ -486,7 +788,22 @@ export const validateArtifactMetadataSchema = (
 ): readonly ArtifactContractDiagnostic[] => {
   const validator = validators[kind];
   const valid = validator(artifact.metadata);
-  if (valid) return [];
+  if (valid) {
+    if (kind === "task-progress" && Object.hasOwn(artifact.metadata, "scope_expansions")) {
+      const scope = validateScopeExpansions(artifact.metadata.scope_expansions);
+      if (scope.kind === "invalid")
+        return [diagnostic(artifact, "invalid-value", scope.reason, { field: "scope_expansions" })];
+    }
+    if (kind === "progress" && Array.isArray(artifact.metadata.tasks)) {
+      for (const [index, task] of artifact.metadata.tasks.entries()) {
+        if (typeof task === "object" && task !== null && Object.hasOwn(task, "admission")) {
+          const admission = validateTaskAdmission((task as Record<string, unknown>).admission);
+          if (admission.kind === "invalid") return [diagnostic(artifact, "invalid-value", admission.reason, { field: `tasks[${String(index)}].admission` })];
+        }
+      }
+    }
+    return [];
+  }
   const errors: readonly ErrorObject[] = validator.errors ?? [];
   const seen = new Set<string>();
   return errors

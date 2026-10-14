@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
-import { spawnSync } from "node:child_process";
+import { nativeReadProcess } from "./runtime.js";
 import {
   createArtifactReader,
   type ArtifactFileSystem,
@@ -12,14 +12,43 @@ import {
   validateArtifact,
   type ArtifactContractResult,
 } from "./artifact-contracts.js";
-import type { ReviewPassEvidence } from "./artifact-types.js";
+import {
+  progressLedgerMatches,
+  readVisiblePlanTaskHeadings,
+  resolveRouteReferences,
+  taskBreakdownDigestFromDefinitions,
+} from "./artifact-body.js";
+import type {
+  LegacyInputConfirmation,
+  PlanContractProjection,
+  PlanExecutionContract,
+  PlanExecutionTransitionContract,
+  PlanInputImpactContract,
+  PlanTaskContract,
+  ReviewPassEvidence,
+} from "./artifact-types.js";
+import { inspectExecutionTransition, inspectInputImpact, type PlanHistoryRuntime } from "./plan-history.js";
+import { legacyCompletedDefinitionProblems, legacyInputConfirmationMetadataProblems } from "./legacy-input-confirmation.js";
+import {
+  readTaskFeedbackRanges,
+  resolveTaskCheckpoint,
+  type TaskCheckpointGit,
+  type TaskFeedbackRange,
+} from "./task-checkpoint.js";
 import { parseReviewPasses } from "./review-passes.js";
+import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
+import { projectTaskReadiness, type TaskReadinessEvidence, type TaskReadinessProjection } from "./task-readiness.js";
+import { inspectInitialScaffold, inspectIntentApprovals, inspectTaskInputContext } from "./precondition-artifacts.js";
+import { collectTaskLedgerHistory } from "./task-ledger-history.js";
+import { inspectTaskWorkspace } from "./task-workspace.js";
+import type { PreconditionRuntime } from "./precondition-runtime.js";
 import type { ProcessPort, ProcessResult } from "./runtime.js";
 import { resolveProjectDataPath } from "./project-data-path.js";
 
 export interface ContextArguments {
   readonly changeDir?: string;
   readonly all?: boolean;
+  readonly inputPaths?: readonly string[];
 }
 
 export type ContextFormat =
@@ -46,10 +75,16 @@ export interface ContextFileSystemPort extends ArtifactFileSystem {
 }
 
 export interface ContextGitPort {
+  readonly changedPaths?: (cwd: string, commit: string) => ProcessResult | Promise<ProcessResult>;
+  readonly pathChanges?: (cwd: string, base: string, head: string, paths: readonly string[]) => ProcessResult | Promise<ProcessResult>;
   readonly repositoryRoot: (
     cwd: string,
   ) => ProcessResult | Promise<ProcessResult>;
   readonly currentHead: (cwd: string) => ProcessResult | Promise<ProcessResult>;
+  readonly firstParent: (
+    cwd: string,
+    commit: string,
+  ) => ProcessResult | Promise<ProcessResult>;
   readonly resolveCommit: (
     cwd: string,
     reference: string,
@@ -61,6 +96,35 @@ export interface ContextGitPort {
   ) => ProcessResult | Promise<ProcessResult>;
   readonly headBlob: (
     cwd: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly blobIdAt: (
+    cwd: string,
+    commit: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly pathHistory: (
+    cwd: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly pathHistoryAt: (
+    cwd: string,
+    commit: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly treeEntry: (
+    cwd: string,
+    commit: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly pathHistorySince: (
+    cwd: string,
+    base: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly fileAt: (
+    cwd: string,
+    commit: string,
     sourcePath: string,
   ) => ProcessResult | Promise<ProcessResult>;
   readonly worktreeBlob: (
@@ -84,9 +148,13 @@ export interface ContextGitPort {
     changePath: string,
     taskPaths: readonly string[],
   ) => ProcessResult | Promise<ProcessResult>;
+  readonly statusPorcelain: (cwd: string) => ProcessResult | Promise<ProcessResult>;
 }
 
 export interface ContextRuntime {
+  readonly ledgerHistory?: import("./task-ledger-history.js").TaskLedgerHistory;
+  readonly workerIdentity?: () => string | undefined;
+  readonly process?: ProcessPort;
   readonly cwd: () => string;
   readonly fileSystem: ContextFileSystemPort;
   readonly git: ContextGitPort;
@@ -99,21 +167,106 @@ export interface ContextRuntimeOverrides {
   readonly git?: ContextGitPort;
 }
 
+export interface ContextPlanContractData {
+  readonly version: 1;
+  readonly repository: string | null;
+  readonly taskBreakdownDigest: string;
+  readonly recordedInitialization: {
+    readonly base: string;
+    readonly authority: string;
+    readonly breakdown: string;
+    readonly taskIds: readonly number[];
+  } | null;
+  readonly tasks: readonly {
+    readonly id: number;
+    readonly title: string;
+    readonly taskDefinitionDigest: string;
+    readonly goal?: string;
+    readonly acceptance?: readonly string[];
+    readonly dependsOn: readonly number[];
+    readonly recordedInputContext: {
+      readonly repository: string;
+      readonly intentCommit: string;
+      readonly taskDefinition: string;
+      readonly impactPlanCommit: string | null;
+      readonly inputs: readonly { readonly path: string; readonly blob: string }[];
+      } | null;
+    readonly legacyCurrentConfirmation?: LegacyInputConfirmation & {
+      readonly standing:
+        | "legacy-current-confirmed"
+        | "legacy-confirmation-stale"
+        | "unavailable";
+    };
+  }[];
+  readonly inputs: readonly {
+    readonly path: string;
+    readonly requested: boolean;
+    readonly recordedBy: readonly { readonly task: number; readonly blob: string }[];
+    readonly legacyCurrentConfirmationBy?: readonly {
+      readonly task: number;
+      readonly blob: string;
+      readonly standing:
+        | "legacy-current-confirmed"
+        | "legacy-confirmation-stale"
+        | "unavailable";
+    }[];
+    readonly currentHeadBlob: string | null;
+    readonly headAvailable: boolean;
+    readonly currentWorktreeBlob: string | null;
+    readonly worktreeAvailable: boolean;
+  }[];
+}
+
 export interface ContextChange {
   readonly name: string;
   readonly path: string;
   readonly format: ContextFormat;
   readonly artifacts: readonly string[];
+  readonly diagnostics?: readonly string[];
   readonly artifactDetails?: Readonly<
     Record<string, { readonly lines: number; readonly header: string }>
   >;
   readonly requirements: readonly string[];
+  readonly planContractData?: ContextPlanContractData;
   readonly routeUnit?: string;
+  readonly routeUnitRevision?: string;
   readonly tasks?: { readonly done: number; readonly total: number };
+  readonly readiness?: TaskReadinessProjection;
+  readonly identityOrder?: readonly number[];
+  readonly execution?: PlanExecutionContract;
+  readonly executionOrder?: readonly number[];
+  readonly executionTransition?: PlanExecutionTransitionContract;
+  readonly inputImpact?: PlanInputImpactContract;
+  readonly inputImpactStanding?: {
+    readonly status: "verified" | "uncommitted" | "blocked";
+    readonly reasons: readonly string[];
+    readonly unaffectedInputs?: ReadonlyMap<string, ReadonlySet<number>>;
+  };
+  readonly executionTransitionStanding?: {
+    readonly status: "verified" | "uncommitted" | "blocked";
+    readonly reasons: readonly string[];
+  };
+  readonly critiqueDisposition?: string;
+  readonly intentStanding?: "tactical" | "approval-required" | "approved-reference" | "stale";
+  readonly scaffoldRecovery?: {
+    readonly status: "eligible" | "blocked";
+    readonly reasons: readonly string[];
+  };
   readonly taskStates?: readonly {
     readonly task: string;
     readonly status: string;
     readonly feedback: string;
+  }[];
+  readonly taskInputs?: readonly {
+    readonly task: number;
+    readonly status:
+      | "current"
+      | "stale"
+      | "missing"
+      | "impact-reviewed-unaffected"
+      | "legacy-current-confirmed"
+      | "legacy-confirmation-stale";
+    readonly changedPaths: readonly string[];
   }[];
   readonly wholeReview?: ContextStanding | string;
   readonly lastModified: number;
@@ -142,26 +295,7 @@ const ARTIFACTS = [
   "finish.md",
   "critique.md",
 ] as const;
-const environment = {
-  ...process.env,
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-};
-
-const productionProcess: ProcessPort = {
-  run: (command, args, cwd) => {
-    const result = spawnSync(command, [...args], {
-      cwd,
-      encoding: "utf-8",
-      env: environment,
-    });
-    return {
-      status: result.status ?? -1,
-      stdout: result.stdout ?? "",
-      stderr: result.stderr ?? "",
-    };
-  },
-};
+const productionProcess = nativeReadProcess;
 
 const productionFileSystem: ContextFileSystemPort = {
   readFile: (sourcePath) => Fs.readFile(sourcePath, "utf8"),
@@ -191,6 +325,8 @@ const createGitPort = (processPort: ProcessPort): ContextGitPort => ({
   repositoryRoot: (cwd) =>
     processPort.run("git", ["rev-parse", "--show-toplevel"], cwd),
   currentHead: (cwd) => processPort.run("git", ["rev-parse", "HEAD"], cwd),
+  firstParent: (cwd, commit) =>
+    processPort.run("git", ["rev-parse", `${commit}^`], cwd),
   resolveCommit: (cwd, reference) =>
     processPort.run(
       "git",
@@ -201,6 +337,22 @@ const createGitPort = (processPort: ProcessPort): ContextGitPort => ({
     processPort.run("git", ["merge-base", "--is-ancestor", base, head], cwd),
   headBlob: (cwd, sourcePath) =>
     processPort.run("git", ["rev-parse", `HEAD:${sourcePath}`], cwd),
+  blobIdAt: (cwd, commit, sourcePath) =>
+    processPort.run("git", ["rev-parse", "--verify", `${commit}:${sourcePath}`], cwd),
+  pathHistory: (cwd, sourcePath) =>
+    processPort.run("git", ["log", "--format=%H", "--full-history", "HEAD", "--", sourcePath], cwd),
+  changedPaths: (cwd, commit) =>
+    processPort.run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", "-z", commit], cwd),
+  pathChanges: (cwd, base, head, paths) =>
+    processPort.run("git", ["log", "--full-history", "--format=%H", `${base}..${head}`, "--", ...paths], cwd),
+  pathHistoryAt: (cwd, commit, sourcePath) =>
+    processPort.run("git", ["log", "--format=%H", commit, "--", sourcePath], cwd),
+  treeEntry: (cwd, commit, sourcePath) =>
+    processPort.run("git", ["ls-tree", commit, "--", sourcePath], cwd),
+  pathHistorySince: (cwd, base, sourcePath) =>
+    processPort.run("git", ["log", "--format=%H", `${base}..HEAD`, "--", sourcePath], cwd),
+  fileAt: (cwd, commit, sourcePath) =>
+    processPort.run("git", ["show", `${commit}:${sourcePath}`], cwd),
   worktreeBlob: (cwd, sourcePath) =>
     processPort.run("git", ["hash-object", "--", sourcePath], cwd),
   stagedDiff: (cwd, sourcePath) =>
@@ -241,6 +393,8 @@ const createGitPort = (processPort: ProcessPort): ContextGitPort => ({
       ],
       cwd,
     ),
+  statusPorcelain: (cwd) =>
+    processPort.run("git", ["status", "--porcelain=v1", "--untracked-files=all"], cwd),
 });
 
 export const createContextRuntime = (
@@ -249,6 +403,8 @@ export const createContextRuntime = (
   const processPort = overrides.process ?? productionProcess;
   return {
     cwd: overrides.cwd ?? (() => process.cwd()),
+    workerIdentity: () => process.env.PI_SESSION_ID,
+    process: processPort,
     fileSystem: overrides.fileSystem ?? productionFileSystem,
     git: overrides.git ?? createGitPort(processPort),
   };
@@ -299,6 +455,8 @@ const lineCount = (source: string): number =>
     ? 0
     : source.split(/\r\n|\n|\r/).length - (/[\r\n]$/.test(source) ? 1 : 0);
 const fullCommit = (value: string): boolean => /^[0-9a-f]{40}$/.test(value);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const read = async (
   runtime: ContextRuntime,
@@ -325,6 +483,7 @@ const readArtifact = async (
 };
 
 const planTasks = (
+  projection: PlanContractProjection | undefined,
   source: string,
 ):
   | {
@@ -333,20 +492,697 @@ const planTasks = (
       readonly abandoned: boolean;
     }[]
   | undefined => {
-  const body = stripComments(source);
-  const headings = [...body.matchAll(/^### Task ([1-9][0-9]*):[ \t]+(.+)$/gm)];
-  const allHeadings = [...body.matchAll(/^### Task ([1-9][0-9]*):/gm)];
-  if (allHeadings.length !== headings.length) return undefined;
-  const seen = new Set<string>();
-  const tasks: { task: string; title: string; abandoned: boolean }[] = [];
-  for (const match of headings) {
-    const task = match[1] ?? "";
-    if (seen.has(task)) return undefined;
-    seen.add(task);
-    const title = match[2] ?? "";
-    tasks.push({ task, title, abandoned: /\(abandoned — .+\)$/.test(title) });
+  const visibleTasks = projection?.tasks.map((task) => ({ id: task.id, title: task.title }))
+    ?? readVisiblePlanTaskHeadings(source);
+  return visibleTasks?.map((task) => ({
+    task: String(task.id),
+    title: task.title,
+    abandoned: /\(abandoned — .+\)$/.test(task.title),
+  }));
+};
+
+const safeRepositoryPath = (value: string): boolean =>
+  value !== "" &&
+  !value.startsWith("/") &&
+  !value.includes("\\") &&
+  value.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+
+const contextTaskCheckpointGit = (runtime: ContextRuntime): TaskCheckpointGit => ({
+  ledgerHistory: runtime.ledgerHistory,
+  changedPaths: runtime.git.changedPaths,
+  pathChanges: runtime.git.pathChanges,
+  pathHistory: (root, path) => runtime.git.pathHistory(root, path),
+  blobAt: (root, commit, path) => runtime.git.fileAt(root, commit, path),
+  firstParent: (root, commit) => runtime.git.firstParent(root, commit),
+  resolveCommit: (root, reference) => runtime.git.resolveCommit(root, reference),
+  isAncestor: (root, base, head) => runtime.git.isAncestor(root, base, head),
+});
+
+const inspectLegacyInputConfirmation = async (
+  runtime: ContextRuntime,
+  root: string,
+  changeDir: string,
+  task: PlanTaskContract,
+  plan: PlanContractProjection,
+  repositoryIdentity: string | undefined,
+  inputImpactStanding: ContextChange["inputImpactStanding"],
+): Promise<readonly string[]> => {
+  const confirmation = plan.legacyInputConfirmations?.find((entry) => entry.task === task.id);
+  if (!confirmation) return [];
+  const problems = new Set<string>();
+  let checkpointVerified = false;
+  if (repositoryIdentity === undefined || confirmation.repository !== repositoryIdentity)
+    problems.add("repository");
+  if (confirmation.taskDefinition !== task.definitionDigest)
+    problems.add("task definition");
+  for (const problem of legacyInputConfirmationMetadataProblems(confirmation))
+    problems.add(problem);
+  const currentHead = text(await runtime.git.currentHead(root));
+  if (!fullCommit(currentHead)) problems.add("current HEAD");
+  const planPath = Path.join(relative(root, changeDir), "plan.md");
+  const planHead = await runtime.git.headBlob(root, planPath);
+  const planWorktree = await runtime.git.worktreeBlob(root, planPath);
+  const planIndex = await runtime.git.stagedDiff(root, planPath);
+  if (
+    !successful(planHead) ||
+    !successful(planWorktree) ||
+    !successful(planIndex) ||
+    text(planHead) !== text(planWorktree) ||
+    planIndex.status !== 0
+  )
+    problems.add("confirmation plan is not committed exactly at HEAD");
+  const taskProgressRelativePath = Path.join(
+    relative(root, changeDir),
+    "tasks",
+    `task-${task.id}`,
+    "progress.md",
+  );
+  const taskProgressPath = Path.join(root, taskProgressRelativePath);
+  const implementation = text(await runtime.git.latestCommit(root, taskProgressRelativePath));
+  if (!fullCommit(implementation)) {
+    problems.add("historical implementation");
+  } else {
+    const historicalSource = await runtime.git.fileAt(root, implementation, planPath);
+    const historicalRead = successful(historicalSource)
+      ? await createArtifactReader({ readFile: () => text(historicalSource) })(planPath)
+      : undefined;
+    const historical = historicalRead ? validateArtifact(historicalRead) : undefined;
+    const historicalPlan =
+      historical?._tag === "valid" && historical.artifact === "plan"
+        ? historical.body.workflow.plan
+        : undefined;
+    const historicalTask = historicalPlan?.tasks.find((entry) => entry.id === task.id);
+    if (
+      !historicalTask ||
+      historicalTask.inputContext !== undefined ||
+      historicalTask.definitionDigest !== task.definitionDigest
+    )
+      problems.add("historical task contract or provenance");
+    const refs = new Set([
+      ...(historicalPlan?.intentApprovals ?? []),
+      ...plan.intentApprovals,
+    ].map((entry) => entry.path));
+    for (const path of refs) {
+      const before = historicalPlan?.intentApprovals.find((entry) => entry.path === path);
+      const current = plan.intentApprovals.find((entry) => entry.path === path);
+      if (before?.commit === current?.commit && before?.reference === current?.reference) continue;
+      const repoPath = relative(root, Path.resolve(changeDir, path));
+      if (
+        inputImpactStanding?.status !== "verified" ||
+        inputImpactStanding.unaffectedInputs?.get(repoPath)?.has(task.id) !== true
+      )
+        problems.add(`changed approval ${path}`);
+    }
   }
-  return tasks;
+  if (!(await durableArtifact(runtime, root, taskProgressPath)))
+    problems.add("task progress is not committed exactly at HEAD");
+  const feedbackPath = Path.join(changeDir, "tasks", `task-${task.id}`, "feedback.md");
+  let feedbackRanges: readonly TaskFeedbackRange[] = [];
+  if (await runtime.fileSystem.pathExists(feedbackPath)) {
+    if (!(await durableArtifact(runtime, root, feedbackPath))) {
+      problems.add("task feedback is not committed exactly at HEAD");
+    } else {
+      const feedback = await readArtifact(runtime, feedbackPath);
+      if ("exitCode" in feedback) {
+        problems.add("task feedback history is unavailable");
+      } else {
+        const parsedRanges = await readTaskFeedbackRanges(
+          feedbackPath,
+          feedback.source,
+          Path.basename(changeDir),
+          task.id,
+        );
+        if (parsedRanges.kind === "valid") feedbackRanges = parsedRanges.ranges;
+        else problems.add(`task feedback range is unverified: ${parsedRanges.reason}`);
+      }
+    }
+  }
+  if (fullCommit(currentHead)) {
+    const checkpoint = await resolveTaskCheckpoint(
+      contextTaskCheckpointGit(runtime),
+      root,
+      taskProgressRelativePath,
+      task.id,
+      Path.basename(changeDir),
+      currentHead,
+      feedbackRanges,
+    );
+    if (checkpoint.kind !== "verified")
+      problems.add(`historical task/Base/range identity is unverified: ${checkpoint.kind === "unverified" ? checkpoint.reason : "no committed task attempt exists"}`);
+    else checkpointVerified = true;
+  }
+  if (plan.inputImpact && inputImpactStanding?.status !== "verified")
+    problems.add("input impact history");
+  for (const impact of plan.inputImpact?.changes ?? [])
+    if (impact.affectedTasks.includes(task.id)) problems.add(`affected input ${impact.path}`);
+  const inputsByPath = new Map(confirmation.inputs.map((input) => [input.path, input.blob]));
+  const intentIsCommit = fullCommit(confirmation.intentCommit);
+  if (plan.intentApprovals.length > 0 && !intentIsCommit)
+    problems.add("formal approval revision");
+  if (
+    plan.intentApprovals.length === 0 &&
+    confirmation.intentCommit !== `tactical:${confirmation.ownerReference}`
+  )
+    problems.add("tactical authority reference");
+  if (intentIsCommit) {
+    const resolved = await runtime.git.resolveCommit(root, confirmation.intentCommit);
+    if (
+      !successful(resolved) ||
+      text(resolved) !== confirmation.intentCommit ||
+      !fullCommit(currentHead) ||
+      !successful(await runtime.git.isAncestor(root, confirmation.intentCommit, currentHead))
+    )
+      problems.add("intent revision");
+  }
+  for (const input of confirmation.inputs) {
+    if (!safeRepositoryPath(input.path)) {
+      problems.add(`unsafe input ${input.path}`);
+      continue;
+    }
+    const head = await runtime.git.headBlob(root, input.path);
+    const working = await runtime.git.worktreeBlob(root, input.path);
+    const staged = await runtime.git.stagedDiff(root, input.path);
+    if (
+      !successful(head) ||
+      !successful(working) ||
+      !successful(staged) ||
+      text(head) !== input.blob ||
+      text(working) !== input.blob ||
+      staged.status !== 0
+    )
+      problems.add(input.path);
+    if (intentIsCommit) {
+      const selected = await runtime.git.blobIdAt(root, confirmation.intentCommit, input.path);
+      if (!successful(selected) || text(selected) !== input.blob)
+        problems.add(`intent revision input ${input.path}`);
+    }
+  }
+  for (const reference of plan.intentApprovals) {
+    const repoPath = relative(root, Path.resolve(changeDir, reference.path));
+    const blob = inputsByPath.get(repoPath);
+    if (blob === undefined) {
+      problems.add(`approved input ${repoPath}`);
+      continue;
+    }
+    const approved = await runtime.git.blobIdAt(root, reference.commit, repoPath);
+    const current = await runtime.git.headBlob(root, repoPath);
+    if (
+      !successful(approved) ||
+      !successful(current) ||
+      text(approved) !== blob ||
+      text(current) !== blob
+    )
+      problems.add(`approved input ${repoPath}`);
+    if (intentIsCommit) {
+      const ancestor = await runtime.git.isAncestor(root, reference.commit, confirmation.intentCommit);
+      const selected = await runtime.git.blobIdAt(root, confirmation.intentCommit, repoPath);
+      if (!successful(ancestor) || !successful(selected) || text(selected) !== blob)
+        problems.add(`approval revision ${repoPath}`);
+    }
+  }
+  if (checkpointVerified && problems.size === 0) {
+    const frozenProblems = await legacyCompletedDefinitionProblems(
+      contextTaskCheckpointGit(runtime),
+      root,
+      taskProgressRelativePath,
+      planPath,
+      Path.basename(changeDir),
+      task.id,
+      task.definitionDigest,
+    );
+    for (const problem of frozenProblems) problems.add(problem);
+  }
+  return [...problems];
+};
+
+const contextHistoryRuntime = (runtime: ContextRuntime): PlanHistoryRuntime => ({
+  pathExists: (path) => runtime.fileSystem.pathExists(path),
+  git: { ...runtime.git, blobAt: (cwd, commit, path) => runtime.git.fileAt(cwd, commit, path) },
+});
+
+const inspectContextExecutionTransition = async (
+  runtime: ContextRuntime,
+  root: string,
+  changeDir: string,
+  planArtifact: ArtifactReadResult,
+): Promise<ContextChange["executionTransitionStanding"]> => {
+  const planContract =
+    planArtifact._tag === "recognized" ? metadataContract(planArtifact) : undefined;
+  const projection =
+    planContract?._tag === "valid" ? planContract.body.workflow.plan : undefined;
+  if (!projection || planContract?._tag !== "valid") return undefined;
+  const hasExecution = projection.execution !== undefined;
+  const planPath = relative(root, Path.join(changeDir, "plan.md"));
+  const headBlob = await runtime.git.headBlob(root, planPath);
+  const worktreeBlob = await runtime.git.worktreeBlob(root, planPath);
+  const staged = await runtime.git.stagedDiff(root, planPath);
+  const durable =
+    successful(headBlob) &&
+    successful(worktreeBlob) &&
+    text(headBlob) === text(worktreeBlob) &&
+    successful(staged);
+  if (!durable) {
+    if (!hasExecution && !projection.executionTransition) return undefined;
+    return {
+      status: "uncommitted",
+      reasons: ["explicit execution metadata is not committed with plan.md"],
+    };
+  }
+  const reasons = await inspectExecutionTransition(contextHistoryRuntime(runtime), root, changeDir, planContract);
+  return { status: reasons.length === 0 ? "verified" : "blocked", reasons };
+};
+
+const inspectContextInputImpact = async (
+  runtime: ContextRuntime,
+  root: string,
+  changeDir: string,
+  projection: PlanContractProjection,
+): Promise<ContextChange["inputImpactStanding"]> => {
+  if (!projection.inputImpact && !projection.tasks.some((task) => task.inputContext?.impactPlanCommit !== undefined))
+    return undefined;
+  const inspection = await inspectInputImpact(contextHistoryRuntime(runtime), root, changeDir, projection);
+  return { status: inspection.problems.length === 0 ? "verified" : "blocked", reasons: inspection.problems, unaffectedInputs: inspection.unaffectedInputs };
+};
+
+const inspectInitialScaffoldRecovery = async (
+  runtime: ContextRuntime,
+  changeDir: string,
+  planArtifact: ArtifactReadResult,
+): Promise<ContextChange["scaffoldRecovery"]> => {
+  const planContract =
+    planArtifact._tag === "recognized" ? metadataContract(planArtifact) : undefined;
+  const plan =
+    planContract?._tag === "valid" ? planContract.body.workflow.plan : undefined;
+  const proof = plan?.initialization;
+  if (!proof || !plan) return undefined;
+  const reasons: string[] = [];
+  const rootResult = await runtime.git.repositoryRoot(changeDir);
+  const root = text(rootResult);
+  const headResult = successful(rootResult)
+    ? await runtime.git.currentHead(root)
+    : { status: 1, stdout: "", stderr: "" };
+  const head = text(headResult);
+  const resolved = fullCommit(proof.base)
+    ? await runtime.git.resolveCommit(root, proof.base)
+    : { status: 1, stdout: "", stderr: "" };
+  if (
+    !successful(rootResult) ||
+    !successful(headResult) ||
+    !fullCommit(head) ||
+    !successful(resolved) ||
+    text(resolved) !== proof.base
+  )
+    reasons.push("original initialization revision is missing or unresolvable");
+  else if (!successful(await runtime.git.isAncestor(root, proof.base, head)))
+    reasons.push("original initialization revision is not an ancestor of HEAD");
+  if (!successful(rootResult) || !fullCommit(proof.base))
+    return { status: "blocked", reasons };
+  const changePath = relative(root, changeDir);
+  const baselineArtifacts = [
+    `${changePath}/plan.md`,
+    `${changePath}/progress.md`,
+    ...proof.taskIds.flatMap((task) => [
+      `${changePath}/tasks/task-${task}/progress.md`,
+      `${changePath}/tasks/task-${task}/feedback.md`,
+    ]),
+  ];
+  const scaffoldCommits = new Set<string>();
+  let hasDirectInitializationCommit = false;
+  let initialPlanCommit: string | undefined;
+  const planPath = `${changePath}/plan.md`;
+  for (const path of baselineArtifacts) {
+    if (!successful(await runtime.git.stagedDiff(root, path)))
+      reasons.push(`staged scaffold state requires owner reconciliation: ${path}`);
+    if (successful(await runtime.git.blobIdAt(root, proof.base, path)))
+      reasons.push(`initialization revision already contains ${path}`);
+    const pathHistory = await runtime.git.pathHistory(root, path);
+    if (!successful(pathHistory)) {
+      reasons.push(`history for ${path} cannot be verified`);
+      continue;
+    }
+    const postBase: string[] = [];
+    for (const commit of text(pathHistory).split("\n").filter(Boolean)) {
+      if (successful(await runtime.git.isAncestor(root, commit, proof.base))) {
+        reasons.push(`${path} has history before the authorized initialization revision`);
+        continue;
+      }
+      postBase.push(commit);
+      scaffoldCommits.add(commit);
+      const parent = await runtime.git.firstParent(root, commit);
+      if (successful(parent) && text(parent) === proof.base)
+        hasDirectInitializationCommit = true;
+    }
+    if (path === planPath) initialPlanCommit = postBase.at(-1);
+  }
+  const initialPlanSource = initialPlanCommit
+    ? await runtime.git.fileAt(root, initialPlanCommit, planPath)
+    : { status: 1, stdout: "", stderr: "missing initial plan revision" };
+  const initialPlanRead = successful(initialPlanSource)
+    ? await createArtifactReader({ readFile: () => text(initialPlanSource) })(planPath)
+    : undefined;
+  const initialPlanContract = initialPlanRead
+    ? metadataContract(initialPlanRead)
+    : undefined;
+  const historicalInitialPlan =
+    initialPlanContract?._tag === "valid" && initialPlanContract.artifact === "plan"
+      ? initialPlanContract.body.workflow.plan
+      : undefined;
+  const uncommittedFirstInitialization =
+    initialPlanCommit === undefined &&
+    scaffoldCommits.size === 0 &&
+    head === proof.base;
+  const initialPlan = historicalInitialPlan ??
+    (uncommittedFirstInitialization ? plan : undefined);
+  const initialContract = initialPlanContract?._tag === "valid"
+    ? initialPlanContract
+    : uncommittedFirstInitialization && planContract?._tag === "valid"
+      ? planContract
+      : undefined;
+  const initialTitle = initialContract?.body.headings
+    .find((heading) => heading.level === 1)?.text.slice("Plan: ".length);
+  if (
+    !initialPlan?.initialization ||
+    initialPlan.initialization.base !== proof.base ||
+    initialPlan.initialization.authority !== proof.authority ||
+    initialPlan.initialization.breakdown !== proof.breakdown ||
+    JSON.stringify(initialPlan.initialization.taskIds) !== JSON.stringify(proof.taskIds) ||
+    JSON.stringify(initialPlan.identityOrder) !== JSON.stringify(proof.taskIds)
+  )
+    reasons.push("initial plan revision does not contain the recorded initialization proof");
+  else if (
+    proof.taskIds.some((taskId) => {
+      const task = initialPlan.tasks.find((entry) => entry.id === taskId);
+      return !task || /\(abandoned — .+\)$/.test(task.title);
+    })
+  )
+    reasons.push("initial plan revision does not contain every active task");
+  else if (
+    initialPlan.execution?.version !== 2 &&
+    proof.taskIds.some((taskId) => !initialPlan.tasks.find((entry) => entry.id === taskId)?.filesDeclared)
+  )
+    reasons.push("initial plan revision does not contain active tasks with explicit Files scopes");
+  else if (
+    taskBreakdownDigestFromDefinitions(proof.taskIds, initialPlan.tasks) !== proof.breakdown
+  )
+    reasons.push("initial plan task definitions do not match the recorded breakdown");
+  if (
+    historicalInitialPlan &&
+    (JSON.stringify(plan.identityOrder) !== JSON.stringify(historicalInitialPlan.identityOrder) ||
+      JSON.stringify(plan.execution) !== JSON.stringify(historicalInitialPlan.execution) ||
+      JSON.stringify(plan.executionOrder) !== JSON.stringify(historicalInitialPlan.executionOrder) ||
+      JSON.stringify(plan.tasks) !== JSON.stringify(historicalInitialPlan.tasks) ||
+      JSON.stringify(plan.executionTransition) !== JSON.stringify(historicalInitialPlan.executionTransition) ||
+      JSON.stringify(plan.inputImpact) !== JSON.stringify(historicalInitialPlan.inputImpact) ||
+      JSON.stringify(plan.intentApprovals) !== JSON.stringify(historicalInitialPlan.intentApprovals))
+  )
+    reasons.push("amended plan cannot use initial-scaffold recovery");
+  if (
+    (scaffoldCommits.size === 0 && head !== proof.base) ||
+    (scaffoldCommits.size > 0 && !hasDirectInitializationCommit)
+  )
+    reasons.push("initialization revision is not the HEAD immediately before initial scaffold history");
+  const approvalReferences = plan.intentApprovals ?? [];
+  const referencedFormalPaths = new Set<string>();
+  for (const reference of approvalReferences) {
+    if (!safeRepositoryPath(reference.path)) {
+      reasons.push(`formal intent reference has an unsafe path: ${reference.path}`);
+      continue;
+    }
+    const sourcePath = Path.resolve(changeDir, reference.path);
+    const repositoryPath = relative(root, sourcePath);
+    referencedFormalPaths.add(repositoryPath);
+    const formal = await readArtifact(runtime, sourcePath);
+    const formalContract =
+      "exitCode" in formal ? undefined : metadataContract(formal.artifact);
+    const commit = await runtime.git.resolveCommit(root, reference.commit);
+    const committedBlob = await runtime.git.blobIdAt(root, reference.commit, repositoryPath);
+    const currentBlob = await runtime.git.blobIdAt(root, head, repositoryPath);
+    const workingBlob = await runtime.git.worktreeBlob(root, repositoryPath);
+    if (
+      formalContract?._tag !== "valid" ||
+      formalContract.metadata.status !== "approved" ||
+      formalContract.metadata.decision !== "accepted" ||
+      !successful(commit) ||
+      text(commit) !== reference.commit ||
+      !successful(await runtime.git.isAncestor(root, reference.commit, head)) ||
+      !successful(committedBlob) ||
+      !successful(currentBlob) ||
+      !successful(workingBlob) ||
+      text(committedBlob) !== text(currentBlob) ||
+      text(committedBlob) !== text(workingBlob) ||
+      !successful(await runtime.git.stagedDiff(root, repositoryPath))
+    )
+      reasons.push(`formal intent reference is not a current committed approval: ${reference.path}`);
+  }
+  const formalPaths = [
+    Path.join(changeDir, "proposal.md"),
+    Path.join(changeDir, "design.md"),
+  ];
+  const requirementsDir = Path.join(changeDir, "requirements");
+  if (await runtime.fileSystem.directoryExists(requirementsDir))
+    for (const name of await runtime.fileSystem.readDirectory(requirementsDir))
+      if (name.endsWith(".md")) formalPaths.push(Path.join(requirementsDir, name));
+  for (const formalPath of formalPaths)
+    if (
+      (await runtime.fileSystem.pathExists(formalPath)) &&
+      !referencedFormalPaths.has(relative(root, formalPath))
+    )
+      reasons.push(`formal input lacks a committed approval reference: ${relative(root, formalPath)}`);
+  const rootProgressIsPending = async (source: string): Promise<boolean> => {
+    const artifact = await createArtifactReader({ readFile: () => source })(Path.join(changeDir, "progress.md"));
+    const contract = metadataContract(artifact);
+    const records =
+      contract?._tag === "valid"
+        ? contract.body.workflow.records.filter((record) => record.kind === "task")
+        : [];
+    return (
+      contract?._tag === "valid" &&
+      contract.artifact === "progress" &&
+      contract.metadata.change === Path.basename(changeDir) &&
+      contract.body.headings.find((heading) => heading.level === 1)?.text ===
+        `Progress: ${initialTitle}` &&
+      progressLedgerMatches(contract.metadata.tasks, records) &&
+      records.length === proof.taskIds.length &&
+      records.every(
+        (record, index) =>
+          record.number === proof.taskIds[index] &&
+          record.title === initialPlan?.tasks.find((task) => task.id === record.number)?.title &&
+          record.fields.Status === "pending",
+      ) &&
+      Array.isArray(contract.metadata.tasks) &&
+      contract.metadata.tasks.length === proof.taskIds.length &&
+      contract.metadata.tasks.every(
+        (entry) => isRecord(entry) && entry.status === "pending",
+      )
+    );
+  };
+  const taskProgressIsPending = async (
+    source: string,
+    task: number,
+  ): Promise<boolean> => {
+    const path = Path.join(changeDir, "tasks", `task-${task}`, "progress.md");
+    const artifact = await createArtifactReader({ readFile: () => source })(path);
+    const contract = metadataContract(artifact);
+    return (
+      contract?._tag === "valid" &&
+      contract.artifact === "task-progress" &&
+      contract.metadata.task === task &&
+      contract.metadata.change === Path.basename(changeDir) &&
+      contract.metadata.status === "pending" &&
+      contract.body.headings.find((heading) => heading.level === 1)?.text ===
+        `Task Progress: Task ${task} — ${initialPlan?.tasks.find((entry) => entry.id === task)?.title}` &&
+      !contract.body.workflow.records.some((record) => record.kind === "attempt")
+    );
+  };
+  const historySinceBase = async (path: string): Promise<string[]> => {
+    const history = await runtime.git.pathHistorySince(root, proof.base, path);
+    return successful(history) ? text(history).split("\n").filter(Boolean) : [];
+  };
+  const progressPath = Path.join(changeDir, "progress.md");
+  const rootProgressPath = relative(root, progressPath);
+  const rootProgressHistory = await historySinceBase(rootProgressPath);
+  if (await runtime.fileSystem.pathExists(progressPath)) {
+    const source = await read(runtime, progressPath);
+    if (
+      typeof source !== "string" ||
+      !(await rootProgressIsPending(source))
+    )
+      reasons.push("present root task state is not a consistent pending initialization");
+  } else if (rootProgressHistory.length > 0)
+    reasons.push("root task progress has deleted history since initialization");
+  const rootHistoryResult = await runtime.git.pathHistorySince(root, proof.base, rootProgressPath);
+  if (!successful(rootHistoryResult))
+    reasons.push("root task progress history cannot be verified");
+  else
+    for (const commit of text(rootHistoryResult).split("\n").filter(Boolean)) {
+      const version = await runtime.git.fileAt(root, commit, rootProgressPath);
+      if (!successful(version) || !(await rootProgressIsPending(text(version))))
+        reasons.push("root task progress history contains non-pending state");
+    }
+  for (const task of plan.tasks.filter((entry) => proof.taskIds.includes(entry.id))) {
+    if (!task.inputContext) reasons.push(`Task ${task.id} has no current-input handoff context`);
+    else {
+      if (Path.resolve(task.inputContext.repository) !== Path.resolve(root))
+        reasons.push(`Task ${task.id} input context names a different repository`);
+      if (fullCommit(task.inputContext.intentCommit)) {
+        const intentCommit = await runtime.git.resolveCommit(root, task.inputContext.intentCommit);
+        if (
+          !successful(intentCommit) ||
+          text(intentCommit) !== task.inputContext.intentCommit ||
+          !successful(await runtime.git.isAncestor(root, task.inputContext.intentCommit, head))
+        )
+          reasons.push(`Task ${task.id} formal-intent revision is not current and reachable`);
+      } else if (!task.inputContext.intentCommit.startsWith("tactical:"))
+        reasons.push(`Task ${task.id} input context has no recognized authority revision`);
+      for (const formalPath of referencedFormalPaths)
+        if (!task.inputContext.inputs.some((input) => input.path === formalPath))
+          reasons.push(`Task ${task.id} input context omits approved formal input ${formalPath}`);
+      for (const input of task.inputContext.inputs) {
+        if (!safeRepositoryPath(input.path)) {
+          reasons.push(`Task ${task.id} input context contains an unsafe path`);
+          continue;
+        }
+        const committedBlob = await runtime.git.blobIdAt(root, head, input.path);
+        const currentBlob = await runtime.git.worktreeBlob(root, input.path);
+        if (
+          !successful(committedBlob) ||
+          text(committedBlob) !== input.blob ||
+          !successful(currentBlob) ||
+          text(currentBlob) !== input.blob ||
+          !successful(await runtime.git.stagedDiff(root, input.path))
+        )
+          reasons.push(`Task ${task.id} input changed since handoff: ${input.path}`);
+      }
+    }
+    if (!task.filesDeclared && plan.execution?.version !== 2)
+      reasons.push(`Task ${task.id} has no complete Files scope for partial-work inspection`);
+    for (const sourcePath of task.files) {
+      if (!safeRepositoryPath(sourcePath)) {
+        reasons.push(`Task ${task.id} Files scope contains an unsafe repository path`);
+        continue;
+      }
+      const history = await runtime.git.pathHistorySince(root, proof.base, sourcePath);
+      if (!successful(history) || text(history) !== "")
+        reasons.push(`Task ${task.id} has committed work in ${sourcePath} since initialization`);
+      const baselineBlob = await runtime.git.blobIdAt(root, proof.base, sourcePath);
+      const currentBlob = await runtime.git.worktreeBlob(root, sourcePath);
+      if (
+        successful(baselineBlob) !== successful(currentBlob) ||
+        (successful(baselineBlob) && text(baselineBlob) !== text(currentBlob)) ||
+        !successful(await runtime.git.stagedDiff(root, sourcePath))
+      )
+        reasons.push(`Task ${task.id} has partial work in ${sourcePath}`);
+    }
+    const taskProgressPath = Path.join(
+      changeDir,
+      "tasks",
+      `task-${task.id}`,
+      "progress.md",
+    );
+    const feedbackPath = Path.join(
+      changeDir,
+      "tasks",
+      `task-${task.id}`,
+      "feedback.md",
+    );
+    const checkpointPath = Path.join(
+      changeDir,
+      "tasks",
+      `task-${task.id}`,
+      ".base",
+    );
+    const feedbackHistory = await runtime.git.pathHistorySince(
+      root,
+      proof.base,
+      relative(root, feedbackPath),
+    );
+    if (
+      (await runtime.fileSystem.pathExists(feedbackPath)) ||
+      !successful(feedbackHistory) ||
+      text(feedbackHistory) !== ""
+    )
+      reasons.push(`Task ${task.id} already has feedback history`);
+    const checkpointHistory = await runtime.git.pathHistorySince(
+      root,
+      proof.base,
+      relative(root, checkpointPath),
+    );
+    if (
+      (await runtime.fileSystem.pathExists(checkpointPath)) ||
+      !successful(checkpointHistory) ||
+      text(checkpointHistory) !== "" ||
+      !successful(await runtime.git.stagedDiff(root, relative(root, checkpointPath)))
+    )
+      reasons.push(`Task ${task.id} has a task checkpoint or unverifiable checkpoint history`);
+    const taskProgressRelative = relative(root, taskProgressPath);
+    const taskProgressHistory = await runtime.git.pathHistorySince(
+      root,
+      proof.base,
+      taskProgressRelative,
+    );
+    if (!successful(taskProgressHistory))
+      reasons.push(`Task ${task.id} progress history cannot be verified`);
+    const taskProgressCommits = successful(taskProgressHistory)
+      ? text(taskProgressHistory).split("\n").filter(Boolean)
+      : [];
+    if (await runtime.fileSystem.pathExists(taskProgressPath)) {
+      const source = await read(runtime, taskProgressPath);
+      if (
+        typeof source !== "string" ||
+        !(await taskProgressIsPending(source, task.id))
+      )
+        reasons.push(`Task ${task.id} present progress is not pending and history-free`);
+    } else if (taskProgressCommits.length > 0)
+      reasons.push(`Task ${task.id} progress has deleted history`);
+    for (const commit of taskProgressCommits) {
+      const version = await runtime.git.fileAt(root, commit, taskProgressRelative);
+      if (
+        !successful(version) ||
+        !(await taskProgressIsPending(text(version), task.id))
+      )
+        reasons.push(`Task ${task.id} progress history contains an attempt or invalid state`);
+    }
+  }
+  const unscopedTasks = plan.execution?.version === 2
+    ? plan.tasks.filter((task) => proof.taskIds.includes(task.id) && !task.filesDeclared)
+    : [];
+  if (unscopedTasks.length > 0) {
+    const scopedPaths = new Set(plan.tasks.flatMap((task) => task.files));
+    const excludedPaths = [
+      `${changePath}/plan.md`,
+      ...proof.taskIds.map((taskId) => `${changePath}/tasks/task-${taskId}/progress.md`),
+      ...scopedPaths,
+    ];
+    const materialCommit = await runtime.git.latestMaterialCommit(root, changePath, excludedPaths);
+    if (!successful(materialCommit)) {
+      reasons.push("material history for dependency-mode tasks without Files scopes cannot be verified");
+    } else if (text(materialCommit) !== "") {
+      const commit = text(materialCommit);
+      const resolvedMaterial = await runtime.git.resolveCommit(root, commit);
+      const postInitialization = fullCommit(commit) &&
+        successful(resolvedMaterial) &&
+        text(resolvedMaterial) === commit &&
+        commit !== proof.base &&
+        successful(await runtime.git.isAncestor(root, proof.base, commit));
+      if (postInitialization)
+        reasons.push(`dependency-mode tasks without Files scopes have material history since initialization at ${commit}`);
+      else if (!fullCommit(commit) || !successful(resolvedMaterial) || text(resolvedMaterial) !== commit)
+        reasons.push("material history for dependency-mode tasks without Files scopes cannot be verified");
+    }
+    const status = await runtime.git.statusPorcelain(root);
+    if (!successful(status)) {
+      reasons.push("uncommitted material state for dependency-mode tasks without Files scopes cannot be verified");
+    } else {
+      const changePrefix = `${changePath}/`;
+      for (const entry of text(status).split(/\r?\n/).filter(Boolean)) {
+        const paths = entry.slice(3).split(" -> ").filter(Boolean);
+        for (const path of paths)
+          if (!path.startsWith(changePrefix) && !scopedPaths.has(path))
+            reasons.push("task work cannot be bounded without Files scopes");
+      }
+    }
+  }
+  return { status: reasons.length === 0 ? "eligible" : "blocked", reasons };
 };
 
 const splitRow = (line: string): readonly string[] | undefined => {
@@ -478,34 +1314,99 @@ const currentInvalid = (artifact: ArtifactReadResult): boolean =>
   (artifact._tag === "recognized" &&
     metadataContract(artifact)?._tag === "invalid");
 
+const legacyRouteUnit = (source: string): string | null => {
+  const clean = stripComments(source);
+  const match =
+    clean.match(/^\| *Route unit *\| *(.+?) *\|$/m) ??
+    clean.match(/^- *Route unit: *(.+)$/m);
+  const value = match?.[1]?.trim();
+  return value && !value.startsWith("<") && value !== "null" ? value : null;
+};
+
 const routeUnit = (
   sources: ReadonlyMap<string, string>,
   inspected: ReadonlyMap<string, ArtifactReadResult>,
-): string | undefined => {
-  let recognized = false;
-  let legacyRoute: string | undefined;
-  for (const name of ["proposal.md", "plan.md"]) {
+) => {
+  const modernProfile = ["proposal.md", "plan.md"].some(
+    (name) => inspected.get(name)?._tag === "recognized",
+  );
+  const reference = (name: string): string | null | undefined => {
     const source = sources.get(name);
+    if (source === undefined) return undefined;
     const artifact = inspected.get(name);
-    if (source === undefined || artifact === undefined) continue;
-    if (artifact._tag === "recognized") {
-      recognized = true;
-      if (
-        typeof artifact.metadata.route_unit === "string" &&
-        artifact.metadata.route_unit !== ""
-      )
-        return artifact.metadata.route_unit;
-      continue;
+    if (artifact?._tag === "recognized") {
+      return typeof artifact.metadata.route_unit === "string"
+        ? artifact.metadata.route_unit
+        : null;
     }
-    if (artifact._tag !== "unrelated" || legacyRoute) continue;
-    const match =
-      stripComments(source).match(/^\| *Route unit *\| *(.+?) *\|$/m) ??
-      stripComments(source).match(/^- *Route unit: *(.+)$/m);
-    const value = match?.[1]?.trim();
-    if (value && !value.startsWith("<") && value !== "null")
-      legacyRoute = value;
+    return !modernProfile && artifact?._tag === "unrelated"
+      ? legacyRouteUnit(source)
+      : null;
+  };
+  const proposal = reference("proposal.md");
+  const hasPlan = sources.has("plan.md");
+  return resolveRouteReferences(proposal, {
+    present: hasPlan,
+    reference: hasPlan ? reference("plan.md") ?? null : undefined,
+  });
+};
+
+const validateRouteBinding = async (
+  runtime: ContextRuntime,
+  changeDir: string,
+  reference: string,
+): Promise<string | ContextResult> => {
+  const match =
+    /^(\.kepler\/maps\/[^/]+\/route\.md) — unit ([1-9][0-9]*)$/.exec(reference);
+  if (!match)
+    return failure(
+      "one",
+      `route binding is not a canonical route/unit reference: ${reference}`,
+    );
+  const routePath = match[1] ?? "";
+  const unitId = Number(match[2]);
+  const rootResult = await runtime.git.repositoryRoot(changeDir);
+  if (!successful(rootResult))
+    return failure("one", "cannot resolve the repository for the route binding");
+  const root = text(rootResult);
+  const absoluteRoutePath = Path.resolve(root, routePath);
+  const relativeRoutePath = Path.relative(root, absoluteRoutePath);
+  if (
+    relativeRoutePath === "" ||
+    relativeRoutePath.startsWith(`..${Path.sep}`) ||
+    Path.isAbsolute(relativeRoutePath)
+  )
+    return failure("one", `route binding escapes the repository: ${reference}`);
+  if (!(await runtime.fileSystem.pathExists(absoluteRoutePath)))
+    return failure("one", `route binding file does not exist: ${routePath}`);
+  let source: string;
+  try {
+    source = await runtime.fileSystem.readFile(absoluteRoutePath);
+  } catch (error) {
+    return failure("one", `cannot read route binding ${routePath}: ${String(error)}`);
   }
-  return recognized ? undefined : legacyRoute;
+  const routeArtifact = await createArtifactReader({
+    readFile: () => source,
+  })(absoluteRoutePath);
+  if (routeArtifact._tag !== "recognized" || routeArtifact.metadata.artifact !== "route")
+    return failure("one", `route binding is not a recognized route artifact: ${routePath}`);
+  const routeContract = validateArtifact(routeArtifact);
+  if (routeContract._tag !== "valid")
+    return failure(
+      "one",
+      `route binding artifact is invalid: ${routePath}: ${routeContract._tag === "invalid" ? routeContract.diagnostics.map((item) => item.message).join("; ") : "route artifact was skipped"}`,
+    );
+  const units = routeArtifact.metadata.units as readonly { readonly id: number }[];
+  if (!units.some((unit) => unit.id === unitId))
+    return failure("one", `route unit ${unitId} does not exist in ${routePath}`);
+  const repositoryPath = relativeRoutePath.split(Path.sep).join("/");
+  const committed = await runtime.git.headBlob(root, repositoryPath);
+  const current = await runtime.git.worktreeBlob(root, repositoryPath);
+  if (!successful(committed) || !successful(current))
+    return failure("one", `route binding has no verifiable committed revision: ${routePath}`);
+  if (text(committed) !== text(current))
+    return failure("one", `route binding differs from its committed revision: ${routePath}`);
+  return text(committed);
 };
 
 const formatChange = async (
@@ -551,12 +1452,20 @@ const formatChange = async (
   let requirements: string[] = [];
   try {
     if (await runtime.fileSystem.directoryExists(requirementsDir)) {
-      requirements = [
+      const requirementFiles = [
         ...(await runtime.fileSystem.readDirectory(requirementsDir)),
-      ]
-        .filter((entry) => entry.endsWith(".md"))
-        .map((entry) => entry.slice(0, -3))
-        .sort();
+      ].filter((entry) => entry.endsWith(".md")).sort();
+      requirements = requirementFiles.map((entry) => entry.slice(0, -3));
+      for (const entry of requirementFiles) {
+        const path = Path.join(requirementsDir, entry);
+        const source = await runtime.fileSystem.readFile(path);
+        sources.set(`requirements/${entry}`, source);
+        inspected.set(
+          `requirements/${entry}`,
+          await createArtifactReader({ readFile: () => source })(path),
+        );
+        newest = Math.max(newest, await runtime.fileSystem.modificationTime(path));
+      }
       newest = Math.max(
         newest,
         await runtime.fileSystem.modificationTime(requirementsDir),
@@ -584,7 +1493,33 @@ const formatChange = async (
       { lines: lineCount(source), header: firstHeader(source) },
     ]),
   );
-  if ([...inspected.values()].some(currentInvalid))
+  if ([...inspected.values()].some(currentInvalid)) {
+    const diagnostics = [...inspected.entries()].flatMap(([path, artifact]) => {
+      const contract = artifact._tag === "recognized" ? metadataContract(artifact) : undefined;
+      return contract?._tag === "invalid"
+        ? contract.diagnostics.map((diagnostic) =>
+            `${path}${"field" in diagnostic && diagnostic.field ? ` ${diagnostic.field}` : ""}: ${diagnostic.message}`,
+          )
+        : [];
+    });
+    return {
+      change: {
+        name,
+        path: dir,
+        format: "invalid",
+        artifacts,
+        requirements,
+        diagnostics,
+        lastModified: newest,
+      },
+      sources,
+    };
+  }
+  const plan = sources.get("plan.md");
+  const routeResolution = routeUnit(sources, inspected);
+  if (routeResolution.kind === "conflict") {
+    const proposalReference = routeResolution.references[0];
+    const planReference = routeResolution.references[1];
     return {
       change: {
         name,
@@ -595,9 +1530,31 @@ const formatChange = async (
         lastModified: newest,
       },
       sources,
+      error: failure(
+        "one",
+        `route binding conflict: proposal.md route_unit=${JSON.stringify(proposalReference)}; plan.md route_unit=${JSON.stringify(planReference)}`,
+      ),
     };
-  const plan = sources.get("plan.md");
-  const route = routeUnit(sources, inspected);
+  }
+  const route = routeResolution.reference;
+  let routeUnitRevision: string | undefined;
+  if (route !== undefined) {
+    const checkedRoute = await validateRouteBinding(runtime, dir, route);
+    if (typeof checkedRoute !== "string")
+      return {
+        change: {
+          name,
+          path: dir,
+          format: "invalid",
+          artifacts,
+          requirements,
+          lastModified: newest,
+        },
+        sources,
+        error: checkedRoute,
+      };
+    routeUnitRevision = checkedRoute;
+  }
   if (!plan)
     return {
       change: {
@@ -608,6 +1565,7 @@ const formatChange = async (
         artifactDetails,
         requirements,
         ...(route ? { routeUnit: route } : {}),
+        ...(routeUnitRevision ? { routeUnitRevision } : {}),
         lastModified: newest,
       },
       sources,
@@ -638,7 +1596,15 @@ const formatChange = async (
       },
       sources,
     };
-  const tasks = planTasks(bodyOf(planRead.source, planRead.artifact));
+  const planContractResult = metadataContract(planRead.artifact);
+  const planContract =
+    planContractResult?._tag === "valid"
+      ? planContractResult.body.workflow.plan
+      : undefined;
+  const tasks = planTasks(
+    planContract,
+    bodyOf(planRead.source, planRead.artifact),
+  );
   if (!tasks)
     return {
       change: {
@@ -651,8 +1617,46 @@ const formatChange = async (
       },
       sources,
     };
+  const rootResult = await runtime.git.repositoryRoot(dir);
+  const executionTransitionStanding = successful(rootResult)
+    ? await inspectContextExecutionTransition(
+        runtime,
+        text(rootResult),
+        dir,
+        planRead.artifact,
+      )
+    : planContract?.execution !== undefined || planContract?.executionTransition !== undefined
+      ? { status: "blocked" as const, reasons: ["repository history cannot be verified"] }
+      : undefined;
+  const inputImpactStanding = successful(rootResult) && planContract
+    ? await inspectContextInputImpact(runtime, text(rootResult), dir, planContract)
+    : planContract?.inputImpact !== undefined
+      ? { status: "blocked" as const, reasons: ["repository history cannot be verified"] }
+      : undefined;
+  if (
+    executionTransitionStanding?.status === "blocked" ||
+    inputImpactStanding?.status === "blocked"
+  )
+    return {
+      change: {
+        name,
+        path: dir,
+        format: "invalid",
+        artifacts,
+        requirements,
+        ...(executionTransitionStanding === undefined ? {} : { executionTransitionStanding }),
+        ...(inputImpactStanding === undefined ? {} : { inputImpactStanding }),
+        lastModified: newest,
+      },
+      sources,
+    };
   const progress = sources.get("progress.md");
-  if (!progress)
+  if (!progress) {
+    const scaffoldRecovery = await inspectInitialScaffoldRecovery(
+      runtime,
+      dir,
+      planRead.artifact,
+    );
     return {
       change: {
         name,
@@ -660,10 +1664,14 @@ const formatChange = async (
         format: "legacy-unsupported",
         artifacts,
         requirements,
+        ...(scaffoldRecovery === undefined ? {} : { scaffoldRecovery }),
+        ...(executionTransitionStanding === undefined ? {} : { executionTransitionStanding }),
+        ...(inputImpactStanding === undefined ? {} : { inputImpactStanding }),
         lastModified: newest,
       },
       sources,
     };
+  }
   const progressRead = await readArtifact(
     runtime,
     Path.join(dir, "progress.md"),
@@ -722,7 +1730,12 @@ const formatChange = async (
       `task-${task.task}`,
       "progress.md",
     );
-    if (!(await runtime.fileSystem.pathExists(taskPath)))
+    if (!(await runtime.fileSystem.pathExists(taskPath))) {
+      const scaffoldRecovery = await inspectInitialScaffoldRecovery(
+        runtime,
+        dir,
+        planRead.artifact,
+      );
       return {
         change: {
           name,
@@ -730,10 +1743,13 @@ const formatChange = async (
           format: "legacy-unsupported",
           artifacts,
           requirements,
+          ...(scaffoldRecovery === undefined ? {} : { scaffoldRecovery }),
+          ...(executionTransitionStanding === undefined ? {} : { executionTransitionStanding }),
           lastModified: newest,
         },
         sources,
       };
+    }
     const taskSource = await read(runtime, taskPath);
     if (typeof taskSource !== "string")
       return {
@@ -762,6 +1778,73 @@ const formatChange = async (
         sources,
         error: taskRead,
       };
+    if (current && currentValid(taskRead.artifact)) {
+      const scopeContract = validateArtifact(taskRead.artifact);
+      const scopedRootResult = await runtime.git.repositoryRoot(dir);
+      if (scopeContract._tag === "valid" && successful(scopedRootResult)) {
+        const scopedRoot = text(scopedRootResult);
+        const scopedGit = contextTaskCheckpointGit(runtime);
+        const entries = scopeContract.body.workflow.scopeExpansions ?? [];
+        const taskRelativePath = relative(scopedRoot, taskPath);
+        const scopeGit = {
+          ...scopedGit,
+          changedPaths: scopedGit.changedPaths ?? (() => ({ status: 2, stdout: "", stderr: "scope changed-path port is unavailable" })),
+          pathChanges: scopedGit.pathChanges ?? (() => ({ status: 2, stdout: "", stderr: "scope path-history port is unavailable" })),
+        };
+        const scopeHead = text(await runtime.git.currentHead(scopedRoot));
+        let feedbackRanges: readonly TaskFeedbackRange[] = [];
+        const feedbackPath = Path.join(dir, "tasks", `task-${task.task}`, "feedback.md");
+        if (await runtime.fileSystem.pathExists(feedbackPath)) {
+          const feedbackRead = await readArtifact(runtime, feedbackPath);
+          if (!("exitCode" in feedbackRead)) {
+            const parsedRanges = await readTaskFeedbackRanges(feedbackPath, feedbackRead.source, name, Number(task.task));
+            if (parsedRanges.kind === "valid") feedbackRanges = parsedRanges.ranges;
+          }
+        }
+        let scopeBase = feedbackRanges.at(-1)?.base;
+        if (entries.length > 0) {
+          const checkpoint = await resolveTaskCheckpoint(
+            scopedGit,
+            scopedRoot,
+            taskRelativePath,
+            Number(task.task),
+            name,
+            scopeHead,
+            feedbackRanges,
+          );
+          if (checkpoint.kind === "unverified")
+            return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${checkpoint.reason}`] }, sources };
+          if (planContract?.execution?.version === 2)
+            scopeBase = checkpoint.base;
+        }
+        if (scopeBase === undefined && entries.length > 0) {
+          const serialBase = await serialScopeBaseline(
+            runtime,
+            scopedRoot,
+            dir,
+            planContract,
+            rows,
+            Number(task.task),
+          );
+          if (serialBase.kind === "unverified")
+            return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${serialBase.reason}`] }, sources };
+          if (serialBase.kind === "verified") scopeBase = serialBase.base;
+        }
+        const scopeHistory = await inspectScopeExpansionHistory(
+          scopeGit,
+          scopedRoot,
+          taskRelativePath,
+          Number(task.task),
+          name,
+          scopeHead,
+          entries,
+          scopeBase,
+        );
+        if (scopeHistory.kind === "unverified")
+          return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} scope history: ${scopeHistory.reason}`] }, sources };
+      } else if (Object.hasOwn(taskRead.artifact.metadata, "scope_expansions"))
+        return { change: { name, path: dir, format: "invalid", artifacts, requirements, lastModified: newest, diagnostics: [`Task ${task.task} reservation history requires a Git repository`] }, sources };
+    }
     if (current) {
       if (
         !currentValid(taskRead.artifact) ||
@@ -874,6 +1957,34 @@ const formatChange = async (
       };
   }
   const done = rows.filter((row) => row.status === "done").length;
+  const formalInputs = [...inspected.entries()].filter(
+    ([path]) =>
+      path === "proposal.md" || path === "design.md" || path.startsWith("requirements/"),
+  );
+  const intentReferences = planContract?.intentApprovals ?? [];
+  const referencesByPath = new Map(intentReferences.map((entry) => [entry.path, entry]));
+  const intentStanding =
+    formalInputs.length === 0 && intentReferences.length === 0
+      ? "tactical"
+      : formalInputs.length === intentReferences.length &&
+          formalInputs.every(([path, artifact]) => {
+            const reference = referencesByPath.get(path);
+            return (
+              artifact._tag === "recognized" &&
+              artifact.metadata.status === "approved" &&
+              artifact.metadata.decision === "accepted" &&
+              reference !== undefined
+            );
+          })
+        ? "approved-reference"
+        : "approval-required";
+  const critique = inspected.get("critique.md");
+  const critiqueContract =
+    critique?._tag === "recognized" ? metadataContract(critique) : undefined;
+  const critiqueDisposition =
+    critiqueContract?._tag === "valid"
+      ? critiqueContract.body.workflow.critiqueDisposition
+      : undefined;
   return {
     change: {
       name,
@@ -883,7 +1994,25 @@ const formatChange = async (
       artifactDetails,
       requirements,
       tasks: { done, total: rows.length },
+      ...(planContract === undefined ? {} : {
+        identityOrder: planContract.identityOrder,
+        ...(planContract.execution === undefined ? {} : { execution: planContract.execution }),
+        ...(planContract.execution?.version === 2
+          ? {}
+          : { executionOrder: planContract.executionOrder }),
+        ...(planContract.executionTransition === undefined
+          ? {}
+          : { executionTransition: planContract.executionTransition }),
+        ...(planContract.inputImpact === undefined
+          ? {}
+          : { inputImpact: planContract.inputImpact }),
+      }),
+      ...(executionTransitionStanding === undefined ? {} : { executionTransitionStanding }),
+      ...(inputImpactStanding === undefined ? {} : { inputImpactStanding }),
+      ...(critiqueDisposition === undefined ? {} : { critiqueDisposition }),
+      intentStanding,
       ...(route ? { routeUnit: route } : {}),
+      ...(routeUnitRevision ? { routeUnitRevision } : {}),
       lastModified: newest,
     },
     sources,
@@ -952,44 +2081,130 @@ const latestParsedPass = (
   artifact: RecognizedArtifact,
 ): ReviewPassEvidence | undefined => parseReviewPasses(artifact).latest;
 
+interface ContextFeedbackInspection {
+  readonly standing: ContextStanding | string;
+  readonly implementation?: string;
+  readonly feedback?: Awaited<ReturnType<typeof readArtifact>>;
+  readonly progress?: Awaited<ReturnType<typeof readArtifact>>;
+  readonly checkpoint?: { readonly kind: "verified"; readonly base: string };
+  readonly feedbackDurable?: boolean;
+  readonly feedbackCommit?: string;
+  readonly feedbackFiles?: ProcessResult;
+  readonly progressDurable?: boolean;
+  readonly range?: ContextStanding;
+}
+
 const latestFeedback = async (
   runtime: ContextRuntime,
   root: string,
   dir: string,
   task: string,
   implementation: string | undefined,
-): Promise<ContextStanding | string> => {
-  const path = Path.join(dir, "tasks", `task-${task}`, "feedback.md");
-  if (!(await runtime.fileSystem.pathExists(path))) return "absent";
-  const readResult = await readArtifact(runtime, path);
-  if ("exitCode" in readResult) return "malformed";
-  if (!currentValid(readResult.artifact)) return "malformed";
-  if (
-    readResult.artifact.metadata.task !== Number(task) ||
-    readResult.artifact.metadata.change !== Path.basename(dir)
-  )
-    return "malformed";
-  const latest = latestParsedPass(readResult.artifact);
-  if (latest === undefined) return "malformed";
-  const verdict = latest.verdict;
-  const base = latest.base;
-  const head = latest.head;
-  if (!(await durableArtifact(runtime, root, path)))
-    return `${String(verdict)} (uncommitted)`;
-  const commit = text(
-    await runtime.git.latestCommit(root, relative(root, path)),
+  status: string,
+): Promise<ContextFeedbackInspection> => {
+  let feedbackRead: ContextFeedbackInspection["feedback"];
+  let progressRead: ContextFeedbackInspection["progress"];
+  let verifiedCheckpoint: ContextFeedbackInspection["checkpoint"];
+  let feedbackDurable: boolean | undefined;
+  let feedbackCommit: string | undefined;
+  let feedbackFiles: ProcessResult | undefined;
+  let progressDurable: boolean | undefined;
+  let range: ContextStanding | undefined;
+  const standing = await (async (): Promise<ContextStanding | string> => {
+    const path = Path.join(dir, "tasks", `task-${task}`, "feedback.md");
+    if (!(await runtime.fileSystem.pathExists(path))) return "absent";
+    const readResult = await readArtifact(runtime, path);
+    feedbackRead = readResult;
+    if ("exitCode" in readResult) return "malformed";
+    if (!currentValid(readResult.artifact)) return "malformed";
+    if (
+      readResult.artifact.metadata.task !== Number(task) ||
+      readResult.artifact.metadata.change !== Path.basename(dir)
+    )
+      return "malformed";
+    const latest = latestParsedPass(readResult.artifact);
+    if (latest === undefined) return "malformed";
+    const verdict = latest.verdict;
+    const base = latest.base;
+    const head = latest.head;
+    feedbackDurable = await durableArtifact(runtime, root, path);
+    if (!feedbackDurable) return `${String(verdict)} (uncommitted)`;
+    const commit = text(await runtime.git.latestCommit(root, relative(root, path)));
+    feedbackCommit = commit;
+    feedbackFiles = fullCommit(commit) ? await runtime.git.commitFiles(root, commit) : undefined;
+    if (!feedbackFiles || feedbackFiles.stdout.trim().split(/\r?\n/).filter(Boolean).join("\n") !== relative(root, path))
+      return `${String(verdict)} (uncommitted)`;
+    range = await validRange(runtime, root, base, head, implementation);
+    if (range !== "fresh") return `${String(verdict)} (${range})`;
+    const progressPath = Path.join(dir, "tasks", `task-${task}`, "progress.md");
+    const progress = await readArtifact(runtime, progressPath);
+    progressRead = progress;
+    const progressContract = "exitCode" in progress ? undefined : metadataContract(progress.artifact);
+    if (progressContract?._tag !== "valid" || progressContract.artifact !== "task-progress" ||
+        progressContract.metadata.task !== Number(task) || progressContract.metadata.change !== Path.basename(dir))
+      return `${String(verdict)} (stale)`;
+    progressDurable = await durableArtifact(runtime, root, progressPath);
+    if (!progressDurable) return `${String(verdict)} (stale)`;
+    const latestAttempt = progressContract.body.workflow.records.filter((record) => record.kind === "attempt").at(-1);
+    if (verdict === "approved" && (status !== "done" || progressContract.metadata.status !== "done" || latestAttempt?.fields.Outcome !== "done"))
+      return "approved (stale)";
+    const resolvedImplementation = implementation ? await runtime.git.resolveCommit(root, implementation) : undefined;
+    if (!resolvedImplementation || !successful(resolvedImplementation) || text(resolvedImplementation) !== implementation)
+      return `${String(verdict)} (stale)`;
+    const ranges = await readTaskFeedbackRanges(path, readResult.source, Path.basename(dir), Number(task));
+    const current = text(await runtime.git.currentHead(root));
+    if (ranges.kind !== "valid" || !fullCommit(current)) return `${String(verdict)} (malformed)`;
+    const checkpoint = await resolveTaskCheckpoint(contextTaskCheckpointGit(runtime), root, relative(root, progressPath), Number(task), Path.basename(dir), current, ranges.ranges);
+    if (checkpoint.kind !== "verified" || checkpoint.base !== base) return `${String(verdict)} (stale)`;
+    verifiedCheckpoint = { kind: "verified", base: checkpoint.base };
+    return `${String(verdict)} (fresh)`;
+  })();
+  return { standing, implementation, feedback: feedbackRead, progress: progressRead, checkpoint: verifiedCheckpoint, feedbackDurable, feedbackCommit, feedbackFiles, progressDurable, range };
+};
+
+const serialScopeBaseline = async (
+  runtime: ContextRuntime,
+  root: string,
+  dir: string,
+  plan: PlanContractProjection | undefined,
+  rows: readonly LedgerRow[],
+  task: number,
+): Promise<
+  | { readonly kind: "none" }
+  | { readonly kind: "verified"; readonly base: string }
+  | { readonly kind: "unverified"; readonly reason: string }
+> => {
+  if (plan?.execution?.version === 2) return { kind: "none" };
+  const order = plan?.executionOrder;
+  const position = order?.indexOf(task) ?? -1;
+  if (position < 0)
+    return { kind: "unverified", reason: "serial execution order is unavailable" };
+  if (position === 0) return { kind: "none" };
+  const predecessor = order?.[position - 1];
+  const row = predecessor === undefined
+    ? undefined
+    : rows.find((candidate) => Number(candidate.task) === predecessor);
+  if (!row || row.status !== "done")
+    return { kind: "unverified", reason: "prior serial task is not implementation done" };
+  const progressPath = Path.join(dir, "tasks", `task-${predecessor}`, "progress.md");
+  const implementation = text(
+    await runtime.git.latestCommit(root, relative(root, progressPath)),
+  );
+  const feedback = await latestFeedback(
+    runtime,
+    root,
+    dir,
+    String(predecessor),
+    implementation,
+    row.status,
   );
   if (
-    !fullCommit(commit) ||
-    (await runtime.git.commitFiles(root, commit)).stdout
-      .trim()
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .join("\n") !== relative(root, path)
+    feedback.standing !== "approved (fresh)" ||
+    feedback.feedbackCommit === undefined ||
+    !fullCommit(feedback.feedbackCommit)
   )
-    return `${String(verdict)} (uncommitted)`;
-  const standing = await validRange(runtime, root, base, head, implementation);
-  return `${String(verdict)} (${standing})`;
+    return { kind: "unverified", reason: "prior serial task has no fresh durable approval" };
+  return { kind: "verified", base: feedback.feedbackCommit };
 };
 
 const latestReview = async (
@@ -1044,7 +2259,12 @@ const latestReview = async (
       ),
     );
   const standing = await validRange(runtime, root, base, head, required);
-  return `${String(verdict)} (${standing})`;
+  return `${String(verdict)} (${standing === "fresh" ? "range-fresh; clearance-unverified" : standing})`;
+};
+
+export const contextEvidenceRuntime = (runtime: ContextRuntime): PreconditionRuntime | undefined => runtime.process === undefined ? undefined : {
+  cwd: runtime.cwd, workerIdentity: runtime.workerIdentity, process: runtime.process, fileSystem: runtime.fileSystem,
+  git: { ...runtime.git, blobAt: runtime.git.fileAt },
 };
 
 const enrichSplit = async (
@@ -1069,30 +2289,30 @@ const enrichSplit = async (
       "progress.md",
     ),
   );
-  const states = [];
-  for (const row of rows)
-    states.push({
-      task: row.task,
-      status: row.status,
-      feedback: await latestFeedback(
-        runtime,
-        root,
-        change.path,
-        row.task,
-        text(
-          await runtime.git.latestCommit(
-            root,
-            Path.join(
-              relative(root, change.path),
-              "tasks",
-              `task-${row.task}`,
-              "progress.md",
-            ),
-          ),
-        ),
-      ),
-    });
   const plan = await readArtifact(runtime, Path.join(change.path, "plan.md"));
+  const planContractResult = "exitCode" in plan ? undefined : metadataContract(plan.artifact);
+  const planContract = planContractResult?._tag === "valid" ? planContractResult.body.workflow.plan : undefined;
+  if (planContract?.execution?.version === 2) {
+    const head = text(await runtime.git.currentHead(root));
+    const ledgerHistory = await collectTaskLedgerHistory(contextTaskCheckpointGit(runtime), root, relative(root, Path.join(change.path, "progress.md")), head, taskPaths);
+    runtime = { ...runtime, ledgerHistory };
+  }
+  const states = [];
+  const feedbackInspections = new Map<number, ContextFeedbackInspection>();
+  const inspectRow = async (row: LedgerRow) => {
+    const inspection = await latestFeedback(
+      runtime, root, change.path, row.task,
+      text(await runtime.git.latestCommit(root, Path.join(relative(root, change.path), "tasks", `task-${row.task}`, "progress.md"))),
+      row.status,
+    );
+    feedbackInspections.set(Number(row.task), inspection);
+    return { task: row.task, status: row.status, feedback: inspection.standing };
+  };
+  if (planContract?.execution?.version === 2)
+    for (let offset = 0; offset < rows.length; offset += 4)
+      states.push(...await Promise.all(rows.slice(offset, offset + 4).map(inspectRow)));
+  else
+    for (const row of rows) states.push(await inspectRow(row));
   const expectedTitle =
     "exitCode" in plan
       ? ""
@@ -1104,7 +2324,224 @@ const enrichSplit = async (
     taskPaths,
     expectedTitle,
   );
-  return { ...change, taskStates: states, wholeReview };
+  const taskInputs: NonNullable<ContextChange["taskInputs"]>[number][] = [];
+  const taskRepositories = new Map<number, string | undefined>();
+  if (planContract) {
+    let repositoryIdentity: string | undefined;
+    try {
+      repositoryIdentity = await runtime.fileSystem.realpath(root);
+    } catch {
+      repositoryIdentity = undefined;
+    }
+    for (const task of planContract.tasks.filter(
+      (entry) => !/\(abandoned — .+\)$/.test(entry.title),
+    )) {
+      const input = task.inputContext;
+      if (!input) {
+        const confirmation = planContract.legacyInputConfirmations?.find(
+          (entry) => entry.task === task.id,
+        );
+        if (!confirmation) {
+          taskInputs.push({ task: task.id, status: "missing", changedPaths: [] });
+          continue;
+        }
+        const changedPaths = await inspectLegacyInputConfirmation(
+          runtime,
+          root,
+          change.path,
+          task,
+          planContract,
+          repositoryIdentity,
+          change.inputImpactStanding,
+        );
+        taskInputs.push({
+          task: task.id,
+          status:
+            changedPaths.length === 0
+              ? "legacy-current-confirmed"
+              : "legacy-confirmation-stale",
+          changedPaths,
+        });
+        continue;
+      }
+      const changedPaths: string[] = [];
+      const taskRepository = planContract.execution?.version === 2 && repositoryIdentity !== input.repository && runtime.process
+        ? await inspectTaskWorkspace({ process: runtime.process, realpath: runtime.fileSystem.realpath, git: contextTaskCheckpointGit(runtime), worker: runtime.workerIdentity }, root, relative(root, Path.join(change.path, "progress.md")), task.id, change.name, text(await runtime.git.currentHead(root)), input.repository)
+        : repositoryIdentity;
+      taskRepositories.set(task.id, taskRepository);
+      const repositoryChanged = taskRepository !== input.repository;
+      if (repositoryChanged) changedPaths.push("repository");
+      for (const item of input.inputs) {
+        const current = await runtime.git.headBlob(root, item.path);
+        const working = await runtime.git.worktreeBlob(root, item.path);
+        if (
+          !successful(current) ||
+          !successful(working) ||
+          text(current) !== item.blob ||
+          text(working) !== item.blob
+        )
+          changedPaths.push(item.path);
+      }
+      const reviewedUnaffectedPaths = new Set(
+        change.inputImpactStanding?.status === "verified"
+          ? [...(change.inputImpactStanding.unaffectedInputs ?? [])]
+              .flatMap(([path, tasks]) => tasks.has(task.id) ? [path] : [])
+          : [],
+      );
+      const unreviewedChanges = changedPaths.filter(
+        (path) => (repositoryChanged && path === "repository") || !reviewedUnaffectedPaths.has(path),
+      );
+      taskInputs.push({
+        task: task.id,
+        status:
+          changedPaths.length === 0
+            ? "current"
+            : unreviewedChanges.length === 0
+              ? "impact-reviewed-unaffected"
+              : "stale",
+        changedPaths,
+      });
+    }
+  }
+  let intentStanding = change.intentStanding;
+  if (intentStanding === "approved-reference" && planContract) {
+    const currentHead = text(await runtime.git.currentHead(root));
+    for (const reference of planContract.intentApprovals) {
+      const resolved = await runtime.git.resolveCommit(root, reference.commit);
+      const path = Path.join(change.path, reference.path);
+      const repoPath = relative(root, path);
+      const approvedBlob = await runtime.git.blobIdAt(root, reference.commit, repoPath);
+      const currentBlob = await runtime.git.headBlob(root, repoPath);
+      if (
+        !fullCommit(currentHead) ||
+        !successful(resolved) ||
+        text(resolved) !== reference.commit ||
+        !successful(await runtime.git.isAncestor(root, reference.commit, currentHead)) ||
+        !successful(approvedBlob) ||
+        !successful(currentBlob) ||
+        text(approvedBlob) !== text(currentBlob)
+      ) {
+        intentStanding = "stale";
+        break;
+      }
+    }
+  }
+  const readinessEvidence: TaskReadinessEvidence[] = [];
+  const dependencyMode = planContract?.execution?.version === 2 && planContract.execution.mode === "dependencies";
+  if (dependencyMode && planContract) {
+    const currentHead = text(await runtime.git.currentHead(root));
+    const evidenceRuntime = contextEvidenceRuntime(runtime);
+    const intent = evidenceRuntime && planContractResult?._tag === "valid"
+      ? await inspectIntentApprovals(evidenceRuntime, root, change.path, planContractResult)
+      : undefined;
+    const scaffoldProblems = evidenceRuntime && planContractResult?._tag === "valid" && planContract.initialization !== undefined
+      ? await inspectInitialScaffold(evidenceRuntime, root, change.path, planContractResult, currentHead, false)
+      : ["initialization proof cannot be verified"];
+    const impact = await inspectInputImpact(contextHistoryRuntime(runtime), root, change.path, planContract);
+    const planVerified = intent !== undefined && intent.problems.length === 0 && scaffoldProblems.length === 0 &&
+      await durableArtifact(runtime, root, Path.join(change.path, "plan.md")) &&
+      change.executionTransitionStanding?.status === "verified" && impact.problems.length === 0 &&
+      (intentStanding === "tactical" || intentStanding === "approved-reference");
+    const rootPath = Path.join(change.path, "progress.md");
+    const committedRoot = await runtime.git.fileAt(root, currentHead, relative(root, rootPath));
+    const committedRootArtifact = successful(committedRoot)
+      ? await createArtifactReader({ readFile: () => committedRoot.stdout })(rootPath)
+      : undefined;
+    const committedRootContract = committedRootArtifact?._tag === "recognized" ? metadataContract(committedRootArtifact) : undefined;
+    const committedRows = committedRootContract?._tag === "valid" && committedRootContract.artifact === "progress" && committedRootContract.metadata.change === change.name
+      ? progressRows(bodyOf(committedRoot.stdout, committedRootArtifact as RecognizedArtifact)) ?? []
+      : [];
+    const collected = await Promise.all(planContract.tasks.filter((entry) => !/\(abandoned — .+\)$/.test(entry.title)).map(async (task): Promise<TaskReadinessEvidence> => {
+      const row = rows.find((entry) => Number(entry.task) === task.id);
+      const progressPath = Path.join(change.path, "tasks", `task-${task.id}`, "progress.md");
+      const progressRelative = relative(root, progressPath);
+      const inspection = feedbackInspections.get(task.id);
+      const progress = inspection?.progress ?? await readArtifact(runtime, progressPath);
+      const progressContract = "exitCode" in progress ? undefined : metadataContract(progress.artifact);
+      const durableProgress = inspection?.progressDurable ?? await durableArtifact(runtime, root, progressPath);
+      const implementationCommit = inspection?.implementation ?? text(await runtime.git.latestCommit(root, progressRelative));
+      const feedbackPath = Path.join(change.path, "tasks", `task-${task.id}`, "feedback.md");
+      const feedbackExists = await runtime.fileSystem.pathExists(feedbackPath);
+      const feedback = inspection?.feedback ?? (feedbackExists ? await readArtifact(runtime, feedbackPath) : undefined);
+      const parsedRanges = feedback && !("exitCode" in feedback)
+        ? await readTaskFeedbackRanges(feedbackPath, feedback.source, Path.basename(change.path), task.id)
+        : undefined;
+      const ranges = parsedRanges?.kind === "valid" ? parsedRanges.ranges : [];
+      const checkpoint = inspection?.checkpoint ?? (fullCommit(currentHead)
+        ? await resolveTaskCheckpoint(contextTaskCheckpointGit(runtime), root, progressRelative, task.id, Path.basename(change.path), currentHead, ranges)
+        : { kind: "unverified" as const });
+      const latest = feedback && !("exitCode" in feedback) && currentValid(feedback.artifact) &&
+        feedback.artifact.metadata.task === task.id && feedback.artifact.metadata.change === change.name &&
+        firstHeader(bodyOf(feedback.source, feedback.artifact)) === `Code Feedback: Task ${task.id} — ${task.title}`
+        ? latestParsedPass(feedback.artifact)
+        : undefined;
+      const feedbackDurable = inspection?.feedbackDurable ?? (feedbackExists && await durableArtifact(runtime, root, feedbackPath));
+      const feedbackCommit = inspection?.feedbackCommit ?? (feedbackDurable ? text(await runtime.git.latestCommit(root, relative(root, feedbackPath))) : "");
+      const feedbackFiles = inspection?.feedbackFiles ?? (fullCommit(feedbackCommit) ? await runtime.git.commitFiles(root, feedbackCommit) : undefined);
+      const feedbackIndependent = feedbackFiles !== undefined && successful(feedbackFiles) &&
+        feedbackFiles.stdout.trim() === relative(root, feedbackPath) && feedbackCommit !== implementationCommit;
+      const feedbackReachable = fullCommit(feedbackCommit) && fullCommit(currentHead) &&
+        successful(await runtime.git.isAncestor(root, feedbackCommit, currentHead)) && latest !== undefined &&
+        successful(await runtime.git.isAncestor(root, latest.head, feedbackCommit));
+      const range = inspection?.range ?? (latest
+        ? await validRange(runtime, root, latest.base, latest.head, fullCommit(implementationCommit) ? implementationCommit : undefined)
+        : "malformed");
+      const input = taskInputs.find((entry) => entry.task === task.id);
+      const inputProblems = evidenceRuntime && intent && planContractResult?._tag === "valid"
+        ? await inspectTaskInputContext(evidenceRuntime, root, change.path, planContractResult, task.id,
+            "base" in checkpoint ? checkpoint.base : undefined, taskRepositories.get(task.id),
+            intent.approvals, currentHead, impact,
+            checkpoint.kind === "verified" ? checkpoint : { kind: "unverified", reason: "task has no committed attempt" })
+        : ["input evidence ports are unavailable"];
+      const currentInputs = inputProblems.length === 0 && (task.inputContext === undefined || task.inputContext.taskDefinition === task.definitionDigest) &&
+        (input?.status === "current" || input?.status === "impact-reviewed-unaffected" || input?.status === "legacy-current-confirmed");
+      const validProgress = progressContract?._tag === "valid" && progressContract.artifact === "task-progress" &&
+        progressContract.metadata.task === task.id && progressContract.metadata.change === change.name &&
+        !("exitCode" in progress) && firstHeader(bodyOf(progress.source, progress.artifact)) === `Task Progress: Task ${task.id} — ${task.title}`
+        ? progressContract : undefined;
+      const latestAttempt = validProgress?.body.workflow.records.filter((record) => record.kind === "attempt").at(-1);
+      const committedRow = committedRows.find((entry) => Number(entry.task) === task.id);
+      const consistent = validProgress !== undefined && row?.status === validProgress.metadata.status &&
+        row?.status === committedRow?.status && row?.title === task.title && committedRow?.title === task.title &&
+        (row?.status === "pending" ? latestAttempt === undefined : row?.status === latestAttempt?.fields.Outcome);
+      let cacheValid = true;
+      const cachePath = Path.join(change.path, "tasks", `task-${task.id}`, ".base");
+      if (await runtime.fileSystem.pathExists(cachePath)) {
+        try {
+          const cache = (await runtime.fileSystem.readFile(cachePath)).trim();
+          const resolved = fullCommit(cache) ? await runtime.git.resolveCommit(root, cache) : undefined;
+          cacheValid = resolved !== undefined && successful(resolved) && text(resolved) === cache &&
+            successful(await runtime.git.isAncestor(root, cache, currentHead)) &&
+            (!("base" in checkpoint) || checkpoint.base === cache);
+        } catch {
+          cacheValid = false;
+        }
+      }
+      const taskDone = row?.status === "done" && latestAttempt?.fields.Outcome === "done";
+      return {
+        task: task.id,
+        status: (row?.status === "pending" || row?.status === "blocked" || row?.status === "in-progress" || row?.status === "done") ? row.status : "blocked",
+        currentInputs,
+        checkpoint: cacheValid && (checkpoint.kind === "verified" || checkpoint.kind === "not-started"),
+        history: planVerified && consistent && durableProgress && checkpoint.kind !== "unverified",
+        implementation: { committed: durableProgress && fullCommit(implementationCommit), done: taskDone, consistent, baseHead: checkpoint.kind === "verified", reachable: checkpoint.kind === "verified" },
+        feedback: { physicallyLast: latest !== undefined, approved: latest?.verdict === "approved", fresh: range === "fresh", durable: feedbackDurable, independent: feedbackIndependent, noBlockers: (latest?.blocking.length ?? 1) === 0, baseHead: checkpoint.kind === "verified" && latest?.base === checkpoint.base, reachable: feedbackReachable && range === "fresh" },
+      };
+    }));
+    readinessEvidence.push(...collected);
+  }
+  const readiness = dependencyMode && planContract ? projectTaskReadiness({ execution: planContract.execution, tasks: planContract.tasks.filter((task) => !/\(abandoned — .+\)$/.test(task.title)), evidence: readinessEvidence }) : undefined;
+  return {
+    ...change,
+    taskStates: states,
+    taskInputs,
+    ...(readiness === undefined ? {} : { readiness }),
+    ...(planContract?.executionTransition === undefined
+      ? {}
+      : { executionTransition: planContract.executionTransition }),
+    intentStanding,
+    wholeReview,
+  };
 };
 
 const renderOne = (change: ContextChange): string => {
@@ -1113,7 +2550,50 @@ const renderOne = (change: ContextChange): string => {
     `path: ${change.path}`,
     `format: ${change.format}`,
   ];
+  for (const diagnostic of change.diagnostics ?? [])
+    lines.push(`artifact-diagnostic: ${diagnostic}`);
   if (change.routeUnit) lines.push(`route-unit: ${change.routeUnit}`);
+  if (change.routeUnitRevision)
+    lines.push(`route-unit-revision: ${change.routeUnitRevision}`);
+  if (change.planContractData)
+    lines.push(`plan-contract-data: ${JSON.stringify(change.planContractData)}`);
+  if (change.identityOrder)
+    lines.push(`identity-order: ${change.identityOrder.join(", ")}`);
+  if (change.execution?.version === 2)
+    lines.push("execution-mode: dependencies");
+  else if (change.executionOrder)
+    lines.push(`execution-order: ${change.executionOrder.join(", ")}`);
+  if (change.executionTransitionStanding)
+    lines.push(
+      `execution-history: ${change.executionTransitionStanding.status}${change.executionTransitionStanding.reasons.length === 0 ? "" : ` (${change.executionTransitionStanding.reasons.join("; ")})`}`,
+    );
+  if (change.inputImpactStanding)
+    lines.push(
+      `input-impact-history: ${change.inputImpactStanding.status}${change.inputImpactStanding.reasons.length === 0 ? "" : ` (${change.inputImpactStanding.reasons.join("; ")})`}`,
+    );
+  if (change.inputImpact) {
+    lines.push(`input-impact-review: ${change.inputImpact.reviewReference} (assertion, not authenticated)`);
+    for (const impact of change.inputImpact.changes)
+      lines.push(
+        `  input-impact: ${impact.path} ${impact.previousBlob ?? "absent"} -> ${impact.currentBlob ?? "absent"}; affected=${impact.affectedTasks.join(",") || "none"}; unaffected=${impact.unaffectedTasks.join(",") || "none"}; new=${impact.newTasks.join(",") || "none"}${impact.unresolvedIntent ? "; unresolved-intent" : ""}`,
+      );
+  }
+  if (change.executionTransition?.version === 1)
+    lines.push(
+      `execution-transition: previous=${change.executionTransition.previousOrder.join(", ")}; gated-prefix=${change.executionTransition.fullyGatedPrefix.length === 0 ? "none" : change.executionTransition.fullyGatedPrefix.join(", ")}; approval=${change.executionTransition.approval} (assertion)`,
+    );
+  else if (change.executionTransition?.version === 2)
+    lines.push(
+      `execution-transition: fully-gated=${change.executionTransition.fullyGatedTasks.join(", ") || "none"}; approval=${change.executionTransition.approval} (assertion)`,
+    );
+  if (change.intentStanding)
+    lines.push(`formal-intent: ${change.intentStanding} (approval references are assertions)`);
+  if (change.critiqueDisposition)
+    lines.push(`critique-disposition: ${change.critiqueDisposition}`);
+  if (change.scaffoldRecovery)
+    lines.push(
+      `scaffold-recovery: ${change.scaffoldRecovery.status}${change.scaffoldRecovery.reasons.length === 0 ? "" : ` (${change.scaffoldRecovery.reasons.join("; ")})`}`,
+    );
   lines.push("", "artifacts:");
   for (const artifact of ARTIFACTS) {
     if (change.artifacts.includes(artifact)) {
@@ -1144,6 +2624,18 @@ const renderOne = (change: ContextChange): string => {
       lines.push(
         `  Task ${task.task}: ${task.status}, feedback: ${task.feedback}`,
       );
+    for (const task of change.taskInputs ?? [])
+      lines.push(
+        task.status === "legacy-current-confirmed" || task.status === "legacy-confirmation-stale"
+          ? `  Task ${task.task} scoped legacy current-confirmation standing: ${task.status}${task.changedPaths.length === 0 ? "" : ` (${task.changedPaths.join(", ")})`}`
+          : `  Task ${task.task} input context: ${task.status}${task.changedPaths.length === 0 ? "" : ` (${task.changedPaths.join(", ")})`}`,
+      );
+    if (change.readiness) {
+      lines.push(`ready-tasks: ${change.readiness.ready.join(", ") || "none"}`);
+      lines.push(`fully-gated-tasks: ${change.readiness.fullyGated.join(", ") || "none"}`);
+      for (const held of change.readiness.held)
+        lines.push(`held-task: ${held.task} (${held.reasons.join("; ")})`);
+    }
     const whole = change.wholeReview ?? "not reviewed";
     lines.push(
       "reviews:",
@@ -1154,14 +2646,165 @@ const renderOne = (change: ContextChange): string => {
   return lines.join("\n");
 };
 
+const buildContextPlanContractData = async (
+  runtime: ContextRuntime,
+  changeDir: string,
+  projection: PlanContractProjection,
+  requestedPaths: readonly string[],
+  taskInputs: ContextChange["taskInputs"],
+): Promise<ContextPlanContractData> => {
+  const rootResult = await runtime.git.repositoryRoot(changeDir);
+  const root = successful(rootResult) ? text(rootResult) : undefined;
+  let repository: string | null = null;
+  if (root) {
+    try {
+      repository = await runtime.fileSystem.realpath(root);
+    } catch {
+      repository = null;
+    }
+  }
+  const recordedByPath = new Map<string, Array<{ task: number; blob: string }>>();
+  for (const task of projection.tasks)
+    for (const input of task.inputContext?.inputs ?? []) {
+      const records = recordedByPath.get(input.path) ?? [];
+      records.push({ task: task.id, blob: input.blob });
+      recordedByPath.set(input.path, records);
+    }
+  const taskStanding = new Map((taskInputs ?? []).map((entry) => [entry.task, entry.status]));
+  const legacyConfirmationByPath = new Map<string, Array<{
+    readonly task: number;
+    readonly blob: string;
+    readonly standing: "legacy-current-confirmed" | "legacy-confirmation-stale" | "unavailable";
+  }>>();
+  for (const confirmation of projection.legacyInputConfirmations ?? [])
+    for (const input of confirmation.inputs) {
+      const records = legacyConfirmationByPath.get(input.path) ?? [];
+      const standing = taskStanding.get(confirmation.task);
+      records.push({
+        task: confirmation.task,
+        blob: input.blob,
+        standing:
+          standing === "legacy-current-confirmed" || standing === "legacy-confirmation-stale"
+            ? standing
+            : "unavailable",
+      });
+      legacyConfirmationByPath.set(input.path, records);
+    }
+  const inputPaths = [...new Set([
+    ...recordedByPath.keys(),
+    ...legacyConfirmationByPath.keys(),
+    ...requestedPaths,
+  ])];
+  const inputs = await Promise.all(
+    inputPaths.map(async (path) => {
+      const recordedBy = recordedByPath.get(path) ?? [];
+      const head = root && safeRepositoryPath(path)
+        ? await runtime.git.headBlob(root, path)
+        : { status: 1, stdout: "", stderr: "" };
+      const worktree = root && safeRepositoryPath(path)
+        ? await runtime.git.worktreeBlob(root, path)
+        : { status: 1, stdout: "", stderr: "" };
+      const legacyCurrentConfirmationBy = legacyConfirmationByPath.get(path);
+      return {
+        path,
+        requested: requestedPaths.includes(path),
+        recordedBy,
+        ...(legacyCurrentConfirmationBy === undefined || legacyCurrentConfirmationBy.length === 0
+          ? {}
+          : { legacyCurrentConfirmationBy }),
+        currentHeadBlob: successful(head) ? text(head) : null,
+        headAvailable: successful(head),
+        currentWorktreeBlob: successful(worktree) ? text(worktree) : null,
+        worktreeAvailable: successful(worktree),
+      };
+    }),
+  );
+  return {
+    version: 1,
+    repository,
+    taskBreakdownDigest: taskBreakdownDigestFromDefinitions(
+      projection.identityOrder,
+      projection.tasks,
+    ),
+    recordedInitialization: projection.initialization
+      ? {
+          base: projection.initialization.base,
+          authority: projection.initialization.authority,
+          breakdown: projection.initialization.breakdown,
+          taskIds: projection.initialization.taskIds,
+        }
+      : null,
+    tasks: projection.tasks.map((task) => {
+      const confirmation = projection.legacyInputConfirmations?.find((entry) => entry.task === task.id);
+      const standing = taskStanding.get(task.id);
+      return {
+        id: task.id,
+        title: task.title,
+        taskDefinitionDigest: task.definitionDigest,
+        ...(task.goal === undefined ? {} : { goal: task.goal }),
+        ...(task.acceptance === undefined ? {} : { acceptance: task.acceptance }),
+        dependsOn: task.dependsOn,
+        recordedInputContext: task.inputContext
+          ? {
+              repository: task.inputContext.repository,
+              intentCommit: task.inputContext.intentCommit,
+              taskDefinition: task.inputContext.taskDefinition,
+              impactPlanCommit: task.inputContext.impactPlanCommit ?? null,
+              inputs: task.inputContext.inputs,
+            }
+          : null,
+        ...(confirmation === undefined
+          ? {}
+          : {
+              legacyCurrentConfirmation: {
+                ...confirmation,
+                standing:
+                  standing === "legacy-current-confirmed" || standing === "legacy-confirmation-stale"
+                    ? standing
+                    : "unavailable",
+              },
+            }),
+      };
+    }),
+    inputs,
+  };
+};
+
+const enrichPlanContractData = async (
+  runtime: ContextRuntime,
+  change: ContextChange,
+  requestedPaths: readonly string[],
+): Promise<ContextChange> => {
+  const plan = await readArtifact(runtime, Path.join(change.path, "plan.md"));
+  if ("exitCode" in plan || plan.artifact._tag !== "recognized") return change;
+  const contract = validateArtifact(plan.artifact);
+  if (contract._tag !== "valid" || contract.artifact !== "plan") return change;
+  const projection = contract.body.workflow.plan;
+  if (!projection) return change;
+  const planContractData = await buildContextPlanContractData(
+    runtime,
+    change.path,
+    projection,
+    requestedPaths,
+    change.taskInputs,
+  );
+  return { ...change, planContractData };
+};
+
 const normalizeChange = async (
   runtime: ContextRuntime,
   dir: string,
+  requestedPaths: readonly string[] = [],
 ): Promise<ContextChange | ContextResult> => {
   try {
     const formatted = await formatChange(runtime, dir);
     if (formatted.error) return formatted.error;
-    return await enrichSplit(runtime, formatted.change);
+    const withTaskStanding = await enrichSplit(runtime, formatted.change);
+    return await enrichPlanContractData(
+      runtime,
+      withTaskStanding,
+      requestedPaths,
+    );
   } catch (error) {
     return failure("one", `cannot inspect change ${dir}: ${String(error)}`);
   }
@@ -1225,10 +2868,14 @@ const discover = async (
 const contextOne = async (
   runtime: ContextRuntime,
   supplied: string | undefined,
+  inputPaths: readonly string[] = [],
 ): Promise<ContextResult> => {
+  const unsafePath = inputPaths.find((path) => !safeRepositoryPath(path));
+  if (unsafePath !== undefined)
+    return failure("one", `input path must be a safe repository-relative path: ${unsafePath}`);
   const dir = await discover(runtime, supplied);
   if (typeof dir !== "string") return dir;
-  const change = await normalizeChange(runtime, dir);
+  const change = await normalizeChange(runtime, dir, inputPaths);
   if ("exitCode" in change) return change;
   return result("one", "success", 0, `${renderOne(change)}\n`, "", [change]);
 };
@@ -1335,9 +2982,11 @@ export class ContextService {
   ) {}
 
   execute(args: ContextArguments): Promise<ContextResult> {
+    if (args.all && (args.inputPaths?.length ?? 0) > 0)
+      return Promise.resolve(failure("all", "--input requires one change directory"));
     return args.all
       ? contextAll(this.runtime)
-      : contextOne(this.runtime, args.changeDir);
+      : contextOne(this.runtime, args.changeDir, args.inputPaths);
   }
 }
 

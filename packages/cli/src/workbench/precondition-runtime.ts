@@ -1,3 +1,4 @@
+import * as Fs from "node:fs/promises";
 import {
   createRuntime,
   type ProcessPort,
@@ -7,7 +8,9 @@ import {
 export interface PreconditionArguments {
   readonly changeDir: string;
   readonly testCommand: string;
+  readonly targetBranch: string;
   readonly wholeChangeWaived?: boolean;
+  readonly recoverFinish?: number;
 }
 
 export type PreconditionResultStatus = "success" | "negative" | "error";
@@ -27,9 +30,12 @@ export interface PreconditionFileSystemPort {
   readonly directoryExists: (sourcePath: string) => boolean | Promise<boolean>;
   readonly realpath: (sourcePath: string) => string | Promise<string>;
   readonly readFile?: (sourcePath: string) => string | Promise<string>;
+  readonly readDirectory?: (sourcePath: string) => readonly string[] | Promise<readonly string[]>;
 }
 
 export interface PreconditionGitPort {
+  readonly changedPaths?: (cwd: string, commit: string) => ProcessResult | Promise<ProcessResult>;
+  readonly pathChanges?: (cwd: string, base: string, head: string, paths: readonly string[]) => ProcessResult | Promise<ProcessResult>;
   readonly repositoryRoot: (
     cwd: string,
   ) => ProcessResult | Promise<ProcessResult>;
@@ -38,6 +44,25 @@ export interface PreconditionGitPort {
   ) => ProcessResult | Promise<ProcessResult>;
   readonly currentHead?: (
     cwd: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly currentBranch?: (
+    cwd: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly worktreeIdentity?: (
+    cwd: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly pathHistory?: (
+    cwd: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly blobAt?: (
+    cwd: string,
+    commit: string,
+    sourcePath: string,
+  ) => ProcessResult | Promise<ProcessResult>;
+  readonly firstParent?: (
+    cwd: string,
+    commit: string,
   ) => ProcessResult | Promise<ProcessResult>;
   readonly resolveCommit?: (
     cwd: string,
@@ -75,7 +100,16 @@ export interface PreconditionGitPort {
   ) => ProcessResult | Promise<ProcessResult>;
 }
 
+export interface HistoricalAdmissionSource {
+  readonly revision: string;
+  readonly repositoryRoot: string;
+  readonly sourceRoot: string;
+}
+
 export interface PreconditionRuntime {
+  readonly ledgerHistory?: import("./task-ledger-history.js").TaskLedgerHistory;
+  readonly workerIdentity?: () => string | undefined;
+  readonly admissionSource?: HistoricalAdmissionSource;
   readonly cwd: () => string;
   readonly process: ProcessPort;
   readonly fileSystem: PreconditionFileSystemPort;
@@ -97,9 +131,13 @@ export const createPreconditionRuntime = (
     process: overrides.process,
   });
   return {
+    workerIdentity: () => process.env.PI_SESSION_ID,
     cwd: runtime.cwd,
     process: runtime.process,
-    fileSystem: overrides.fileSystem ?? runtime.fileSystem,
+    fileSystem: overrides.fileSystem ?? {
+      ...runtime.fileSystem,
+      readDirectory: async (sourcePath) => Fs.readdir(sourcePath),
+    },
     git: overrides.git ?? {
       repositoryRoot: runtime.git.repositoryRoot,
       statusPorcelain: runtime.git.statusPorcelain,

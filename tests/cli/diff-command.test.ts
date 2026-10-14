@@ -163,10 +163,16 @@ describe("DiffCommand", () => {
           "workbench",
           "diff",
           "--whole-change",
+          "--target-branch",
+          "refs/remotes/origin/main",
           "--out",
           "whole.diff",
         ],
-        expected: { mode: "whole-change", out: "whole.diff" },
+        expected: {
+          mode: "whole-change",
+          targetBranch: "refs/remotes/origin/main",
+          out: "whole.diff",
+        },
       },
     ];
 
@@ -204,6 +210,10 @@ describe("DiffCommand", () => {
 
   it("rejects invalid combinations before calling DiffService", async () => {
     const cases = [
+      {
+        arguments: ["workbench", "diff", "--whole-change"],
+        message: "--whole-change requires --target-branch",
+      },
       {
         arguments: ["workbench", "diff", "--record", "--task", "13", "--out", "record.diff"],
         message:

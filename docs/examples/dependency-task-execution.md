@@ -1,0 +1,15 @@
+# Dependency-aware task execution example
+
+This fictional example illustrates the v2 dependency contract; it is not evidence of execution, approval, or admission. See [plan](dependency-task-execution/plan.md) and [root progress](dependency-task-execution/progress.md).
+
+Each task states Goal, Acceptance, Depends on, Steps, Verify, and Commit. Files is optional guidance, not an allowlist: necessary goal-serving edits outside it are permitted. Keep tasks coherent and TDD-sized. Run Red before production edits, Green against the same check, then behavior-preserving Refactor and relevant verification. A correction repeats the full cycle.
+
+Dependencies determine readiness, not permission. Readiness is a projection; admission is guarded against the original Base and current plan/approval; implementation done is the task-local verified outcome; fully gated additionally requires fresh independent feedback. Ready independent tasks may execute in isolated compatible lanes, but descendants remain held until their prerequisites are gated. A coordinator serializes original-commit integration, exact integrated Verify, and guarded root publication. Workers own only their task-local evidence and original commit in v2; root publication belongs to the coordinator.
+
+At most two lifetime reservations may be made, each covering at most four concrete paths. Reservations precede edits; removing, rewriting, or reverting records does not refund quota. Re-plan when the bounded reservation cannot represent the goal. Do not add dependencies without explicit plan authorization. These rules do not relax public or security policy.
+
+A representative chain and diamond include a later-numbered prerequisite; IDs are identities, not execution order. A held task cannot run merely because its number is next. `kepler workbench context` derives and reports state; it does not schedule workers. Use actual documented CLI options and preserve the seven-stage pipeline. Unknown execution modes fail closed. No distributed scheduler or concurrency guarantee is implied.
+
+Version 1 and unversioned plans retain historical serial execution and compatibility. Do not reinterpret their order as parallel authorization. Outcomes `done` and `blocked` describe completed actor work; `interrupted` and `unavailable` describe neutral observations, not fabricated outcomes. Whole-branch review waits until every active task is fully gated.
+
+Task-local admission retains the original Base across retries, rebinds, and cache loss. Actor observation is distinct from signer identity. Approval references express owner-held intent; fresh artifact-only feedback is separately required. Examples are disposable and do not replace canonical capability specs. Approved requirements remain change-side deltas until separately selected finish-work synchronization.

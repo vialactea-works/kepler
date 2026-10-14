@@ -15,15 +15,24 @@ const gitEnvironment = {
   GIT_CONFIG_SYSTEM: "/dev/null",
 };
 
+const selectedGit = process.platform === "darwin"
+  ? spawnSync("/usr/bin/which", ["git"], { encoding: "utf8", env: gitEnvironment }).stdout?.trim()
+  : undefined;
+const developerGit = selectedGit === "/usr/bin/git"
+  ? spawnSync("/usr/bin/xcrun", ["--find", "git"], { encoding: "utf8", env: gitEnvironment })
+  : undefined;
+const gitBinary = developerGit?.status === 0 && developerGit.stdout.trim() ? developerGit.stdout.trim() : "git";
+export const fixtureEnvironment = { ...gitEnvironment, PATH: gitBinary === "git" ? gitEnvironment.PATH : `${Path.dirname(gitBinary)}${Path.delimiter}${gitEnvironment.PATH ?? ""}` };
+
 export const runCommand = (
   command: string,
   args: readonly string[],
   cwd: string,
 ): CommandResult => {
-  const result = spawnSync(command, [...args], {
+  const result = spawnSync(command === "git" ? gitBinary : command, [...args], {
     cwd,
     encoding: "utf-8",
-    env: gitEnvironment,
+    env: fixtureEnvironment,
   });
   return {
     status: result.status ?? -1,
@@ -31,6 +40,8 @@ export const runCommand = (
     stderr: result.stderr ?? "",
   };
 };
+
+export const fixtureProcess = { run: runCommand };
 
 export function git(cwd: string, ...args: string[]): string {
   const result = runCommand("git", args, cwd);
@@ -53,6 +64,7 @@ export function makeRepo(options?: { defaultBranch?: string }): string {
   write(directory, "README.md", "# fixture\n");
   git(directory, "add", "-A");
   git(directory, "commit", "-q", "-m", "initial");
+  git(directory, "update-ref", `refs/remotes/origin/${options?.defaultBranch ?? "main"}`, "HEAD");
   return directory;
 }
 
