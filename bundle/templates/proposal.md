@@ -9,20 +9,20 @@ route_unit: <.kepler/maps/<effort>/route.md — unit N, or null>
 ---
 
 <!--
-  PRD — Proposal / "Why"
+  PRD: Proposal / "Why"
   Produced by: kepler-propose (step 1)
-  Owns the WHY and the product-level WHAT, grounded in project language and domain boundaries.
+  Explain why the change is needed and what it delivers, using project language and domain boundaries.
   Target length: 1–2 pages; concise rows are enough for a small change.
-  New full-path proposals include Domain Context and Affected Boundaries. Existing lint-valid
-  historical proposals remain valid without these sections; do not rewrite approved history.
-  OPTIONAL artifact — skip for small changes and start at plan.md.
-  A draft or a template default is never requester approval. Show the requester the exact final candidate bytes, including status: approved and decision: accepted, and wait for explicit approval of that revision before writing it. Commit exactly those approved bytes; any later intent edit needs new approval.
-  Delete this comment block and every inline <!-- ... --> hint before finalizing.
-  Before creating this artifact, read the configured Git identity with `git config user.name` and
-  `git config user.email`, then write `author: Name <email>` using both configured values. If either
-  configured value is missing, ask the user or stop with a blocker rather than inventing an identity.
-  When revising an existing artifact, preserve its recorded author unless the user explicitly directs
-  an attribution change.
+  New proposals include Domain Context and Affected Boundaries. Historical lint-valid proposals
+  remain valid without these sections; do not rewrite approved history.
+  Optional artifact: small changes may start at plan.md.
+  Drafts and template defaults do not establish requester approval. Present the exact final candidate bytes,
+  including status: approved and decision: accepted, and obtain explicit approval before writing them.
+  Commit exactly those bytes. Later intent edits require fresh approval.
+  Delete this comment block and all inline hints before finalizing.
+  Before creating this artifact, read `git config user.name` and `git config user.email`.
+  Use both values in `author: Name <email>`. If either is missing, ask the user or stop;
+  never invent an identity. Preserve existing author attribution unless the user directs a change.
 -->
 
 # Proposal: <Change Title>
@@ -34,36 +34,35 @@ route_unit: <.kepler/maps/<effort>/route.md — unit N, or null>
 
 ## Goals & Success Criteria
 
-<!-- Express outcomes in the canonical glossary's context-scoped language. Supplement missing
-     definitions from established project docs and cite them in Domain Context. Surface conflicts
-     and proposed meanings for requester resolution; do not silently redefine canonical terms.
-     Make outcomes observable or measurable so finish-work and review can check them. -->
+<!-- Express outcomes in the canonical glossary's context-scoped language. Use established project
+     documentation for missing definitions and cite it in Domain Context. Ask the requester to resolve
+     conflicts and proposed meanings; do not redefine canonical terms. Make outcomes observable or
+     measurable so finish-work and review can verify them. -->
 
 -
 
 ## Non-Goals
 
-<!-- What this change explicitly does NOT do. This is the main scope guard —
-     be generous here, it prevents drift. -->
+<!-- List explicit exclusions. Be thorough: this section guards against scope drift. -->
 
 -
 
 ## Proposed Change
 
-<!-- Product-level description of what changes and how a user experiences it.
-     NOT implementation (that is design.md). Mark breaking changes **BREAKING**. -->
+<!-- Describe what changes and how users experience it. Put implementation details in design.md.
+     Mark breaking changes **BREAKING**. -->
 
 ## Domain Context
 
-<!-- Identify the project domain and its source. Mark proposed contexts or definitions as
-     proposed, not existing facts. Name material unknowns in Open Questions; resolve them before
-     approval. A package, service or transport is not automatically a bounded context. -->
+<!-- Identify the project domain and cite its source. Distinguish proposed contexts and definitions
+     from established facts. Record material unknowns in Open Questions and resolve them before
+     approval. A package, service or transport does not by itself define a bounded context. -->
 
 ### Ubiquitous Language
 
 <!-- Cite .kepler/specs/glossary.md entries first, then supplementary project documentation.
-     The same word may have different meanings in different contexts; scope each use and identify
-     translations. Do not turn this section into an independent replacement glossary. -->
+     Scope terms to their contexts and explain translations between meanings.
+     Reference the glossary rather than replacing it here. -->
 
 | Term | Meaning in this change | Bounded context | Source |
 | --- | --- | --- | --- |
@@ -84,10 +83,10 @@ route_unit: <.kepler/maps/<effort>/route.md — unit N, or null>
 <!-- A capability is a cohesive, durable responsibility with a clear boundary and observable
      contract. It may represent a domain, subdomain or bounded context, including infrastructure.
      Identify scope kind and name, responsibility and relation to Domain Context for each entry.
-     For example, rest-api may own an external model and translation into domain operations;
-     domain contexts retain business rules. REST alone does not establish a bounded context.
-     Avoid endpoint/file/wiring fragments and overlapping parent/child contracts.
-     Each name maps to requirements/<capability>.md IF requirements are needed, then to
+     For example, rest-api may own an external model and translation boundary while domain contexts
+     retain business rules. Context boundaries depend on model ownership, not the use of REST.
+     Avoid fragments named after endpoints, files or wiring, and overlapping parent and child contracts.
+     Each name maps to requirements/<capability>.md when requirements are needed, then to
      .kepler/specs/<capability>.md. Preserve existing kebab-case slugs and metadata; scope stays
      in prose. Leave a subsection empty if it does not apply. -->
 
@@ -105,7 +104,7 @@ route_unit: <.kepler/maps/<effort>/route.md — unit N, or null>
 
 ## Impact
 
-<!-- Affected code, APIs, dependencies, data, and users. Call out coordination or migration. -->
+<!-- Identify affected code, APIs, dependencies, data and users, including coordination or migration needs. -->
 
 ### Affected Boundaries
 
@@ -120,7 +119,6 @@ route_unit: <.kepler/maps/<effort>/route.md — unit N, or null>
 
 ## Open Questions
 
-<!-- Unresolved product decisions blocking or shaping this change. Remove the
-     section if there are none. -->
+<!-- List unresolved product decisions that block or shape this change. Remove the section if none remain. -->
 
 -

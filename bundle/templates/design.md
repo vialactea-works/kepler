@@ -9,37 +9,36 @@ route_unit: null
 ---
 
 <!--
-  SDD — Design / "How"   (IEEE 1016-inspired, right-sized)
+  SDD: Design / "How" (IEEE 1016-inspired, right-sized)
   Produced by: kepler-propose (step 1 of the seven-stage pipeline).
-  Owns the change's domain model and architectural realization. References proposal.md for why,
-  requirements/ for what. Explain responsibility and boundaries before supporting decisions;
-  implementation steps belong in plan.md.
-  OPTIONAL artifact — skip for mechanical changes and start at plan.md.
+  Describe the change's domain model and architecture. Reference proposal.md for why and
+  requirements/ for what. Explain responsibilities and boundaries before supporting decisions.
+  Put implementation steps in plan.md.
+  Optional artifact: mechanical changes may start at plan.md.
   Keep the seven lint-required headings: Context, Goals / Non-Goals, Decisions, Architecture &
   Components, Testing Strategy, Constraints & Boundaries, and Risks / Trade-offs. Keep their
-  content concise when no facts apply; omit optional sections and subsections instead of inventing
-  content. Tables below are aids, not mandatory layouts. Existing lint-valid designs remain valid
+  explanations brief when no facts apply. Omit irrelevant optional sections rather than inventing
+  content. Use the tables where helpful; they are optional. Historical lint-valid designs remain valid
   without the new model or mapping sections; do not rewrite approved history.
-  A draft or a template decision default is never requester approval. Show the requester the exact final candidate bytes, including status: approved and decision: accepted, and wait for explicit approval of that revision before writing it. Commit exactly those approved bytes; any later intent edit needs new approval.
+  Drafts and template defaults do not establish requester approval. Present the exact final candidate bytes,
+  including status: approved and decision: accepted, and obtain explicit approval before writing them.
+  Commit exactly those bytes. Later intent edits require fresh approval.
   Delete this comment block and inline hints before finalizing.
-  Before creating this artifact, read the configured Git identity with `git config user.name` and
-  `git config user.email`, then write `author: Name <email>` using both configured values. If either
-  configured value is missing, ask the user or stop with a blocker rather than inventing an identity.
-  When revising an existing artifact, preserve its recorded author unless the user explicitly directs
-  an attribution change.
+  Before creating this artifact, read `git config user.name` and `git config user.email`.
+  Use both values in `author: Name <email>`. If either is missing, ask the user or stop;
+  never invent an identity. Preserve existing author attribution unless the user directs a change.
 -->
 
 # Design: <Change Title>
 
 ## Context
 
-<!-- Describe the current architecture, change scope and constraints. Read the canonical
-     glossary first, then authoritative project documentation for missing meanings; cite each
-     source and its context. Reference proposal Domain Context rather than copying the glossary.
-     If no glossary exists, disclose that gap and use sourced project language. Distinguish
-     established facts, proposed changes and assumptions. Record undefined or conflicting terms
-     in Open Questions; material language or ownership uncertainty blocks approval. Do not silently
-     redefine terms or update the glossary here. -->
+<!-- Describe the current architecture, scope and constraints. Read the canonical glossary first;
+     use authoritative project documentation for missing meanings. Cite each source and its context.
+     Reference the proposal's Domain Context rather than copying the glossary. If no glossary exists,
+     disclose the gap and use documented project language. Separate established facts, proposed changes
+     and assumptions. Record undefined or conflicting terms in Open Questions. Material uncertainty
+     about language or ownership blocks approval. Do not redefine terms or edit the glossary here. -->
 
 ## Goals / Non-Goals
 
@@ -55,12 +54,12 @@ route_unit: null
 
 <!-- Optional when the affected model is already clear from Context and upstream references.
      Cover relevant domains, subdomains and bounded contexts; terms and relationships; commands,
-     events, states and invariants. Name who owns each rule and how meanings translate across
+     events, states and invariants. Name each rule's owner and explain how meanings translate across
      contexts. Distinguish current and proposed models and cite their sources. Use core, supporting
      or generic subdomain classifications only when supported. A package, directory, service or
      transport is not automatically a bounded context. Do not invent events, ports or definitions
-     to fill this outline. Omit irrelevant model elements; missing material evidence is an open
-     question, not a claim that the element does not apply. -->
+     to fill this outline. Omit irrelevant model elements. Treat missing material evidence as an
+     open question, not proof that an element is irrelevant. -->
 
 ## Architecture & Components
 
@@ -68,17 +67,16 @@ route_unit: null
      interactions, trust, compatibility and coordination. If boundaries remain intact, say which
      and why. Keep domain rules and application use cases independent of infrastructure;
      dependencies point toward the application core. Reuse existing seams and abstractions.
-     Distinguish dependency direction from runtime call/data flow. Cover every affected package
+     Distinguish dependency direction from runtime calls and data flow. Cover every affected package
      and responsibility; use prose or tables proportional to the change. -->
 
 ### Packages
 
-<!-- Cover each package created, modified or removed, its domain/context or infrastructure role,
-     exposed ports and required ports. For a removed package, identify the destination or retirement
-     of its responsibilities, contracts and consumers. Carry existing callers' success and failure
-     outcomes into replacement contracts and requirements, unless explicitly changed or retired.
-     If no package changes, state that briefly
-     and omit this subsection. A package may span contexts; identify ownership per responsibility. -->
+<!-- For each package created, modified or removed, describe its domain/context or infrastructure
+     role and its provided and required ports. For removals, explain where responsibilities, contracts
+     and consumers move or which are retired. Preserve callers' success and failure outcomes in
+     replacement contracts and requirements unless explicitly changed or retired. If no package changes,
+     state that briefly and omit this subsection. A package may span contexts; name each responsibility's owner. -->
 
 | Package | Change | Responsibility | Domain / context and role | Exposes | Depends on |
 | --- | --- | --- | --- | --- | --- |
@@ -87,7 +85,7 @@ route_unit: null
 ### Ports & Adapters
 
 <!-- Name inbound use-case contracts and outbound capabilities, their owners and relevant inputs,
-     results, errors and invariants. Identify consumers/providers and adapters for UI, storage or
+     results, errors and invariants. Identify consumers, providers and adapters for UI, storage or
      external services, including model translation at context boundaries. A port may be an existing
      function or injected collaborator; do not add an interface merely to fill a row. Separate
      existing contracts from explicitly proposed additions, changes or retirements. Omit this
@@ -99,12 +97,11 @@ route_unit: null
 
 ### Code Attribution
 
-<!-- Map affected modules and significant symbols to their responsibility and domain/context or
-     infrastructure role. Verify existing references against source; proposed references need an
-     explicit contract and owner, not a claim that they already exist. For removed code, identify
-     what disappears or which owner receives the responsibility, and check surviving consumers.
-     This is responsibility ownership, not a change to author metadata. A few sentences can replace
-     the table; do not inventory unrelated code or repeat plan task steps. -->
+<!-- Map affected modules and significant symbols to their responsibilities and domain/context or
+     infrastructure roles. Verify existing references against source. Mark proposed code as proposed
+     and name its contract and owner. For removed code, explain what disappears or who takes over its
+     responsibility; check surviving consumers. This mapping records responsibilities, not authorship.
+     A few sentences may replace the table. Omit unrelated code and plan task steps. -->
 
 | Code | Existing / proposed / removed | Domain / context or infrastructure role | Responsibility | Source |
 | --- | --- | --- | --- | --- |
@@ -112,16 +109,15 @@ route_unit: null
 
 ### Quality Lens
 
-<!-- Record how this design holds up against code-quality.md — evidence, not a checkbox.
-     Scale to the change: for a mechanical or single-file change, one line ("trivial — no
-     structural risk") is enough. For a non-trivial change, cover:
+<!-- Assess this design against code-quality.md and record evidence. Scale the review to the change:
+     for a mechanical or single-file change, one line ("trivial: no structural risk") suffices.
+     For a non-trivial change, cover:
      - Responsibility: each unit's single reason to change (if it needs "and", split it).
      - Boundaries & dependencies: what each unit hides; where high-level logic depends on an
-       abstraction, and the seam a test substitutes for concrete IO/DB/clock.
-     - Right-sizing: an abstraction or extension point you deliberately did NOT add.
-     - Accepted smells: any structural trade-off taken on purpose, and why (also list it under
-       Risks / Trade-offs). This is the gate's blocking record — an unresolved smell that is
-       neither fixed nor recorded here fails the self-review. -->
+       abstraction; and where tests can substitute for concrete IO, databases or clocks.
+     - Right-sizing: an abstraction or extension point you deliberately omitted.
+     - Accepted smells: any deliberate structural trade-off and its reason (also list it under
+       Risks / Trade-offs). A smell that is neither fixed nor recorded here fails self-review. -->
 
 ## Data & Flow
 
@@ -132,37 +128,34 @@ route_unit: null
 
 ## Decisions
 
-<!-- Supporting rationale for significant model or architectural choices. A concise note is
-     sufficient when there is no new choice; do not invent alternatives for a predetermined change. -->
+<!-- Explain significant model or architectural choices. If there is no new choice, say so briefly;
+     do not invent alternatives for a predetermined change. -->
 
 ### Decision: <name>
 
 - Choice: <what we are doing; reference the affected model or boundary>
 - Alternatives considered: <viable alternatives and why they were rejected, or the constraint fixing this choice>
-- Rationale: <why this option wins; the trade-off accepted>
+- Rationale: <why this option was chosen; the accepted trade-off>
 
 ## Error Handling & Edge Cases
 
-<!-- Failure modes and the expected behavior for each. A "Failure -> Behavior"
-     table works well. Include what happens on partial failure and retry. -->
+<!-- Describe expected behavior for each failure mode, including partial failure and retry.
+     A "Failure -> Behavior" table may help. -->
 
 ## Testing Strategy
 
-<!-- What will prove this works: unit vs integration boundaries, the key cases to
-     cover, and how verification runs. Name the tactical gates, `kepler-code` and
+<!-- Define unit and integration test boundaries, key cases and verification commands. Name the tactical gates, `kepler-code` and
      `kepler-code-feedback`, and the final gates, `kepler-review` and
      `kepler-finish-work`. Tie checks to the named contracts, state transitions and invariant
      owners; substitute outbound ports in core tests and exercise adapter translation at boundaries. -->
 
 ## Constraints & Boundaries
 
-<!-- Change-specific operating boundaries for the implementing agent, in three tiers.
-     Standing project-wide boundaries belong in project standards (AGENTS.md /
-     guidelines), not here — list only what is special to THIS change.
-     "Ask first" is resolved by the skill asking the user for input; when running
-     unattended, the agent auto-reflects — it answers the question itself and records
+<!-- List change-specific operating boundaries for the implementing agent in three tiers.
+     Keep project-wide rules in AGENTS.md or guidelines.
+     For "Ask first", ask the user when attended. When unattended, answer the question and record
      the reasoning before proceeding. Material language or ownership questions still require
-     requester resolution. If none apply, keep the heading and state that concisely. -->
+     requester resolution. If no change-specific boundaries apply, retain the heading and say so. -->
 
 - Always: <actions the agent should take without asking, e.g. run tests before commit>
 - Ask first: <actions needing a decision, e.g. changing a public interface>
@@ -179,9 +172,8 @@ route_unit: null
 
 ## Open Questions
 
-<!-- Undefined terms, conflicting sources, uncertain ownership and other outstanding decisions.
-     Cite the affected source and explain what resolution is needed. Resolve material model or
-     boundary questions with the requester before approval; unattended work remains draft. Remove
-     this optional section if none remain. -->
+<!-- List undefined terms, conflicting sources, uncertain ownership and other unresolved decisions.
+     Cite the source and explain what needs resolution. Resolve material model or boundary questions
+     with the requester before approval. Keep unattended work draft. Remove this section if no questions remain. -->
 
 -

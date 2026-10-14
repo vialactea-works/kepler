@@ -32,15 +32,15 @@ In `.kepler/changes/<YYYY-MM-DD-title>/`, using the templates at `${XDG_CONFIG_H
 
 ## Domain language and capability scope
 
-The canonical glossary takes precedence for established meanings. Use established project documentation to supplement missing definitions, recording each source. If the glossary is absent, disclose that gap and use documented language rather than inventing a replacement glossary. Define the problem, goals and proposed change with those terms, and carry the same meanings into requirements and design. The same word may have different meanings in different bounded contexts; name the context and any translation instead of imposing one global definition.
+Use the canonical glossary for established meanings and project documentation for missing definitions. Cite each source. If the glossary is absent, disclose the gap and use documented language rather than inventing a replacement. Use these terms consistently in the problem, goals, proposed change, requirements and design. When a word has different meanings across bounded contexts, name each context and explain the translation.
 
-Surface any terminology conflict to the requester; do not silently redefine canonical terms or modify the glossary during proposal drafting. Record proposed additions or meaning changes in Open Questions for explicit resolution through domain modeling. A material unresolved meaning or boundary blocks approval; unattended work remains draft rather than inventing a decision.
+Raise terminology conflicts with the requester; do not redefine canonical terms or edit the glossary while drafting the proposal. Record proposed additions or changes in meaning in Open Questions for explicit resolution through domain modeling. Unresolved material meanings or boundaries block approval. Keep unattended work draft.
 
-A capability is a cohesive, durable area of responsibility with a clear boundary and an observable contract. It can represent a domain, subdomain or bounded context, including infrastructure responsibilities. A domain is the overall subject area, a subdomain is a problem area within it, and a bounded context defines where a particular model and language apply. Capability is Kepler's specification unit, not a synonym for those concepts. Identify the chosen scope and the related subdomains and contexts; their relationship is not necessarily one-to-one.
+A capability is a cohesive, durable area of responsibility with a clear boundary and an observable contract. It can represent a domain, subdomain or bounded context, including infrastructure responsibilities. A domain is the overall subject area, a subdomain is a problem area within it, and a bounded context defines where a particular model and language apply. A capability is Kepler's specification unit. Identify its scope and related subdomains and contexts without assuming a one-to-one mapping.
 
 For example, a `rest-api` capability qualifies as an infrastructure bounded context when it owns a distinct external request/response model, vocabulary, translation boundary and compatibility obligations. If it only exposes an existing context's model over HTTP, it is an adapter within that context. The distinction depends on model and contract ownership, not the use of REST. State which domain contexts retain business rules and data ownership. A package, deployment unit or endpoint is not automatically a context or capability. Do not create overlapping parent and child capabilities that duplicate the same contracts.
 
-Preserve existing capability slugs, frontmatter metadata and the file mapping from `requirements/<capability>.md` to `.kepler/specs/<capability>.md`. Record scope in prose, not new mandatory metadata. Historical proposals and specs remain valid under their existing lint contract; do not rewrite approved history to add these sections or classifications. New proposals use the expanded authoring contract below. The glossary is shared vocabulary support, not automatically a capability requiring a new delta.
+Preserve existing capability slugs, frontmatter metadata and the file mapping from `requirements/<capability>.md` to `.kepler/specs/<capability>.md`. Record scope in prose, not new mandatory metadata. Historical proposals and specs remain valid under their existing lint contract; do not rewrite approved history to add sections or classifications. Apply the authoring contract below to new proposals. The glossary provides shared vocabulary; its presence alone does not require a capability delta.
 
 ## Design authoring contract
 
@@ -48,39 +48,29 @@ Describe the change in its project's domain and architectural language before ex
 
 - **Language and goal:** Express goals in sourced, context-scoped terms from the canonical glossary and authoritative project documents. Cite their sources or the proposal's Domain Context; do not create a replacement glossary. Record undefined or conflicting meanings in Open Questions. A material unresolved meaning or owner blocks approval; obtain requester resolution through domain modeling, and keep unattended work draft.
 - **Model:** Describe relevant domains, subdomains, bounded contexts, terms, relationships, commands, events, states and invariants, including who owns each rule and how meanings translate across contexts. Use core, supporting or generic classifications only when supported by project evidence or an explicit proposed decision. Separate current facts from the proposed model; a package or transport alone does not establish a context.
-- **Packages and boundaries:** For each package created, modified or removed, identify its responsibility, domain/context ownership and domain, application or infrastructure role, the contracts it exposes and those it depends on. Explain data ownership, interactions, trust and compatibility across boundaries. For removals, trace responsibility transfers or retirements and affected consumers. Trace existing callers' success and failure outcomes into replacement contracts and requirements; retire or change an outcome only when the change explicitly authorizes it. A package can contain several contexts; attribute individual responsibilities rather than forcing one-to-one ownership.
+- **Packages and boundaries:** For each package created, modified or removed, name its responsibility, owning domain or context, architectural role (domain, application or infrastructure), and provided and required contracts. Explain data ownership, interactions, trust and compatibility across boundaries. For removals, trace responsibility transfers or retirements and affected consumers. Trace existing callers' success and failure outcomes into replacement contracts and requirements; retire or change an outcome only when the change explicitly authorizes it. A package can contain several contexts; attribute individual responsibilities rather than forcing one-to-one ownership.
 - **Ports and adapters:** Name inbound use-case contracts and outbound capabilities, their owners, consumers/providers and relevant inputs, results, errors and invariant obligations. Identify each adapter and model translation. Reuse existing functions and injected collaborators as ports where suitable; dependencies point toward the application core. Distinguish dependency direction from runtime flow and describe unchanged seams when relevant.
 - **Code attribution:** Map affected code to its domain/context or infrastructure responsibility, marking references as existing, proposed or removed. Verify existing references in the repository; proposed code needs an explicit owner and contract, not a claim that it already exists. Explain where removed responsibilities go and check surviving consumers. This mapping records responsibility, not author metadata or plan task steps.
-- **Proportionate coverage:** Keep the seven lint-required headings from the design template, with concise explanations when no facts apply. Omit optional sections and tables when prose or upstream references provide the relevant coverage. Do not invent events, states, interfaces, layers or definitions to fill the outline; missing material evidence remains a question. Historical lint-valid designs are not invalid for lacking the new model or mapping sections. These are semantic authoring and review expectations, not new CLI schema requirements.
+- **Proportionate coverage:** Keep the seven lint-required headings from the design template, with concise explanations when no facts apply. Omit optional sections and tables when prose or upstream references provide the relevant coverage. Do not invent events, states, interfaces, layers or definitions to fill the outline; missing material evidence remains a question. Historical lint-valid designs remain valid without the new model or mapping sections. These expectations guide authoring and review; they do not add CLI schema requirements.
 
-Architectural realization leads into the decisions and trade-offs that support it. Tie testing to contracts, state transitions and invariant owners: core tests substitute outbound capabilities, while adapter checks exercise translation and failure boundaries.
+Describe the architecture before its supporting decisions and trade-offs. Tie tests to contracts, state transitions and invariant owners. Core tests substitute outbound capabilities; adapter checks exercise translation and failure boundaries.
 
 ## References
 
-This skill ships with a `references/` folder. Read reference files using the Read tool on
-the skill's own directory — they are co-located with this SKILL.md, **not** at
-`${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/` or `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/`.
+Use the Read tool to open references relative to this `SKILL.md`. They live in this skill's `references/` folder, not in the global Kepler data or templates directories.
 
 - `references/code-quality.md` — the self-review rubric for design quality.
 
 ## Principles
 
-- **Collaborate.** Refine through dialogue — confirm each section before moving on.
+- **Collaborate.** Confirm each section with the requester before moving on.
 - **High-level first.** Start from the user's goal; draft, then elaborate together.
 - **YAGNI.** Cut unnecessary scope from every artifact.
 - **Explore alternatives.** Offer 2–3 approaches with trade-offs and a recommendation
   before settling on a design.
-- **Design for quality.** Code quality is decided here, not at review. The decomposition,
-  boundaries, and dependencies the design commits to are inherited by every line the coder
-  later writes — and a defect caught at review means refactoring code that already exists.
-  Judge the design against `references/code-quality.md` (read it from this skill's
-  references directory), proportional to the change's size.
-- **Right-size.** Scale each artifact to the change; a few sentences is fine when the
-  change is simple.
-- **Write flowing prose.** In every artifact you produce (`proposal.md`, `requirements/`,
-  `design.md`), let paragraphs run as continuous lines — do not hard-wrap text at ~80
-  characters or any fixed width. Insert a line break only at a real boundary: between
-  paragraphs, list items, or headings. Soft-wrapping is the reader's job, not yours.
+- **Design for quality.** Review decomposition, boundaries and dependencies before implementation, when structural defects cost less to fix. Apply `references/code-quality.md` from this skill's references directory, proportional to the change's size.
+- **Right-size.** Scale each artifact to the change; a few sentences may suffice.
+- **Write flowing prose.** In `proposal.md`, `requirements/` and `design.md`, keep each paragraph on one continuous line. Break lines only between paragraphs, list items or headings; let the reader's editor handle wrapping.
 
 ## Process
 
@@ -99,8 +89,8 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    user/controller serializes route-unit claims and delivery, with one owner per unit and one
    writer per change/worktree. Before creating or suffixing a workspace, scan known change
    proposals/plans, local and visible remote branches, and `git worktree list --porcelain` for
-   the canonical route/unit reference. Prefer resuming its existing owner; a competing or
-   ambiguous claim requires owner-directed resume/transfer or a stop, never a suffix workaround.
+   the canonical route/unit reference. Prefer resuming the existing owner's change. A competing or ambiguous claim requires
+   owner-directed resumption or transfer; otherwise stop. Do not evade the claim with a suffix.
    Transfer or release requires explicit owner authorization, inspection of partial work and
    Git/provider effects, preservation of history/work, and dependency revalidation. Retain shared,
    dirty, or ambiguously owned workspaces. A local scan is not distributed exclusivity; concurrent
@@ -116,7 +106,7 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    checkout, or `isolated: yes` is insufficient. If the source is the target or the identities
    cannot be resolved, stop for owner-directed creation/switching and verify again before any
    artifact, route-claim, or code write.
-3. **Ensure an isolated workspace — then confirm you are inside it.** Run
+3. **Ensure an isolated workspace and verify your location.** Run
    `kepler workbench isolate --check`; its last line is only the workspace-shape result.
    Once claim and target-role checks pass, `isolated: yes` permits use of that workspace; it does
    not grant route or change ownership. `isolated: no` means create one:
@@ -137,28 +127,19 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    `git worktree add .worktrees/<title> -b <title>` under the git-ignored `.worktrees/`
    directory, `cd` in, and confirm `git rev-parse --show-toplevel` ends in `.worktrees/<title>`.
 
-   Creating the worktree does **not** move you into it — a fresh `git worktree add` leaves your
-   shell and every file tool rooted in the original checkout. You must `cd` into the worktree and
-   then **verify the switch took effect** before creating any files. **Do not proceed to step 4
-   until `--verify` succeeds.** If you skip this check you will silently write every artifact on
-   the default branch — the exact failure this step exists to prevent. From here on, the change
-   directory and every artifact are created **inside** `.worktrees/<title>/`, never in the
-   original checkout.
+   `git worktree add` creates the worktree but leaves the shell and file tools in the original checkout. Change into the new worktree and verify that the shell and file tools target it before creating files. **Do not proceed to step 4 until `--verify` succeeds.** Create the change directory and all artifacts inside `.worktrees/<title>/`, not the original checkout.
 
    In map-aware mode, reread the route source revision and selected unit after switching. If
    either changed, discard the stale selection and re-evaluate the route before writing any artifact.
 4. **Set up the change.** Create `.kepler/changes/<YYYY-MM-DD-title>/`.
-5. **Explore context (read-only).** Project structure, docs, recent commits, and the canonical
-   specs (`.kepler/specs/`). Read the canonical glossary and relevant domain and architecture documentation before drafting goals. Identify established subdomains, bounded contexts, their responsibilities and interactions; distinguish evidence from inferred boundaries and resolve material ambiguity with the requester. Inspect affected packages, public contracts, ports, adapters and significant code references so the design can attribute responsibilities without guessing. Read the specs before drafting: they hold the conventions and
+5. **Explore context (read-only).** Inspect the project structure, documentation, recent commits and canonical specs (`.kepler/specs/`). Read the canonical glossary and relevant domain and architecture documentation before drafting goals. Identify established subdomains, bounded contexts, their responsibilities and interactions; distinguish evidence from inferred boundaries and resolve material ambiguity with the requester. Inspect affected packages, public contracts, ports, adapters and significant code references so the design can attribute responsibilities without guessing. Read the specs before drafting: they hold the conventions and
    prior decisions the change inherits, so a MODIFIED capability builds on the behavior its
    canonical spec already documents (human-readable prose — Overview / Contract / Behavior /
    Invariants / Decisions) rather than contradicting it. When step 1 entered map-aware mode,
    read the route body as the primary current context: Point of departure, Destination,
-   Path chosen, Shipping rules, and Units. Enter the selected unit's destination contribution,
-   goal, observable completion outcome, and binding constraints into that context before any
-   optional ticket drill-down. Navigate the selected unit's `backed_by` links only when deeper
-   reasoning or rejected alternatives need their evidence; they are not a substitute for the
-   synthesized route body. If the selected unit has no `backed_by` entry, proceed from the
+   Path chosen, Shipping rules, and Units. Read the selected unit's destination contribution, goal, observable completion outcome and
+   binding constraints before consulting tickets. Follow the selected unit's `backed_by` links only for evidence about reasoning or rejected
+   alternatives; tickets do not replace the synthesized route body. If the selected unit has no `backed_by` entry, proceed from the
    route body alone.
    A coherent change may affect several related contexts and capability specs. If the request bundles independent goals or subsystems, stop and help decompose it rather than forcing them into one capability.
 6. **Ask clarifying questions.** Draw out purpose, constraints, and success criteria from
@@ -175,17 +156,11 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
    only when its rule holds, and stop on contradictory unit/map state. After each route/map
    mutation, run `kepler workbench lint --file <path>`; then run scoped change-directory lint before
    the next mutation. Commit the claim with the initial change scaffolding. The visible
-   status is a reservation, not a distributed lock. This is the provenance link every downstream
-   step follows back to the map. For every
-   new author-bearing output — `proposal.md`, each `requirements/<capability>.md`, and
-   `design.md` — read the effective repository Git identity immediately before creation with
-   `git config user.name` and `git config user.email`; write `author: Name <email>` using both
-   configured values, including when a requirements or design artifact is created even when
-   `proposal.md` already exists. If either configured Git value is unavailable, ask the user or
+   status records a reservation, not a distributed lock; `route_unit` links downstream steps to the map.
+
+   Immediately before creating each author-bearing artifact (`proposal.md`, each `requirements/<capability>.md`, and `design.md`), read the repository's effective Git identity with `git config user.name` and `git config user.email`. Write `author: Name <email>` using both values, even if another artifact already exists. If either configured Git value is unavailable, ask the user or
    stop with a blocker before writing; never use an agent name, operating-system username, or
-   unresolved template placeholder. On a revision of `proposal.md`,
-   `requirements/<capability>.md`, or `design.md`, preserve each existing author attribution and
-   each recorded author exactly unless explicitly directed otherwise.
+   unresolved template placeholder. When revising these artifacts, preserve every recorded author exactly unless explicitly directed otherwise.
    Populate the proposal frontmatter fields `change`, `status`, `author`, and `created`; do not
    recreate them as a Markdown metadata table. After every proposal artifact mutation, run
    `kepler workbench lint --change-dir <change-dir>` and resolve every warning or error before
@@ -201,12 +176,9 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
 
 8. **Write the requirements (what).** For each capability named in the proposal, write
    `requirements/<capability>.md` in delta form (ADDED / MODIFIED / REMOVED / RENAMED), with
-   normative SHALL statements and WHEN/THEN scenarios. These change-side deltas keep the
-   structured form regardless of how the canonical spec reads. For MODIFIED, there is no
-   requirement block to copy — the canonical spec is prose; instead read the behavior its
-   relevant section documents, then write a MODIFIED requirement that names the behavior it
-   changes clearly enough for finish-work to locate the spec section, and states the *whole* new
-   behavior (not just the diff). After every requirements artifact mutation, run
+   normative SHALL statements and WHEN/THEN scenarios. Keep this structured delta form even when the canonical spec uses prose. For MODIFIED,
+   read the relevant canonical section and name the changed behavior precisely enough for
+   finish-work to locate it. State the *whole* new behavior, not just the difference. After every requirements artifact mutation, run
    `kepler workbench lint --change-dir <change-dir>` and resolve every warning or error before
    the next mutation or handoff.
 9. **Propose 2–3 approaches.** Before designing, lay out two or three ways to build it
@@ -222,9 +194,7 @@ the skill's own directory — they are co-located with this SKILL.md, **not** at
     mechanical or single-file edit — an unresolved structural smell (a unit with more than one
     reason to change, a leaked boundary, a hard-wired dependency with no testable seam) is a
     gate failure. Fix the structure, or, if you are deliberately accepting it, record it in
-    the design's **Quality Lens** subsection (and cross-list under Risks / Trade-offs). Do
-    not pass the gate with a silent smell — a weak coder cannot recover quality the design
-    did not encode. After every in-place correction of a recognized artifact, rerun
+    the design's **Quality Lens** subsection (and cross-list under Risks / Trade-offs). Do not pass the gate with an unrecorded structural smell; the design must give the coder an explicit decision. After every in-place correction of a recognized artifact, rerun
     `kepler workbench lint --change-dir <change-dir>`; a nonzero lint result is a failed gate,
     not a bypass.
 12. **Get revision-bound approval.** Keep the working artifacts draft until the proposal,
@@ -247,9 +217,7 @@ with each full approval commit and requester-held reference, ready for `kepler-p
 
 ## Handoff
 
-- **Disclose the workspace.** If step 3 created a worktree for this change, state its path
-  (`.worktrees/<title>`) and branch — the artifacts, and all the work to come, live there, not
-  in the original checkout. If you worked in place, name that branch.
+- **Disclose the workspace.** If step 3 created a worktree, state its path (`.worktrees/<title>`) and branch. Make clear that the artifacts and subsequent work belong there. If you worked in place, name that branch.
 - **Name the next step.** After the artifacts pass step 12, the next step is `kepler-plan`.
 - **Hand back the decision.** Never invoke `kepler-plan` yourself. Ask whether to proceed after
   approval, and provide the artifact paths, approval commits and requester-held references.
