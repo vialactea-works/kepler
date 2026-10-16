@@ -224,7 +224,18 @@ A question blocks completion when different answers would change scope, required
 | What response-time target applies? | Pass to Non-functional Requirements. |
 | Which storage technology should we use? | Pass to Implementation Planning. |
 
-Later findings can still require a design revision. Apply the shared [Revision rules](../revision.md) to identify the earliest affected stage and reopen every downstream stage.
+## Reopening questionnaire
+
+Evaluate each question against the agreed functional design, including linked supporting files. Use the answers in the shared [Revision procedure](../revision.md#revision-procedure).
+
+1. Does the finding require a change to the intended outcome, scope, or exclusions of the Unit of Work?
+2. Does it require a change to domain behavior, acceptance criteria, failure behavior, or boundary conditions?
+3. Does it require a change to the meaning of domain terms, concepts, relationships, business rules, invariants, states, or responsibilities?
+4. Does it require a change to ownership at an interaction boundary or a functional contract, including inputs, outputs, errors, or compatibility obligations?
+5. Does it invalidate an assumption or decision that the agreed functional design depends on?
+6. Does it expose a required functional decision that remains unresolved, or show that a Functional Design completion condition is no longer met?
+
+Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid.
 
 ## Handoff and correction
 
@@ -234,6 +245,4 @@ The handoff identifies the Unit of Work directory, `unit-of-work.md`, `design.md
 
 The next stage records quality targets and constraints in `quality.md` at the Unit of Work root. Include observability among the applicable concerns passed to that stage. Implementation Planning then selects the technical solution against the functional design and non-functional requirements.
 
-A functional change reopens Functional Design and every subsequent stage. Each reopened stage must reconsider all its artifacts and satisfy its completion conditions again. Apply the shared [Revision procedure](../revision.md#revision-procedure).
-
-A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid. Remaining Functional Design revision and approval details require a separate decision.
+Apply the shared [Revision procedure](../revision.md#revision-procedure) when a finding requires revision. The reopening questionnaire supplies this stage's rules. A reopened Functional Design stage must repeat self-review, obtain explicit requester approval, and record that approval in metadata. External review remains requester-triggered only.

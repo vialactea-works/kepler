@@ -23,10 +23,11 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - The shared [Depth definition](depth.md) uses Minimal, Standard, and Comprehensive levels.
 - Depth controls analysis and documentation detail. It does not remove required information, weaken verification, or prescribe file counts or page lengths.
 - The shared [Revision rules](revision.md) start at the earliest affected stage and reopen every downstream stage and its artifacts. Upstream stages remain complete while their contracts and outputs remain valid.
+- Each stage contract defines a reopening questionnaire for the shared revision procedure. A questionnaire does not exempt downstream stages from the cascade. Functional Design defines its [questionnaire](phase_construction/functional-design.md#reopening-questionnaire).
 
 ## Next Functional Design decisions
 
-Work through these decisions in order. Required Functional Design content, stage responsibilities, entry conditions, completion conditions, review, and approval are agreed and recorded. The revision cascade is now a shared concept. Next, resolve the remaining revision and recovery decisions.
+Work through these decisions in order. Required Functional Design content, stage responsibilities, entry conditions, completion conditions, review, approval, and reopening rules are agreed and recorded. Next, define agents and supporting skills. Shared editorial-correction and interrupted-work recovery decisions remain in SH04.
 
 | ID | Decision | Questions to resolve | Status |
 | --- | --- | --- | --- |
@@ -34,7 +35,7 @@ Work through these decisions in order. Required Functional Design content, stage
 | FD02 | Stage responsibilities and documents | Agreed and recorded: Non-functional Requirements uses `quality.md`; Implementation Planning selects the technical solution. See the [stage boundaries](phase_construction/README.md#agreed-boundaries). | Complete. |
 | FD03 | Entry and completion conditions | Agreed and recorded: [entry conditions](phase_construction/functional-design.md#entry-conditions), [completion conditions](phase_construction/functional-design.md#completion-conditions), and [blocking questions](phase_construction/functional-design.md#blocking-questions). | Complete. |
 | FD04 | Review and approval | Agreed and recorded: required self-review, requester-triggered external review, and explicit requester approval in metadata. See [review and approval](phase_construction/functional-design.md#review-and-approval). | Complete. |
-| FD05 | Revision and recovery | The shared [Revision rules](revision.md) apply. Define the remaining Functional Design revision and approval details. Shared editorial-correction and interrupted-work recovery rules belong to SH04. | In progress. |
+| FD05 | Reopening rules | Agreed and recorded: the [reopening questionnaire](phase_construction/functional-design.md#reopening-questionnaire) supplies stage-specific rules to the shared revision procedure. Existing self-review and approval conditions apply again. | Complete. |
 | FD06 | Agents and skills | Select agent profiles and supporting skills. Define their responsibilities and limits. | Pending. |
 
 ## Filename convention
@@ -50,7 +51,7 @@ These decisions affect several stages. Define them in shared contracts rather th
 | SH01 | Unit of Work identity | Identifier format and its relationship to the directory name. |
 | SH02 | Document metadata | Required fields, their meanings, and their formats. Include approval records and references to approved document versions. |
 | SH03 | Depth selection | Who selects depth, defaults, changes during work, and any stored values. |
-| SH04 | Revision and recovery | The [shared cascade rule](revision.md) is recorded. Still define editorial corrections and recovery from interrupted work. Stage-specific rules remain in stage contracts. |
+| SH04 | Revision and recovery | The [shared cascade rule and questionnaire mechanism](revision.md) are recorded. Still define editorial corrections and recovery from interrupted work. Stage questionnaires belong to stage contracts. |
 
 ## Deferred decisions
 
@@ -59,7 +60,7 @@ These decisions affect several stages. Define them in shared contracts rather th
 | DF01 | Application reference | Define its internal document structure, authority, and update rules when we design that shared reference. |
 | DF02 | Inception | Define intent documents, terminology, and the production of one or more Units of Work when we design Inception. Include the previous route concept and its relationship to Units of Work. |
 | DF03 | Initialization | Define project preparation when we design the Initialization phase. |
-| DF04 | Later construction stages | Define the remaining stage contracts, artifact sections, agents, and skills after Functional Design. Include the location of the technical design record from Implementation Planning. Use the [stage outline](phase_construction/README.md#stage-outline). |
+| DF04 | Later construction stages | Define the remaining stage contracts, artifact sections, reopening questionnaires, agents, and skills after Functional Design. Include the location of the technical design record from Implementation Planning. Use the [stage outline](phase_construction/README.md#stage-outline). |
 
 ## Record maintenance
 

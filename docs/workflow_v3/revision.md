@@ -27,9 +27,21 @@ Upstream stages occur before the revision boundary. Downstream stages occur afte
 - Satisfy each stage's completion conditions again. Its contract determines the required checks, review, and approval.
 - Preserve unaffected upstream artifacts and approvals.
 
+## Stage reopening questionnaires
+
+Each stage contract must define a reopening questionnaire. Its questions identify findings that require a change to that stage's contract or outputs, or invalidate its completion. This questionnaire supplies stage-specific rules to the shared revision procedure. Do not define a separate revision procedure for each stage.
+
+Evaluate the questionnaires in stage order to identify the earliest affected stage. Use the findings and existing artifacts to answer the questions. Resolve unclear answers through investigation or requester decisions before selecting the boundary.
+
+- A Yes answer identifies a reason to reopen that stage.
+- All No answers identify no independent reason to reopen that stage for the finding.
+- All No answers do not exempt a downstream stage from a cascade that starts upstream.
+
+A questionnaire identifies the revision boundary. It does not replace the stage's completion conditions, review rules, or approval rules.
+
 ## Revision procedure
 
-1. **Identify the boundary.** Record the finding, the required change, and the earliest affected stage.
+1. **Identify the boundary.** Use the stage reopening questionnaires. Record the finding, the required change, and the earliest affected stage.
 2. **Reopen the stages.** Treat completion of that stage and every downstream stage as no longer current. Preserve the previous work as history.
 3. **Revise the current stage.** Reconsider all its artifacts against its current inputs. Update or confirm each artifact.
 4. **Complete the current stage.** Execute the stage and satisfy its completion conditions. Obtain and record approval when its contract requires it.
@@ -49,4 +61,4 @@ If a finding moves the revision boundary upstream, apply this procedure from the
 
 The shared metadata contract must define revision identifiers, approved-version references, and history formats.
 
-Rules for editorial corrections and recovery from interrupted work require separate decisions. This document records the shared cascade rule; it does not approve all earlier revision and recovery proposals.
+Rules for editorial corrections and recovery from interrupted work require separate decisions. This document records the shared cascade rule and questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
