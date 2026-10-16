@@ -24,7 +24,7 @@ Intent documents belong to Inception. Their structure and the terms for their or
 
 ## Shared concepts
 
-A **Unit of Work** replaces the previous **change** concept. Construction operates on one Unit of Work. A Unit of Work can contain several implementation tasks.
+A **Unit of Work** replaces the previous **change** concept. Construction operates on one Unit of Work. A Unit of Work can contain several implementation tasks. The shared [Unit of Work draft](unit-of-work.md) defines the acceptance boundary, decomposition procedure, and walking skeleton kind.
 
 A **stage** defines a workflow responsibility. A skill supplies a procedure that can support that responsibility. Stage boundaries do not depend on skill names or packaging.
 

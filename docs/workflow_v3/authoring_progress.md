@@ -50,15 +50,19 @@ These decisions affect several stages. Define them in shared contracts rather th
 
 Complete the core definitions of Project references (DF01), depth (SH03), and artifact metadata (SH02). The existing [Depth definition](depth.md) records agreed levels and limits, but its selection rules remain open.
 
-The Unit of Work definition also needs scope and decomposition criteria (SH05). The Functional Design entry condition uses "fit within one Unit of Work", but those criteria are not yet defined.
+The [Unit of Work draft](unit-of-work.md) records the agreed acceptance-cohesion boundary, requirement coverage, explicit dependencies, verifiable outcomes, deployment aspect, and decomposition procedure. Detailed scope and size criteria, the decomposition questionnaire, and deployment content and location remain open in SH05. These decisions must make "fit within one Unit of Work" clear at Functional Design entry.
+
+The [walking skeleton kind](unit-of-work.md#walking-skeleton) is agreed and recorded. It uses normal stages, documents, and approval rules. Inception can produce it, greenfield work can use it as the first unit, or it can be proposed before a requester's original unit. Adding that preceding unit requires requester agreement and an explicit dependency. Its metadata field and format remain in SH02.
+
+Use "Decomposition procedure" instead of "Application mechanism" for this procedure. The [AWS AI-DLC Units Generation reference](https://github.com/awslabs/aidlc-workflows/blob/main/docs/reference/04-stages/inception.md#stage-27-units-generation) supplies research for the remaining decomposition decisions. Its conventions are not automatically part of Kepler.
 
 | ID | Decision | Open scope |
 | --- | --- | --- |
 | SH01 | Unit of Work identity | Identifier format and its relationship to the directory name. |
-| SH02 | Artifact metadata | Required fields, their meanings, and their formats. Include approval records and references to approved document versions. |
+| SH02 | Artifact metadata | Required fields, their meanings, and their formats. Include unit kind, approval records, and references to approved document versions. |
 | SH03 | Depth | Complete the shared contract: who selects depth, defaults, changes during work, and any stored values. Preserve the agreed levels and limits. |
 | SH04 | Revision and recovery | The [shared cascade rule and questionnaire mechanism](revision.md) are recorded. Still define editorial corrections and recovery from interrupted work. Stage questionnaires belong to stage contracts. |
-| SH05 | Unit of Work scope | Define what belongs in one Unit of Work, scope and size criteria, and when to divide work into multiple units. |
+| SH05 | Unit of Work scope | The [accepted rules, walking skeleton kind, and decomposition procedure](unit-of-work.md) are recorded in a draft. Still define detailed scope and size criteria, the decomposition questionnaire, and deployment content and location. |
 
 ## Deferred decisions
 
