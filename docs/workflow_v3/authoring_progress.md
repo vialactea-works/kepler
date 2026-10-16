@@ -22,7 +22,7 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - Functional Design requires explicit requester approval, recorded in Unit of Work metadata. Exact fields and formats remain part of SH02. See [review and approval](phase_construction/functional-design.md#review-and-approval).
 - Required documents have required sections. Additional detail lives in linked files under `details/`, not optional inline sections.
 - Functional Design supporting files live under `details/functional-design/`.
-- The shared [Depth definition](depth.md) uses Minimal, Standard, and Comprehensive levels.
+- The shared [Depth definition](depth.md) uses Minimal, Standard, and Comprehensive levels. Set one unit default with explicit stage overrides. Use Standard when no other level is selected. The agent recommends adjustments; the requester decides.
 - Depth controls analysis and documentation detail. It does not remove required information, weaken verification, or prescribe file counts or page lengths.
 - The shared [Revision rules](revision.md) start at the earliest affected stage and reopen every downstream stage and its artifacts. Upstream stages remain complete while their contracts and outputs remain valid.
 - Each stage contract defines a reopening questionnaire for the shared revision procedure. A questionnaire does not exempt downstream stages from the cascade. Functional Design defines its [questionnaire](phase_construction/functional-design.md#reopening-questionnaire).
@@ -48,7 +48,7 @@ Use short filenames with full words, without abbreviations. The agreed `quality.
 
 These decisions affect several stages. Define them in shared contracts rather than only in Functional Design.
 
-Complete the core definitions of Project references (DF01), depth (SH03), and artifact metadata (SH02). The existing [Depth definition](depth.md) records agreed levels and limits, but its selection rules remain open.
+Complete the core definitions of Project references (DF01) and artifact metadata (SH02). The shared [Depth definition](depth.md) records agreed levels, limits, inheritance, selection authority and procedure, recording requirements, and changes during work. SH03 is complete; exact depth metadata fields and formats remain in SH02.
 
 The [Unit of Work draft](unit-of-work.md) records the agreed acceptance-cohesion boundary, requirement coverage, explicit dependencies, verifiable outcomes, deployment aspect, and decomposition procedure. Detailed scope and size criteria, the decomposition questionnaire, and deployment content and location remain open in SH05. These decisions must make "fit within one Unit of Work" clear at Functional Design entry.
 
@@ -59,10 +59,15 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 | ID | Decision | Open scope |
 | --- | --- | --- |
 | SH01 | Unit of Work identity | Identifier format and its relationship to the directory name. |
-| SH02 | Artifact metadata | Required fields, their meanings, and their formats. Include unit kind, approval records, and references to approved document versions. |
-| SH03 | Depth | Complete the shared contract: who selects depth, defaults, changes during work, and any stored values. Preserve the agreed levels and limits. |
+| SH02 | Artifact metadata | Required fields, their meanings, and their formats. Include unit kind, unit depth default, explicit stage depth overrides, approval records, and references to approved document versions. |
 | SH04 | Revision and recovery | The [shared cascade rule and questionnaire mechanism](revision.md) are recorded. Still define editorial corrections and recovery from interrupted work. Stage questionnaires belong to stage contracts. |
 | SH05 | Unit of Work scope | The [accepted rules, walking skeleton kind, and decomposition procedure](unit-of-work.md) are recorded in a draft. Still define detailed scope and size criteria, the decomposition questionnaire, and deployment content and location. |
+
+## Completed shared decisions
+
+| ID | Decision | Record |
+| --- | --- | --- |
+| SH03 | Depth | Agreed and recorded: [levels and limits](depth.md#levels), [selection rules](depth.md#selection-rules), and [selection procedure](depth.md#selection-procedure). Exact metadata representation remains in SH02. |
 
 ## Deferred decisions
 

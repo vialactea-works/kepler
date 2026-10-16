@@ -51,7 +51,9 @@ The authority, internal file structure, and update rules for Project references 
 
 [Depth](depth.md) defines the shared Minimal, Standard, and Comprehensive levels. Depth controls the detail of analysis and documentation. It does not remove required information or weaken verification.
 
-Stages apply this shared definition to their work. Depth does not prescribe a file count or page length.
+Each Unit of Work has one default depth. Use Standard when the requester has not selected another level. Stages inherit the unit default unless an explicit stage override exists. The agent recommends adjustments; the requester decides whether to accept them.
+
+Stages apply this shared definition to their work. Depth does not prescribe a file count or page length. Exact metadata fields and formats remain part of the shared artifact metadata decision.
 
 ## Writing convention
 

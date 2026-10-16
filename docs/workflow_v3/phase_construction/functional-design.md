@@ -141,7 +141,7 @@ The authority, internal file structure, and update rules for Project references 
 
 ## Depth
 
-Apply the shared [Depth definition](../depth.md). Depth controls the detail of analysis and documentation. It does not remove required information or weaken verification.
+Apply the shared [Depth definition](../depth.md). Use the Unit of Work default unless an explicit stage override applies. Depth controls the detail of analysis and documentation. It does not remove required information or weaken verification.
 
 | Depth | Functional Design guidance |
 | --- | --- |

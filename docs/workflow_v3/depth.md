@@ -18,7 +18,34 @@ Each stage uses this shared definition. A stage can explain how to apply each de
 
 Depth does not prescribe a file count or page length. A complex Unit of Work at Minimal depth can need a model document. A simple Unit of Work at Comprehensive depth does not need invented complexity.
 
-Depth does not determine which stages execute. It does not change acceptance criteria, required checks, or approval authority.
+Depth does not determine which stages execute. It does not change required information, acceptance criteria, verification requirements, or approval authority. It does not change review triggers or turn requester-triggered external review into an automatic gate.
+
+## Selection rules
+
+| Subject | Rule |
+| --- | --- |
+| Scope | Set one default depth for the Unit of Work. Stages inherit it unless an explicit stage override exists. Do not set a separate depth for each document. |
+| Default | Use Standard when the requester has not selected another level. |
+| Authority | The agent recommends adjustments with a short rationale. The requester decides whether to accept them. |
+| Selection criteria | Consider uncertainty, domain complexity, interactions, consequences of incorrect decisions, and available references. Code size alone is insufficient. |
+| Recording | Record the unit default and explicit stage overrides in artifact metadata. The shared metadata contract defines the exact format. |
+| Changes during work | Reassess depth when new findings change the analysis needed. Changes apply to current and future work. Revisiting completed work follows the shared revision rules. |
+
+## Selection procedure
+
+1. Start with the requester's selected depth, or Standard.
+2. Assess whether the known uncertainty and complexity justify another level.
+3. Present any recommended adjustment and its rationale. The requester decides whether to accept it.
+4. Record the agreed selection and any stage override.
+5. Reassess when new findings materially change the analysis needed.
+
+Use the shared [Revision procedure](revision.md#revision-procedure) if completed work must be revisited. A depth selection does not replace stage completion conditions.
+
+### Illustrative example
+
+A walking skeleton can need Comprehensive Implementation Planning because deployment and integration assumptions are unproven. Its narrow, familiar domain behavior can need only Minimal Functional Design.
+
+These are possible selections, not required settings for walking skeletons. Small functional scope does not automatically make every stage Minimal.
 
 ## Required documents and supporting detail
 
@@ -44,4 +71,4 @@ A supporting file is optional to create. Its location does not make an approved 
 
 Stage contracts select required documents. The [Functional Design contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md`. That contract defines the required sections of both documents for Functional Design. Other artifact contracts for later stages will be defined separately.
 
-Depth selection, defaults, and stored values require separate decisions. This definition does not add CLI options or artifact schema fields.
+The shared artifact metadata contract must define the exact fields, stored values, and format for the unit default and stage overrides. This definition does not add CLI options or implement artifact schema fields.
