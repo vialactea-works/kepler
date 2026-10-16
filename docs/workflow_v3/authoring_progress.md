@@ -19,7 +19,9 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - `kepler-architect` is the Functional Design owner and uses `kepler-design`. No other agent roles are defined for this stage.
 - Supporting skills adapt structured questioning, domain modeling, and research from `kepler-grilling`, `kepler-wayfinder-domain-modeling`, and `kepler-wayfinder-research`. Their paths and artifact contracts must follow version 3. See [supporting skills](phase_construction/functional-design.md#supporting-skills).
 - Self-review is implemented within `kepler-design` and performed by `kepler-architect`. It is not a separate supporting skill. External review occurs only when the requester asks for it.
-- Functional Design requires explicit requester approval, recorded in Unit of Work metadata. Exact fields and formats remain part of SH02. See [review and approval](phase_construction/functional-design.md#review-and-approval).
+- Functional Design requires explicit requester approval, recorded through the `kepler` CLI in JSON execution state and audit history. Exact fields and formats remain in SH06. See [review and approval](phase_construction/functional-design.md#review-and-approval).
+- [CLI infrastructure](runtime.md) separates mostly immutable artifact identity frontmatter from dynamic JSON execution state and audit records. Agents and skills operate on execution state through the CLI, not direct file edits.
+- This persistence decision supersedes earlier choices to store approvals and changing depth selections in artifact metadata. Approval authority, depth selection rules, and revision semantics remain unchanged.
 - Required documents have required sections. Additional detail lives in linked files under `details/`, not optional inline sections.
 - Functional Design supporting files live under `details/functional-design/`.
 - The shared [Depth definition](depth.md) uses Minimal, Standard, and Comprehensive levels. Set one unit default with explicit stage overrides. Use Standard when no other level is selected. The agent recommends adjustments; the requester decides.
@@ -36,7 +38,7 @@ All listed Functional Design decisions are agreed and recorded. Next, review the
 | FD01 | Required content | Agreed and recorded: [Unit of Work definition](phase_construction/functional-design.md#unit-of-work-definition) and [Functional Design contribution](phase_construction/functional-design.md#functional-design), including sufficient content and use of references. | Complete. |
 | FD02 | Stage responsibilities and documents | Agreed and recorded: Non-functional Requirements uses `quality.md`; Implementation Planning selects the technical solution. See the [stage boundaries](phase_construction/README.md#agreed-boundaries). | Complete. |
 | FD03 | Entry and completion conditions | Agreed and recorded: [entry conditions](phase_construction/functional-design.md#entry-conditions), [completion conditions](phase_construction/functional-design.md#completion-conditions), and [blocking rule](phase_construction/functional-design.md#blocking-rule). | Complete. |
-| FD04 | Review and approval | Agreed and recorded: required self-review, requester-triggered external review, and explicit requester approval in metadata. See [review and approval](phase_construction/functional-design.md#review-and-approval). | Complete. |
+| FD04 | Review and approval | Agreed and recorded: required self-review, requester-triggered external review, and explicit requester approval. The CLI records approval in JSON execution state and audit history. See [review and approval](phase_construction/functional-design.md#review-and-approval). | Complete. |
 | FD05 | Reopening rules | Agreed and recorded: the [reopening questionnaire](phase_construction/functional-design.md#reopening-questionnaire) supplies stage-specific rules to the shared revision procedure. Existing self-review and approval conditions apply again. | Complete. |
 | FD06 | Agents and skills | Agreed and recorded: [kepler-architect](phase_construction/functional-design.md#agent-roles), `kepler-design`, and [supporting skill responsibilities and adaptations](phase_construction/functional-design.md#supporting-skills). Other agent roles are excluded. | Complete. |
 
@@ -48,7 +50,7 @@ Use short filenames with full words, without abbreviations. The agreed `quality.
 
 These decisions affect several stages. Define them in shared contracts rather than only in Functional Design.
 
-Complete the core definitions of Project references (DF01) and artifact metadata (SH02). The shared [Depth definition](depth.md) records agreed levels, limits, inheritance, selection authority and procedure, recording requirements, and changes during work. SH03 is complete; exact depth metadata fields and formats remain in SH02.
+Complete the core definitions of Project references (DF01), mostly immutable artifact frontmatter (SH02), and CLI infrastructure contracts (SH06). The shared [Depth definition](depth.md) records agreed levels, limits, inheritance, selection authority and procedure, recording requirements, and changes during work. SH03 is complete; depth state schemas and operations remain in SH06.
 
 The [Unit of Work draft](unit-of-work.md) records the agreed acceptance-cohesion boundary, requirement coverage, explicit dependencies, verifiable outcomes, deployment aspect, and decomposition procedure. Detailed scope and size criteria, the decomposition questionnaire, and deployment content and location remain open in SH05. These decisions must make "fit within one Unit of Work" clear at Functional Design entry.
 
@@ -59,15 +61,16 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 | ID | Decision | Open scope |
 | --- | --- | --- |
 | SH01 | Unit of Work identity | Identifier format and its relationship to the directory name. |
-| SH02 | Artifact metadata | Required fields, their meanings, and their formats. Include unit kind, unit depth default, explicit stage depth overrides, approval records, and references to approved document versions. |
+| SH02 | Artifact metadata | Mostly immutable identity and classification fields in frontmatter, including unit kind. Define exact fields and valid changes. Dynamic execution data belongs to SH06. |
 | SH04 | Revision and recovery | The [shared cascade rule and questionnaire mechanism](revision.md) are recorded. Still define editorial corrections and recovery from interrupted work. Stage questionnaires belong to stage contracts. |
 | SH05 | Unit of Work scope | The [accepted rules, walking skeleton kind, and decomposition procedure](unit-of-work.md) are recorded in a draft. Still define detailed scope and size criteria, the decomposition questionnaire, and deployment content and location. |
+| SH06 | CLI infrastructure | The [persistence separation and audit ownership](runtime.md) are agreed. Define JSON state and event schemas, paths, CLI commands, attempt identities, approval binding, consistent writes, recovery, and revision output retention. |
 
 ## Completed shared decisions
 
 | ID | Decision | Record |
 | --- | --- | --- |
-| SH03 | Depth | Agreed and recorded: [levels and limits](depth.md#levels), [selection rules](depth.md#selection-rules), and [selection procedure](depth.md#selection-procedure). Exact metadata representation remains in SH02. |
+| SH03 | Depth | Agreed and recorded: [levels and limits](depth.md#levels), [selection rules](depth.md#selection-rules), and [selection procedure](depth.md#selection-procedure). JSON execution-state representation and operations remain in SH06. |
 
 ## Deferred decisions
 

@@ -28,7 +28,7 @@ Depth does not determine which stages execute. It does not change required infor
 | Default | Use Standard when the requester has not selected another level. |
 | Authority | The agent recommends adjustments with a short rationale. The requester decides whether to accept them. |
 | Selection criteria | Consider uncertainty, domain complexity, interactions, consequences of incorrect decisions, and available references. Code size alone is insufficient. |
-| Recording | Record the unit default and explicit stage overrides in artifact metadata. The shared metadata contract defines the exact format. |
+| Recording | Record the unit default and explicit stage overrides in JSON execution state through the `kepler` CLI, not artifact frontmatter. The shared CLI infrastructure contract defines the exact format and operations. |
 | Changes during work | Reassess depth when new findings change the analysis needed. Changes apply to current and future work. Revisiting completed work follows the shared revision rules. |
 
 ## Selection procedure
@@ -36,7 +36,7 @@ Depth does not determine which stages execute. It does not change required infor
 1. Start with the requester's selected depth, or Standard.
 2. Assess whether the known uncertainty and complexity justify another level.
 3. Present any recommended adjustment and its rationale. The requester decides whether to accept it.
-4. Record the agreed selection and any stage override.
+4. Record the agreed selection and any stage override through the `kepler` CLI.
 5. Reassess when new findings materially change the analysis needed.
 
 Use the shared [Revision procedure](revision.md#revision-procedure) if completed work must be revisited. A depth selection does not replace stage completion conditions.
@@ -71,4 +71,4 @@ A supporting file is optional to create. Its location does not make an approved 
 
 Stage contracts select required documents. The [Functional Design contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md`. That contract defines the required sections of both documents for Functional Design. Other artifact contracts for later stages will be defined separately.
 
-The shared artifact metadata contract must define the exact fields, stored values, and format for the unit default and stage overrides. This definition does not add CLI options or implement artifact schema fields.
+The shared [CLI infrastructure contract](runtime.md) must define the JSON state fields, stored values, format, and operations for the unit default and stage overrides. These are changing execution settings, not artifact identity metadata. This definition does not implement persistence or CLI options.

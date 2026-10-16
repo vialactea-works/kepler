@@ -8,6 +8,8 @@ Define the shared revision rules for the stages of one Unit of Work. These rules
 
 Use the stage order defined by the phase contract. See the [Construction stage outline](phase_construction/README.md#stage-outline).
 
+Apply execution-state changes through the `kepler` CLI. Reopening, attempts, current completion, and approval history belong in structured JSON under the shared [CLI infrastructure contract](runtime.md), not artifact frontmatter or Markdown status fields.
+
 ## Rules
 
 ### Revision boundary
@@ -59,6 +61,6 @@ If a finding moves the revision boundary upstream, apply this procedure from the
 
 ## Decisions still required
 
-The shared metadata contract must define revision identifiers, approved-version references, and history formats.
+The shared [CLI infrastructure contract](runtime.md) must define attempt and revision identifiers, approved-version references, and JSON audit history formats. How to preserve each revision's actual outputs remains a separate decision; an audit event or fingerprint is not an output snapshot.
 
 Rules for editorial corrections and recovery from interrupted work require separate decisions. This document records the shared cascade rule and questionnaire mechanism. It does not approve all earlier revision and recovery proposals.

@@ -78,7 +78,7 @@ These paths are part of the version 3 draft. They do not migrate existing files 
 
 ### Required information and supporting detail
 
-This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Metadata formats remain undecided.
+This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Identity frontmatter fields remain undecided. Dynamic execution state follows the shared [CLI infrastructure contract](../runtime.md).
 
 Create the Unit of Work definition when needed. Preserve and refine an existing definition when Inception or earlier work supplies it. Do not create a second definition for the same Unit of Work.
 
@@ -173,7 +173,7 @@ The requester retains authority over product behavior, scope, consequential trad
 - Maintain `unit-of-work.md`, `design.md`, and relevant linked supporting files.
 - Apply the shared depth definition.
 - Perform the self-review defined within this skill against the required content and completion conditions.
-- Request explicit approval and record it in Unit of Work metadata.
+- Request explicit approval and record it through the `kepler` CLI.
 - Use the reopening questionnaire with the shared revision procedure.
 - Hand off known quality concerns and questions to Non-functional Requirements.
 
@@ -216,7 +216,7 @@ The requester must explicitly approve the current functional design. Approval co
 
 Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval permits progression to Non-functional Requirements. It does not authorize implementation or delivery.
 
-Record approval in Unit of Work metadata. Do not require a separate approval document. Exact metadata fields, formats, and document version references remain part of the shared metadata decision.
+Record approval through the `kepler` CLI in JSON execution state and audit history, not artifact frontmatter. Do not require a separate human-authored approval document. Exact state fields, event formats, and approved-version references remain part of the shared [CLI infrastructure contract](../runtime.md).
 
 ### Reopening questionnaire
 
@@ -231,7 +231,7 @@ Evaluate each question against the agreed functional design, including linked su
 
 Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid.
 
-Apply the shared [Revision procedure](../revision.md#revision-procedure) when a finding requires revision. The reopening questionnaire supplies this stage's rules. A reopened Functional Design stage must repeat self-review, obtain explicit requester approval, and record that approval in metadata. External review remains requester-triggered only.
+Apply the shared [Revision procedure](../revision.md#revision-procedure) when a finding requires revision. The reopening questionnaire supplies this stage's rules. A reopened Functional Design stage must repeat self-review, obtain explicit requester approval, and record that approval through the `kepler` CLI in JSON execution state and audit history. External review remains requester-triggered only.
 
 ## Completion conditions
 
@@ -243,7 +243,7 @@ The stage is complete when:
 - No unresolved question or unsupported assumption leaves a material functional choice to the implementer.
 - Known quality concerns and technical questions are explicit and passed to their responsible stages.
 - The agent has completed its self-review.
-- The requester has explicitly approved the functional design, and approval is recorded in Unit of Work metadata.
+- The requester has explicitly approved the functional design, and the `kepler` CLI has recorded approval in JSON execution state and audit history.
 
 `quality.md`, implementation tasks, and a selected technical solution are not required at this point. Completion does not authorize implementation or delivery.
 

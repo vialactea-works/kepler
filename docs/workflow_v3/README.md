@@ -47,13 +47,19 @@ These paths do not migrate existing artifacts or change current CLI path rules.
 
 The authority, internal file structure, and update rules for Project references require further decisions. The distinction between observed facts and proposed behavior must remain explicit.
 
+## CLI infrastructure and persistence
+
+[CLI infrastructure](runtime.md) separates mostly immutable artifact metadata from dynamic execution state. Artifact identity belongs in frontmatter. Progress, attempts, approvals, pause checkpoints, and changing execution settings belong in structured JSON, operated through the `kepler` CLI.
+
+The CLI records audit events for its operations. Agents and skills do not edit execution state or audit records directly. This decision does not change artifact content or implement new CLI commands.
+
 ## Depth
 
 [Depth](depth.md) defines the shared Minimal, Standard, and Comprehensive levels. Depth controls the detail of analysis and documentation. It does not remove required information or weaken verification.
 
 Each Unit of Work has one default depth. Use Standard when the requester has not selected another level. Stages inherit the unit default unless an explicit stage override exists. The agent recommends adjustments; the requester decides whether to accept them.
 
-Stages apply this shared definition to their work. Depth does not prescribe a file count or page length. Exact metadata fields and formats remain part of the shared artifact metadata decision.
+Stages apply this shared definition to their work. Depth does not prescribe a file count or page length. Record depth selections in CLI-managed JSON execution state. Exact fields, formats, and CLI operations remain part of the shared CLI infrastructure contract.
 
 ## Writing convention
 
