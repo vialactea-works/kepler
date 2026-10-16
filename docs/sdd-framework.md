@@ -9,8 +9,8 @@ through a fixed sequence of steps, each captured as a **skill** and backed by du
 **artifacts**. The same skills are used by a person working in an editor or by a coding agent —
 a person authors the spec and hands execution to the agent.
 
-See the **[Change state machine](./change-state-machine.md)** for lifecycle states,
-skill ownership, and artifact-based transition guards.
+The **[canonical workflow reference](workflow/README.md)** defines steps, internal states, transitions, gates, and artifact contracts.
+Change that reference before you change workflow behavior.
 
 ## Philosophy
 
@@ -35,9 +35,9 @@ project's `.kepler/` directory are the contract between authoring and execution.
 
 ## Principles
 
-**Skills are the single, tool-agnostic source of truth.** Each pipeline step is one skill.
-It names no tool, defines the terms it uses, and depends on no runtime internals — only on
-the project's standards file (`AGENTS.md`) and the shared artifacts.
+**Skills implement the canonical workflow.** Each core step has one skill procedure.
+The [workflow reference](workflow/README.md) defines the required behavior.
+Skills use project standards, shared artifacts, and supported workbench operations to perform that behavior.
 
 **Agents are thin wrappers.** A Kepler agent that runs a step loads the skill and adds only
 the harness binding (output reporting, context, schemas). The skill is never duplicated into

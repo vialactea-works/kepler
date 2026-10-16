@@ -19,8 +19,8 @@ editor and a coding agent.
 
 For the design rationale behind the pipeline, see **[SDD framework](./sdd-framework.md)**. For how
 this layer is installed and what the CLI does, see **[modes](./modes.md)**.
-See the **[Change state machine](./change-state-machine.md)** for lifecycle states,
-skill-controlled transitions, and the artifact fields each gate reads.
+The **[canonical workflow reference](workflow/README.md)** defines steps, internal states, transitions, gates, and artifact contracts.
+Change that reference before you change workflow behavior.
 
 ## The pipeline
 
@@ -139,13 +139,12 @@ when running outside the change directory.
   before publishing root status. Optional `--response` accepts `done`, `blocked`,
   `interrupted`, or `unavailable`; neutral responses do not publish an implementation outcome.
 
-Admission binds eligible dependency-mode work to an isolated lane. These operations guard
-local state transitions; they do not schedule work or grant feedback clearance.
+Admission binds eligible dependency-mode work to an isolated lane and reports distinct full identifiers for immutable Task Base, coordinator source HEAD, admission commit, attempt start HEAD, and next coordinator HEAD. Workers record only the attempt start as that attempt's `Start HEAD`; they do not replace Task Base with a retry's newer HEAD. Stale expected-head refresh is allowed only across a first-parent chain of verified admission-only ledger commits from the same independently observed coordinator and exact repository/source/target refs. Material edits, publications, and feedback commits are not refresh events. Guarded v2 publication records versioned review coverage for each covered attempt, original task-owned commits and paths, and the exact integration delta. Review packages retain verified integration deltas from every publication across corrections. Feedback `Coverage:` must identify that v2 publication commit; verified v1 history remains readable with a conservative broad Base-to-Head package. These operations guard local state transitions; they do not schedule work or grant feedback clearance.
 
 ## The skills
 
-Each skill's authoritative definition is its own `SKILL.md` — this table is a map, not a
-replacement.
+Each `SKILL.md` supplies the execution procedure for its skill. This table is a navigation aid.
+The [canonical workflow reference](workflow/README.md) defines the required workflow behavior.
 
 ### `kepler-init` — set up a project *(step 0, once per project)*
 
