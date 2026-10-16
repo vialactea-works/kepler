@@ -19,7 +19,7 @@ editor and a coding agent.
 
 For the design rationale behind the pipeline, see **[SDD framework](./sdd-framework.md)**. For how
 this layer is installed and what the CLI does, see **[modes](./modes.md)**.
-The **[canonical workflow reference](workflow/README.md)** defines steps, internal states, transitions, gates, and artifact contracts.
+The **[canonical workflow reference](workflow_v2/README.md)** defines steps, internal states, transitions, gates, and artifact contracts.
 Change that reference before you change workflow behavior.
 
 ## The pipeline
@@ -144,7 +144,7 @@ Admission binds eligible dependency-mode work to an isolated lane and reports di
 ## The skills
 
 Each `SKILL.md` supplies the execution procedure for its skill. This table is a navigation aid.
-The [canonical workflow reference](workflow/README.md) defines the required workflow behavior.
+The [canonical workflow reference](workflow_v2/README.md) defines the required workflow behavior.
 
 ### `kepler-init` — set up a project *(step 0, once per project)*
 

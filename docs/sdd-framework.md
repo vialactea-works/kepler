@@ -9,7 +9,7 @@ through a fixed sequence of steps, each captured as a **skill** and backed by du
 **artifacts**. The same skills are used by a person working in an editor or by a coding agent —
 a person authors the spec and hands execution to the agent.
 
-The **[canonical workflow reference](workflow/README.md)** defines steps, internal states, transitions, gates, and artifact contracts.
+The **[canonical workflow reference](workflow_v2/README.md)** defines steps, internal states, transitions, gates, and artifact contracts.
 Change that reference before you change workflow behavior.
 
 ## Philosophy
@@ -36,7 +36,7 @@ project's `.kepler/` directory are the contract between authoring and execution.
 ## Principles
 
 **Skills implement the canonical workflow.** Each core step has one skill procedure.
-The [workflow reference](workflow/README.md) defines the required behavior.
+The [construction phase reference](workflow_v2/phase_construction/README.md) defines the required behavior.
 Skills use project standards, shared artifacts, and supported workbench operations to perform that behavior.
 
 **Agents are thin wrappers.** A Kepler agent that runs a step loads the skill and adds only

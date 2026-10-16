@@ -8,12 +8,12 @@ or CLI commands must include corresponding documentation updates.
 
 ### Canonical workflow definition
 
-[`docs/workflow/README.md`](docs/workflow/README.md) is the canonical workflow reference.
+[`docs/workflow_v2/README.md`](docs/workflow_v2/README.md) is the canonical workflow reference.
 It defines steps, internal states, transitions, gates, and artifact ownership.
 
 Change the canonical definition before you change workflow behavior.
 Then update the affected skills, CLI operations, templates, tests, and explanatory documents.
-Use the [reference maintenance procedure](docs/workflow/maintenance.md) to verify alignment.
+Use the [reference maintenance procedure](docs/workflow_v2/README.md#reference-maintenance) to verify alignment.
 Do not bypass a runtime gate because its implementation differs from the reference.
 
 ### Mapping Code to Docs

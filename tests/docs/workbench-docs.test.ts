@@ -50,7 +50,9 @@ describe("workbench documentation", () => {
       content["README.md"],
       content["docs/modes.md"],
       content["docs/sdd-framework.md"],
-      readFileSync(resolve(root, "docs/change-state-machine.md"), "utf8"),
+      ...["README", "concepts", "lifecycle", "task-cycle", "gates"].map((name) =>
+        readFileSync(resolve(root, `docs/workflow_v2/phase_construction/${name}.md`), "utf8"),
+      ),
     ].join("\n");
 
     expect(readerDocs).toMatch(/(?:version-2|version 2|v2).*dependenc.*unversioned.*(?:version-1|version 1|v1).*serial/is);

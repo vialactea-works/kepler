@@ -30,7 +30,7 @@ Kepler stores global files under `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-wo
 
 See the **[Skills reference](docs/skills.md)** for what each skill does, its inputs, and its outputs,
 and the **[SDD framework](docs/sdd-framework.md)** for the design rationale.
-The **[canonical workflow reference](docs/workflow/README.md)** defines the steps, internal states, transitions, gates, and artifact contracts.
+The **[canonical workflow reference](docs/workflow_v2/README.md)** defines the steps, internal states, transitions, gates, and artifact contracts.
 Change that reference before you change workflow behavior in skills, templates, or the CLI.
 
 ## Nest CLI migration
