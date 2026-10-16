@@ -16,6 +16,8 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - Non-functional Requirements replaces Non-functional Design & Requirements. It requires `.kepler/units-of-work/<unit-id>/quality.md`.
 - Applicable non-functional requirements include performance, availability, security, accessibility, compatibility, operability, and observability.
 - Implementation Planning selects the technical solution before it divides the work into tasks. See the [stage boundaries](phase_construction/README.md#agreed-boundaries).
+- The agent that performs Functional Design must review its own work. External review occurs only when the requester asks for it.
+- Functional Design requires explicit requester approval, recorded in Unit of Work metadata. Exact fields and formats remain part of SH02. See [review and approval](phase_construction/functional-design.md#review-and-approval).
 - Required documents have required sections. Additional detail lives in linked files under `details/`, not optional inline sections.
 - Functional Design supporting files live under `details/functional-design/`.
 - The shared [Depth definition](depth.md) uses Minimal, Standard, and Comprehensive levels.
@@ -23,14 +25,14 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 
 ## Next Functional Design decisions
 
-Work through these decisions in order. Required Functional Design content, stage responsibilities, entry conditions, and completion conditions are agreed and recorded. Next, define review and approval.
+Work through these decisions in order. Required Functional Design content, stage responsibilities, entry conditions, completion conditions, review, and approval are agreed and recorded. Next, define revision and recovery.
 
 | ID | Decision | Questions to resolve | Status |
 | --- | --- | --- | --- |
 | FD01 | Required content | Agreed and recorded: [Unit of Work definition](phase_construction/functional-design.md#unit-of-work-definition) and [Functional Design contribution](phase_construction/functional-design.md#functional-design), including sufficient content and use of references. | Complete. |
 | FD02 | Stage responsibilities and documents | Agreed and recorded: Non-functional Requirements uses `quality.md`; Implementation Planning selects the technical solution. See the [stage boundaries](phase_construction/README.md#agreed-boundaries). | Complete. |
 | FD03 | Entry and completion conditions | Agreed and recorded: [entry conditions](phase_construction/functional-design.md#entry-conditions), [completion conditions](phase_construction/functional-design.md#completion-conditions), and [blocking questions](phase_construction/functional-design.md#blocking-questions). | Complete. |
-| FD04 | Review and approval | Decide when independent review is required, what the requester approves, and how approval is recorded. | Pending. |
+| FD04 | Review and approval | Agreed and recorded: required self-review, requester-triggered external review, and explicit requester approval in metadata. See [review and approval](phase_construction/functional-design.md#review-and-approval). | Complete. |
 | FD05 | Revision and recovery | Define how later findings reopen the stage and which changes require new review or approval. | Pending. |
 | FD06 | Agents and skills | Select agent profiles and supporting skills. Define their responsibilities and limits. | Pending. |
 
@@ -45,7 +47,7 @@ These decisions affect several stages. Define them in shared contracts rather th
 | ID | Decision | Open scope |
 | --- | --- | --- |
 | SH01 | Unit of Work identity | Identifier format and its relationship to the directory name. |
-| SH02 | Document metadata | Required fields, their meanings, and their formats. |
+| SH02 | Document metadata | Required fields, their meanings, and their formats. Include approval records and references to approved document versions. |
 | SH03 | Depth selection | Who selects depth, defaults, changes during work, and any stored values. |
 
 ## Deferred decisions

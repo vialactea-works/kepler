@@ -155,10 +155,12 @@ Depth does not prescribe a file count or page length. Add diagrams, tables, or m
 
 | Role | Responsibility |
 | --- | --- |
-| Functional design owner | Investigate context, conduct the discussion, resolve functional questions, and maintain a consistent design. |
+| Functional design owner | Investigate context, conduct the discussion, resolve functional questions, maintain a consistent design, and review its own work. |
 | Requester | Decide product behavior, scope, and consequential trade-offs. |
 | Supporting specialist | Supply bounded domain, integration, or technical evidence when needed. |
-| Design reviewer | Inspect completeness, consistency, existing contracts, and unresolved risks when a review is requested or required. |
+| Design reviewer | Inspect completeness, consistency, existing contracts, and unresolved risks only when the requester asks for external review. |
+
+The functional design owner is the agent that performs this stage with its supporting skill. This role does not require an additional agent or person. The requester retains authority over product behavior, scope, and approval.
 
 One agent can investigate and write the documents. Delegation does not transfer requester authority.
 
@@ -174,6 +176,29 @@ The stage can use skills for:
 
 Skill names and packaging do not define the stage boundary. One skill can support this stage and Non-functional Requirements.
 
+## Review and approval
+
+### Self-review
+
+The agent that performs this stage must review its own work before it asks for approval. Use the stage's supporting skill to check required content, acceptance criteria, consistency, blocking questions, and concerns passed to later stages.
+
+### External review
+
+External review by another agent or person occurs only when the requester asks for it. Risk, complexity, and depth do not trigger external review. Self-review remains required whether or not the requester asks for external review.
+
+### Requester approval
+
+The requester must explicitly approve the current functional design. Approval covers:
+
+- Purpose and scope.
+- Domain behavior and acceptance criteria.
+- The domain model and functional contracts.
+- Material decisions, assumptions, and questions passed to later stages.
+
+Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval permits progression to Non-functional Requirements. It does not authorize implementation or delivery.
+
+Record approval in Unit of Work metadata. Do not require a separate approval document. Exact metadata fields, formats, and document version references remain part of the shared metadata decision.
+
 ## Completion conditions
 
 The stage is complete when:
@@ -183,11 +208,10 @@ The stage is complete when:
 - Domain rules, responsibilities, and functional contracts are consistent.
 - No unresolved question or unsupported assumption leaves a material functional choice to the implementer.
 - Known quality concerns and technical questions are explicit and passed to their responsible stages.
-- The requester accepts the functional design.
+- The agent has completed its self-review.
+- The requester has explicitly approved the functional design, and approval is recorded in Unit of Work metadata.
 
 `quality.md`, implementation tasks, and a selected technical solution are not required at this point. Completion does not authorize implementation or delivery.
-
-Independent review and approval recording require separate decisions.
 
 ### Blocking questions
 
