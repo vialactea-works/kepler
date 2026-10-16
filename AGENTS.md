@@ -36,6 +36,10 @@ Kepler's global home is `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/keple
 
 Bundle lookup can be overridden with `KEPLER_BUNDLE_DIR` in tests or development.
 
+## Canonical Specifications
+
+- Use ASD-STE100 Simplified Technical English for all text that you add or change in `docs/workflow_v2/` and `docs/workflow_v3/`.
+
 ## Critical Conventions
 
 - **No comments in code** — zero, ever.
