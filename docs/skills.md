@@ -230,7 +230,9 @@ declarative handoff contract between planning and coding. **This skill never wri
   `tasks/task-N/progress.md` implementation-history file per task.
 - **Notes:** all sequencing happens here because code follows each task's steps verbatim. Each task
   runs Red before production edits, reruns the same check to Green, verifies behavior after Refactor,
-  and then runs its Verify command. If a failing check is technically impossible, the task specifies
+  and then runs its Verify command: related tests, project type checking and linting when configured.
+  Projects without linting record `lint: not configured`; configured checks must pass.
+  If a failing check is technically impossible, the task specifies
   a reason and repeatable pre-change/post-change observation. Corrections stay in the same task;
   the serial driver, not the task Steps, dispatches feedback and awaits fresh approval. Re-plan
   preserves done tasks byte-for-byte and stable numeric identities, appends remediation tasks,
