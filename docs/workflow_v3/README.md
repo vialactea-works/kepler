@@ -34,7 +34,7 @@ A **revision** returns work to the earliest affected stage and every downstream 
 
 | Scope | Proposed project path | Responsibility |
 | --- | --- | --- |
-| Application reference | `.kepler/reference/` | Supply shared application context across Units of Work. This scope has a role similar to the AWS AI-DLC CodeKB. |
+| Project references | `.kepler/reference/` | Supply shared application context across Units of Work. This scope has a role similar to the AWS AI-DLC CodeKB. |
 | Unit of Work documents | `.kepler/units-of-work/<unit-id>/` | Describe the purpose, requirements, design, decisions, and evidence for one Unit of Work. |
 
 Paths are relative to the project repository root. `<unit-id>` identifies one Unit of Work and remains stable across stages and retries. Its format requires a separate decision.
@@ -45,7 +45,7 @@ The [Functional Design artifact draft](phase_construction/functional-design.md#a
 
 These paths do not migrate existing artifacts or change current CLI path rules.
 
-Application reference authority, internal file structure, and update rules require further decisions. The distinction between observed facts and proposed behavior must remain explicit.
+The authority, internal file structure, and update rules for Project references require further decisions. The distinction between observed facts and proposed behavior must remain explicit.
 
 ## Depth
 

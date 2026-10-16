@@ -14,13 +14,13 @@ The result must give later stages enough information to plan, implement, and ver
 
 - The Unit of Work identity and intended outcome.
 - Requester instructions and known constraints.
-- Relevant Application reference documents.
+- Relevant Project references.
 - Relevant source code and existing tests, when available.
 - Inception outputs, when available.
 
 Inception is not a required entry path. Its document structure is outside this stage's scope.
 
-The Application reference supplies shared application context. Investigate missing or outdated information. Do not invent current behavior to fill a gap.
+Project references supply shared application context. Investigate missing or outdated information. Do not invent current behavior to fill a gap.
 
 ## Entry conditions
 
@@ -67,7 +67,7 @@ All paths are relative to the project repository root. `<unit-id>` is the stable
 
 | Artifact | Location | Responsibility |
 | --- | --- | --- |
-| Application reference | `.kepler/reference/` | Supply shared application context. |
+| Project references | `.kepler/reference/` | Supply shared application context. |
 | Unit of Work definition | `.kepler/units-of-work/<unit-id>/unit-of-work.md` | Define the purpose, scope, and context shared by all stages. |
 | Functional design | `.kepler/units-of-work/<unit-id>/design.md` | Define domain behavior, the domain model, functional contracts, and design decisions. |
 | Supporting Functional Design files | `.kepler/units-of-work/<unit-id>/details/functional-design/` | Supply linked detail for this stage. |
@@ -90,7 +90,7 @@ A required section can link to supporting files for additional detail. It must i
 
 Create supporting files only when their content is useful. Do not create empty files or links to files that do not exist. A supporting file is optional to create. An approved requirement remains binding when its detailed definition lives in `details/`.
 
-The functional design owner maintains this stage's information. Later stages consume the required documents and relevant linked files.
+`kepler-architect` maintains this stage's information with `kepler-design`. Later stages consume the required documents and relevant linked files.
 
 ### Unit of Work definition
 
@@ -100,7 +100,7 @@ The functional design owner maintains this stage's information. Later stages con
 | --- | --- |
 | Purpose | State the problem or need and the intended outcome. Explain why this Unit of Work exists. |
 | Scope | State what the work includes and excludes. Identify affected application areas or users when relevant. |
-| Context | Describe relevant existing behavior, source instructions, dependencies, and binding constraints. Link to applicable Application reference or Inception documents. Distinguish facts from assumptions. |
+| Context | Describe relevant existing behavior, source instructions, dependencies, and binding constraints. Link to applicable Project references or Inception documents. Distinguish facts from assumptions. |
 
 A reader must be able to understand the purpose, scope, and relevant constraints without searching the conversation. A short explanation can be sufficient.
 
@@ -131,13 +131,13 @@ These sections define the Functional Design contribution. Non-functional Require
 
 Requirements define observable behavior. The model defines the concepts and rules that support that behavior. Contracts define obligations at interaction boundaries. These subjects do not each require a separate document.
 
-Keep essential information in the required documents. Add supporting analysis when the detail would make those documents difficult to read. Reference unchanged Application reference material instead of writing it again.
+Keep essential information in the required documents. Add supporting analysis when the detail would make those documents difficult to read. Refer to unchanged Project references instead of writing their content again.
 
 Keep one authoritative location for each definition. Use summaries and references elsewhere. Keep earlier decisions visible when a later decision replaces them. Identify the replacement and its reason.
 
-Documents must distinguish existing facts, proposed behavior, and assumptions. Record proposed Application reference corrections or additions in the Unit of Work documents. Do not present an unimplemented design as an observed application fact.
+Documents must distinguish existing facts, proposed behavior, and assumptions. Record proposed corrections or additions to Project references in the Unit of Work documents. Do not present an unimplemented design as an observed application fact.
 
-Application reference authority, internal file structure, and update rules remain separate decisions.
+The authority, internal file structure, and update rules for Project references remain separate decisions.
 
 ## Depth
 
@@ -153,34 +153,53 @@ Depth does not prescribe a file count or page length. Add diagrams, tables, or m
 
 ## Agent roles
 
-| Role | Responsibility |
-| --- | --- |
-| Functional design owner | Investigate context, conduct the discussion, resolve functional questions, maintain a consistent design, and review its own work. |
-| Requester | Decide product behavior, scope, and consequential trade-offs. |
-| Supporting specialist | Supply bounded domain, integration, or technical evidence when needed. |
-| Design reviewer | Inspect completeness, consistency, existing contracts, and unresolved risks only when the requester asks for external review. |
+| Role | Agent | Responsibility |
+| --- | --- | --- |
+| Functional design owner | `kepler-architect` | Investigate context, conduct the discussion, resolve functional questions with the requester, maintain a consistent design, and review its own work. |
 
-The functional design owner is the agent that performs this stage with its supporting skill. This role does not require an additional agent or person. The requester retains authority over product behavior, scope, and approval.
+`kepler-architect` uses `kepler-design` to perform this stage. Its profile requires domain analysis, requirements discovery, domain-driven design, source investigation, and technical writing capabilities.
 
-One agent can investigate and write the documents. Delegation does not transfer requester authority.
+The agent can inspect existing source and tests and maintain this stage's documents. It must distinguish existing facts, proposed behavior, and assumptions. It must not make consequential product choices for the requester, change production code in this stage, or select the technical solution assigned to Implementation Planning.
+
+The requester retains authority over product behavior, scope, consequential trade-offs, and approval. No other agent roles are defined for this stage. Requester-triggered external review remains available without selecting a reviewer agent profile here.
 
 ## Supporting skills
 
-The stage can use skills for:
+### Entry skill
 
-- Requirements discovery and functional design.
-- Domain modeling.
-- Structured question resolution.
-- Research and source inspection.
-- Design critique.
+`kepler-design` is the entry skill for Functional Design. It must:
 
-Skill names and packaging do not define the stage boundary. One skill can support this stage and Non-functional Requirements.
+- Investigate relevant context and resolve functional questions with the requester.
+- Maintain `unit-of-work.md`, `design.md`, and relevant linked supporting files.
+- Apply the shared depth definition.
+- Perform the self-review defined within this skill against the required content and completion conditions.
+- Request explicit approval and record it in Unit of Work metadata.
+- Use the reopening questionnaire with the shared revision procedure.
+- Hand off known quality concerns and questions to Non-functional Requirements.
+
+Technical solution selection remains in Implementation Planning. Skill names and packaging do not define stage boundaries.
+
+### Supporting responsibilities and inspiration
+
+| Responsibility | Existing inspiration | Adaptation |
+| --- | --- | --- |
+| Structured questioning | [kepler-grilling](../../../skills/kepler-grilling/SKILL.md) | Keep the focused requester discussion, recommendations, and content-and-exit-condition invocation. Record confirmed answers where the caller's artifact contract requires them. |
+| Domain modeling | [kepler-wayfinder-domain-modeling](../../../skills/kepler-wayfinder-domain-modeling/SKILL.md) | Develop domain language, rules, invariants, and boundaries. Use the caller's document paths and distinguish existing application facts from proposed changes. |
+| Research | [kepler-wayfinder-research](../../../skills/kepler-wayfinder-research/SKILL.md) | Investigate uncertain facts through source code and primary references. Return findings with sources at the caller's supporting-file path. |
+
+These skills supply behavior to adapt, not artifact contracts to preserve. Structured questioning is expected to need fewer changes than the other two skills.
+
+For this stage, required content belongs in the root Unit of Work documents. Supporting detail belongs under `details/functional-design/` and must be linked from the relevant required section. Use caller-supplied paths when a supporting skill serves another stage.
+
+Do not require old map directories, tickets, routes, glossary paths, or their validation commands. Follow the version 3 stage and artifact contracts. Authority and update rules for Project references remain separate decisions.
+
+Supporting skills do not introduce additional agent roles. This specification defines their responsibilities; it does not modify their current implementations.
 
 ## Review and approval
 
 ### Self-review
 
-The agent that performs this stage must review its own work before it asks for approval. Use the stage's supporting skill to check required content, acceptance criteria, consistency, blocking questions, and concerns passed to later stages.
+Self-review is part of `kepler-design`, not a separate supporting skill. `kepler-architect` must perform it before it asks for approval. The self-review checks required content, acceptance criteria, consistency, blocking questions, and concerns passed to later stages.
 
 ### External review
 
@@ -199,6 +218,21 @@ Saving a draft, committing it, or receiving a positive review does not grant req
 
 Record approval in Unit of Work metadata. Do not require a separate approval document. Exact metadata fields, formats, and document version references remain part of the shared metadata decision.
 
+### Reopening questionnaire
+
+Evaluate each question against the agreed functional design, including linked supporting files. Use the answers in the shared [Revision procedure](../revision.md#revision-procedure).
+
+1. Does the finding require a change to the intended outcome, scope, or exclusions of the Unit of Work?
+2. Does it require a change to domain behavior, acceptance criteria, failure behavior, or boundary conditions?
+3. Does it require a change to the meaning of domain terms, concepts, relationships, business rules, invariants, states, or responsibilities?
+4. Does it require a change to ownership at an interaction boundary or a functional contract, including inputs, outputs, errors, or compatibility obligations?
+5. Does it invalidate an assumption or decision that the agreed functional design depends on?
+6. Does it expose a required functional decision that remains unresolved, or show that a Functional Design completion condition is no longer met?
+
+Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid.
+
+Apply the shared [Revision procedure](../revision.md#revision-procedure) when a finding requires revision. The reopening questionnaire supplies this stage's rules. A reopened Functional Design stage must repeat self-review, obtain explicit requester approval, and record that approval in metadata. External review remains requester-triggered only.
+
 ## Completion conditions
 
 The stage is complete when:
@@ -213,36 +247,25 @@ The stage is complete when:
 
 `quality.md`, implementation tasks, and a selected technical solution are not required at this point. Completion does not authorize implementation or delivery.
 
-### Blocking questions
+### Blocking rule
 
 A question blocks completion when different answers would change scope, required functional behavior, a domain invariant, or a functional contract.
 
-| Question | Treatment |
+#### Examples
+
+These examples are not mandatory questions or additional completion conditions. Apply the blocking rule to the actual situation.
+
+| Example question | Illustrative treatment |
 | --- | --- |
 | Who can cancel an order? | Resolve in Functional Design. |
 | What happens when cancellation is refused? | Resolve in Functional Design. |
-| What response-time target applies? | Pass to Non-functional Requirements. |
-| Which storage technology should we use? | Pass to Implementation Planning. |
+| What response-time target applies? | Pass to Non-functional Requirements if functional behavior is already defined. |
+| Which storage technology should we use? | Pass to Implementation Planning if the functional contract remains unchanged. |
 
-## Reopening questionnaire
-
-Evaluate each question against the agreed functional design, including linked supporting files. Use the answers in the shared [Revision procedure](../revision.md#revision-procedure).
-
-1. Does the finding require a change to the intended outcome, scope, or exclusions of the Unit of Work?
-2. Does it require a change to domain behavior, acceptance criteria, failure behavior, or boundary conditions?
-3. Does it require a change to the meaning of domain terms, concepts, relationships, business rules, invariants, states, or responsibilities?
-4. Does it require a change to ownership at an interaction boundary or a functional contract, including inputs, outputs, errors, or compatibility obligations?
-5. Does it invalidate an assumption or decision that the agreed functional design depends on?
-6. Does it expose a required functional decision that remains unresolved, or show that a Functional Design completion condition is no longer met?
-
-Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid.
-
-## Handoff and correction
+## Handoff
 
 **Next stage:** Non-functional Requirements.
 
-The handoff identifies the Unit of Work directory, `unit-of-work.md`, `design.md`, and any linked supporting files. It includes relevant Application reference paths, known constraints, and questions for the next stage.
+The handoff identifies the Unit of Work directory, `unit-of-work.md`, `design.md`, and any linked supporting files. It includes relevant Project references, their paths, known constraints, and questions for the next stage.
 
 The next stage records quality targets and constraints in `quality.md` at the Unit of Work root. Include observability among the applicable concerns passed to that stage. Implementation Planning then selects the technical solution against the functional design and non-functional requirements.
-
-Apply the shared [Revision procedure](../revision.md#revision-procedure) when a finding requires revision. The reopening questionnaire supplies this stage's rules. A reopened Functional Design stage must repeat self-review, obtain explicit requester approval, and record that approval in metadata. External review remains requester-triggered only.

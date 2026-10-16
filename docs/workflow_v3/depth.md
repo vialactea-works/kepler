@@ -34,7 +34,7 @@ A supporting file is optional to create. Its location does not make an approved 
 
 ## Content rules
 
-- Document new or changed information. Reference unchanged Application reference material.
+- Document new or changed information. Refer to unchanged Project references.
 - Keep one authoritative location for each definition. Use summaries and references elsewhere.
 - Add diagrams, tables, and model descriptions only when they explain relevant information.
 - Keep required documents concise. Do not require a reader to inspect unlinked files to discover a material obligation.
