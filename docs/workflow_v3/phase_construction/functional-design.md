@@ -22,6 +22,16 @@ Inception is not a required entry path. Its document structure is outside this s
 
 The Application reference supplies shared application context. Investigate missing or outdated information. Do not invent current behavior to fill a gap.
 
+## Entry conditions
+
+Start Functional Design when:
+
+- The request identifies an intended outcome that can reasonably fit within one Unit of Work.
+- There is enough initial context to begin investigation and discussion.
+- The requester can resolve consequential product and scope questions.
+
+Completed documents, a complete domain model, and an Inception handoff are not required before the stage starts. Functional Design produces or refines its inputs.
+
 ## Scope
 
 ### Included
@@ -164,21 +174,33 @@ The stage can use skills for:
 
 Skill names and packaging do not define the stage boundary. One skill can support this stage and Non-functional Requirements.
 
-## Proposed completion gate
+## Completion conditions
 
 The stage is complete when:
 
-- `unit-of-work.md` and `design.md` exist directly under the Unit of Work directory and contain the information required for this stage.
-- Required sections contain essential information and identify any linked supporting detail.
-- Linked Functional Design supporting files exist under `details/functional-design/`.
-- Its documents consistently describe one bounded Unit of Work.
-- Functional requirements have observable acceptance criteria.
-- Relevant behavior, models, contracts, and decisions are documented.
-- Material functional questions are resolved.
-- Assumptions and remaining non-functional questions are explicit.
+- `unit-of-work.md` and `design.md` exist at the Unit of Work root and contain their required sections. Relevant supporting files are linked and exist under `details/functional-design/`.
+- Required behavior has observable acceptance criteria, including relevant failures and boundary conditions.
+- Domain rules, responsibilities, and functional contracts are consistent.
+- No unresolved question or unsupported assumption leaves a material functional choice to the implementer.
+- Known quality concerns and technical questions are explicit and passed to their responsible stages.
 - The requester accepts the functional design.
 
-Completion does not authorize implementation or delivery.
+`quality.md`, implementation tasks, and a selected technical solution are not required at this point. Completion does not authorize implementation or delivery.
+
+Independent review and approval recording require separate decisions.
+
+### Blocking questions
+
+A question blocks completion when different answers would change scope, required functional behavior, a domain invariant, or a functional contract.
+
+| Question | Treatment |
+| --- | --- |
+| Who can cancel an order? | Resolve in Functional Design. |
+| What happens when cancellation is refused? | Resolve in Functional Design. |
+| What response-time target applies? | Pass to Non-functional Requirements. |
+| Which storage technology should we use? | Pass to Implementation Planning. |
+
+Later findings can still require a design revision. Rules for reopening the stage require a separate decision.
 
 ## Handoff and correction
 

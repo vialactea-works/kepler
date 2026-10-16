@@ -23,13 +23,13 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 
 ## Next Functional Design decisions
 
-Work through these decisions in order. Required Functional Design content, stage responsibilities, and the separate `quality.md` document are agreed and recorded. Next, define Functional Design entry and completion conditions.
+Work through these decisions in order. Required Functional Design content, stage responsibilities, entry conditions, and completion conditions are agreed and recorded. Next, define review and approval.
 
 | ID | Decision | Questions to resolve | Status |
 | --- | --- | --- | --- |
 | FD01 | Required content | Agreed and recorded: [Unit of Work definition](phase_construction/functional-design.md#unit-of-work-definition) and [Functional Design contribution](phase_construction/functional-design.md#functional-design), including sufficient content and use of references. | Complete. |
 | FD02 | Stage responsibilities and documents | Agreed and recorded: Non-functional Requirements uses `quality.md`; Implementation Planning selects the technical solution. See the [stage boundaries](phase_construction/README.md#agreed-boundaries). | Complete. |
-| FD03 | Entry and completion conditions | Define required starting information, blocking questions, and questions that can pass to the next stage. | Pending. |
+| FD03 | Entry and completion conditions | Agreed and recorded: [entry conditions](phase_construction/functional-design.md#entry-conditions), [completion conditions](phase_construction/functional-design.md#completion-conditions), and [blocking questions](phase_construction/functional-design.md#blocking-questions). | Complete. |
 | FD04 | Review and approval | Decide when independent review is required, what the requester approves, and how approval is recorded. | Pending. |
 | FD05 | Revision and recovery | Define how later findings reopen the stage and which changes require new review or approval. | Pending. |
 | FD06 | Agents and skills | Select agent profiles and supporting skills. Define their responsibilities and limits. | Pending. |
