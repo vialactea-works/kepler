@@ -10,9 +10,11 @@ Kepler installs shared templates under `${XDG_CONFIG_HOME:-$HOME/.config}/vialac
 
 The templates guide new records. `kepler workbench lint` decides the supported format of existing records.
 
-The documents in `docs/workflow/` define the workflow itself. The files in `.kepler/specs/` define capability contracts for a project.
+The documents in `docs/workflow_v2/` define this workflow generation. The files in `.kepler/specs/` define capability contracts for a project.
 
 ## Artifact ownership
+
+The map, ticket, and route rows summarize construction inputs. [Inception artifacts](../phase_inception/artifacts.md) define their complete authoring and lifecycle contracts.
 
 | Artifact | Producer and permitted writer | Inputs and purpose | Consumers and output contract |
 | --- | --- | --- | --- |
@@ -137,4 +139,4 @@ A repair adds a new linked pair. It preserves original delivery identity and eve
 | `workbench precondition` | Check ordinary finish or finalization-repair readiness. | Change, explicit target, test/build command, and optional recovery identity → closed or identity-bound open gate. | It checks readiness. It does not perform finish effects. |
 | `workbench prototype` | Manage the support prototype branch. | Prototype operation and branch context → guarded prototype workspace result. | Throwaway investigation only. It cannot approve production intent. |
 
-The [skills reference](../skills.md) supplies command syntax. This reference defines the workflow obligations that those commands support.
+The [skills reference](../../skills.md) supplies command syntax. This reference defines the workflow obligations that those commands support.

@@ -1,56 +1,52 @@
-# Kepler workflow reference
+# Kepler workflow reference: version 2
 
 ## Purpose
 
-This folder defines the canonical Kepler workflow. It describes the required behavior for people, skills, templates, and the CLI.
+This folder defines two workflow phases. Inception resolves the destination and its decisions. Construction delivers changes through the SDD framework.
 
-Change this reference before you change workflow behavior. Then change the affected skills, CLI operations, templates, tests, and other documents.
+Change the relevant phase reference before you change workflow behavior. Then align skills, CLI operations, templates, tests, and explanatory documents.
 
-This reference formalizes the internal states of the seven core steps. It does not add a workflow engine or new artifact fields.
+The phase names organize the reference. They do not add persisted fields, a workflow engine, or numbered SDD steps.
 
-## Reading order
+## Phase index
 
-| Order | Document | Question |
-| --- | --- | --- |
-| 1 | [Concepts](concepts.md) | What do the terms mean? |
-| 2 | [Workflow map](lifecycle.md) | How do the seven steps connect? |
-| 3 | [Preparation](preparation.md) | How does a project become ready for task work? |
-| 4 | [Task cycle](task-cycle.md) | How does one task reach independent approval? |
-| 5 | [Branch review](branch-review.md) | How does the complete change receive approval? |
-| 6 | [Finish](finish.md) | How does the change finish safely? |
-| 7 | [Gates](gates.md) | Which conditions permit each transition? |
-| 8 | [Artifacts](artifacts.md) | Which records prove the state, and who can change them? |
-| 9 | [Support operations](support.md) | How do optional operations connect to the core steps? |
-| 10 | [Reference maintenance](maintenance.md) | How do we change and verify this definition? |
+| Order | Reference | Responsibility | Main output |
+| --- | --- | --- | --- |
+| 1 | [Inception: Wayfinder](phase_inception/README.md) | Chart uncertainty, resolve authorized decision tickets, and compile a route. | Current answers, confirmed language, and coarse delivery units. |
+| 2 | [Construction: SDD framework](phase_construction/README.md) | Define, plan, implement, review, and finish each authorized change. | Verified change results and delivery evidence. |
 
-For a first reading, read Concepts and Workflow map. Then read the step that you need.
+Start with each phase's Concepts and Workflow map. Then read the operation that you need.
 
-The diagrams show states and operation names. The transition tables identify the applicable gates. The gate tables contain the conditions.
+Each reference provides state tables, transition diagrams, operation contracts, separate gate tables, artifact ownership, and recovery rules.
 
-## Scope
+## Phase boundary
 
-The core steps are `init`, `propose`, `plan`, `code`, `code-feedback`, `review`, and `finish-work`.
+A ready project can enter construction directly. An effort needs Wayfinder only when unresolved decisions require work across sessions.
 
-Step 0 prepares a project once. Step 1 is optional for a tactical change. Steps 3 and 4 repeat for each task.
+A cleared map supplies a route. Each route unit defines a delivery outcome, not an implementation task or an approved formal change.
 
-Wayfinder, critique, and orchestration support the core steps. They do not increase the core step count.
+The [handoff contract](phase_inception/handoff.md) defines unit selection, ownership, dependencies, source and target branches, and shipment feedback.
 
-New plans use `execution: {version: 2, mode: dependencies}`. Historical serial plans keep their recorded contracts. They do not become dependency plans automatically.
+The seven construction steps remain `init`, `propose`, `plan`, `code`, `code-feedback`, `review`, and `finish-work`. Wayfinder does not increase that count.
 
-This reference does not authorize a merge, push, request, installation, or destructive operation. The requester and project rules retain that authority.
+Project initialization can establish standards and language before inception. Its definition remains in [construction preparation](phase_construction/preparation.md#step-0-init).
 
-## Authority
+## Authority and generation
 
-This reference owns workflow meaning. The [skills reference](../skills.md) explains skill use. The [SDD framework](../sdd-framework.md) explains design rationale.
+This folder defines the version 2 workflow. [The version 3 reference](../workflow_v3/README.md) is a separate document set.
 
-The [artifact contracts](artifacts.md) identify the records that store workflow evidence. Successful artifact lint proves format validity, not approval or permission.
+This reorganization does not migrate active work, change artifact schemas, or authorize execution under another generation.
 
-An implementation difference does not change this definition. Record the difference under [Reference maintenance](maintenance.md). Do not bypass a closed runtime gate.
+[Skills](../skills.md) describe execution procedures. [The SDD framework](../sdd-framework.md) explains construction rationale.
 
-## Writing convention
+Lint proves supported artifact format. It does not prove a decision, authorize a ticket, grant formal approval, or verify shipment.
 
-This reference uses ASD-STE100 Simplified Technical English writing rules. [Concepts](concepts.md) defines the software technical terms.
+## Reference maintenance
 
-Commands, paths, field names, and stored values retain their exact spelling. These identifiers are not ordinary English words.
+Use the [inception maintenance procedure](phase_inception/maintenance.md) for Wayfinder contracts. Use the [construction maintenance procedure](phase_construction/maintenance.md) for SDD contracts.
 
-The [ASD-STE100 site](https://www.asd-ste100.org/) provides the language standard. This reference does not claim certified language validation.
+For a phase-boundary change, update both references and their shared handoff. Keep conditions in gate tables, outside diagrams.
+
+Both phases use ASD-STE100 Simplified Technical English writing rules. Commands, paths, schema fields, and stored values retain their exact spelling.
+
+The reference does not claim certified dictionary validation. See the [ASD-STE100 site](https://www.asd-ste100.org/) for the standard.

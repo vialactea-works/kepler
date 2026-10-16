@@ -6,68 +6,23 @@ Support operations prepare decisions or coordinate core work. They do not add co
 
 ## Wayfinder
 
-Wayfinder resolves uncertainty before a change needs formal intent or a task plan. It produces a map, decision tickets, and a compiled route.
+The [inception phase](../phase_inception/README.md) owns the complete Wayfinder definition. It covers charting, ticket authorization, investigations, language, route closure, and recovery.
 
-### State contracts
+Construction consumes a compiled route through the [phase handoff](../phase_inception/handoff.md). A route unit supplies an outcome and constraints, not formal approval or an implementation task.
 
-| State | Responsibility | Inputs | Outputs and artifacts | Contract |
-| --- | --- | --- | --- | --- |
-| V0 · Destination unclear | Identify the required result and unresolved questions. | Request and project context. | Destination and candidate ticket frontier. | If no material uncertainty exists, no map is required. |
-| V1 · Map open | Resolve authorized tickets. | Map, operation rules, and explicit ticket authorization. | Answers, research links, and decision summaries. | An orientation request alone authorizes no ticket work. |
-| V2 · Map cleared | Compile current decisions into one route. | All resolved tickets and consistent destination. | Lint-valid route and confirmed canonical terms. | The route contains no unresolved product decision. |
-| V3 · Map shipping | Track units through bound changes. | Route and owner-bound in-progress units. | Aggregate map and route state. | Downstream change owners retain their core gates. |
-| V4 · Map shipped | Preserve verified destination completion. | Every route unit's qualifying result. | Aggregate shipped map and route. | Map status alone cannot prove shipment. |
-
-```mermaid
-flowchart LR
-    V0["V0 · Destination unclear"] -->|"V01 · Chart map"| V1["V1 · Map open"]
-    V1 -->|"V02 · Compile route"| V2["V2 · Map cleared"]
-    V2 -->|"V03 · Start unit"| V3["V3 · Map shipping"]
-    V3 -->|"V04 · Complete units"| V4["V4 · Map shipped"]
-```
-
-### Transition contracts
-
-| ID | From → to | Actor and operation | Input → output | Conditions and contract |
-| --- | --- | --- | --- | --- |
-| V01 | V0 → V1 | Wayfinder owner charts the map. | Destination dialogue → map, operation rules, and tickets. | Preserve requester rules. Apply [G01](gates.md#g01-common-evidence) and [G03](gates.md#g03-preservation-and-attribution). |
-| V02 | V1 → V2 | Wayfinder owner compiles the route. | Resolved ticket set → glossary updates, route body, and unit metadata. | Apply the route compilation gate below. Lint every recognized artifact after mutation. |
-| V03 | V2 → V3 | Bound change owner starts a unit. | Selected eligible route unit → committed in-progress claim with change scaffold. | Apply [G25](gates.md#g25-route-binding). Do not bypass a competing claim. |
-| V04 | V3 → V4 | Finish owner completes the last unit. | Qualifying effects for every unit → shipped aggregate state. | Apply [G30](gates.md#g30-strategy-and-shipment). Preserve all unit identities and sibling evidence. |
-
-The route body contains Point of departure, Destination, Path chosen, Shipping rules, and Units.
-
-The frontmatter owns mutable unit identity, dependencies, backing tickets, and lifecycle state. Downstream owners do not rewrite the compiled destination.
-
-### Ticket contracts
-
-| State | Responsibility and evidence | Contract |
+| Boundary | Input → output | Construction obligation |
 | --- | --- | --- |
-| `open` | The question and `blocked_by` list define unresolved work. | Only open, unclaimed tickets with resolved prerequisites enter the frontier. |
-| `claimed` | The authorized owner starts the matching support operation. | Claim before work. Research can remain claimed while its dispatched investigation runs. |
-| `resolved` | An Answer and map summary preserve the result. | Retain source evidence and explicit supersession history. |
+| Start a unit | Exact eligible route unit and authorized owner → matching change scaffold and in-progress claim. | Apply [G25](gates.md#g25-route-binding). Preserve source/target and dependency evidence. |
+| Execute a change | Bound outcome and constraints → independently gated implementation. | Apply construction intent, planning, task, and branch-review gates. |
+| Complete a unit | Observed qualifying finish effect → named unit shipment and final map update when applicable. | Apply [G30](gates.md#g30-strategy-and-shipment). Preserve sibling state and verify delivery before status updates. |
 
-| ID | From → to | Actor and operation | Input → output | Conditions and contract |
-| --- | --- | --- | --- | --- |
-| V05 | open → claimed | Authorized ticket owner claims the ticket. | Explicit fixed authorization set and current eligibility → claimed ticket. | Recheck status and blockers at its turn. Do not substitute another ticket. |
-| V06 | claimed → resolved | Ticket owner records the answer. | Matching operation result → Answer, source links, resolved status, and map summary. | Apply operation rules and artifact lint. Check conflicts with prior decisions. |
-| V07 | resolved → resolved | Wayfinder owner records supersession. | New authorized decision → current Answer and explicit Outdated decisions. | Preserve the superseded evidence and update affected summaries. |
+The former local V0–V4 states now correspond to W0, W1, W3, W4, and W5 in the [inception lifecycle](../phase_inception/lifecycle.md).
 
-Newly created or unblocked tickets do not enlarge the fixed authorization set. A later session needs explicit authority for additional ticket work.
+The former V01–V04 transitions now correspond to WX01, WX05, WX06, and WX07. V05 and V06 map to WT05 and WT08 in the [ticket cycle](../phase_inception/ticket-cycle.md).
 
-A claimed ticket has no automatic expiry or reopen transition. An interrupted claim requires owner diagnosis and explicit authority before reassignment.
+The former V07 supersession operation belongs to WT09. Inception's WG gate tables replace the former local support gate table.
 
-### Support gate table
-
-| Gate | Check owner | Required condition | Failure action |
-| --- | --- | --- | --- |
-| Route compilation | Wayfinder owner | All tickets are resolved. Decisions, destination coverage, causal dependencies, and boundaries agree. | Keep the map open. Resolve uncertainty before route creation. |
-| Route structure | Wayfinder owner | Unit IDs and names match body order. Dependencies are unique, valid, non-self, and acyclic. | Correct structure and rerun lint. |
-| Canonical language | Wayfinder owner and requester | Changed committed meanings have requester confirmation. Scoped terms retain sources and existing author metadata. | Preserve unresolved language outside canonical entries. |
-| Ticket start | Ticket owner | The ticket belongs to the explicit fixed authorization set and is currently open, unblocked, and unclaimed. | Report and skip that member without substitution. |
-| Ticket resolution | Ticket owner | The matching skill supplies the result. Prototype branch checks precede prototype code. | Do not claim unsupported resolution. |
-
-These support conditions remain in tables, not diagram labels.
+Research, prototype, grilling, and domain modeling can also support construction. Their [inception operation contracts](../phase_inception/investigations.md) and [language contract](../phase_inception/domain-modeling.md) retain their safety boundaries.
 
 ## Critique
 
@@ -125,4 +80,4 @@ The todo list mirrors durable state. It does not approve a task, reserve a prere
 | Domain modeling | Maintain scoped language and explicit model decisions. | Project evidence and requester decisions → glossary or model updates. | Confirm material changes to canonical meanings. Keep unresolved meanings explicit. |
 | Compose-spec | Author canonical capability documents outside the change pipeline. | Direct specification authority and source behavior → canonical `.kepler/specs/` files. | Do not infer authority to change a contract from source code alone. |
 
-These operations have no additional core lifecycle states. Their durable handoffs use the map, ticket, glossary, or spec contracts above.
+These operations do not add numbered construction steps. Their durable handoffs use the relevant inception or construction artifact contracts.

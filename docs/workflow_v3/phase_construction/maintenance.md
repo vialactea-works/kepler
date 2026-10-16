@@ -55,18 +55,18 @@ These links locate the implementation evidence. The linked files do not become a
 
 | Contract area | Skill evidence | Template and CLI evidence |
 | --- | --- | --- |
-| Project readiness | [Init](../../skills/kepler-init/SKILL.md) | [Glossary template](../../bundle/templates/glossary.md), [project path migration](../../packages/cli/src/workbench/project-data-path.ts) |
-| Formal intent | [Propose](../../skills/kepler-propose/SKILL.md) | [Proposal](../../bundle/templates/proposal.md), [requirements](../../bundle/templates/requirements-change.md), [design](../../bundle/templates/design.md), [input checks](../../packages/cli/src/workbench/precondition-artifacts.ts) |
-| Planning and amendments | [Plan](../../skills/kepler-plan/SKILL.md) | [Plan template](../../bundle/templates/plan.md), [plan history](../../packages/cli/src/workbench/plan-history.ts) |
-| Task implementation | [Code](../../skills/kepler-code/SKILL.md) | [Task progress](../../bundle/templates/task-progress.md), [task state](../../packages/cli/src/workbench/task-state.ts), [admission](../../packages/cli/src/workbench/task-admission.ts) |
-| Dependency clearance | [Orchestrate](../../skills/kepler-orchestrate/SKILL.md) | [Readiness](../../packages/cli/src/workbench/task-readiness.ts), [context](../../packages/cli/src/workbench/context.ts) |
-| Publication coverage | [Task feedback](../../skills/kepler-code-feedback/SKILL.md) | [Publication history](../../packages/cli/src/workbench/task-publication-history.ts), [coverage](../../packages/cli/src/workbench/task-review-coverage.ts), [diff](../../packages/cli/src/workbench/diff.ts) |
-| Review durability and scope | [Branch review](../../skills/kepler-review/SKILL.md) | [Feedback template](../../bundle/templates/feedback.md), [review template](../../bundle/templates/review.md), [review passes](../../packages/cli/src/workbench/review-passes.ts) |
-| Finish admission | [Finish-work preconditions](../../skills/kepler-finish-work/SKILL.md#preconditions) | [Precondition operation](../../packages/cli/src/workbench/precondition.ts), [review gates](../../packages/cli/src/workbench/precondition-reviews.ts) |
-| Finish history and repair | [Finish-work recovery](../../skills/kepler-finish-work/SKILL.md#resume-and-recovery) | [Finish template](../../bundle/templates/finish.md), [finish records](../../packages/cli/src/workbench/finish-records.ts), [repair](../../packages/cli/src/workbench/finish-repair.ts) |
-| Maps and routes | [Wayfinder](../../skills/kepler-wayfinder/SKILL.md) | [Map](../../bundle/templates/wayfinder/map.md), [ticket](../../bundle/templates/wayfinder/ticket.md), [route](../../bundle/templates/wayfinder/route.md) |
-| Critique settlement | [Critique](../../skills/kepler-critique/SKILL.md#handoff) | [Critique template](../../bundle/templates/critique.md), [artifact body](../../packages/cli/src/workbench/artifact-body.ts) |
-| Artifact schemas | Applicable step skill | [Artifact types](../../packages/cli/src/workbench/artifact-types.ts), [schemas](../../packages/cli/src/workbench/artifact-schemas.ts) |
+| Project readiness | [Init](../../../skills/kepler-init/SKILL.md) | [Glossary template](../../../bundle/templates/glossary.md), [project path migration](../../../packages/cli/src/workbench/project-data-path.ts) |
+| Formal intent | [Propose](../../../skills/kepler-propose/SKILL.md) | [Proposal](../../../bundle/templates/proposal.md), [requirements](../../../bundle/templates/requirements-change.md), [design](../../../bundle/templates/design.md), [input checks](../../../packages/cli/src/workbench/precondition-artifacts.ts) |
+| Planning and amendments | [Plan](../../../skills/kepler-plan/SKILL.md) | [Plan template](../../../bundle/templates/plan.md), [plan history](../../../packages/cli/src/workbench/plan-history.ts) |
+| Task implementation | [Code](../../../skills/kepler-code/SKILL.md) | [Task progress](../../../bundle/templates/task-progress.md), [task state](../../../packages/cli/src/workbench/task-state.ts), [admission](../../../packages/cli/src/workbench/task-admission.ts) |
+| Dependency clearance | [Orchestrate](../../../skills/kepler-orchestrate/SKILL.md) | [Readiness](../../../packages/cli/src/workbench/task-readiness.ts), [context](../../../packages/cli/src/workbench/context.ts) |
+| Publication coverage | [Task feedback](../../../skills/kepler-code-feedback/SKILL.md) | [Publication history](../../../packages/cli/src/workbench/task-publication-history.ts), [coverage](../../../packages/cli/src/workbench/task-review-coverage.ts), [diff](../../../packages/cli/src/workbench/diff.ts) |
+| Review durability and scope | [Branch review](../../../skills/kepler-review/SKILL.md) | [Feedback template](../../../bundle/templates/feedback.md), [review template](../../../bundle/templates/review.md), [review passes](../../../packages/cli/src/workbench/review-passes.ts) |
+| Finish admission | [Finish-work preconditions](../../../skills/kepler-finish-work/SKILL.md#preconditions) | [Precondition operation](../../../packages/cli/src/workbench/precondition.ts), [review gates](../../../packages/cli/src/workbench/precondition-reviews.ts) |
+| Finish history and repair | [Finish-work recovery](../../../skills/kepler-finish-work/SKILL.md#resume-and-recovery) | [Finish template](../../../bundle/templates/finish.md), [finish records](../../../packages/cli/src/workbench/finish-records.ts), [repair](../../../packages/cli/src/workbench/finish-repair.ts) |
+| Maps and routes | [Inception reference](../phase_inception/README.md) | [Map](../../../bundle/templates/wayfinder/map.md), [ticket](../../../bundle/templates/wayfinder/ticket.md), [route](../../../bundle/templates/wayfinder/route.md) |
+| Critique settlement | [Critique](../../../skills/kepler-critique/SKILL.md#handoff) | [Critique template](../../../bundle/templates/critique.md), [artifact body](../../../packages/cli/src/workbench/artifact-body.ts) |
+| Artifact schemas | Applicable step skill | [Artifact types](../../../packages/cli/src/workbench/artifact-types.ts), [schemas](../../../packages/cli/src/workbench/artifact-schemas.ts) |
 
 ## Compatibility
 
