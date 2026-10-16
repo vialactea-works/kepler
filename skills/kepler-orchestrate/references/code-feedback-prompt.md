@@ -26,11 +26,12 @@ Subagent:
 
     ## Stable task diff
 
-    - Base: [BASE_SHA]
-    - Head: [HEAD_SHA]
+    - Immutable Task Base: [BASE_SHA]
+    - Reviewed integrated HEAD: [HEAD_SHA]
+    - Exact Coverage publication commit: [COVERAGE_COMMIT]
     - Diff package: [DIFF_FILE]
 
-    Run `kepler workbench lint --change-dir <change-dir>` before interpreting existing artifacts; only lint determines whether their format is valid. Require the package Base to match Task [N]'s CLI-verified original admission checkpoint, not just the ignored `.base` cache. Follow kepler-code-feedback's evidence, review, append, and commit rules. Do not impose a second template or pass-shape validator on a lint-valid history. Treat the package as the bounded inspection boundary. Inspect one concrete, named outside risk only under kepler-code-feedback's rules.
+    Run `kepler workbench lint --change-dir <change-dir>` before interpreting existing artifacts; only lint determines whether their format is valid. Require the package Task Base to match Task [N]'s CLI-verified original admission checkpoint, not just the ignored `.base` cache. The package distinguishes Task Base, reviewed integrated HEAD, the exact Coverage publication commit, each attempt's admission/Start/terminal HEADs and original commits, and verified integration deltas from every publication, preserving earlier correction effects. For v2 feedback, append `Coverage: [COVERAGE_COMMIT]` after Verdict and preserve each earlier pass's Coverage unchanged. A verified v1 broad-review publication has no Coverage field and retains a broad Task Base-to-Head package, including full cumulative commit history for interrupted recovery. Follow kepler-code-feedback's evidence, review, append, and commit rules. Do not impose a second template or pass-shape validator on a lint-valid history. Treat the package as the bounded inspection boundary. Inspect one concrete, named outside risk only under kepler-code-feedback's rules.
 
     ## Peer-approved commit/path context
 
@@ -73,7 +74,8 @@ Subagent:
 
 - `[MODEL]` is required for every dispatch.
 - `[<change-dir>]`, `[N]`, and `[TASK_TITLE]` identify one exact active task.
-- `[BASE_SHA]` and `[HEAD_SHA]` are the full range printed by the task diff package.
+- `[BASE_SHA]` is the immutable Task Base; `[HEAD_SHA]` is the reviewed integrated HEAD printed by the package.
+- `[COVERAGE_COMMIT]` is the exact publication ledger commit printed by the package; it binds the new pass to one v2 publication epoch.
 - `[DIFF_FILE]` is the scratch package produced for Task `[N]`.
 - `[TASK_ACCEPTANCE_AND_CITED_CONSTRAINTS]` is copied verbatim from that task and its cited requirements or design sections.
 - `[PROJECT_STANDARDS]` supplies the applicable project standards for the task.

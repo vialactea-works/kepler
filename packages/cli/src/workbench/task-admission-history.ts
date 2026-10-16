@@ -5,17 +5,22 @@ import { validateArtifact } from "./artifact-contracts.js";
 import { validateTaskAdmission, validateTaskAdmissionHistory, type TaskAdmission } from "./task-admission.js";
 import type { TaskCheckpointGit } from "./task-checkpoint.js";
 
+export interface TaskAdmissionSnapshot {
+  readonly admission: TaskAdmission;
+  readonly commit: string;
+}
+
 export type TaskAdmissionHistory =
   | { readonly kind: "absent" }
   | { readonly kind: "unverified"; readonly reason: string }
-  | { readonly kind: "verified"; readonly admission: TaskAdmission; readonly original: TaskAdmission; readonly commit: string; readonly originalCommit: string };
+  | { readonly kind: "verified"; readonly admission: TaskAdmission; readonly original: TaskAdmission; readonly commit: string; readonly originalCommit: string; readonly snapshots: readonly TaskAdmissionSnapshot[] };
 
 const fullCommit = (value: string): boolean => /^[0-9a-f]{40}$/.test(value);
 
 export const inspectTaskAdmissionHistory = async (git: TaskCheckpointGit, root: string, path: string, task: number, change: string, head: string): Promise<TaskAdmissionHistory> => {
   const invalid = (reason: string): TaskAdmissionHistory => ({ kind: "unverified", reason });
   const collected = taskLedgerHistoryAt(git, root, path, head);
-  const history = collected?.history ?? await git.pathHistory(root, path);
+  const history = collected?.history ?? await (git.pathHistoryAt?.(root, head, path) ?? git.pathHistory(root, path));
   if (history.status !== 0) return invalid("admission history is unavailable");
   const revisions = history.stdout.trim().split(/\r?\n/).filter(Boolean).reverse();
   const snapshots: { admission: TaskAdmission; commit: string }[] = [];
@@ -84,5 +89,5 @@ export const inspectTaskAdmissionHistory = async (git: TaskCheckpointGit, root: 
       if (approval.status !== 0 || approval.stdout.trim() !== prerequisite.feedbackCommit || (await git.isAncestor(root, prerequisite.feedbackCommit, snapshot.commit)).status !== 0) return invalid("admission prerequisite approval is unreachable");
     }
   }
-  return { kind: "verified", admission: latest.admission, original: original.admission, commit: latest.commit, originalCommit: original.commit };
+  return { kind: "verified", admission: latest.admission, original: original.admission, commit: latest.commit, originalCommit: original.commit, snapshots };
 };

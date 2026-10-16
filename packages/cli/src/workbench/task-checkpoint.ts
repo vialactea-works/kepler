@@ -11,11 +11,13 @@ import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
 import { validateScopeExpansions } from "./scope-expansions.js";
 import { taskCheckpointHistoryAt, taskLedgerHistoryAt } from "./task-ledger-history.js";
 import { inspectTaskAdmissionHistory, type TaskAdmissionHistory } from "./task-admission-history.js";
-import { inspectTaskPublicationHistory } from "./task-publication-history.js";
+import { inspectTaskPublicationHistory, type TaskPublicationSnapshot } from "./task-publication-history.js";
+import type { TaskReviewCoverage } from "./artifact-types.js";
 
 export interface TaskFeedbackRange {
   readonly base: string;
   readonly head: string;
+  readonly coverage?: string;
 }
 
 export type TaskFeedbackRangesResult =
@@ -29,6 +31,9 @@ export type TaskCheckpointResult =
       readonly base: string;
       readonly attempt: string;
       readonly head?: string;
+      readonly publicationCommit?: string;
+      readonly reviewCoverage?: TaskReviewCoverage;
+      readonly publicationHistory?: readonly TaskPublicationSnapshot[];
     }
   | { readonly kind: "unverified"; readonly reason: string };
 
@@ -40,6 +45,7 @@ export interface TaskCheckpointGit {
     root: string,
     sourcePath: string,
   ) => ProcessResult | Promise<ProcessResult>;
+  readonly pathHistoryAt?: (root: string, head: string, sourcePath: string) => ProcessResult | Promise<ProcessResult>;
   readonly blobAt: (
     root: string,
     commit: string,
@@ -49,6 +55,7 @@ export interface TaskCheckpointGit {
     root: string,
     commit: string,
   ) => ProcessResult | Promise<ProcessResult>;
+  readonly parents?: (root: string, commit: string) => ProcessResult | Promise<ProcessResult>;
   readonly resolveCommit: (
     root: string,
     reference: string,
@@ -95,7 +102,7 @@ export const readTaskFeedbackRanges = async (
   const ranges = parsed.passes.flatMap((pass) =>
     pass.provenance === "structural"
       ? []
-      : [{ base: pass.base, head: pass.head }],
+      : [{ base: pass.base, head: pass.head, ...(pass.coverage === undefined ? {} : { coverage: pass.coverage }) }],
   );
   if (ranges.length === 0)
     return { kind: "unverified", reason: "feedback history has no valid ranges" };
@@ -542,12 +549,31 @@ export const resolveTaskCheckpoint = async (
       reason: "historical task Base is not an ancestor of current HEAD",
     };
   const publication = admission?.kind === "verified"
-    ? await inspectTaskPublicationHistory(git, root, planPath.replace(/plan\.md$/, "progress.md"), task, change, currentHead, admission.commit)
+    ? await inspectTaskPublicationHistory(git, root, planPath.replace(/plan\.md$/, "progress.md"), task, change, currentHead, admission.snapshots)
     : undefined;
   if (publication?.kind === "unverified") return publication;
   const integratedHead = publication?.kind === "verified" ? publication.publication.integratedHead : undefined;
   for (const range of feedbackRanges) {
-    if (integratedHead && (await git.isAncestor(root, integratedHead, range.head)).status !== 0) return { kind: "unverified", reason: "feedback Head omits the actual integrated task range" };
+    if (publication?.kind === "verified") {
+      const publications = publication.publications;
+      if (range.coverage !== undefined) {
+        const matches = publications.filter((candidate) => candidate.commit === range.coverage);
+        if (matches.length !== 1 || matches[0]?.publication.version !== 2 || matches[0].publication.integratedHead !== range.head) return { kind: "unverified", reason: "feedback Coverage does not identify its exact v2 publication boundary" };
+      } else {
+        const candidates: TaskPublicationSnapshot[] = [];
+        for (const candidate of publications) if ((await git.isAncestor(root, candidate.publication.integratedHead, range.head)).status === 0) candidates.push(candidate);
+        if (candidates.length === 0) return { kind: "unverified", reason: "feedback range does not contain a verified publication boundary" };
+        const latest: TaskPublicationSnapshot[] = [];
+        for (const candidate of candidates) {
+          let followsAll = true;
+          for (const other of candidates) if (candidate !== other && (await git.isAncestor(root, other.publication.integratedHead, candidate.publication.integratedHead)).status !== 0) followsAll = false;
+          if (followsAll) latest.push(candidate);
+        }
+        if (latest.length !== 1) return { kind: "unverified", reason: "legacy feedback range matches ambiguous publication boundaries" };
+        if (latest[0]?.publication.version === 2) return { kind: "unverified", reason: "v2 publication feedback is missing exact Coverage" };
+      }
+    }
+    if (range.coverage === undefined && integratedHead && publication?.kind !== "verified" && (await git.isAncestor(root, integratedHead, range.head)).status !== 0) return { kind: "unverified", reason: "feedback Head omits the actual integrated task range" };
     if (!fullCommit(range.base) || !fullCommit(range.head))
       return {
         kind: "unverified",
@@ -583,5 +609,13 @@ export const resolveTaskCheckpoint = async (
         reason: "feedback Head does not contain the historical task range",
       };
   }
-  return { kind: "verified", base, attempt, ...(integratedHead ? { head: integratedHead } : {}) };
+  const latestPublication = publication?.kind === "verified" ? publication.publications.at(-1) : undefined;
+  return {
+    kind: "verified",
+    base,
+    attempt,
+    ...(integratedHead ? { head: integratedHead } : {}),
+    ...(latestPublication?.publication.version === 2 ? { publicationCommit: latestPublication.commit, reviewCoverage: latestPublication.publication.reviewCoverage } : {}),
+    ...(publication?.kind === "verified" ? { publicationHistory: publication.publications } : {}),
+  };
 };

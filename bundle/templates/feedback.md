@@ -14,7 +14,7 @@ decision: accepted | rejected | skipped
   Whole-branch review belongs in review.md.
   Delete this instruction block and every inline hint before finalizing.
 
-  New files keep only identity and lifecycle metadata in frontmatter. Each pass records complete Base, Head and Verdict fields.
+  New files keep only identity and lifecycle metadata in frontmatter. Each pass records complete Base, Head and Verdict fields. A pass over a v2 publication also records Coverage as that exact publication commit; v1 broad-review passes omit Coverage.
 
   Before the first append to a legacy-global history, validate that history. In one atomic mutation, preserve every existing pass body byte-for-byte, remove exactly the global `base`, `head` and `verdict` fields, and append the next complete pass-local record at the file's end. Never copy global provenance into historical passes or retain it beside an explicit suffix.
 
@@ -25,9 +25,10 @@ decision: accepted | rejected | skipped
 
 ## Pass N — <YYYY-MM-DD> <!-- hint: replace with the next pass number and current date -->
 
-Base: <full commit identifier>
-Head: <full commit identifier>
+Base: <full immutable Task Base>
+Head: <full reviewed integrated HEAD>
 Verdict: approved | changes-requested | skipped
+Coverage: <exact v2 publication commit; omit only for a v1 broad-review publication>
 
 ### Blocking
 

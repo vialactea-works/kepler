@@ -19,6 +19,7 @@ import {
   type TaskCheckpointResult,
   type TaskFeedbackRange,
 } from "./task-checkpoint.js";
+import type { TaskPublication, TaskReviewCoverage } from "./artifact-types.js";
 
 export interface RecordDiffArguments {
   readonly mode: "record";
@@ -136,6 +137,7 @@ export interface DiffGitPort {
     cwd: string,
     sourcePath: string,
   ) => ProcessResult | Promise<ProcessResult>;
+  readonly pathHistoryAt?: (cwd: string, head: string, sourcePath: string) => ProcessResult | Promise<ProcessResult>;
   readonly blobAt?: (
     cwd: string,
     commit: string,
@@ -145,6 +147,7 @@ export interface DiffGitPort {
     cwd: string,
     commit: string,
   ) => ProcessResult | Promise<ProcessResult>;
+  readonly parents?: (cwd: string, commit: string) => ProcessResult | Promise<ProcessResult>;
 }
 
 export interface DiffRuntime {
@@ -247,6 +250,7 @@ const createGitPort = (processPort: ProcessPort): DiffGitPort => ({
     processPort.run("git", ["status", "--porcelain", "--untracked-files=all"], cwd),
   pathHistory: (cwd, sourcePath) =>
     processPort.run("git", ["log", "--format=%H", "--full-history", "HEAD", "--", sourcePath], cwd),
+  pathHistoryAt: (cwd, head, sourcePath) => processPort.run("git", ["log", "--format=%H", "--full-history", head, "--", sourcePath], cwd),
   changedPaths: (cwd, commit) =>
     processPort.run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", "-z", commit], cwd),
   pathChanges: (cwd, base, head, paths) =>
@@ -255,6 +259,7 @@ const createGitPort = (processPort: ProcessPort): DiffGitPort => ({
     processPort.run("git", ["show", `${commit}:${sourcePath}`], cwd),
   firstParent: (cwd, commit) =>
     processPort.run("git", ["rev-parse", "--verify", `${commit}^1`], cwd),
+  parents: (cwd, commit) => processPort.run("git", ["show", "-s", "--format=%P", commit], cwd),
 });
 
 export const createDiffRuntime = (
@@ -404,6 +409,7 @@ const checkpointGit = (runtime: DiffRuntime): TaskCheckpointGit => ({
       stdout: "",
       stderr: "task progress history is unavailable",
     },
+  pathHistoryAt: runtime.git.pathHistoryAt,
   blobAt: (root, commit, sourcePath) =>
     runtime.git.blobAt?.(root, commit, sourcePath) ?? {
       status: 2,
@@ -416,6 +422,7 @@ const checkpointGit = (runtime: DiffRuntime): TaskCheckpointGit => ({
       stdout: "",
       stderr: "task attempt parent is unavailable",
     },
+  parents: runtime.git.parents,
   resolveCommit: (root, reference) => runtime.git.resolveCommit(root, reference),
   isAncestor: (root, base, head) =>
     runtime.git.isAncestor(root, base, head),
@@ -819,6 +826,27 @@ const recordCheckpoint = async (
   return result(operation, "success", 0, `${outputs.join("\n")}\n`);
 };
 
+const cumulativeCommitHistory = async (runtime: DiffRuntime, operation: DiffOperation, root: string, base: string, head: string): Promise<string | DiffResult> => {
+  if (!runtime.git.pathChanges || !runtime.git.parents) return failure(operation, "Full cumulative history ports are unavailable");
+  const history = await runtime.git.pathChanges(root, base, head, []);
+  if (!successful(history)) return commandError(operation, "Cumulative commit history is unavailable", history);
+  const sections = ["## Full cumulative commit history", ""];
+  for (const commit of history.stdout.trim().split(/\r?\n/).filter(Boolean).reverse()) {
+    if (!/^[0-9a-f]{40}$/.test(commit)) return failure(operation, "Cumulative history contains an invalid commit");
+    const parents = await runtime.git.parents(root, commit);
+    if (!successful(parents)) return commandError(operation, "Cumulative commit parents are unavailable", parents);
+    const parentIds = parents.stdout.trim().split(/\s+/).filter(Boolean);
+    if (parentIds.length === 0) return failure(operation, "Cumulative commit has no reviewable parent");
+    sections.push(`### Commit ${commit}`, `Parents: ${parentIds.join(" ")}`, "");
+    for (const parent of parentIds) {
+      const patch = await runtime.git.diff(root, parent, commit);
+      if (!successful(patch)) return commandError(operation, "Cumulative commit diff is unavailable", patch);
+      sections.push(`#### Against parent ${parent}`, "", patch.stdout, "");
+    }
+  }
+  return sections.join("\n");
+};
+
 const packageRange = async (
   runtime: DiffRuntime,
   operation: DiffOperation,
@@ -827,6 +855,7 @@ const packageRange = async (
   head: string,
   label: string,
   out: string | undefined,
+  includeHistory = false,
 ): Promise<DiffResult> => {
   const stat = await runtime.git.diffStat(root, base, head);
   if (!successful(stat))
@@ -837,6 +866,8 @@ const packageRange = async (
   const files = await runtime.git.changedFiles(root, base, head);
   if (!successful(files))
     return commandError(operation, "git diff --name-only failed", files);
+  const history = includeHistory ? await cumulativeCommitHistory(runtime, operation, root, base, head) : "";
+  if (typeof history !== "string") return history;
   let output: string;
   try {
     output =
@@ -845,7 +876,7 @@ const packageRange = async (
         : Path.isAbsolute(out)
           ? out
           : Path.join(root, out);
-    const content = `# Kepler diff package\n# range: ${base}..${head}\n\n## git diff --stat ${base}..${head}\n\n${stat.stdout}\n## git diff -U10 ${base}..${head}\n\n${patch.stdout}`;
+    const content = `# Kepler diff package\n# range: ${base}..${head}\n\n## git diff --stat ${base}..${head}\n\n${stat.stdout}\n## git diff -U10 ${base}..${head}\n\n${patch.stdout}${history ? `\n${history}` : ""}`;
     await runtime.fileSystem.writeFile(output, content);
   } catch (error) {
     return failure(
@@ -857,6 +888,85 @@ const packageRange = async (
     files.stdout === "" ? 0 : files.stdout.trimEnd().split("\n").length;
   const stdout = `Base: ${base}\nHead: ${head}\nrange: ${base}..${head}\nfiles-changed: ${fileCount}\nPackage: ${output}\n${output}\n`;
   return result(operation, "success", 0, stdout);
+};
+
+const packageCoveredTask = async (
+  runtime: DiffRuntime,
+  root: string,
+  task: string,
+  base: string,
+  head: string,
+  publicationCommit: string,
+  coverage: TaskReviewCoverage,
+  publicationHistory: readonly { readonly publication: TaskPublication; readonly commit: string }[],
+  out: string | undefined,
+): Promise<DiffResult> => {
+  const operation: DiffOperation = "task";
+  if (coverage.integratedHead !== head || coverage.attempts.length === 0) return failure(operation, "verified task review coverage is malformed");
+  const sections = [
+    "# Kepler task review package",
+    `Task: ${task}`,
+    `Task Base: ${base}`,
+    `Reviewed integrated HEAD: ${head}`,
+    `Coverage publication: ${publicationCommit}`,
+    "",
+    "## Attempt and commit manifest",
+  ];
+  const files = new Set<string>();
+  for (const attempt of coverage.attempts) {
+    sections.push(`### Attempt ${attempt.number}`, `Start HEAD: ${attempt.startHead}`, `Admission commit: ${attempt.admissionCommit}`, `Terminal HEAD: ${attempt.terminalHead}`, "");
+    for (const commit of attempt.commits) {
+      const parent = commit.parents[0];
+      if (!parent || commit.parents.length !== 1 || commit.paths.length === 0) return failure(operation, `invalid verified commit coverage for ${commit.commit}`);
+      const [stat, patch] = await Promise.all([
+        runtime.git.diffStat(root, parent, commit.commit),
+        runtime.git.diff(root, parent, commit.commit),
+      ]);
+      if (!successful(stat)) return commandError(operation, `git diff --stat failed for ${commit.commit}`, stat);
+      if (!successful(patch)) return commandError(operation, `git diff failed for ${commit.commit}`, patch);
+      for (const path of commit.paths) files.add(path);
+      sections.push(`#### Original task commit ${commit.commit}`, `Parents: ${commit.parents.join(" ")}`, `Changed paths: ${commit.paths.join(", ")}`, "", stat.stdout, patch.stdout, "");
+    }
+  }
+  sections.push("## Integration history", "");
+  const legacyPublication = publicationHistory.filter((entry) => entry.publication.version === 1).at(-1);
+  const ranges: { readonly label: string; readonly base: string; readonly head: string }[] = [];
+  if (legacyPublication?.publication.version === 1) {
+    ranges.push({ label: `Legacy v1 broad context through ${legacyPublication.commit}`, base, head: legacyPublication.publication.integratedHead });
+    const history = await cumulativeCommitHistory(runtime, operation, root, base, legacyPublication.publication.integratedHead);
+    if (typeof history !== "string") return history;
+    sections.push(history, "");
+  }
+  for (const entry of publicationHistory) {
+    if (entry.publication.version === 2) ranges.push({ label: `V2 publication integration delta ${entry.commit}`, base: entry.publication.reviewCoverage.integrationBase, head: entry.publication.reviewCoverage.integratedHead });
+  }
+  for (const range of ranges) {
+    sections.push(`### ${range.label}`, `Integration base: ${range.base}`, `Integrated HEAD: ${range.head}`, "");
+    if (range.base === range.head) {
+      sections.push("No new integration commit; the delta is empty.", "");
+      continue;
+    }
+    const [stat, patch, changed] = await Promise.all([
+      runtime.git.diffStat(root, range.base, range.head),
+      runtime.git.diff(root, range.base, range.head),
+      runtime.git.changedFiles(root, range.base, range.head),
+    ]);
+    if (!successful(stat)) return commandError(operation, `git diff --stat failed for ${range.label}`, stat);
+    if (!successful(patch)) return commandError(operation, `git diff failed for ${range.label}`, patch);
+    if (!successful(changed)) return commandError(operation, `git diff --name-only failed for ${range.label}`, changed);
+    for (const path of changed.stdout.trim().split(/\r?\n/).filter(Boolean)) files.add(path);
+    sections.push(stat.stdout, patch.stdout, "");
+  }
+  let output: string;
+  try {
+    output = out === undefined
+      ? await runtime.fileSystem.makeTempFile(`task-${task}-review`)
+      : Path.isAbsolute(out) ? out : Path.join(root, out);
+    await runtime.fileSystem.writeFile(output, `${sections.join("\n")}\n`);
+  } catch (error) {
+    return failure(operation, `cannot write ${out ?? "scratch package"}: ${String(error)}`);
+  }
+  return result(operation, "success", 0, `Base: ${base}\nHead: ${head}\nReviewed integrated HEAD: ${head}\nCoverage publication: ${publicationCommit}\nfiles-changed: ${files.size}\nPackage: ${output}\n${output}\n`);
 };
 
 const packageTask = async (
@@ -929,6 +1039,7 @@ const packageTask = async (
       operation,
       `BASE equals HEAD (${base}) — nothing has been committed since --record`,
     );
+  if (historical.kind === "verified" && historical.reviewCoverage && historical.publicationCommit && historical.publicationHistory) return packageCoveredTask(runtime, root, task, base, head, historical.publicationCommit, historical.reviewCoverage, historical.publicationHistory, args.out);
   return packageRange(
     runtime,
     operation,
@@ -937,6 +1048,7 @@ const packageTask = async (
     head,
     `task-${task}`,
     args.out,
+    historical.kind === "verified" && historical.publicationHistory !== undefined,
   );
 };
 

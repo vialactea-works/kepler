@@ -85,6 +85,7 @@ export interface ContextGitPort {
     cwd: string,
     commit: string,
   ) => ProcessResult | Promise<ProcessResult>;
+  readonly parents?: (cwd: string, commit: string) => ProcessResult | Promise<ProcessResult>;
   readonly resolveCommit: (
     cwd: string,
     reference: string,
@@ -326,7 +327,8 @@ const createGitPort = (processPort: ProcessPort): ContextGitPort => ({
     processPort.run("git", ["rev-parse", "--show-toplevel"], cwd),
   currentHead: (cwd) => processPort.run("git", ["rev-parse", "HEAD"], cwd),
   firstParent: (cwd, commit) =>
-    processPort.run("git", ["rev-parse", `${commit}^`], cwd),
+    processPort.run("git", ["rev-parse", `${commit}^1`], cwd),
+  parents: (cwd, commit) => processPort.run("git", ["show", "-s", "--format=%P", commit], cwd),
   resolveCommit: (cwd, reference) =>
     processPort.run(
       "git",
@@ -514,6 +516,7 @@ const contextTaskCheckpointGit = (runtime: ContextRuntime): TaskCheckpointGit =>
   pathHistory: (root, path) => runtime.git.pathHistory(root, path),
   blobAt: (root, commit, path) => runtime.git.fileAt(root, commit, path),
   firstParent: (root, commit) => runtime.git.firstParent(root, commit),
+  parents: runtime.git.parents,
   resolveCommit: (root, reference) => runtime.git.resolveCommit(root, reference),
   isAncestor: (root, base, head) => runtime.git.isAncestor(root, base, head),
 });

@@ -4,7 +4,7 @@ import * as Path from "node:path";
 import { parseDocument } from "yaml";
 import { ContextService, contextEvidenceRuntime } from "./context.js";
 import { inspectInitialScaffold, inspectIntentApprovals } from "./precondition-artifacts.js";
-import { createArtifactReader } from "./artifact-reader.js";
+import { createArtifactReader, type ArtifactReadResult } from "./artifact-reader.js";
 import { validateArtifact } from "./artifact-contracts.js";
 import { validateTaskAdmission, validateTaskAdmissionHistory, type TaskAdmission } from "./task-admission.js";
 import { inspectTaskAdmissionHistory } from "./task-admission-history.js";
@@ -13,7 +13,8 @@ import { resolveTaskCheckpoint } from "./task-checkpoint.js";
 import { TASK_STATE_RUNTIME, type TaskStateRuntime, type TaskWorkspace } from "./task-state-runtime.js";
 import { validateScopeExpansions, type ScopeExpansionHistoryGit } from "./scope-expansions.js";
 import { inspectScopeExpansionHistory } from "./scope-expansion-history.js";
-import type { TaskPublication } from "./artifact-types.js";
+import { attemptStartHasKnownParentage } from "./task-review-coverage.js";
+import type { TaskAttemptReviewCoverage, TaskPublication, TaskReviewCoverage } from "./artifact-types.js";
 import type { CliResult } from "../cli/nest/result-reporter.js";
 
 export interface TaskStateArguments {
@@ -43,10 +44,18 @@ const fullCommit = (value: unknown): value is string => typeof value === "string
 const digest = (source: string): string => createHash("sha256").update(source).digest("hex");
 const within = (root: string, path: string): boolean => { const relative = Path.relative(root, path); return relative !== "" && !relative.startsWith("..") && !Path.isAbsolute(relative); };
 
+const attemptRecords = (terminal: ArtifactReadResult): readonly { readonly number: number; readonly fields: Readonly<Record<string, string>> }[] => {
+  if (terminal._tag !== "recognized") return [];
+  const contract = validateArtifact(terminal);
+  return contract._tag === "valid" && contract.artifact === "task-progress"
+    ? contract.body.workflow.records.filter((record) => record.kind === "attempt" && record.number !== undefined).map((record) => ({ number: record.number as number, fields: record.fields }))
+    : [];
+};
+
 export const taskStateCheckpointGit = (runtime: TaskStateRuntime): ScopeExpansionHistoryGit => {
   const port = runtime.context.git;
   if (!port.pathHistory || !port.fileAt || !port.firstParent || !port.resolveCommit || !port.isAncestor || !port.changedPaths || !port.pathChanges) throw new Error("Admission history ports are unavailable");
-  return { pathHistory: port.pathHistory, blobAt: port.fileAt, firstParent: port.firstParent, resolveCommit: port.resolveCommit, isAncestor: port.isAncestor, changedPaths: port.changedPaths, pathChanges: port.pathChanges };
+  return { pathHistory: port.pathHistory, pathHistoryAt: port.pathHistoryAt, blobAt: port.fileAt, firstParent: port.firstParent, parents: port.parents, resolveCommit: port.resolveCommit, isAncestor: port.isAncestor, changedPaths: port.changedPaths, pathChanges: port.pathChanges };
 };
 
 export const updateTaskLedger = (source: string, task: number, status: "in-progress" | "blocked" | "done", fields: Readonly<Record<string, unknown>>): string => {
@@ -84,7 +93,8 @@ export class TaskStateService {
       const progressRelative = Path.relative(root.root, Path.join(changeDir, "progress.md"));
       const recovery = args.retry ? await inspectTaskAdmissionHistory(taskStateCheckpointGit(this.runtime), root.root, progressRelative, args.task as number, Path.basename(changeDir), root.head) : undefined;
       const preserving = recovery?.kind === "verified" && recovery.admission.worktree === lane.root && recovery.admission.gitDirectory === lane.gitDirectory && recovery.admission.lane === lane.ref && recovery.admission.commonDirectory === lane.commonDirectory;
-      const invalid = await this.workspaceProblems(root, lane, args.expectedHead, args.targetBranch, preserving);
+      if (root.head !== args.expectedHead && !(await this.runtime.git.ancestor(root.root, args.expectedHead, root.head))) return failure("Expected HEAD is stale");
+      const invalid = await this.workspaceProblems(root, lane, root.head, args.targetBranch, preserving);
       if (invalid) return failure(invalid);
       const coordinator = this.runtime.worker();
       if (!coordinator?.trim() || coordinator !== coordinator.trim()) return failure("An independently observed coordinator session identity is required");
@@ -94,8 +104,11 @@ export class TaskStateService {
       try {
         const current = await this.runtime.git.workspace(root.root);
         const currentLane = await this.runtime.git.workspace(lane.root);
-        const currentProblem = await this.workspaceProblems(current, currentLane, args.expectedHead, args.targetBranch, preserving);
-        if (currentProblem || current.ref !== root.ref || currentLane.ref !== lane.ref) return failure(currentProblem ?? "Workspace identity changed after coordinator lock");
+        const ledgerPath = Path.relative(current.root, Path.join(changeDir, "progress.md"));
+        const refreshed = await this.verifyAdmissionRefresh(current.root, ledgerPath, args.expectedHead, current.head, coordinator, root.ref, args.targetBranch);
+        if (refreshed || current.ref !== root.ref || currentLane.ref !== lane.ref) return failure(refreshed ?? "Workspace identity changed after coordinator lock");
+        const currentProblem = await this.workspaceProblems(current, currentLane, current.head, args.targetBranch, preserving);
+        if (currentProblem) return failure(currentProblem);
         const result = await new ContextService(this.runtime.context).execute({ changeDir });
         const change = result.changes.find((entry) => entry.path === changeDir);
         const task = change?.planContractData?.tasks.find((entry) => entry.id === args.task);
@@ -158,9 +171,61 @@ export class TaskStateService {
           ? await this.runtime.git.fastForward(lane.root, commit)
           : await this.runtime.git.merge(lane.root, commit);
         if (advanced.status !== 0) return failure(`Admission ${commit} is durable but lane synchronization failed: ${advanced.stderr.trim()}`);
-        return { operation: "admit", status: "admitted", stdout: `Task ${task.id} admitted\nBase: ${admission.base}\nAdmission: ${commit}\n`, stderr: "", exitCode: 0 };
+        const attemptStart = await this.runtime.git.workspace(lane.root);
+        const nextCoordinator = await this.runtime.git.workspace(root.root);
+        if (attemptStart.ref !== admission.lane || attemptStart.gitDirectory !== admission.gitDirectory || nextCoordinator.head !== commit) return failure(`Admission ${commit} is durable but its resulting HEAD binding changed`);
+        return { operation: "admit", status: "admitted", stdout: `Task ${task.id} admitted\nTask Base: ${admission.base}\nCoordinator source HEAD: ${admission.sourceHead}\nAdmission commit: ${commit}\nAttempt start HEAD: ${attemptStart.head}\nNext coordinator HEAD: ${nextCoordinator.head}\n`, stderr: "", exitCode: 0 };
       } finally { await release(); }
     } catch (error) { return failure(error instanceof Error ? error.message : String(error)); }
+  }
+
+  private async verifyAdmissionRefresh(root: string, ledgerPath: string, expectedHead: string, currentHead: string, coordinator: string, source: string, target: string): Promise<string | undefined> {
+    if (expectedHead === currentHead) return undefined;
+    const observedCoordinator = this.runtime.worker();
+    if (observedCoordinator !== coordinator) return "Coordinator session identity changed during admission";
+    const [resolved, ancestor] = await Promise.all([
+      this.runtime.git.resolve(root, expectedHead),
+      this.runtime.git.ancestor(root, expectedHead, currentHead),
+    ]);
+    if (resolved !== expectedHead || !ancestor) return "Expected HEAD is stale";
+    const chain: { readonly parent: string; readonly commit: string }[] = [];
+    let cursor = currentHead;
+    while (cursor !== expectedHead) {
+      let parent: string;
+      try { parent = await this.runtime.git.firstParent(root, cursor); } catch { return "Expected HEAD refresh crosses an unrecognized coordinator event"; }
+      if (!fullCommit(parent) || parent === cursor) return "Expected HEAD refresh crosses an unrecognized coordinator event";
+      chain.push({ parent, commit: cursor });
+      cursor = parent;
+    }
+    for (const event of chain.reverse()) {
+      const paths = await this.runtime.git.changedPaths(root, event.commit);
+      if (paths.length !== 1 || paths[0] !== ledgerPath) return "Expected HEAD refresh crosses a non-admission change";
+      const [before, after] = await Promise.all([
+        this.runtime.git.blob(root, event.parent, ledgerPath),
+        this.runtime.git.blob(root, event.commit, ledgerPath),
+      ]);
+      if (before.status !== 0 || after.status !== 0) return "Admission refresh ledger event is unavailable";
+      const beforeRead = await createArtifactReader({ readFile: () => before.stdout })(ledgerPath);
+      const afterRead = await createArtifactReader({ readFile: () => after.stdout })(ledgerPath);
+      const beforeContract = validateArtifact(beforeRead);
+      const afterContract = validateArtifact(afterRead);
+      if (beforeContract._tag !== "valid" || beforeContract.artifact !== "progress" || afterContract._tag !== "valid" || afterContract.artifact !== "progress" || beforeContract.metadata.change !== afterContract.metadata.change) return "Admission refresh ledger event is malformed";
+      const beforeTasks = beforeContract.metadata.tasks;
+      const afterTasks = afterContract.metadata.tasks;
+      if (!Array.isArray(beforeTasks) || !Array.isArray(afterTasks) || beforeTasks.length !== afterTasks.length) return "Admission refresh ledger event is malformed";
+      const changed = afterTasks.filter((entry: unknown, index: number) => JSON.stringify(entry) !== JSON.stringify(beforeTasks[index]));
+      if (changed.length !== 1 || typeof changed[0] !== "object" || changed[0] === null) return "Admission refresh must contain exactly one task admission";
+      const nextEntry = changed[0] as Record<string, unknown>;
+      const task = nextEntry.id;
+      const parsed = validateTaskAdmission(nextEntry.admission);
+      if (!Number.isSafeInteger(task) || typeof task !== "number" || parsed.kind !== "valid" || parsed.admission.sourceHead !== event.parent || parsed.admission.coordinator !== observedCoordinator || parsed.admission.repository !== root || parsed.admission.source !== source || parsed.admission.target !== target || nextEntry.status !== "in-progress") return "Admission refresh event is not bound to the current coordinator/workspace";
+      let expected: string;
+      try { expected = updateTaskLedger(before.stdout, task, "in-progress", { admission: parsed.admission }); } catch { return "Admission refresh ledger transition is malformed"; }
+      if (expected !== after.stdout) return "Admission refresh event changed unrelated ledger evidence";
+      const history = await inspectTaskAdmissionHistory(taskStateCheckpointGit(this.runtime), root, ledgerPath, task, String(afterContract.metadata.change), event.commit);
+      if (history.kind !== "verified" || history.commit !== event.commit || JSON.stringify(history.admission) !== JSON.stringify(parsed.admission)) return history.kind === "unverified" ? history.reason : "Admission refresh event lacks verified admission history";
+    }
+    return undefined;
   }
 
   private async reserve(args: TaskStateArguments): Promise<TaskStateResult> {
@@ -293,6 +358,20 @@ export class TaskStateService {
         const last = terminal._tag === "valid" ? terminal.body.workflow.records.filter((record) => record.kind === "attempt").at(-1) : undefined;
         const outcome = last?.fields.Outcome;
         if (terminal._tag !== "valid" || terminal.artifact !== "task-progress" || terminal.metadata.task !== args.task || terminal.metadata.change !== progress.contract.metadata.change || (outcome !== "done" && outcome !== "blocked") || terminal.metadata.status !== outcome) return reject("Worker terminal outcome is incomplete or contradictory");
+        const taskAttempts = terminal.body.workflow.records.filter((record) => record.kind === "attempt" && record.number !== undefined).map((record) => ({ number: record.number as number, fields: record.fields }));
+        const latestAttempt = taskAttempts.at(-1);
+        if (!latestAttempt || !fullCommit(latestAttempt.fields["Start HEAD"])) return reject("The current task attempt must record its full Start HEAD");
+        const legacyAttemptHistory = taskAttempts.some((record) => !fullCommit(record.fields["Start HEAD"]));
+        if (legacyAttemptHistory) {
+          const startHead = latestAttempt.fields["Start HEAD"];
+          if (await this.runtime.git.resolve(lane.root, startHead) !== startHead) return reject("Current attempt Start HEAD is unresolved");
+          if (startHead !== history.commit) {
+            const parents = await this.runtime.git.parents(lane.root, startHead);
+            if (parents.length !== 2 || !parents.includes(history.commit)) return reject("Current attempt Start HEAD is not a direct admission synchronization");
+            const laneParent = parents[0] === history.commit ? parents[1] : parents[0];
+            if (!laneParent || !(await this.runtime.git.ancestor(lane.root, laneParent, history.admission.sourceHead))) return reject("Current attempt Start HEAD contains unaccounted pre-attempt work");
+          }
+        }
         const admittedProgress = await this.runtime.git.blob(root.root, admission.sourceHead, repoTask);
         const oldBody = admittedProgress.status === 0 ? admittedProgress.stdout.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "").trimEnd() : undefined;
         const newBody = taskSource.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
@@ -300,10 +379,18 @@ export class TaskStateService {
         if ((args.response === "done" || args.response === "blocked") && args.response !== outcome) return reject("Worker response contradicts committed outcome");
         const terminalCommit = await this.runtime.git.latest(lane.root, repoTask);
         if (!fullCommit(terminalCommit) || terminalCommit === history.commit || !(await this.runtime.git.ancestor(root.root, history.commit, terminalCommit))) return reject("Terminal outcome predates current admission");
+        let attemptCoverage: TaskReviewCoverage | undefined;
+        if (!legacyAttemptHistory) {
+          const preflightCoverage = await this.buildReviewCoverage(root.root, lane.root, repoTask, task.id, progress.contract.metadata.change as string, lane.head, taskAttempts, history.snapshots, current.head, lane.head);
+          if (typeof preflightCoverage === "string") return reject(preflightCoverage);
+          attemptCoverage = preflightCoverage;
+        }
         const checkpointGit = taskStateCheckpointGit(this.runtime);
         const scopeHistory = await inspectScopeExpansionHistory(checkpointGit, lane.root, repoTask, task.id, progress.contract.metadata.change as string, lane.head, terminal.body.workflow.scopeExpansions, history.original.base);
         if (scopeHistory.kind === "unverified") return reject(scopeHistory.reason);
+        const attemptStartHeads = new Set(taskAttempts.map((record) => record.fields["Start HEAD"]).filter(fullCommit));
         for (const commit of await this.runtime.git.uniqueCommits(root.root, lane.head, current.head)) {
+          if (attemptStartHeads.has(commit)) continue;
           const paths = await this.runtime.git.changedPaths(root.root, commit);
           if (paths.some((path) => path.startsWith(`${relativeChange}/`) && path !== repoTask)) return reject("Worker edited coordinator, reviewer, plan, or sibling artifacts");
           if (outcome === "blocked" && paths.some((path) => path !== repoTask)) return reject("Blocked work committed partial production; state preserved");
@@ -311,7 +398,20 @@ export class TaskStateService {
         if (outcome === "done" && !(await this.runtime.git.clean(lane.root))) return reject("Completed worker has uncommitted material work");
         const verify = task.verify.replace(/^`([\s\S]+)`$/, "$1");
         if (outcome === "done" && args.verify !== verify) return reject("Publication must execute the exact task Verify command", 2);
-        if (!(await this.runtime.git.ancestor(root.root, lane.head, current.head))) {
+        let integrationBase = current.head;
+        let broadRecovery = false;
+        const alreadyIntegrated = await this.runtime.git.ancestor(root.root, lane.head, current.head);
+        if (alreadyIntegrated && current.head !== lane.head) {
+          const parents = await this.runtime.git.parents(root.root, current.head);
+          if (parents.length === 2 && parents[1] === lane.head && parents[0] && !(await this.runtime.git.ancestor(root.root, lane.head, parents[0]))) integrationBase = parents[0];
+          else broadRecovery = true;
+        }
+        const previousPublication = progress.entry.publication as TaskPublication | undefined;
+        for (const attempt of attemptCoverage?.attempts ?? []) {
+          if (attempt.terminalHead === lane.head) continue;
+          if (await this.runtime.git.ancestor(root.root, attempt.terminalHead, current.head) && (!previousPublication || !(await this.runtime.git.ancestor(root.root, attempt.terminalHead, previousPublication.taskHead)))) broadRecovery = true;
+        }
+        if (!alreadyIntegrated) {
           const integrated = await this.runtime.git.merge(root.root, lane.head);
           if (integrated.status !== 0) return reject(`Integration failed; conflict and original work preserved: ${integrated.stderr.trim()}`);
         }
@@ -326,7 +426,14 @@ export class TaskStateService {
         if ((await this.runtime.git.workspace(root.root)).head !== integrated.head || !(await this.runtime.git.clean(root.root))) return reject("Verification changed integrated source; root implementation remains in-progress");
         const finalLane = await this.runtime.git.workspace(lane.root);
         if (finalLane.head !== lane.head || finalLane.ref !== lane.ref || finalLane.gitDirectory !== lane.gitDirectory || finalLane.commonDirectory !== lane.commonDirectory) return reject("Worker identity or HEAD changed during integrated verification");
-        const publication: TaskPublication = { version: 1, taskHead: lane.head, integratedHead: integrated.head, outcome, verification };
+        let publication: TaskPublication;
+        if (legacyAttemptHistory || broadRecovery) {
+          publication = { version: 1, taskHead: lane.head, integratedHead: integrated.head, outcome, verification };
+        } else {
+          const reviewCoverage = await this.buildReviewCoverage(root.root, lane.root, repoTask, task.id, progress.contract.metadata.change as string, lane.head, taskAttempts, history.snapshots, integrationBase, integrated.head);
+          if (typeof reviewCoverage === "string") return reject(reviewCoverage);
+          publication = { version: 2, taskHead: lane.head, integratedHead: integrated.head, outcome, verification, reviewCoverage };
+        }
         const source = await this.runtime.files.readFile(Path.join(changeDir, "progress.md"));
         const next = updateTaskLedger(source, task.id, outcome, { publication });
         const nextRead = await createArtifactReader({ readFile: () => next })(Path.join(changeDir, "progress.md"));
@@ -336,6 +443,69 @@ export class TaskStateService {
         return { operation: "publish", status: "published", stdout: `Task ${task.id} implementation ${outcome}\nIntegration: ${integrated.head}\nPublication: ${commit}\nFeedback clearance is separate.\n`, stderr: "", exitCode: 0 };
       } finally { await release(); }
     } catch (error) { return reject(error instanceof Error ? error.message : String(error)); }
+  }
+
+  private async buildReviewCoverage(root: string, lane: string, taskPath: string, task: number, change: string, taskHead: string, records: readonly { readonly number: number; readonly fields: Readonly<Record<string, string>> }[], admissions: readonly { readonly admission: TaskAdmission; readonly commit: string }[], integrationBase: string, integratedHead: string): Promise<TaskReviewCoverage | string> {
+    if (!this.runtime.context.git.pathHistoryAt || !this.runtime.context.git.fileAt) return "Attempt history ports are unavailable";
+    if (records.length === 0) return "Task attempt history is empty";
+    const history = await this.runtime.context.git.pathHistoryAt(lane, taskHead, taskPath);
+    if (history.status !== 0) return "Task attempt ancestry is unavailable";
+    const revisions = history.stdout.trim().split(/\r?\n/).filter(Boolean).reverse();
+    const attempts: TaskAttemptReviewCoverage[] = [];
+    let previousTerminal: string | undefined;
+    let admissionIndex = -1;
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index];
+      if (!record || record.number !== index + 1 || !fullCommit(record.fields["Start HEAD"])) return "Each task attempt must record its full Start HEAD";
+      const startHead = record.fields["Start HEAD"];
+      const startResolved = await this.runtime.git.resolve(root, startHead);
+      if (startResolved !== startHead) return "Attempt start HEAD is unresolved";
+      const parentsForStart = await this.runtime.git.parents(lane, startHead);
+      const candidates: { readonly admission: TaskAdmission; readonly commit: string; readonly index: number }[] = [];
+      for (let admissionPosition = admissionIndex + 1; admissionPosition < admissions.length; admissionPosition += 1) {
+        const candidate = admissions[admissionPosition];
+        if (!candidate) continue;
+        if (startHead === candidate.commit || parentsForStart.includes(candidate.commit)) candidates.push({ ...candidate, index: admissionPosition });
+      }
+      if (candidates.length !== 1) return "Attempt start HEAD does not identify exactly one admitted lane synchronization";
+      const admission = candidates[0];
+      if (!admission) return "Attempt admission is unavailable";
+      const admissionAncestor = await this.runtime.git.ancestor(lane, admission.commit, startHead);
+      if (!admissionAncestor) return "Attempt start HEAD omits its admission commit";
+      if (!attemptStartHasKnownParentage(startHead, admission.commit, parentsForStart, previousTerminal)) return "Attempt start HEAD contains unaccounted pre-attempt work";
+      if (previousTerminal && !(await this.runtime.git.ancestor(lane, previousTerminal, startHead))) return "Task attempts do not preserve cumulative provenance";
+      let terminalHead: string | undefined;
+      for (const revision of revisions) {
+        if (!(await this.runtime.git.ancestor(lane, startHead, revision))) continue;
+        const blob = await this.runtime.context.git.fileAt(lane, revision, taskPath);
+        if (blob.status !== 0) return "Task attempt record is unavailable";
+        const read = await createArtifactReader({ readFile: () => blob.stdout })(taskPath);
+        const terminal = validateArtifact(read);
+        if (terminal._tag !== "valid" || terminal.artifact !== "task-progress" || terminal.metadata.task !== task || terminal.metadata.change !== change) return "Task attempt identity is malformed";
+        const attempt = attemptRecords(read).find((entry) => entry.number === record.number);
+        if (attempt?.fields["Start HEAD"] === startHead && attempt.fields.Outcome === record.fields.Outcome && ["done", "blocked"].includes(attempt.fields.Outcome ?? "")) {
+          terminalHead = revision;
+          break;
+        }
+      }
+      if (!terminalHead) return `Task attempt ${record.number} has no committed terminal boundary`;
+      const commitIds = await this.runtime.git.uniqueCommits(lane, terminalHead, startHead);
+      if (commitIds.length === 0) return `Task attempt ${record.number} has no original worker commits`;
+      const commits: TaskAttemptReviewCoverage["commits"][number][] = [];
+      let parent = startHead;
+      for (const commit of commitIds) {
+        const [parents, paths] = await Promise.all([this.runtime.git.parents(lane, commit), this.runtime.git.changedPaths(lane, commit)]);
+        if (parents.length !== 1 || parents[0] !== parent) return `Task attempt ${record.number} commit ancestry is ambiguous`;
+        commits.push({ commit, parents, paths: [...paths].sort() });
+        parent = commit;
+      }
+      if (parent !== terminalHead) return `Task attempt ${record.number} terminal HEAD does not match its original commits`;
+      attempts.push({ number: record.number, admissionCommit: admission.commit, startHead, terminalHead, commits });
+      previousTerminal = terminalHead;
+      admissionIndex = admission.index;
+    }
+    if (attempts.at(-1)?.terminalHead !== taskHead) return "Latest attempt does not terminate at the admitted worker HEAD";
+    return { version: 1, attempts, integrationBase, integratedHead };
   }
 
   private async correctionEligible(root: TaskWorkspace, changeDir: string, task: number, change: string): Promise<boolean> {
@@ -353,8 +523,12 @@ export class TaskStateService {
     const blob = await this.runtime.git.blob(root.root, commit, Path.relative(root.root, path));
     const files = await this.runtime.git.changedPaths(root.root, commit);
     if (blob.status !== 0 || blob.stdout !== source || files.length !== 1 || files[0] !== Path.relative(root.root, path)) return false;
-    const checkpoint = await resolveTaskCheckpoint(taskStateCheckpointGit(this.runtime), root.root, Path.relative(root.root, Path.join(changeDir, "tasks", `task-${task}`, "progress.md")), task, change, root.head, parsed.passes.flatMap((entry) => entry.provenance === "structural" ? [] : [{ base: entry.base, head: entry.head }]));
-    return checkpoint.kind === "verified" && checkpoint.base === pass.base;
+    const checkpoint = await resolveTaskCheckpoint(taskStateCheckpointGit(this.runtime), root.root, Path.relative(root.root, Path.join(changeDir, "tasks", `task-${task}`, "progress.md")), task, change, root.head, parsed.passes.flatMap((entry) => entry.provenance === "structural" ? [] : [{ base: entry.base, head: entry.head, ...(entry.coverage === undefined ? {} : { coverage: entry.coverage }) }]));
+    if (checkpoint.kind !== "verified" || checkpoint.base !== pass.base) return false;
+    if (checkpoint.publicationCommit && pass.coverage !== checkpoint.publicationCommit) return false;
+    if (checkpoint.head && !(await this.runtime.git.ancestor(root.root, checkpoint.head, pass.head))) return false;
+    const implementation = await this.runtime.git.latest(root.root, Path.relative(root.root, Path.join(changeDir, "tasks", `task-${task}`, "progress.md")));
+    return fullCommit(implementation) && await this.runtime.git.ancestor(root.root, implementation, pass.head);
   }
 
   private async readRoot(changeDir: string, task: number) {

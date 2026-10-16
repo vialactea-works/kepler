@@ -28,6 +28,55 @@ describe("artifact metadata schemas", () => {
     expect(schema.required).toEqual(expect.arrayContaining(requiredFields[artifact]));
   });
 
+  it("accepts exact v2 review coverage and preserves v1 task publications", () => {
+    const commit = "0123456789abcdef0123456789abcdef01234567";
+    const publication = {
+      version: 2,
+      taskHead: commit,
+      integratedHead: commit,
+      outcome: "done",
+      verification: { command: "bun run verify", exitCode: 0 },
+      reviewCoverage: {
+        version: 1,
+        attempts: [{
+          number: 1,
+          admissionCommit: commit,
+          startHead: commit,
+          terminalHead: commit,
+          commits: [{ commit, parents: [commit], paths: ["src/example.ts"] }],
+        }],
+        integrationBase: commit,
+        integratedHead: commit,
+      },
+    };
+    const metadata = {
+      artifact: "progress",
+      change: "demo",
+      status: "in-progress",
+      updated: "2026-10-16",
+      decision: "accepted",
+      tasks: [{ id: 1, title: "Example", status: "done", progress: "tasks/task-1/progress.md", publication }],
+    };
+
+    expect(validateArtifactMetadataSchema(recognized(metadata), "progress")).toEqual([]);
+    const attempt = publication.reviewCoverage.attempts[0];
+    const commitRecord = attempt?.commits[0];
+    if (!attempt || !commitRecord) throw new Error("coverage fixture is incomplete");
+    const invalidCoverage = {
+      ...publication.reviewCoverage,
+      attempts: [{ ...attempt, commits: [{ ...commitRecord, paths: [] }] }],
+    };
+    const invalidMetadata = {
+      ...metadata,
+      tasks: [{ ...metadata.tasks[0], publication: { ...publication, reviewCoverage: invalidCoverage } }],
+    };
+    expect(validateArtifactMetadataSchema(recognized(invalidMetadata), "progress")).not.toEqual([]);
+    expect(validateArtifactMetadataSchema(recognized({
+      ...metadata,
+      tasks: [{ ...metadata.tasks[0], publication: { version: 1, taskHead: commit, integratedHead: commit, outcome: "blocked", verification: null } }],
+    }), "progress")).toEqual([]);
+  });
+
   it("validates dependency-mode execution and scheduling amendment metadata", () => {
     const base = {
       artifact: "plan",
