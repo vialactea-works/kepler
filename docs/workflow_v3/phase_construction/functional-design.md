@@ -224,7 +224,7 @@ A question blocks completion when different answers would change scope, required
 | What response-time target applies? | Pass to Non-functional Requirements. |
 | Which storage technology should we use? | Pass to Implementation Planning. |
 
-Later findings can still require a design revision. Rules for reopening the stage require a separate decision.
+Later findings can still require a design revision. Apply the shared [Revision rules](../revision.md) to identify the earliest affected stage and reopen every downstream stage.
 
 ## Handoff and correction
 
@@ -234,4 +234,6 @@ The handoff identifies the Unit of Work directory, `unit-of-work.md`, `design.md
 
 The next stage records quality targets and constraints in `quality.md` at the Unit of Work root. Include observability among the applicable concerns passed to that stage. Implementation Planning then selects the technical solution against the functional design and non-functional requirements.
 
-Later findings can return the Unit of Work to Functional Design. Revisions must identify affected requirements, models, contracts, and decisions. Reassess dependent work before it continues.
+A functional change reopens Functional Design and every subsequent stage. Each reopened stage must reconsider all its artifacts and satisfy its completion conditions again. Apply the shared [Revision procedure](../revision.md#revision-procedure).
+
+A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid. Remaining Functional Design revision and approval details require a separate decision.

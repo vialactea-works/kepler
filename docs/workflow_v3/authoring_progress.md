@@ -8,7 +8,7 @@ Track the next authoring decisions and the decisions deferred to later work. Thi
 
 The Functional Design contract remains a draft. A saved draft is not approval of all its contents.
 
-## Agreed document decisions
+## Agreed decisions
 
 - Functional Design requires `unit-of-work.md` and `design.md` at `.kepler/units-of-work/<unit-id>/`.
 - `unit-of-work.md` supplies the definition shared by all stages. Its required sections are Purpose, Scope, and Context. See the [section contract](phase_construction/functional-design.md#unit-of-work-definition).
@@ -22,10 +22,11 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - Functional Design supporting files live under `details/functional-design/`.
 - The shared [Depth definition](depth.md) uses Minimal, Standard, and Comprehensive levels.
 - Depth controls analysis and documentation detail. It does not remove required information, weaken verification, or prescribe file counts or page lengths.
+- The shared [Revision rules](revision.md) start at the earliest affected stage and reopen every downstream stage and its artifacts. Upstream stages remain complete while their contracts and outputs remain valid.
 
 ## Next Functional Design decisions
 
-Work through these decisions in order. Required Functional Design content, stage responsibilities, entry conditions, completion conditions, review, and approval are agreed and recorded. Next, define revision and recovery.
+Work through these decisions in order. Required Functional Design content, stage responsibilities, entry conditions, completion conditions, review, and approval are agreed and recorded. The revision cascade is now a shared concept. Next, resolve the remaining revision and recovery decisions.
 
 | ID | Decision | Questions to resolve | Status |
 | --- | --- | --- | --- |
@@ -33,7 +34,7 @@ Work through these decisions in order. Required Functional Design content, stage
 | FD02 | Stage responsibilities and documents | Agreed and recorded: Non-functional Requirements uses `quality.md`; Implementation Planning selects the technical solution. See the [stage boundaries](phase_construction/README.md#agreed-boundaries). | Complete. |
 | FD03 | Entry and completion conditions | Agreed and recorded: [entry conditions](phase_construction/functional-design.md#entry-conditions), [completion conditions](phase_construction/functional-design.md#completion-conditions), and [blocking questions](phase_construction/functional-design.md#blocking-questions). | Complete. |
 | FD04 | Review and approval | Agreed and recorded: required self-review, requester-triggered external review, and explicit requester approval in metadata. See [review and approval](phase_construction/functional-design.md#review-and-approval). | Complete. |
-| FD05 | Revision and recovery | Define how later findings reopen the stage and which changes require new review or approval. | Pending. |
+| FD05 | Revision and recovery | The shared [Revision rules](revision.md) apply. Define the remaining Functional Design revision and approval details. Shared editorial-correction and interrupted-work recovery rules belong to SH04. | In progress. |
 | FD06 | Agents and skills | Select agent profiles and supporting skills. Define their responsibilities and limits. | Pending. |
 
 ## Filename convention
@@ -49,6 +50,7 @@ These decisions affect several stages. Define them in shared contracts rather th
 | SH01 | Unit of Work identity | Identifier format and its relationship to the directory name. |
 | SH02 | Document metadata | Required fields, their meanings, and their formats. Include approval records and references to approved document versions. |
 | SH03 | Depth selection | Who selects depth, defaults, changes during work, and any stored values. |
+| SH04 | Revision and recovery | The [shared cascade rule](revision.md) is recorded. Still define editorial corrections and recovery from interrupted work. Stage-specific rules remain in stage contracts. |
 
 ## Deferred decisions
 

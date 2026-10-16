@@ -28,6 +28,8 @@ A **Unit of Work** replaces the previous **change** concept. Construction operat
 
 A **stage** defines a workflow responsibility. A skill supplies a procedure that can support that responsibility. Stage boundaries do not depend on skill names or packaging.
 
+A **revision** returns work to the earliest affected stage and every downstream stage. [Revision](revision.md) defines the shared rules, artifact cascade, and execution procedure. Upstream stages remain complete while their contracts and outputs remain valid.
+
 ## Document scopes
 
 | Scope | Proposed project path | Responsibility |
