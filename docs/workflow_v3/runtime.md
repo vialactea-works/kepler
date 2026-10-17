@@ -59,7 +59,11 @@ Command names and arguments are not defined here. This document does not add new
 
 Provide a CLI command that returns the current author as Git `user.name` and Git `user.email`. Resolve both values from the effective Git configuration for the current project. Repository-specific identity settings must apply.
 
-Skills use this command to obtain the author identity for artifact frontmatter. Store the frontmatter `author` value as one `Name <email>` string under the shared [author identity rules](metadata.md#author-identity). The command name, output format, and behavior when either value is missing remain undecided.
+Skills use this command to obtain the original creator's identity when creating an artifact. Store the frontmatter `author` value as one `Name <email>` string under the shared [author identity rules](metadata.md#author-identity).
+
+The command returns the current Git identity, not the stored creator of an existing artifact. Do not use its result to replace `author` during later edits. Explicit correction of incorrect attribution is permitted. Record later contributions through Git history and audit records.
+
+The command name, output format, and behavior when either value is missing remain undecided.
 
 ### Unit creation
 

@@ -16,7 +16,7 @@ The common field set and CLI-generated UUIDv4 values for artifact identity are a
 | `type` | Yes. | The artifact's purpose. It does not identify the current workflow stage. |
 | `schema_version` | Yes. | Integer `3` for the current frontmatter contract, aligned with Kepler versioning. It is not the content revision. |
 | `unit_id` | For unit-owned artifacts. | The owning Unit of Work's `YYYY-MM-DD-<slug>` ID, identical to its directory name. Omit this field from project-scoped artifacts. |
-| `author` | Yes. | One string in `Name <email>` form, using Git `user.name` and Git `user.email`. |
+| `author` | Yes. | The original creator's Git identity as one `Name <email>` string. Preserve it during later edits. |
 | `labels` | No. | Classification labels usable by any artifact. Canonical labels and requester-defined labels are allowed. Omit this field when empty. |
 
 ## Rules
@@ -70,9 +70,13 @@ To classify a unit as a walking skeleton, record this label on its `unit-of-work
 
 ### Author identity
 
-Store `author` as one string in `Name <email>` form. Use Git `user.name` for the name and Git `user.email` for the email.
+`author` identifies the artifact's original creator. Store it as one string in `Name <email>` form. Use Git `user.name` for the name and Git `user.email` for the email.
 
-Use the planned [current-author CLI command](runtime.md#current-author) to obtain these values. The CLI resolves the effective Git configuration for the current project.
+When creating the artifact, use the planned [current-author CLI command](runtime.md#current-author) to obtain these values from the effective Git configuration for the current project.
+
+Preserve `author` during subsequent edits, including edits by another person. A different Git profile must not replace the stored attribution automatically. Explicit correction of incorrect attribution is permitted.
+
+Record later contributions through Git history and audit records.
 
 #### Example
 
@@ -94,6 +98,6 @@ Keep execution state out of frontmatter. Progress, approvals, depth selections, 
 
 - Remaining field formats and value-validation rules.
 - Future schema-version change and compatibility rules.
-- Valid metadata changes, including changes to author identity and unit ownership.
+- Remaining metadata change rules, including changes to artifact classification and unit ownership.
 
 The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. The agreed common fields do not complete all of SH02.
