@@ -22,6 +22,8 @@ Project preparation belongs to Initialization, not Construction. A clear request
 
 Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains parallel task implementation contexts. Each context contains the Task coding loop and Task Integration. These execution relationships are specific to Construction.
 
+[Task Integration](phase_construction/README.md#integration-order-and-locking) prepares, checks, then accepts each candidate under a unit-scoped lock. This serializes integrations within that unit while preserving permitted coding, validation, and cross-unit parallelism.
+
 Intent documents belong to Inception. Their structure and the terms for their organization remain outside the current design scope.
 
 ## Shared concepts

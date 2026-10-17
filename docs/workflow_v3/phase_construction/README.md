@@ -67,13 +67,29 @@ Internal corrections within one stage remain in its attempt. An authorized retur
 
 ### Task Integration
 
-Task Integration is a task-scoped stage after successful Task coding. Combine the task output with the unit's integrated state and obtain the required checks for the combined result.
+Task Integration is a task-scoped stage after successful Task coding. Prepare the combined candidate, check it, then accept it as the unit's integrated state.
 
-Separate worker results do not establish combined correctness. Record the actual integration inputs separately from the task's fixed admission baseline. Retain the integrated checkpoint and supporting evidence under the shared [integration and verification rules](../runtime.md#integration-and-verification).
+Separate worker results do not establish combined correctness. Retain the checked candidate, integrated checkpoint, and supporting evidence under the shared [integration and verification rules](../runtime.md#integration-and-verification).
 
-Complete the task implementation only after its output is integrated and the required combined-result checks succeed. Dependent tasks can use that integrated output under their admission conditions.
+#### Integration order and locking
 
-Keep integration coordination narrow. Do not hold shared locks while agents or checks run. Independent task loops can continue while their inputs and contracts remain valid.
+Use one integration lock per unit. All task integrations targeting that unit's integrated state must use the same lock. Other operations that change its integrated state must also respect that lock.
+
+1. **Acquire the lock.** Wait for the unit's integration lock before preparing a candidate.
+2. **Prepare the candidate.** Read the current unit integration checkpoint after acquiring the lock. Combine it with the task output. Record these integration inputs separately from the task's fixed admission baseline.
+3. **Check the candidate.** Run the required combined-result checks against that candidate. Bind the results to the checked material and relevant inputs.
+4. **Accept the candidate.** Only after the required checks succeed, make the checked candidate the unit's integrated state. A candidate with failed or incomplete required checks must not replace that state.
+5. **Release the lock.** Release it when the integration operation ends. Do not retain it during a return to Task coding.
+
+Hold the lock through preparation, checks, and acceptance. Integration checks for the same unit are therefore serialized. This replaces the earlier restriction to short integration updates.
+
+Candidate acceptance means updating the unit's integrated state. It is not requester approval.
+
+Complete the task implementation only after successful acceptance and satisfaction of its completion conditions. Dependent tasks can then use that integrated output under their admission conditions.
+
+Do not use this lock as a task admission gate. Code Generation, Code Validation, and integrations for other units retain their permitted parallelism. Independent task loops continue while their inputs and contracts remain valid.
+
+Lock ownership does not introduce another attempt identity or run floor.
 
 ### Return paths
 
@@ -99,7 +115,9 @@ This structure does not introduce an additional requester approval gate. Define 
 
 ### Remaining stage contracts
 
-Still define the task graph representation, detailed stage conditions, artifacts, agents, skills, and reopening questionnaires. Exact integration checks, their allocation between Code Validation and Task Integration, and validation timing remain open.
+Still define the task graph representation, detailed stage conditions, artifacts, agents, skills, and reopening questionnaires. Exact integration checks and their allocation between Code Validation and Task Integration remain open. Candidate checks precede acceptance under the agreed integration procedure.
+
+Lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery remain open in the shared CLI infrastructure contract.
 
 Detailed task-state transitions, dependency invalidation, interrupted-work recovery, and handling of running tasks during unit-wide reopening require separate decisions.
 

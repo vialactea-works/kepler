@@ -184,7 +184,9 @@ Starting tasks and recording progress must not depend on shared admission commit
 
 Each task records its actual starting inputs. Running tasks do not need to match a changing coordinator `HEAD`.
 
-State and audit updates must support concurrent work. Any necessary coordination must cover short updates, not agent execution or test runs. Test resources need isolation where concurrent runs could interfere.
+State and audit updates must support concurrent work. Keep their update coordination short. Test resources need isolation where concurrent runs could interfere.
+
+Construction's [integration lock](phase_construction/README.md#integration-order-and-locking) serializes Task Integration within each unit. Hold that lock through candidate preparation, checks, and acceptance. This integration lock can cover long-running checks; it is not a global agent, task admission, or test gate.
 
 Separate unit integration workspaces and isolated workspaces for concurrent writers are one possible arrangement. Exact workspace and branch layouts remain undecided.
 
@@ -213,9 +215,9 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 Task outputs can have separate checkpoints. Results for those checkpoints do not establish that their combined result works.
 
-Run applicable checks against the integrated unit checkpoint. Construction's [Task Integration stage](phase_construction/README.md#task-integration) requires successful combined-result checks before task completion.
+Construction's [Task Integration stage](phase_construction/README.md#task-integration) follows prepare, check, then accept under the unit's integration lock. Check the combined candidate before it becomes the unit's integrated state. Task completion requires successful acceptance and the applicable completion conditions.
 
-Code Validation retains its full-suite and independent-feedback responsibilities under the [stage boundaries](phase_construction/README.md#agreed-boundaries). Exact integration checks, their allocation between the stages, and validation timing remain open.
+Code Validation retains its full-suite and independent-feedback responsibilities under the [stage boundaries](phase_construction/README.md#agreed-boundaries). Exact integration checks and their allocation between the stages remain open.
 
 A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; integration does not authorize a cascade.
 
@@ -264,7 +266,8 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 - JSON state schemas, status transitions, and attempt ID formats.
 - Audit event types, required fields, format, and storage layout.
 - CLI commands and their validation and authority rules.
-- Consistent state and audit writes, admission and integration coordination, concurrent writers, and recovery after an interrupted operation.
+- Consistent state and audit writes, admission coordination, concurrent writers, and recovery after an interrupted operation.
+- Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
 - Required material scopes for each check and stage, external reference formats, and exact evidence and approval record formats.
 - Traceability relationship formats, checkpoint reference names, retention periods, publication, storage locations, and cleanup rules.
 - Workspace and branch layouts, and shared test resource isolation.
