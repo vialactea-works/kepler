@@ -31,7 +31,7 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - Accepted [artifact types](metadata.md#accepted-type-values) are `unit-of-work`, `functional-design`, `non-functional-requirements`, and `project-reference`. Supporting document types are deferred in DF06; the proposed generic `supporting-detail` value was not accepted.
 - Artifact `id` values are CLI-generated UUIDv4 values with cross-project uniqueness. Store the full lowercase hexadecimal value in `8-4-4-4-12` hyphenated form, without prefixes or braces. Do not shorten IDs. They remain stable across content revisions, renames, and moves. Document purpose stays in `type`, not the ID.
 - [Unit IDs](unit-of-work.md#identity-and-directory) use `YYYY-MM-DD-<slug>`, with the machine-local date when the CLI creates the unit. They are unique within the project and are the exact directory names. Keep them unchanged across revisions and retries. The CLI must detect duplicate IDs without overwriting an existing unit.
-- [`schema_version`](metadata.md#schema-version) is the integer `3`, aligned with Kepler versioning. Future version-change and compatibility rules remain open.
+- [`schema_version`](metadata.md#schema-version) uses the Kepler major version. Use the integer `3` for Kepler 3.x. Minor and patch releases must not change it or make valid artifacts invalid. Incompatible changes require a new major version. The CLI reports unsupported schema versions and leaves those artifacts unchanged. Do not migrate data automatically. The migration procedure remains deferred under DF05.
 - `author` identifies the original creator as one `Name <email>` string, using Git `user.name` and Git `user.email` at artifact creation. Preserve it during later edits, including edits by another person. Explicit correction of incorrect attribution is permitted. Record later contributions through Git history and audit records. The planned [current-author CLI command](runtime.md#current-author) returns the current project Git identity, not an existing artifact's stored creator. The command name, output format, and missing-value behavior remain open.
 - Required documents have required sections. Additional detail lives in linked files under `details/`, not optional inline sections.
 - Functional Design supporting files live under `details/functional-design/`.
@@ -61,7 +61,9 @@ Use short filenames with full words, without abbreviations. The agreed `quality.
 
 These decisions affect several stages. Define them in shared contracts rather than only in Functional Design.
 
-Complete the core definitions of Project references (DF01), mostly immutable artifact frontmatter (SH02), and CLI infrastructure contracts (SH06). The shared [Depth definition](depth.md) records agreed levels, limits, inheritance, selection authority and procedure, recording requirements, and changes during work. SH03 is complete; depth state schemas and operations remain in SH06.
+Complete the core definitions of Project references (DF01) and CLI infrastructure contracts (SH06). The shared [Artifact metadata contract](metadata.md) records the agreed fields, validation, changes, and schema-version rules. SH02 is complete. Supporting document types remain deferred in DF06, and stage-specific fields remain deferred with their artifact contracts.
+
+The shared [Depth definition](depth.md) records agreed levels, limits, inheritance, selection authority and procedure, recording requirements, and changes during work. SH03 is complete; depth state schemas and operations remain in SH06.
 
 The [Unit of Work draft](unit-of-work.md) records the agreed acceptance-cohesion boundary, requirement coverage, explicit dependencies, verifiable outcomes, deployment aspect, and decomposition procedure. Detailed scope and size criteria, the decomposition questionnaire, and deployment content and location remain open in SH05. These decisions must make "fit within one Unit of Work" clear at Functional Design entry.
 
@@ -71,7 +73,6 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 
 | ID | Decision | Open scope |
 | --- | --- | --- |
-| SH02 | Artifact metadata | Agreed: [common fields](metadata.md#common-fields), [UUIDv4 format](metadata.md#identity-and-content-versions), [original creator attribution and author string](metadata.md#author-identity), [schema version `3`](metadata.md#schema-version), [initial types](metadata.md#accepted-type-values), and [open-vocabulary labels](metadata.md#labels), including walking skeleton classification and [Kubernetes-style label validation](metadata.md#label-syntax-and-validation). [Strict field validation](metadata.md#field-validation) and [read-only value validation](metadata.md#value-validation) are also agreed. [Classification, ownership, and label change rules](metadata.md#metadata-changes) are also agreed. Define future schema-version change and compatibility rules. Supporting document types are deferred in DF06. Stage-specific extensions remain deferred. Dynamic execution data belongs to SH06. |
 | SH04 | Revision and recovery | The [shared cascade rule and questionnaire mechanism](revision.md) are recorded. Still define editorial corrections and recovery from interrupted work. Stage questionnaires belong to stage contracts. |
 | SH05 | Unit of Work scope | The [accepted rules, walking skeleton kind, and decomposition procedure](unit-of-work.md) are recorded in a draft. Still define detailed scope and size criteria, the decomposition questionnaire, and deployment content and location. |
 | SH06 | CLI infrastructure | The [persistence separation and audit ownership](runtime.md) are agreed. Define JSON state and event schemas, paths, CLI commands, attempt identities, approval binding, consistent writes, recovery, and revision output retention. |
@@ -80,6 +81,7 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 
 | ID | Decision | Record |
 | --- | --- | --- |
+| SH02 | Artifact metadata | Agreed and recorded: [common fields](metadata.md#common-fields), [field and value validation](metadata.md#field-validation), [metadata changes](metadata.md#metadata-changes), and [schema-version rules](metadata.md#schema-version). Supporting document types remain deferred in DF06. Stage-specific fields remain deferred with their artifact contracts. Dynamic execution data belongs to SH06. |
 | SH01 | Unit of Work identity | Agreed and recorded: [format, local creation date, project uniqueness, stable identity, and exact directory name](unit-of-work.md#identity-and-directory). The [CLI detects duplicate IDs](runtime.md#unit-creation) without overwriting an existing unit. |
 | SH03 | Depth | Agreed and recorded: [levels and limits](depth.md#levels), [selection rules](depth.md#selection-rules), and [selection procedure](depth.md#selection-procedure). JSON execution-state representation and operations remain in SH06. |
 

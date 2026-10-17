@@ -6,7 +6,7 @@
 
 Define the common frontmatter fields for Kepler Markdown artifacts. These fields apply to required documents, supporting documents, and Project references.
 
-The common fields and their validation rules are agreed. Future schema-version rules and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
+The common fields, validation rules, metadata change rules, and schema-version rules are agreed. Supporting document types and stage-specific fields remain deferred. This document does not implement schemas or change existing artifacts.
 
 ## Common fields
 
@@ -23,7 +23,13 @@ The common fields and their validation rules are agreed. Future schema-version r
 
 ### Schema version
 
-Set `schema_version` to the integer `3` to follow Kepler versioning. This value identifies the metadata contract, not an artifact's content revision.
+Set `schema_version` to the Kepler major version. Use the integer `3` for Kepler 3.x. This value identifies the metadata contract, not an artifact's content revision.
+
+- Do not change the schema version for minor or patch releases.
+- Artifacts that are valid must remain valid within the same major version.
+- A change that makes existing valid artifacts invalid requires a new Kepler major version.
+- The CLI must report unsupported schema versions. It must leave those artifacts unchanged.
+- Do not migrate data automatically. The migration procedure remains deferred under [DF05](authoring_progress.md#deferred-decisions).
 
 ### Identity and content versions
 
@@ -146,8 +152,8 @@ Stage-specific contracts can add fields. They must not redefine the common field
 
 Keep execution state out of frontmatter. Progress, approvals, depth selections, attempts, and pause checkpoints belong in CLI-managed JSON. Content fingerprints and execution timestamps also belong in that persistence layer. See [CLI infrastructure](runtime.md).
 
-## Decisions still required
+## Deferred decisions
 
-- Future schema-version change and compatibility rules.
+Supporting document types remain deferred under [DF06](authoring_progress.md#deferred-decisions). Define stage-specific fields with their artifact contracts. The migration procedure remains deferred under DF05.
 
-The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. The agreed common fields do not complete all of SH02.
+The [authoring progress record](authoring_progress.md#completed-shared-decisions) records the completed shared metadata decision, SH02.

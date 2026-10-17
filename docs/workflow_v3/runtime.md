@@ -25,6 +25,8 @@ Keep artifact metadata separate from execution state. Mostly immutable does not 
 
 Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. The metadata contract defines their meanings and when they are required. Apply its [field validation rules](metadata.md#field-validation). Validation is read-only: report invalid names or values and preserve content for correction. Do not convert value types or generate missing values during validation. Creation operations can populate fields explicitly. Stage-specific fields remain undecided.
 
+Apply the shared [schema-version rules](metadata.md#schema-version). Report unsupported schema versions and leave those artifacts unchanged. Do not migrate data automatically. The migration procedure remains deferred under DF05.
+
 Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in artifact frontmatter or Markdown status sections.
 
 Implementation plans can describe the work in Markdown. Their execution progress belongs in JSON state, not Markdown checkboxes.
@@ -81,7 +83,6 @@ Audit events and content fingerprints do not preserve artifact contents by thems
 
 ## Decisions still required
 
-- Remaining [artifact metadata decisions](metadata.md#decisions-still-required), including future schema-version rules. Supporting document types and stage-specific extensions remain deferred.
 - JSON state schemas, status transitions, and attempt identities.
 - Audit event types, required fields, format, and storage layout.
 - CLI commands and their validation and authority rules.
