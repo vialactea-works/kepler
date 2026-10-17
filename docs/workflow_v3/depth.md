@@ -28,7 +28,7 @@ Depth does not determine which stages execute. It does not change required infor
 | Default | Use Standard when the requester has not selected another level. |
 | Authority | The agent recommends adjustments with a short rationale. The requester decides whether to accept them. |
 | Selection criteria | Consider uncertainty, domain complexity, interactions, consequences of incorrect decisions, and available references. Code size alone is insufficient. |
-| Recording | Record the unit default and explicit stage overrides in JSON execution state through the `kepler` CLI, not artifact frontmatter. The shared CLI infrastructure contract defines the exact format and operations. |
+| Recording | Record the unit default and explicit stage overrides as journal events through the `kepler` CLI, not artifact frontmatter. Derive current selections from those events. Exact payloads and operations remain open. |
 | Changes during work | Reassess depth when new findings change the analysis needed. Changes apply to current and future work. Revisiting completed work follows the shared revision rules. |
 
 ## Selection procedure
@@ -71,4 +71,4 @@ A supporting file is optional to create. Its location does not make an approved 
 
 Stage contracts select required documents. The [Functional Design contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md`. That contract defines the required sections of both documents for Functional Design. Other artifact contracts for later stages will be defined separately.
 
-The shared [CLI infrastructure contract](runtime.md) must define the JSON state fields, stored values, format, and operations for the unit default and stage overrides. These are changing execution settings, not artifact identity metadata. This definition does not implement persistence or CLI options.
+The shared [execution-state representation](runtime.md#execution-state-representation) derives current selections from journal events. Event payloads, projection fields, and CLI operations for the unit default and stage overrides remain undecided. These are changing execution settings, not artifact identity metadata. This definition does not implement persistence or CLI options.

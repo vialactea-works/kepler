@@ -18,6 +18,8 @@ The [version 2 reference](../workflow_v2/README.md) remains a separate document 
 | Inception | Investigate the intended outcome and define one or more Units of Work. | Phase contract not yet defined. |
 | Construction | Design, plan, implement, validate, review, and deliver one Unit of Work. | See [Construction](phase_construction/README.md). |
 
+Each phase is a bounded context and owns its execution state model and projection schemas. Shared tracking mechanics do not impose a universal unit/task hierarchy.
+
 Project preparation belongs to Initialization, not Construction. A clear request can enter Construction without Inception.
 
 Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains parallel task implementation contexts. Each context contains the Task coding loop and Task Integration. These execution relationships are specific to Construction.
@@ -65,11 +67,13 @@ The metadata contract defines field and value validation, metadata changes, and 
 
 ## CLI infrastructure and persistence
 
-[CLI infrastructure](runtime.md) separates mostly immutable artifact metadata from dynamic execution state. Artifact identity belongs in frontmatter. Progress, attempts, approvals, pause checkpoints, and changing execution settings belong in structured JSON, operated through the `kepler` CLI.
+[CLI infrastructure](runtime.md) separates mostly immutable artifact metadata from dynamic execution state. Artifact identity belongs in frontmatter. Execution state is derived from authoritative phase-owned JSON event journals under the shared [representation contract](runtime.md#execution-state-representation).
 
-The CLI records audit events for its operations. Agents and skills do not edit execution state or audit records directly. This decision does not change artifact content or implement new CLI commands.
+No independently authoritative state files are required. Materialized views are rebuildable, not sources of workflow truth.
 
-The [evidence and checkpoint model](runtime.md#evidence-and-content-checkpoints) separates attempt identity from commit identity. Each attempt has a distinct identity. Limit each unit/task/stage scope to zero or one active attempt under the [attempt scope rules](runtime.md#attempt-identity-and-active-scope). Material types are open-ended. Git checkpoints cover repository content; other material uses appropriate references. Records bind checks and approvals to the material covered and its relevant inputs.
+Agents and skills use CLI-owned operations; they do not edit journals or projections directly. This decision does not change authored artifact content or implement new CLI commands.
+
+The [evidence and checkpoint model](runtime.md#evidence-and-content-checkpoints) separates attempt identity from commit identity. Each attempt has a distinct identity. Construction limits each unit/task/stage scope to zero or one active attempt under the [attempt scope rules](runtime.md#attempt-identity-and-active-scope). Other phases define their own execution scopes. Material types are open-ended. Git checkpoints cover repository content; other material uses appropriate references. Records bind checks and approvals to the material covered and its relevant inputs.
 
 The [run floor](runtime.md#run-floor) uses the applicable attempt identity, without a separate boundary inside the attempt.
 
@@ -81,7 +85,7 @@ The [parallel execution rules](runtime.md#parallel-execution) permit dependency-
 
 Each Unit of Work has one default depth. Use Standard when the requester has not selected another level. Stages inherit the unit default unless an explicit stage override exists. The agent recommends adjustments; the requester decides whether to accept them.
 
-Stages apply this shared definition to their work. Depth does not prescribe a file count or page length. Record depth selections in CLI-managed JSON execution state. Exact fields, formats, and CLI operations remain part of the shared CLI infrastructure contract.
+Stages apply this shared definition to their work. Depth does not prescribe a file count or page length. Record depth selections as journal events through the CLI. Derive current settings from those events. Exact payloads, projection fields, and CLI operations remain part of the shared CLI infrastructure contract.
 
 ## Writing convention
 

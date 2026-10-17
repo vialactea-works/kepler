@@ -6,6 +6,8 @@
 
 Construction operates on one Unit of Work. Its stages define responsibilities independently of the skills and agents that support them.
 
+Construction owns its execution state model and projection schemas under the shared [execution-state representation](../runtime.md#execution-state-representation).
+
 The stage order and execution structure are agreed. Detailed stage contracts remain under development. The Functional Design contract remains a draft until the requester accepts it as a whole.
 
 ## Stage outline

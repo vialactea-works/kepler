@@ -32,7 +32,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH03 | Depth levels | [Levels](depth.md#levels): Minimal, Standard, and Comprehensive change analysis and documentation detail. They do not remove required information, verification, or approval. |
 | SH04 | Editorial corrections | [Editorial corrections](revision.md#editorial-corrections): agents can correct prose without reopening or new approval when meaning stays unchanged. Use existing history, approval bindings, and evidence rules. Refer uncertain changes to the orchestrator. |
 | SH05 | Unit acceptance boundary | [Acceptance cohesion](unit-of-work.md#acceptance-cohesion): define a coherent outcome that the requester can accept as a whole. Implementation size alone does not define the boundary. |
-| SH06 | Persistence responsibilities | [Data responsibilities](runtime.md#data-responsibilities): frontmatter holds artifact metadata; Markdown holds authored content. CLI-managed JSON holds execution state and append-only audit history. This replaces execution flags and depth settings in frontmatter. |
+| SH06 | Persistence responsibilities | [Data responsibilities](runtime.md#data-responsibilities): frontmatter holds artifact metadata; Markdown holds authored content. CLI-owned JSON journals retain workflow history. Execution state is derived under SH43, replacing the earlier state-plus-audit representation. |
 | SH07 | Unit decomposition procedure | [Decomposition procedure](unit-of-work.md#decomposition-procedure): identify outcomes, group by cohesion, check coverage, record dependencies, verify outcomes, and agree boundaries. Use "Decomposition procedure", not "Application mechanism". |
 | SH08 | Walking skeleton | [Walking skeleton](unit-of-work.md#walking-skeleton): minimal executable, deployable, observable functionality across important boundaries. Use normal stages, artifacts, and approval. A proposed predecessor needs requester agreement and an explicit dependency. Retain its implementation; do not require a redundant skeleton. |
 | SH09 | Walking skeleton classification | [Metadata](unit-of-work.md#metadata): use the canonical `walking-skeleton` label on the unit definition. Do not introduce `unit_kind`. |
@@ -55,20 +55,21 @@ Every decision in this section is complete. The linked specification contains it
 | SH26 | Run floor | [Run floor](runtime.md#run-floor): use the applicable attempt identity without a separate verification round. Late results retain their original attempt; they cannot complete a newer attempt. |
 | SH27 | Repository checkpoint meaning | [Checkpoint concepts](runtime.md#concepts): a commit identifies content, not checks or approval. Attempts and commits have separate identities. One attempt can use several checkpoints; different attempts can share a checkpoint. Do not create commits solely for attempt identity. |
 | SH28 | Evidence material types | [Material references](runtime.md#material-references): evidence can cover repository or external material. Use immutable references or retain relevant content when mutable references are insufficient. |
-| SH29 | Evidence bindings | [Evidence bindings](runtime.md#evidence-and-approval-bindings): identify scope, attempt, checked material, inputs, results, supporting output, and relevant conditions. Record bindings through CLI-managed JSON, not frontmatter. |
+| SH29 | Evidence bindings | [Evidence bindings](runtime.md#evidence-and-approval-bindings): identify scope, attempt, checked material, inputs, results, supporting output, and relevant conditions. Record bindings through CLI-owned JSON journal events, not frontmatter. |
 | SH30 | Approval bindings | [Approval bindings](runtime.md#evidence-and-approval-bindings): identify the requester, attempt, and reviewed material. Repository output commits must exist before approval is recorded. Recording approval does not grant approval authority to the CLI. |
 | SH31 | Evidence reuse | [Applicability](runtime.md#evidence-applicability): within an attempt, verify unchanged covered material and relevant inputs before reuse. Retain original references. A different commit alone does not invalidate evidence; reopening still requires stage execution again. |
 | SH32 | Checkpoint preservation | [Retention principles](runtime.md#checkpoint-retention): keep required Git objects reachable through retained references. JSON identifiers, audit events, and fingerprints do not preserve content. External material needs its own retention. |
 | SH33 | Task admission baseline | [Task admission](runtime.md#task-admission-and-baselines): capture the current unit integration commit containing required predecessor outputs. Keep the admitted baseline fixed. Establish inclusion through ancestry or provenance, not timestamps. |
-| SH34 | Parallel coordination boundary | [Parallel execution](runtime.md#parallel-execution): independent units and ready tasks progress without global coordinator `HEAD` gates. Do not require shared admission commits or unrelated workspaces to be clean. Keep state/audit coordination short. Construction's unit integration lock is the explicit exception. |
+| SH34 | Parallel coordination boundary | [Parallel execution](runtime.md#parallel-execution): independent units and ready tasks progress without global coordinator `HEAD` gates. Do not require shared admission commits or unrelated workspaces to be clean. Keep event-update coordination short. Construction's unit integration lock is the explicit exception. |
 | SH35 | Revision authority | [Authority and safeguards](revision.md#authority-and-escalation): the orchestrator assesses findings and authorizes reopening and its boundary. Preserve requester product authority, address evidence, and resolve confirmed invalidity. Ordinary internal corrections need no orchestrator approval. |
 | SH36 | Revision cascade | [Revision boundary](revision.md#revision-boundary): reopen the earliest affected stage and every downstream stage in the authorized scope. Reestablish completion even when content remains unchanged. Preserve valid upstream work and historical artifacts and approvals. |
 | SH37 | Reopening questionnaire mechanism | [Questionnaires](revision.md#stage-reopening-questionnaires): each stage supplies questions for the shared revision procedure. Answers support assessment; they neither authorize reopening nor exempt downstream stages. |
-| SH38 | Audit ownership | [Audit ownership](runtime.md#audit-ownership): CLI-owned operations record their state changes and corresponding append-only events. Agents and skills must not implement separate state or audit writers. |
-| SH39 | Revision decision recording | [Revision decisions](runtime.md#revision-decisions): record the orchestrator's decision, reason, scope, and starting stage through the CLI. Keep execution state consistent with the decision. |
+| SH38 | Audit ownership | [Audit ownership](runtime.md#audit-ownership): CLI-owned operations validate transitions and append resulting events. Current state is derived; agents and skills must not write journals or projections directly. |
+| SH39 | Revision decision recording | [Revision decisions](runtime.md#revision-decisions): record the orchestrator's decision, reason, scope, and starting stage through the CLI. Derive current execution state from the recorded decision. |
 | SH40 | Current-author lookup | [Current author](runtime.md#current-author): provide a command returning effective project Git identity. It identifies the current author, not an existing artifact's creator. |
 | SH41 | Filename convention | [Filename convention](#filename-convention): use short filenames with full words, without abbreviations. |
 | SH42 | Interrupted-work recovery | [Recovery](runtime.md#interrupted-work-recovery): resume from verified progress and preserve unfinished work. Continue the same attempt only if it has not ended. |
+| SH43 | Execution-state representation | [Representation](runtime.md#execution-state-representation): derive execution state from phase-owned event journals without independently authoritative state files. Each phase owns its state model and projection schemas. Materialized views are disposable. |
 | SH80 | Requirement coverage across units | [Coverage](unit-of-work.md#coverage): account for known requirements when defining units. Do not leave required behavior outside the decomposition. |
 | SH81 | Unit dependencies | [Dependencies](unit-of-work.md#dependencies): record dependencies and interaction contracts explicitly. Do not present dependent work as independent. |
 | SH82 | Verifiable unit outcomes | [Verification](unit-of-work.md#verification): give each unit meaningful, observable acceptance conditions. |
@@ -84,10 +85,9 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| SH43 | Execution-state schema | What JSON fields and status values represent workflow execution? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH44 | Audit event schema | What event types, required fields, and envelope represent audit history? See [runtime decisions](runtime.md#decisions-still-required). |
-| SH45 | Runtime storage paths | Where do execution-state and audit files live? See [runtime decisions](runtime.md#decisions-still-required). |
-| SH46 | State/audit write consistency | How does one operation keep state changes and audit events consistent? See [runtime decisions](runtime.md#decisions-still-required). |
+| SH45 | Runtime storage paths | Where do authoritative journals and derived projections live? See [runtime decisions](runtime.md#decisions-still-required). |
+| SH46 | Event-write consistency | How do event appends and journal reconciliation preserve valid workflow histories? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH47 | Attempt ID format | What format identifies a stage attempt? See [attempts](runtime.md#stage-attempts). |
 | SH48 | Revision ID format | What format identifies an authorized revision? See [revision decisions](runtime.md#revision-decisions). |
 | SH49 | Evidence record format | What JSON structure stores evidence bindings and results? See [evidence bindings](runtime.md#evidence-and-approval-bindings). |
@@ -103,7 +103,7 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 | SH59 | Unit creation interface | What command inputs create a unit under the agreed identity rules? See [unit creation](runtime.md#unit-creation). |
 | SH60 | Current-author command interface | What command name and output format expose current Git identity? See [current author](runtime.md#current-author). |
 | SH61 | Missing author identity | What happens when the effective Git name or email is missing? See [current author](runtime.md#current-author). |
-| SH62 | Depth state format | What JSON fields store the unit default and stage overrides? See [depth decisions](depth.md#decisions-still-required). |
+| SH62 | Depth selection representation | What event payloads and derived fields represent the unit default and stage overrides? See [depth decisions](depth.md#decisions-still-required). |
 | SH63 | Depth change interface | What CLI operation changes depth settings? See [depth decisions](depth.md#decisions-still-required). |
 | SH64 | Lock mechanism | What mechanism enforces the agreed lock scopes? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH65 | Lock ownership record | How is lock ownership identified and recorded? See [runtime decisions](runtime.md#decisions-still-required). |
@@ -115,7 +115,7 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 | SH71 | Evidence retention period | How long must required checkpoints and external evidence remain available? See [retention](runtime.md#checkpoint-retention). |
 | SH72 | Checkpoint publication | How are required checkpoint references published? See [retention](runtime.md#checkpoint-retention). |
 | SH73 | Retention cleanup | When and how can retained material be removed? See [retention](runtime.md#checkpoint-retention). |
-| SH74 | Record version-control policy | Which execution-state and audit records are version-controlled, and which are checkout-local? See [runtime decisions](runtime.md#decisions-still-required). |
+| SH74 | Record version-control policy | Which journals, projections, and retained records are version-controlled or checkout-local? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH75 | Additional unit scope guidance | What further scope and size guidance is needed beyond acceptance cohesion? See [remaining unit decisions](unit-of-work.md#decisions-still-required). |
 | SH76 | Decomposition questionnaire | What questions support unit decomposition? See [remaining unit decisions](unit-of-work.md#decisions-still-required). |
 | SH77 | Deployment record content | What deployment information must a unit record? See [remaining unit decisions](unit-of-work.md#decisions-still-required). |
@@ -124,7 +124,7 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 | SH84 | Traceability relationship format | How are relationships between execution records and artifacts represented? See [traceability](runtime.md#traceability-and-revision-outputs). |
 | SH85 | Checkpoint reference names | How are retained Git references named? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH86 | Retained evidence storage | Where is retained evidence content stored? See [retention](runtime.md#checkpoint-retention). |
-| SH87 | Interrupted state-write recovery | How does an interrupted state/audit operation restore consistency? See [runtime decisions](runtime.md#decisions-still-required). |
+| SH87 | Interrupted event-write recovery | How does an interrupted append or journal import recover without losing or duplicating events? See [runtime decisions](runtime.md#decisions-still-required). |
 
 ## Completed Construction decisions
 
@@ -161,7 +161,7 @@ Individual decisions below are complete except whole-draft acceptance. They do n
 | FD01 | Required documents | Complete | [Artifacts](phase_construction/functional-design.md#artifacts): require `unit-of-work.md` and `design.md` at the unit root. |
 | FD02 | Functional Design scope | Complete | [Scope](phase_construction/functional-design.md#scope): define domain behavior and models, not the technical solution, quality specification, or implementation tasks. |
 | FD03 | Entry conditions | Complete | [Entry conditions](phase_construction/functional-design.md#entry-conditions): sufficient context, a reasonably unit-sized outcome, and requester availability. Complete artifacts or an Inception handoff are not prerequisites. |
-| FD04 | Requester approval | Complete | [Requester approval](phase_construction/functional-design.md#requester-approval): explicit approval is required and recorded through CLI-owned JSON state and audit. |
+| FD04 | Requester approval | Complete | [Requester approval](phase_construction/functional-design.md#requester-approval): explicit approval is required and recorded through CLI-owned JSON journal events. |
 | FD05 | Reopening questionnaire | Complete | [Questionnaire](phase_construction/functional-design.md#reopening-questionnaire): use stage-specific questions with shared orchestrator revision authority. Reopened work must satisfy the stage conditions again. |
 | FD06 | Stage owner and entry skill | Complete | [Agent roles](phase_construction/functional-design.md#agent-roles): `kepler-architect` owns the stage and uses `kepler-design`. No other stage agent roles are defined. |
 | FD07 | Unit definition sections | Complete | [Unit definition](phase_construction/functional-design.md#unit-of-work-definition): require Purpose, Scope, and Context. The definition serves every stage. |

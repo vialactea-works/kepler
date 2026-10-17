@@ -64,7 +64,7 @@ Store `labels` as a list of strings. The field is shared metadata and can be use
 
 Kepler can define canonical labels with documented meanings. The vocabulary is open: the requester can add other labels. A label does not need to be in the canonical list to be valid.
 
-Do not use labels to record execution state, including progress, approval, or completion. That information belongs in CLI-managed JSON.
+Do not use labels to record execution state, including progress, approval, or completion. That information is derived from CLI-managed JSON event journals.
 
 #### Label syntax and validation
 
@@ -150,7 +150,7 @@ Stage-specific contracts can add fields. They must not redefine the common field
 
 ### Execution state
 
-Keep execution state out of frontmatter. Progress, approvals, depth selections, attempts, and pause checkpoints belong in CLI-managed JSON. Content fingerprints and execution timestamps also belong in that persistence layer. See [CLI infrastructure](runtime.md).
+Keep execution state out of frontmatter. Record progress, approvals, depth selections, attempts, and pause checkpoints as CLI-owned JSON journal events. Derive current views from those events. Content fingerprints and execution timestamps also belong in that event history. See the shared [execution-state representation](runtime.md#execution-state-representation).
 
 ## Deferred decisions
 

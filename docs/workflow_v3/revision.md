@@ -8,7 +8,7 @@ Define the shared revision rules for the stages of one Unit of Work. These rules
 
 Use the stage order and execution scope defined by the phase contract. Construction defines a [unit-stage order](phase_construction/README.md#stage-outline) and a [task execution structure](phase_construction/README.md#implementation-execution).
 
-Apply execution-state changes through the `kepler` CLI. Reopening, attempts, current completion, and approval history belong in structured JSON under the shared [CLI infrastructure contract](runtime.md), not artifact frontmatter or Markdown status fields.
+Apply execution-state changes through the `kepler` CLI. Record reopening, attempts, completion, and approval facts in phase-owned JSON event journals under the shared [execution-state representation](runtime.md#execution-state-representation). Current execution state is derived from those events, not artifact frontmatter or Markdown status fields.
 
 ## Rules
 

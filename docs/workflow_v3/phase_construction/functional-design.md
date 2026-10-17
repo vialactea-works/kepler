@@ -218,7 +218,7 @@ The requester must explicitly approve the current functional design. Approval co
 
 Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval permits progression to Non-functional Requirements. It does not authorize implementation or delivery.
 
-Record approval through the `kepler` CLI in JSON execution state and audit history, not artifact frontmatter. Do not require a separate human-authored approval document. Apply the shared [evidence and approval bindings](../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact state fields, event formats, and material reference formats remain undecided.
+Record approval through CLI-owned JSON journal events, not artifact frontmatter. Derive current approval views from those events. Do not require a separate human-authored approval document. Apply the shared [evidence and approval bindings](../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact projection fields, event formats, and material reference formats remain undecided.
 
 ### Reopening questionnaire
 
@@ -235,7 +235,7 @@ Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionna
 
 The orchestrator authorizes reopening under the shared [Revision procedure](../revision.md#revision-procedure). Questionnaire answers do not authorize the stage agent to reopen stages.
 
-A reopened Functional Design stage must repeat self-review. The requester must explicitly approve the revised functional design. Record that approval through the `kepler` CLI in JSON execution state and audit history. External review remains requester-triggered only.
+A reopened Functional Design stage must repeat self-review. The requester must explicitly approve the revised functional design. Record that approval through CLI-owned JSON journal events. External review remains requester-triggered only.
 
 ## Completion conditions
 
@@ -247,7 +247,7 @@ The stage is complete when:
 - No unresolved question or unsupported assumption leaves a material functional choice to the implementer.
 - Known quality concerns and technical questions are explicit and passed to their responsible stages.
 - The agent has completed its self-review.
-- The requester has explicitly approved the functional design, and the `kepler` CLI has recorded approval in JSON execution state and audit history.
+- The requester has explicitly approved the functional design, and the `kepler` CLI has recorded approval in JSON event journals.
 
 `quality.md`, implementation tasks, and a selected technical solution are not required at this point. Completion does not authorize implementation or delivery.
 

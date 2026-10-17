@@ -6,7 +6,7 @@
 
 Record decisions about the Kepler CLI, structured persistence, and audit system.
 
-The persistence separation, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. Exact schemas, paths, commands, and persistence mechanisms remain under design. This document does not implement CLI behavior or migrate existing data.
+The persistence responsibilities, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. Exact event schemas, phase-owned projections, paths, commands, and write protocols remain under design. This document does not implement CLI behavior or migrate existing data.
 
 ## Data responsibilities
 
@@ -14,8 +14,8 @@ The persistence separation, attempt boundaries, evidence bindings, and parallel 
 | --- | --- | --- |
 | Artifact metadata | Frontmatter on the artifact. | Record identity, classification, unit ownership, schema version, and author identity through the shared [Artifact metadata contract](metadata.md). Additional fields require further decisions. |
 | Authored content | Markdown artifact body. | Define purpose, scope, requirements, design, plans, and supporting evidence. |
-| Execution state | Structured JSON, operated through the `kepler` CLI. | Track current workflow, unit, stage, and implementation progress; active attempts; pause and resume information; approvals; and changing execution settings. |
-| Audit history | Append-only structured JSON events, recorded through CLI-owned operations. | Record transitions, decisions, approvals, revisions, and the evidence they refer to. |
+| Execution state | Derived phase-owned views, queried through the `kepler` CLI. | Represent current progress, attempts, approvals, and changing settings from each phase's journals. |
+| Audit history | Authoritative append-only structured JSON event journals, recorded through CLI-owned operations. | Preserve lifecycle facts, decisions, settings, revisions, approvals, and evidence bindings needed to derive execution state. |
 
 ## Rules
 
@@ -29,21 +29,35 @@ Apply the shared [schema-version rules](metadata.md#schema-version). Report unsu
 
 Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in artifact frontmatter or Markdown status sections.
 
-Implementation plans can describe the work in Markdown. Their execution progress belongs in JSON state, not Markdown checkboxes.
+Implementation plans can describe the work in Markdown. Their execution progress is derived from event journals, not Markdown checkboxes.
 
 ### Execution state
 
-Agents must use the `kepler` CLI to read and change execution state. They must not edit the JSON records directly. The same rule applies to skills.
+Agents and skills must use the `kepler` CLI to query execution state and record workflow events. They must not edit event journals or projections directly.
 
-Record the unit depth default and explicit stage depth overrides in execution state. Their selection and approval rules remain in the shared [Depth definition](depth.md).
+#### Execution-state representation
 
-Record requester approvals and their relationship to approved content in execution state and audit history. A frontmatter flag, an existing artifact, or a Git commit does not establish approval or completion.
+Workflow execution state is derived from phase-owned event journals. No independently authoritative state files are required. Each phase owns its state model and projection schemas. Materialized views are disposable.
 
-Markdown views can present execution state, but they are derived views, not authoritative records. The authoring progress file tracks specification work, not Unit of Work execution.
+The journals are the persisted source of workflow truth. This replaces the earlier state-plus-audit representation; state files cannot remain a second authority.
+
+Each phase is a bounded context. Shared tracking mechanics do not impose Construction's unit/task hierarchy or status vocabulary on other phases. Agent scopes follow the owning phase and stage contracts; not all agents are task-scoped.
+
+The CLI can calculate views directly or use rebuildable projections. Rebuilding a projection does not rerun work or create approvals. A projection does not replace retained evidence or checks against actual work.
+
+This representation does not require one shared journal or a global total order. Exact event schemas, journal layout, collection, and write protocols remain separate decisions.
+
+Record the unit depth default and explicit stage overrides as journal events through the CLI. Derive their current values from those events. Their selection and approval rules remain in the shared [Depth definition](depth.md).
+
+Record requester approvals and their reviewed-material bindings as journal events through the CLI. Approval views are derived from those events. A frontmatter flag, an existing artifact, or a Git commit does not establish approval or completion.
+
+Markdown views can present execution state, but they remain derived views, not authoritative records. The authoring progress file tracks specification work, not Unit of Work execution.
 
 ### Stage attempts
 
-A stage attempt is one execution of one stage for one Unit of Work. It includes the stage's internal correction loops. When stage execution applies to a task, include that task in the attempt's scope.
+A stage attempt is one execution of one stage within the scope defined by its phase contract. It includes the stage's internal correction loops.
+
+Construction uses unit-scoped attempts and task-scoped attempts where its stage contract requires them. Other phases define their own execution scopes.
 
 - Create an attempt when the stage starts for the first time.
 - Self-review and repeated edits after failed tests keep the same attempt while corrections remain within that stage.
@@ -61,6 +75,8 @@ Suspected upstream problems follow the shared [revision authority and escalation
 
 Give each attempt a distinct identity. A new attempt must not reuse a previous attempt's identity. Git checkpoint reuse does not change this rule.
 
+The following unit/task scope limits apply to Construction. Other phases define their own execution scopes.
+
 For a fixed unit, task, and stage, allow zero or one active attempt. Attempts in that scope are serial. Different task or unit scopes can progress concurrently when dependencies and stage order permit it.
 
 For unit-wide work without a task, apply the same limit to the unit/stage scope. Do not combine different task scopes into one admission gate.
@@ -71,7 +87,7 @@ Preserve the limit under concurrent start or resume requests. Two requests for t
 
 This constraint does not require every task to execute every stage. Phase and stage contracts define the applicable scopes.
 
-Construction defines its [Implementation Execution structure](phase_construction/README.md#implementation-execution). Record the relationship between its unit-scoped attempt and task-scoped Code Generation, Code Validation, and Task Integration attempts. Keep these relationships in CLI-managed execution state and audit history.
+Construction defines its [Implementation Execution structure](phase_construction/README.md#implementation-execution). Record the relationship between its unit-scoped attempt and task-scoped Code Generation, Code Validation, and Task Integration attempts through journal events. Derive relationship views from those events.
 
 Task implementation and Task coding are execution contexts, not additional stage attempts. Do not infer the same nested structure for other phases or stages.
 
@@ -99,17 +115,17 @@ This rule does not define lock recovery or repair of interrupted state writes.
 
 Follow the shared [Revision procedure](revision.md#revision-procedure). A stage's proposed boundary does not authorize reopening or a revision cascade.
 
-Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Keep current execution state consistent with that decision. Retain the decision and reason in append-only JSON audit history. CLI-owned operations record the corresponding events; agents must not write them separately.
+Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Retain those facts in the phase's append-only event journals. Derive current execution state from the recorded decision. CLI-owned operations record the events; agents must not write them separately.
 
-Follow Construction's [unit-wide upstream revision rules](phase_construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and task-stage attempts through CLI-owned operations. Keep these endings in execution state and audit history. Start new attempts only when their stages execute again.
+Follow Construction's [unit-wide upstream revision rules](phase_construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and task-stage attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stages execute again.
 
 Exact state fields, event formats, and command names remain undecided.
 
 ### Audit ownership
 
-Adopt an audit system in which CLI-owned operations record structured events. The operation that changes state also records the corresponding audit events. Do not require agents to create lifecycle events separately after a transition or write event records by hand.
+CLI-owned application operations validate workflow transitions and record the resulting structured events. Current execution state is derived from those events. Callers must not append duplicate lifecycle records after an operation or write event records by hand.
 
-The audit system retains earlier events when work is revised or approved again. Current state and historical events have different roles; the persistence contract must keep them consistent.
+The journals retain earlier events when work is revised or approved again. Rebuildable views reflect recorded history; they do not become an independent workflow authority.
 
 The CLI records the requester's approval. It does not replace the requester as the approval authority.
 
@@ -148,7 +164,7 @@ A mutable URL or tag alone may not identify what was examined. Where necessary, 
 
 Each evidence record identifies:
 
-- Its unit, stage, and attempt for stage work, plus its task when applicable.
+- Its owning phase and applicable stage/attempt scope. In Construction, include the unit and task when applicable.
 - The material checked and relevant inputs.
 - The repository and checkpoint commit for repository material, with appropriate references for other material.
 - The check or review performed, its result, and supporting output.
@@ -160,7 +176,7 @@ Applicable contracts determine the required scope. The material covered is not l
 
 Workflow progress and audit records are separate from the material checked, unless a check explicitly covers them.
 
-Record bindings through the CLI in JSON execution state and audit history, not artifact frontmatter. For repository material, the output commit must exist before approval is recorded. Record approval afterwards, referencing that commit and the other reviewed material.
+Record bindings through CLI-owned JSON journal events, not artifact frontmatter. Derive current binding views from the recorded events. For repository material, the output commit must exist before approval is recorded. Record approval afterwards, referencing that commit and the other reviewed material.
 
 ### Repository checkpoint procedure
 
@@ -188,13 +204,13 @@ A material mismatch does not authorize a revision cascade. Report suspected upst
 
 ## Parallel execution
 
-Dependency-ready tasks and independent units can run concurrently. Unit-scoped stages retain their phase order. In Construction, apply the [task-stage order](phase_construction/README.md#implementation-execution) within each task implementation, not across different tasks.
+In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages retain their phase order. Apply the [task-stage order](phase_construction/README.md#implementation-execution) within each task implementation, not across different tasks. Other phases define their own execution relationships.
 
 Starting tasks and recording progress must not depend on shared admission commits or a global coordinator `HEAD`. Independent work must not require unrelated workspaces to become clean or stop progressing.
 
 Each task records its actual starting inputs. Running tasks do not need to match a changing coordinator `HEAD`.
 
-State and audit updates must support concurrent work. Keep their update coordination short. Test resources need isolation where concurrent runs could interfere.
+Workflow event writes and derived views must support concurrent work. Keep event-update coordination short. Test resources need isolation where concurrent runs could interfere.
 
 Construction's [integration lock](phase_construction/README.md#integration-order-and-locking) serializes Task Integration within each unit. Hold that lock through candidate preparation, checks, and acceptance. This integration lock can cover long-running checks; it is not a global agent, task admission, or test gate.
 
@@ -235,7 +251,7 @@ A conflict can block the affected integration. Unrelated ready tasks and units c
 
 Expose operations for reading progress, changing execution state, recording interactions and approvals, managing pause and resume checkpoints, and applying the shared [Revision procedure](revision.md#revision-procedure).
 
-Keep state-transition rules and audit recording in shared application operations. The CLI invokes those operations; JSON persistence stores their results. Skills must not implement separate state writers.
+Keep phase transition rules and event recording in their owning application operations. The CLI invokes those operations; JSON journals retain the resulting facts. Current state and query views are derived. Skills must not implement separate event or state writers.
 
 Command names and arguments are not defined here. This document does not add new commands.
 
@@ -273,18 +289,18 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 ## Decisions still required
 
-- JSON state schemas, status transitions, and attempt ID formats.
+- Phase-owned state models, projection schemas, status transitions, and attempt ID formats.
 - Audit event types, required fields, format, and storage layout.
 - CLI commands and their validation and authority rules.
-- Consistent state and audit writes, admission coordination, concurrent writers, and recovery after an interrupted operation.
+- Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
 - Required material scopes for each check and stage, external reference formats, and exact evidence and approval record formats.
 - Traceability relationship formats, checkpoint reference names, retention periods, publication, storage locations, and cleanup rules.
 - Workspace and branch layouts, and shared test resource isolation.
-- Which records belong in version control and which are local to a checkout.
+- Which journals, projections, and retained records belong in version control or remain local to a checkout.
 
 ## Inspiration
 
-The [AWS AI-DLC audit model](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/docs/guide/10-state-and-audit.md) provides inspiration for command-owned events and retained history. Kepler uses structured JSON for execution state and audit records instead of adopting AWS's Markdown persistence.
+The [AWS AI-DLC audit model](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/docs/guide/10-state-and-audit.md) provides inspiration for command-owned events and retained history. AWS also retains `aidlc-state.md`. Kepler derives phase-owned execution state from JSON event journals instead of adopting that state-plus-audit representation.
 
 The [AWS run floor implementation](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/core/tools/aidlc-lib.ts#L36642-L36839) supplied research for this decision. Kepler uses attempt identity instead of adopting its floor format or boundary rules.
