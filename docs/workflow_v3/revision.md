@@ -39,7 +39,7 @@ Upstream stages occur before the revision boundary. Downstream stages occur afte
 
 Construction's task-local [return paths](phase_construction/README.md#return-paths) apply within an active Implementation Execution attempt. They do not automatically restart that enclosing attempt. Independent task loops continue while their inputs and contracts remain valid.
 
-A unit-wide upstream revision still applies the full unit-stage cascade. Detailed task-state changes and handling of running tasks during that cascade require separate stage contract decisions.
+A unit-wide upstream revision still applies the full unit-stage cascade. Construction defines the [handling of running task work](phase_construction/README.md#unit-wide-upstream-revision) during that cascade. Detailed task-state transitions and shutdown coordination remain open.
 
 ### Artifacts and evidence
 

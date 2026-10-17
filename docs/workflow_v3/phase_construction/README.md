@@ -103,6 +103,16 @@ Integration agents report findings and proposed correction boundaries. The orche
 
 A task-local return does not itself start another Implementation Execution attempt. Independent task loops continue while their inputs and contracts remain valid.
 
+### Unit-wide upstream revision
+
+When the orchestrator authorizes a unit-wide revision from Implementation Planning or an earlier stage, stop the unit's implementation work.
+
+1. **Stop task work.** Stop new task admissions and all active task execution for that unit. This includes Task Integration.
+2. **End the attempts.** End any active Implementation Execution attempt and all active task-stage attempts for that unit. Preserve existing work and evidence as history. Do not pause these attempts for later continuation. Ended attempts must not complete tasks or accept integration candidates.
+3. **Execute the revised stages.** Follow the shared [Revision procedure](../revision.md#revision-procedure). Restart Implementation Execution only after the revised upstream stages complete. Start new Implementation Execution and task-stage attempts when their stages execute again.
+
+Independent units continue while their inputs and contracts remain valid. Task-local corrections retain the [existing return paths](#return-paths). They do not trigger this unit-wide stopping procedure.
+
 ### Attempts and completion
 
 Implementation Execution has a unit-scoped attempt. Code Generation, Code Validation, and Task Integration have task-scoped attempts within that execution. Several task-stage attempts can belong to the same active Implementation Execution attempt.
@@ -119,7 +129,7 @@ Still define the task graph representation, detailed stage conditions, artifacts
 
 Lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery remain open in the shared CLI infrastructure contract.
 
-Detailed task-state transitions, dependency invalidation, interrupted-work recovery, and handling of running tasks during unit-wide reopening require separate decisions.
+Detailed task-state transitions, dependency invalidation, shutdown coordination, and interrupted-work recovery require separate decisions.
 
 ## Draft use
 

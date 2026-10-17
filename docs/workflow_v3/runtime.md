@@ -93,6 +93,8 @@ Follow the shared [Revision procedure](revision.md#revision-procedure). A stage'
 
 Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Keep current execution state consistent with that decision. Retain the decision and reason in append-only JSON audit history. CLI-owned operations record the corresponding events; agents must not write them separately.
 
+Follow Construction's [unit-wide upstream revision rules](phase_construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and task-stage attempts through CLI-owned operations. Keep these endings in execution state and audit history. Start new attempts only when their stages execute again.
+
 Exact state fields, event formats, and command names remain undecided.
 
 ### Audit ownership

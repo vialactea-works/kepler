@@ -24,6 +24,8 @@ Construction executes task graphs through [Implementation Execution](phase_const
 
 [Task Integration](phase_construction/README.md#integration-order-and-locking) prepares, checks, then accepts each candidate under a unit-scoped lock. The project build and full application test suite must succeed against the candidate before acceptance. This serializes integrations within that unit while preserving permitted coding, validation, and cross-unit parallelism.
 
+During Construction's [unit-wide upstream revision](phase_construction/README.md#unit-wide-upstream-revision), the orchestrator stops new task admissions and active implementation work for that unit. Independent units continue while their inputs and contracts remain valid.
+
 Intent documents belong to Inception. Their structure and the terms for their organization remain outside the current design scope.
 
 ## Shared concepts
