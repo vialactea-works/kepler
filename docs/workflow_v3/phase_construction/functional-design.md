@@ -72,13 +72,13 @@ All paths are relative to the project repository root. `<unit-id>` is the stable
 | Functional design | `.kepler/units-of-work/<unit-id>/design.md` | Define domain behavior, the domain model, functional contracts, and design decisions. |
 | Supporting Functional Design files | `.kepler/units-of-work/<unit-id>/details/functional-design/` | Supply linked detail for this stage. |
 
-The Unit of Work directory remains unchanged across stages, retries, and design revisions. Do not derive its identity from a branch, worktree, skill, or task number. The identifier format requires a separate decision.
+The Unit of Work directory remains unchanged across stages, retries, and design revisions. Do not derive its identity from a branch, worktree, skill, or task number. Use the shared [unit identity and directory rules](../unit-of-work.md#identity-and-directory): `YYYY-MM-DD-<slug>`, with the machine-local creation date and the exact ID as the directory name.
 
 These paths are part of the version 3 draft. They do not migrate existing files or change current CLI path rules.
 
 ### Required information and supporting detail
 
-This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Use the shared [Artifact metadata contract](../metadata.md) for common frontmatter fields. Exact formats and stage-specific fields require further decisions. Dynamic execution state follows the shared [CLI infrastructure contract](../runtime.md).
+This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Use the shared [Artifact metadata contract](../metadata.md) for common frontmatter fields. Remaining formats and stage-specific fields require further decisions. Dynamic execution state follows the shared [CLI infrastructure contract](../runtime.md).
 
 Create the Unit of Work definition when needed. Preserve and refine an existing definition when Inception or earlier work supplies it. Do not create a second definition for the same Unit of Work.
 

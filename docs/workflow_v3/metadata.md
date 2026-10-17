@@ -6,21 +6,23 @@
 
 Define the common frontmatter fields for Kepler Markdown artifacts. These fields apply to required documents, supporting documents, and Project references.
 
-The common field set is agreed. Exact field formats and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
+The common field set and CLI-generated UUIDs for artifact identity are agreed. Remaining field formats and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
 
 ## Common fields
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `id` | Yes. | Stable artifact identity. Keep it across content revisions, renames, and moves. |
+| `id` | Yes. | CLI-generated UUID with cross-project uniqueness. Keep it across content revisions, renames, and moves. |
 | `type` | Yes. | The artifact's purpose. It does not identify the current workflow stage. |
 | `schema_version` | Yes. | Version of the frontmatter contract, not the content revision or Kepler release. |
-| `unit_id` | For unit-owned artifacts. | The owning Unit of Work. Omit this field from project-scoped artifacts. |
+| `unit_id` | For unit-owned artifacts. | The owning Unit of Work's `YYYY-MM-DD-<slug>` ID, identical to its directory name. Omit this field from project-scoped artifacts. |
 | `author` | Yes. | Author identity, identified by both Git `user.name` and Git `user.email`. |
 
 ## Rules
 
 ### Identity and content versions
+
+Generate artifact IDs through the `kepler` CLI as UUIDs with cross-project uniqueness. Keep document purpose in `type`; do not encode it in the ID.
 
 `id` identifies the artifact, not one version of its contents. Execution records must bind approvals to content versions separately.
 
@@ -28,7 +30,7 @@ The common field set is agreed. Exact field formats and stage-specific fields re
 
 `type` describes the document. It is separate from the Unit of Work's kind, such as Walking skeleton.
 
-`unit_id` records ownership. References to other units do not change this ownership.
+`unit_id` records ownership. Follow the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). The CLI uses the machine-local creation date and a descriptive slug. Unit IDs are unique within a project and remain unchanged across revisions. References to other units do not change ownership.
 
 ### Author identity
 
@@ -44,7 +46,7 @@ Keep execution state out of frontmatter. Progress, approvals, depth selections, 
 
 ## Decisions still required
 
-- Artifact identifier format and uniqueness scope. Unit identifier format remains a separate shared decision.
+- UUID variant and text format for artifact IDs.
 - Allowed `type` values and fields specific to each artifact contract.
 - Exact field formats, including the representation of the author's name and email.
 - Schema-version values and change rules.

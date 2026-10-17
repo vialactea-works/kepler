@@ -37,7 +37,7 @@ A **revision** returns work to the earliest affected stage and every downstream 
 | Project references | `.kepler/reference/` | Supply shared application context across Units of Work. This scope has a role similar to the AWS AI-DLC CodeKB. |
 | Unit of Work documents | `.kepler/units-of-work/<unit-id>/` | Describe the purpose, requirements, design, decisions, and evidence for one Unit of Work. |
 
-Paths are relative to the project repository root. `<unit-id>` identifies one Unit of Work and remains stable across stages and retries. Its format requires a separate decision.
+Paths are relative to the project repository root. `<unit-id>` uses `YYYY-MM-DD-<slug>`, with the machine-local date when the CLI creates the unit. It is unique within the project and is the exact directory name. Follow the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). The complete ID remains stable across stages, revisions, and retries.
 
 Required Unit of Work documents live directly under `.kepler/units-of-work/<unit-id>/`. Additional detail lives in linked files under `details/`. Stage-specific detail uses a stage subdirectory, such as `details/functional-design/`.
 
@@ -51,7 +51,7 @@ The authority, internal file structure, and update rules for Project references 
 
 The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `schema_version`, `unit_id`, and `author` as common frontmatter fields. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Author identity uses Git `user.name` and Git `user.email`.
 
-Exact field formats and stage-specific fields require further decisions.
+Remaining field formats and stage-specific fields require further decisions.
 
 ## CLI infrastructure and persistence
 

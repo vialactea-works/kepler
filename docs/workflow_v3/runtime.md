@@ -23,7 +23,7 @@ The separation below is agreed. Exact schemas, paths, commands, and persistence 
 
 Keep artifact metadata separate from execution state. Mostly immutable does not mean that every field can never change; the metadata contract must define valid changes.
 
-Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, and `author`. The metadata contract defines their meanings and when they are required. Exact formats and stage-specific fields remain undecided.
+Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, and `author`. The metadata contract defines their meanings and when they are required. Remaining formats and stage-specific fields remain undecided.
 
 Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in artifact frontmatter or Markdown status sections.
 
@@ -61,9 +61,17 @@ Provide a CLI command that returns the current author as Git `user.name` and Git
 
 Skills use this command to obtain the author identity for artifact frontmatter. The command name, output format, and behavior when either value is missing remain undecided.
 
+### Unit creation
+
+Create unit IDs in the format `YYYY-MM-DD-<slug>` under the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). Use the machine's local timezone to determine the date when the CLI creates the unit.
+
+Use the exact unit ID as the directory name. The CLI must detect duplicate IDs within the project and must not overwrite an existing unit. Do not regenerate an existing ID during revision or resume.
+
 ## Traceability and revision outputs
 
-Execution records must refer to the artifacts and units they concern. The identity, relationship, and approved-version reference formats require separate decisions.
+Execution records must refer to the artifacts and units they concern. The CLI generates artifact IDs as UUIDs with cross-project uniqueness. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions).
+
+Relationship formats and approved-version references require separate decisions.
 
 Audit events and content fingerprints do not preserve artifact contents by themselves. Retention of the outputs from each revision remains an explicit design decision.
 

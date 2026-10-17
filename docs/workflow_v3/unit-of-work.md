@@ -12,6 +12,24 @@ Construction operates on one Unit of Work. A unit can contain several requiremen
 
 ## Rules
 
+### Identity and directory
+
+- The CLI creates the unit ID in the format `YYYY-MM-DD-<slug>`.
+- The date is the date when the CLI creates the unit, in the machine's local timezone. It is not the date when implementation starts.
+- The slug describes the unit with lowercase words separated by hyphens.
+- The complete ID must be unique within the project. Cross-project uniqueness is not required.
+- Use the exact ID as the directory name: `.kepler/units-of-work/<unit-id>/`.
+- Keep the complete ID and directory name unchanged across stages, revisions, retries, branches, and worktrees. Do not update the date or slug when the description or machine timezone changes.
+- Every unit-owned artifact records this ID in `unit_id`. Each artifact keeps its separate UUID in `id`.
+
+#### Example
+
+This path is illustrative:
+
+```text
+.kepler/units-of-work/2026-10-17-order-cancellation/
+```
+
 ### Acceptance cohesion
 
 Group work by the outcome to be accepted. Use that outcome to assess whether the included work belongs together.
@@ -77,7 +95,7 @@ Record Walking skeleton as the unit's kind in mostly immutable artifact frontmat
 - Detailed scope and size criteria, and the decomposition questionnaire.
 - Deployment information to record, its location, and when it must be defined.
 
-The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. Identifier formats and remaining artifact metadata details remain separate shared decisions. The [CLI infrastructure contract](runtime.md) defines the separation between artifact metadata and execution state.
+The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. Remaining artifact metadata details are shared decisions. The [CLI infrastructure contract](runtime.md) defines the separation between artifact metadata and execution state.
 
 ## Inspiration
 
