@@ -6,7 +6,7 @@
 
 Define the common frontmatter fields for Kepler Markdown artifacts. These fields apply to required documents, supporting documents, and Project references.
 
-The common fields and their validation rules are agreed. Future schema-version rules, remaining metadata change rules, and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
+The common fields and their validation rules are agreed. Future schema-version rules and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
 
 ## Common fields
 
@@ -109,6 +109,16 @@ This frontmatter field is illustrative:
 author: "Example Author <author@example.com>"
 ```
 
+### Metadata changes
+
+| Field | Permitted change |
+| --- | --- |
+| `type` | Deliberate reclassification. The content must satisfy the new artifact contract. |
+| `unit_id` | Deliberate ownership transfer. Update the owning-unit reference and artifact location together. |
+| `labels` | Additions and removals under the agreed label rules and canonical meanings. |
+
+For these changes, preserve the artifact's UUID and original author. Validate affected artifact and unit contracts. These permissions do not waive the shared [revision rules](revision.md) for completed work.
+
 ### Field validation
 
 Allow the six shared fields and additional fields defined by the artifact's agreed contract. Report any other field as a validation error, including misspelled field names.
@@ -139,6 +149,5 @@ Keep execution state out of frontmatter. Progress, approvals, depth selections, 
 ## Decisions still required
 
 - Future schema-version change and compatibility rules.
-- Remaining metadata change rules, including changes to artifact classification and unit ownership.
 
 The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. The agreed common fields do not complete all of SH02.

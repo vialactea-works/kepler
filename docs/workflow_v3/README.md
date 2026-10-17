@@ -53,7 +53,7 @@ The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `sche
 
 Optional [labels](metadata.md#labels) can classify any artifact. Canonical labels do not form a closed set; the requester can add labels. Omit the field when empty. Labels must not record execution state.
 
-Shared field and value validation is defined in the metadata contract. Future schema-version rules, remaining metadata change rules, and stage-specific fields require further decisions.
+Shared field and value validation and metadata change rules are defined in the metadata contract. Future schema-version rules and stage-specific fields require further decisions.
 
 ## CLI infrastructure and persistence
 
