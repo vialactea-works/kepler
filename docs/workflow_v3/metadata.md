@@ -14,11 +14,15 @@ The common field set and CLI-generated UUIDv4 values for artifact identity are a
 | --- | --- | --- |
 | `id` | Yes. | CLI-generated UUIDv4 with cross-project uniqueness, stored in full lowercase hyphenated form. Keep it across content revisions, renames, and moves. |
 | `type` | Yes. | The artifact's purpose. It does not identify the current workflow stage. |
-| `schema_version` | Yes. | Version of the frontmatter contract, not the content revision or Kepler release. |
+| `schema_version` | Yes. | Integer `3` for the current frontmatter contract, aligned with Kepler versioning. It is not the content revision. |
 | `unit_id` | For unit-owned artifacts. | The owning Unit of Work's `YYYY-MM-DD-<slug>` ID, identical to its directory name. Omit this field from project-scoped artifacts. |
 | `author` | Yes. | One string in `Name <email>` form, using Git `user.name` and Git `user.email`. |
 
 ## Rules
+
+### Schema version
+
+Set `schema_version` to the integer `3` to follow Kepler versioning. This value identifies the metadata contract, not an artifact's content revision.
 
 ### Identity and content versions
 
@@ -60,7 +64,7 @@ Keep execution state out of frontmatter. Progress, approvals, depth selections, 
 
 - Allowed `type` values and fields specific to each artifact contract.
 - Remaining field formats and value-validation rules.
-- Schema-version values and change rules.
+- Future schema-version change and compatibility rules.
 - Valid metadata changes, including changes to author identity and unit ownership.
 
 The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. The agreed common fields do not complete all of SH02.
