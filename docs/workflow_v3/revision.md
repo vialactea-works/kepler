@@ -6,7 +6,7 @@
 
 Define the shared revision rules for the stages of one Unit of Work. These rules apply across stages, not only to Functional Design.
 
-Use the stage order defined by the phase contract. See the [Construction stage outline](phase_construction/README.md#stage-outline).
+Use the stage order and execution scope defined by the phase contract. Construction defines a [unit-stage order](phase_construction/README.md#stage-outline) and a [task execution structure](phase_construction/README.md#implementation-execution).
 
 Apply execution-state changes through the `kepler` CLI. Reopening, attempts, current completion, and approval history belong in structured JSON under the shared [CLI infrastructure contract](runtime.md), not artifact frontmatter or Markdown status fields.
 
@@ -14,7 +14,7 @@ Apply execution-state changes through the `kepler` CLI. Reopening, attempts, cur
 
 ### Authority and escalation
 
-The orchestrator agent decides whether to start a revision cascade and selects its starting stage.
+The orchestrator agent decides whether to start a revision cascade. It selects the starting stage and execution scope under the phase contract.
 
 A stage agent reports the finding, supporting evidence, uncertainty, and proposed revision boundary. It must not authorize reopening or start a cascade on its own.
 
@@ -30,11 +30,16 @@ The orchestrator can clarify an existing decision, request investigation, or aut
 ### Revision boundary
 
 - After authorization, start at the earliest stage whose contract or output must change, or whose completion is invalid.
-- Reopen that stage and every downstream stage. Their previous completion does not establish completion for the revised work.
+- Apply the execution scope selected by the orchestrator under the phase contract.
+- Reopen that stage and every downstream stage within that scope. Their previous completion does not establish completion for the revised work.
 - Execute the reopened stages again, in order. Do not skip a downstream stage because its outputs appear unaffected.
 - Keep upstream stages complete while their contracts and outputs remain valid. Report new upstream findings to the orchestrator.
 
-Upstream stages occur before the revision boundary. Downstream stages occur after it. Depth does not change the revision boundary or remove the required cascade.
+Upstream stages occur before the revision boundary. Downstream stages occur after it within the applicable scope. Depth does not change the revision boundary or remove the required cascade.
+
+Construction's task-local [return paths](phase_construction/README.md#return-paths) apply within an active Implementation Execution attempt. They do not automatically restart that enclosing attempt. Independent task loops continue while their inputs and contracts remain valid.
+
+A unit-wide upstream revision still applies the full unit-stage cascade. Detailed task-state changes and handling of running tasks during that cascade require separate stage contract decisions.
 
 ### Artifacts and evidence
 
@@ -48,7 +53,7 @@ Upstream stages occur before the revision boundary. Downstream stages occur afte
 
 Each stage contract must define a reopening questionnaire. Its questions identify possible changes to that stage's contract or outputs, or findings that could invalidate its completion. This questionnaire supplies stage-specific rules to the shared revision procedure. Do not define a separate revision procedure for each stage.
 
-Stage agents can supply proposed answers and supporting evidence. The orchestrator evaluates the questionnaires in stage order to select the earliest affected stage. It resolves unclear answers through investigation or requester decisions before selecting the boundary.
+Stage agents can supply proposed answers and supporting evidence. The orchestrator evaluates the questionnaires in the applicable stage order to select the earliest affected stage. It resolves unclear answers through investigation or requester decisions before selecting the boundary.
 
 - A Yes answer identifies a reason for the orchestrator to assess revision of that stage.
 - All No answers identify no independent reason to reopen that stage for the finding.
@@ -61,10 +66,10 @@ A questionnaire supports the orchestrator's boundary decision. It does not autho
 1. **Report the finding.** The stage agent reports the evidence, uncertainty, and proposed revision boundary. Use the relevant reopening questionnaire to support the report.
 2. **Assess the report.** The orchestrator checks the finding against existing decisions, artifacts, and questionnaires. Clarify the existing contract or request investigation when needed.
 3. **Decide and record.** The orchestrator decides whether to continue, investigate, or authorize reopening from the earliest affected stage. Record its decision and reason through the CLI. If reopening is not authorized, resume stage work or investigate as directed. Proceed to step 4 only after authorization.
-4. **Reopen the stages.** Apply the authorized boundary to that stage and every downstream stage. Their completion is no longer current. Preserve the previous work as history.
+4. **Reopen the stages.** Apply the authorized boundary to that stage and every downstream stage within the selected execution scope. Their completion is no longer current. Preserve the previous work as history.
 5. **Revise the current stage.** Start a new attempt when the stage executes again. Reconsider all its artifacts against its current inputs. Update or confirm each artifact.
 6. **Complete the current stage.** Execute the stage and satisfy its completion conditions. Obtain and record approval when its contract requires it.
-7. **Continue downstream.** Execute every following stage again, in order. Start a new attempt for each stage when it executes again. Reconsider its artifacts and satisfy its completion conditions.
+7. **Continue downstream.** Execute every following stage in the selected scope again, in order. Start a new attempt for each stage when it executes again. Reconsider its artifacts and satisfy its completion conditions.
 
 Report a finding that could move the boundary upstream to the orchestrator. Obtain its authorization before changing the boundary.
 
@@ -76,8 +81,9 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 | --- | --- | --- |
 | Required domain behavior changes. | Functional Design. | Every subsequent stage through Deliver. |
 | A quality requirement changes while functional behavior remains valid. | Non-functional Requirements. | Implementation Planning and every subsequent stage through Deliver. |
-| The implementation approach changes while functional and quality requirements remain valid. | Implementation Planning. | Code Generation and every subsequent stage through Deliver. |
-| Code Validation finds a code defect that requires changes only to generated code. | Code Generation. | Code Validation and every subsequent stage through Deliver. |
+| The implementation approach changes while functional and quality requirements remain valid. | Implementation Planning. | Implementation Execution, Unit of Work Review, and Deliver. |
+| During active Implementation Execution, Code Validation finds a task-local code defect. | The task's Code Generation stage. | That task's Code Validation and Task Integration stages. The enclosing execution attempt remains active. |
+| Task Integration requires changes to the task implementation during active Implementation Execution. | The task's Code Generation stage. | That task's Code Validation and Task Integration stages. Independent work continues while its contracts and inputs remain valid. |
 
 ## Decisions still required
 
@@ -87,4 +93,4 @@ The [retention rules](runtime.md#checkpoint-retention) require keeping needed Gi
 
 Rules for editorial corrections and recovery from interrupted work require separate decisions. This document records revision authority, safeguards, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
 
-The orchestrator's wider workflow responsibilities remain undefined. This document defines its revision authority only.
+This document defines revision authority. Construction defines the orchestrator's [task execution responsibilities](phase_construction/README.md#implementation-execution). Other responsibilities require their own contracts.

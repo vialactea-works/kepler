@@ -20,17 +20,19 @@ The [version 2 reference](../workflow_v2/README.md) remains a separate document 
 
 Project preparation belongs to Initialization, not Construction. A clear request can enter Construction without Inception.
 
+Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains parallel task implementation contexts. Each context contains the Task coding loop and Task Integration. These execution relationships are specific to Construction.
+
 Intent documents belong to Inception. Their structure and the terms for their organization remain outside the current design scope.
 
 ## Shared concepts
 
 A **Unit of Work** replaces the previous **change** concept. Construction operates on one Unit of Work. A Unit of Work can contain several implementation tasks. The shared [Unit of Work draft](unit-of-work.md) defines the acceptance boundary, decomposition procedure, and walking skeleton kind.
 
-A **stage** defines a workflow responsibility. A skill supplies a procedure that can support that responsibility. Stage boundaries do not depend on skill names or packaging.
+A **stage** defines a workflow responsibility. Its phase contract defines its execution scope. A skill supplies a procedure that can support that responsibility. Stage boundaries do not depend on skill names or packaging.
 
 An **orchestrator agent** decides whether to start a revision and where it starts. Stage agents report findings and propose revision boundaries. See [Authority and escalation](revision.md#authority-and-escalation) for its revision authority and safeguards.
 
-A **revision** returns work to the earliest affected stage authorized by the orchestrator and every downstream stage. [Revision](revision.md) defines the shared rules, artifact cascade, and execution procedure. Upstream stages remain complete while their contracts and outputs remain valid.
+A **revision** returns work to the earliest affected stage and every downstream stage within the scope authorized by the orchestrator. [Revision](revision.md) defines the shared rules, artifact cascade, and execution procedure. Upstream stages remain complete while their contracts and outputs remain valid.
 
 ## Document scopes
 

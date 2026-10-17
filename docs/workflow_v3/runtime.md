@@ -69,7 +69,11 @@ For this limit, active means started and not ended. Paused attempts and attempts
 
 Preserve the limit under concurrent start or resume requests. Two requests for the same scope must not create two active attempts. Coordination must not become a global Git gate for unrelated scopes.
 
-This constraint does not require every task to execute every stage. Stage contracts must define applicable task scopes and their relationship to unit-wide stage work.
+This constraint does not require every task to execute every stage. Phase and stage contracts define the applicable scopes.
+
+Construction defines its [Implementation Execution structure](phase_construction/README.md#implementation-execution). Record the relationship between its unit-scoped attempt and task-scoped Code Generation, Code Validation, and Task Integration attempts. Keep these relationships in CLI-managed execution state and audit history.
+
+Task implementation and Task coding are execution contexts, not additional stage attempts. Do not infer the same nested structure for other phases or stages.
 
 Attempt ID formats, status values, and exact coordination and binding record formats require further decisions.
 
@@ -87,7 +91,7 @@ Attempt binding and [evidence applicability](#evidence-applicability) are separa
 
 Follow the shared [Revision procedure](revision.md#revision-procedure). A stage's proposed boundary does not authorize reopening or a revision cascade.
 
-Record the orchestrator's decision and reason through the CLI. Keep current execution state consistent with that decision. Retain the decision and reason in append-only JSON audit history. CLI-owned operations record the corresponding events; agents must not write them separately.
+Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Keep current execution state consistent with that decision. Retain the decision and reason in append-only JSON audit history. CLI-owned operations record the corresponding events; agents must not write them separately.
 
 Exact state fields, event formats, and command names remain undecided.
 
@@ -174,7 +178,7 @@ A material mismatch does not authorize a revision cascade. Report suspected upst
 
 ## Parallel execution
 
-Dependency-ready tasks and independent units can run concurrently. Stages retain their required order within each unit.
+Dependency-ready tasks and independent units can run concurrently. Unit-scoped stages retain their phase order. In Construction, apply the [task-stage order](phase_construction/README.md#implementation-execution) within each task implementation, not across different tasks.
 
 Starting tasks and recording progress must not depend on shared admission commits or a global coordinator `HEAD`. Independent work must not require unrelated workspaces to become clean or stop progressing.
 
@@ -209,7 +213,9 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 Task outputs can have separate checkpoints. Results for those checkpoints do not establish that their combined result works.
 
-Run applicable checks against the integrated unit checkpoint. Code Validation evaluates the integrated application under the [stage boundaries](phase_construction/README.md#agreed-boundaries).
+Run applicable checks against the integrated unit checkpoint. Construction's [Task Integration stage](phase_construction/README.md#task-integration) requires successful combined-result checks before task completion.
+
+Code Validation retains its full-suite and independent-feedback responsibilities under the [stage boundaries](phase_construction/README.md#agreed-boundaries). Exact integration checks, their allocation between the stages, and validation timing remain open.
 
 A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; integration does not authorize a cascade.
 
