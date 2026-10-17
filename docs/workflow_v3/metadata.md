@@ -156,4 +156,4 @@ Keep execution state out of frontmatter. Progress, approvals, depth selections, 
 
 Supporting document types remain deferred under [DF06](authoring_progress.md#deferred-decisions). Define stage-specific fields with their artifact contracts. The migration procedure remains deferred under DF05.
 
-The [authoring progress record](authoring_progress.md#completed-shared-decisions) records the completed shared metadata decision, SH02.
+The [authoring progress record](authoring_progress.md#completed-shared-decisions) lists the completed metadata decisions separately.

@@ -27,6 +27,10 @@ The orchestrator can clarify an existing decision, request investigation, or aut
 - **Address evidence and disagreement.** A decision to continue must explain why the reported concern is resolved. The stage can report that the explanation did not resolve it. Use further investigation or a requester decision to resolve continued disagreement. Do not replace resolution with repeated instructions to continue.
 - **Keep local corrections independent.** Stage agents can perform internal correction loops without orchestrator approval. Escalate suspected upstream problems, unresolved authority questions, and proposed reopening.
 
+### Editorial corrections
+
+An agent may correct editorial errors in prose without reopening stages or requesting new approval, provided meaning stays unchanged. Use existing history, approval bindings, and evidence rules. Refer uncertain changes to the orchestrator.
+
 ### Revision boundary
 
 - After authorization, start at the earliest stage whose contract or output must change, or whose completion is invalid.
@@ -91,6 +95,6 @@ Follow the shared [evidence and checkpoint contract](runtime.md#evidence-and-con
 
 The [retention rules](runtime.md#checkpoint-retention) require keeping needed Git checkpoint objects reachable. Detailed retention and recovery remain open. An audit event or fingerprint alone does not preserve output contents.
 
-Rules for editorial corrections and recovery from interrupted work require separate decisions. This document records revision authority, safeguards, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
+Recovery from interrupted work still requires a separate decision. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
 
 This document defines revision authority. Construction defines the orchestrator's [task execution responsibilities](phase_construction/README.md#implementation-execution). Other responsibilities require their own contracts.
