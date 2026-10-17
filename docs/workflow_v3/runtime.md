@@ -6,7 +6,7 @@
 
 Record decisions about the Kepler CLI, structured persistence, and audit system.
 
-The separation below is agreed. Exact schemas, paths, commands, and persistence mechanisms remain under design. This document does not implement CLI behavior or migrate existing data.
+The persistence separation and stage-attempt rules are agreed. Exact schemas, paths, commands, and persistence mechanisms remain under design. This document does not implement CLI behavior or migrate existing data.
 
 ## Data responsibilities
 
@@ -40,6 +40,32 @@ Record the unit depth default and explicit stage depth overrides in execution st
 Record requester approvals and their relationship to approved content in execution state and audit history. A frontmatter flag, an existing artifact, or a Git commit does not establish approval or completion.
 
 Markdown views can present execution state, but they are derived views, not authoritative records. The authoring progress file tracks specification work, not Unit of Work execution.
+
+### Stage attempts
+
+A stage attempt is one execution of one stage for one Unit of Work. It includes the stage's internal correction loops.
+
+- Create an attempt when the stage starts for the first time.
+- Self-review and repeated edits after failed tests keep the same attempt while corrections remain within that stage.
+- A stage report or revision recommendation does not create a new attempt.
+- Create a new attempt when a stage executes again after reopening authorized by the orchestrator.
+- Apply this rule to every stage in the authorized revision cascade when each stage executes again.
+- Pauses, resumes, and new agent sessions keep the same attempt.
+- A failed command alone does not create a new attempt.
+- Link required completion evidence and approvals to the attempt.
+- Keep previous attempts as history. Their completion does not establish completion of the current attempt.
+
+Suspected upstream problems follow the shared [revision authority and escalation rules](revision.md#authority-and-escalation). Stage agents report findings and proposed boundaries. The orchestrator decides whether to authorize reopening and where to start.
+
+Attempt ID formats, run floor rules, and content-version checks require further decisions.
+
+### Revision decisions
+
+Follow the shared [Revision procedure](revision.md#revision-procedure). A stage's proposed boundary does not authorize reopening or a revision cascade.
+
+Record the orchestrator's decision and reason through the CLI. Keep current execution state consistent with that decision. Retain the decision and reason in append-only JSON audit history. CLI-owned operations record the corresponding events; agents must not write them separately.
+
+Exact state fields, event formats, and command names remain undecided.
 
 ### Audit ownership
 
@@ -83,7 +109,7 @@ Audit events and content fingerprints do not preserve artifact contents by thems
 
 ## Decisions still required
 
-- JSON state schemas, status transitions, and attempt identities.
+- JSON state schemas, status transitions, attempt ID formats, and run floor rules.
 - Audit event types, required fields, format, and storage layout.
 - CLI commands and their validation and authority rules.
 - Consistent state and audit writes, concurrent writers, and recovery after an interrupted operation.
@@ -93,3 +119,5 @@ Audit events and content fingerprints do not preserve artifact contents by thems
 ## Inspiration
 
 The [AWS AI-DLC audit model](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/docs/guide/10-state-and-audit.md) provides inspiration for command-owned events and retained history. Kepler uses structured JSON for execution state and audit records instead of adopting AWS's Markdown persistence.
+
+The [AWS run floor implementation](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/core/tools/aidlc-lib.ts#L36642-L36839) supplies research for the run floor decision. Its format and boundary rules are not yet part of the Kepler contract.

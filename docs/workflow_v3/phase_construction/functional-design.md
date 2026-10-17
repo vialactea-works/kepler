@@ -163,6 +163,8 @@ The agent can inspect existing source and tests and maintain this stage's docume
 
 The requester retains authority over product behavior, scope, consequential trade-offs, and approval. No other agent roles are defined for this stage. Requester-triggered external review remains available without selecting a reviewer agent profile here.
 
+The shared [orchestrator role](../revision.md#authority-and-escalation) controls revision authorization outside this stage. It does not replace the Functional Design owner or requester approval.
+
 ## Supporting skills
 
 ### Entry skill
@@ -174,7 +176,7 @@ The requester retains authority over product behavior, scope, consequential trad
 - Apply the shared depth definition.
 - Perform the self-review defined within this skill against the required content and completion conditions.
 - Request explicit approval and record it through the `kepler` CLI.
-- Use the reopening questionnaire with the shared revision procedure.
+- Use the reopening questionnaire to report findings and a proposed revision boundary to the orchestrator.
 - Hand off known quality concerns and questions to Non-functional Requirements.
 
 Technical solution selection remains in Implementation Planning. Skill names and packaging do not define stage boundaries.
@@ -220,7 +222,7 @@ Record approval through the `kepler` CLI in JSON execution state and audit histo
 
 ### Reopening questionnaire
 
-Evaluate each question against the agreed functional design, including linked supporting files. Use the answers in the shared [Revision procedure](../revision.md#revision-procedure).
+Evaluate each question against the agreed functional design, including linked supporting files. Report the answers and proposed revision boundary to the orchestrator under the shared [Revision procedure](../revision.md#revision-procedure).
 
 1. Does the finding require a change to the intended outcome, scope, or exclusions of the Unit of Work?
 2. Does it require a change to domain behavior, acceptance criteria, failure behavior, or boundary conditions?
@@ -231,7 +233,9 @@ Evaluate each question against the agreed functional design, including linked su
 
 Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid.
 
-Apply the shared [Revision procedure](../revision.md#revision-procedure) when a finding requires revision. The reopening questionnaire supplies this stage's rules. A reopened Functional Design stage must repeat self-review, obtain explicit requester approval, and record that approval through the `kepler` CLI in JSON execution state and audit history. External review remains requester-triggered only.
+The orchestrator authorizes reopening under the shared [Revision procedure](../revision.md#revision-procedure). Questionnaire answers do not authorize the stage agent to reopen stages.
+
+A reopened Functional Design stage must repeat self-review. The requester must explicitly approve the revised functional design. Record that approval through the `kepler` CLI in JSON execution state and audit history. External review remains requester-triggered only.
 
 ## Completion conditions
 

@@ -12,12 +12,27 @@ Apply execution-state changes through the `kepler` CLI. Reopening, attempts, cur
 
 ## Rules
 
+### Authority and escalation
+
+The orchestrator agent decides whether to start a revision cascade and selects its starting stage.
+
+A stage agent reports the finding, supporting evidence, uncertainty, and proposed revision boundary. It must not authorize reopening or start a cascade on its own.
+
+The orchestrator can clarify an existing decision, request investigation, or authorize reopening. Record its decision and reason through the shared [CLI infrastructure](runtime.md#revision-decisions).
+
+#### Safeguards
+
+- **Preserve product authority.** A clarification must explain an existing decision. It must not silently change approved behavior or scope. The requester retains authority over product behavior, scope, and material trade-offs. Changes to those decisions require requester approval.
+- **Resolve confirmed invalidity.** Check whether the reported problem is real and which stage it affects. A confirmed invalid upstream contract requires revision. Cost alone does not justify continuing under that contract. Once reopening is authorized, apply the full cascade from the selected boundary.
+- **Address evidence and disagreement.** A decision to continue must explain why the reported concern is resolved. The stage can report that the explanation did not resolve it. Use further investigation or a requester decision to resolve continued disagreement. Do not replace resolution with repeated instructions to continue.
+- **Keep local corrections independent.** Stage agents can perform internal correction loops without orchestrator approval. Escalate suspected upstream problems, unresolved authority questions, and proposed reopening.
+
 ### Revision boundary
 
-- Start at the earliest stage whose contract or output must change, or whose completion is no longer valid.
+- After authorization, start at the earliest stage whose contract or output must change, or whose completion is invalid.
 - Reopen that stage and every downstream stage. Their previous completion does not establish completion for the revised work.
 - Execute the reopened stages again, in order. Do not skip a downstream stage because its outputs appear unaffected.
-- Keep upstream stages complete while their contracts and outputs remain valid. If a finding also affects an upstream stage, move the revision boundary to that earlier stage.
+- Keep upstream stages complete while their contracts and outputs remain valid. Report new upstream findings to the orchestrator.
 
 Upstream stages occur before the revision boundary. Downstream stages occur after it. Depth does not change the revision boundary or remove the required cascade.
 
@@ -31,36 +46,43 @@ Upstream stages occur before the revision boundary. Downstream stages occur afte
 
 ## Stage reopening questionnaires
 
-Each stage contract must define a reopening questionnaire. Its questions identify findings that require a change to that stage's contract or outputs, or invalidate its completion. This questionnaire supplies stage-specific rules to the shared revision procedure. Do not define a separate revision procedure for each stage.
+Each stage contract must define a reopening questionnaire. Its questions identify possible changes to that stage's contract or outputs, or findings that could invalidate its completion. This questionnaire supplies stage-specific rules to the shared revision procedure. Do not define a separate revision procedure for each stage.
 
-Evaluate the questionnaires in stage order to identify the earliest affected stage. Use the findings and existing artifacts to answer the questions. Resolve unclear answers through investigation or requester decisions before selecting the boundary.
+Stage agents can supply proposed answers and supporting evidence. The orchestrator evaluates the questionnaires in stage order to select the earliest affected stage. It resolves unclear answers through investigation or requester decisions before selecting the boundary.
 
-- A Yes answer identifies a reason to reopen that stage.
+- A Yes answer identifies a reason for the orchestrator to assess revision of that stage.
 - All No answers identify no independent reason to reopen that stage for the finding.
-- All No answers do not exempt a downstream stage from a cascade that starts upstream.
+- All No answers do not exempt a downstream stage from a cascade authorized at an upstream stage.
 
-A questionnaire identifies the revision boundary. It does not replace the stage's completion conditions, review rules, or approval rules.
+A questionnaire supports the orchestrator's boundary decision. It does not authorize reopening or replace stage completion, review, or approval conditions.
 
 ## Revision procedure
 
-1. **Identify the boundary.** Use the stage reopening questionnaires. Record the finding, the required change, and the earliest affected stage.
-2. **Reopen the stages.** Treat completion of that stage and every downstream stage as no longer current. Preserve the previous work as history.
-3. **Revise the current stage.** Reconsider all its artifacts against its current inputs. Update or confirm each artifact.
-4. **Complete the current stage.** Execute the stage and satisfy its completion conditions. Obtain and record approval when its contract requires it.
-5. **Continue downstream.** Repeat the stage execution and artifact checks for every following stage, in order.
+1. **Report the finding.** The stage agent reports the evidence, uncertainty, and proposed revision boundary. Use the relevant reopening questionnaire to support the report.
+2. **Assess the report.** The orchestrator checks the finding against existing decisions, artifacts, and questionnaires. Clarify the existing contract or request investigation when needed.
+3. **Decide and record.** The orchestrator decides whether to continue, investigate, or authorize reopening from the earliest affected stage. Record its decision and reason through the CLI. If reopening is not authorized, resume stage work or investigate as directed. Proceed to step 4 only after authorization.
+4. **Reopen the stages.** Apply the authorized boundary to that stage and every downstream stage. Their completion is no longer current. Preserve the previous work as history.
+5. **Revise the current stage.** Start a new attempt when the stage executes again. Reconsider all its artifacts against its current inputs. Update or confirm each artifact.
+6. **Complete the current stage.** Execute the stage and satisfy its completion conditions. Obtain and record approval when its contract requires it.
+7. **Continue downstream.** Execute every following stage again, in order. Start a new attempt for each stage when it executes again. Reconsider its artifacts and satisfy its completion conditions.
 
-If a finding moves the revision boundary upstream, apply this procedure from the earlier stage.
+Report a finding that could move the boundary upstream to the orchestrator. Obtain its authorization before changing the boundary.
 
 ## Construction examples
+
+These examples are illustrative. The orchestrator authorizes the boundary from the actual finding.
 
 | Change | Revision boundary | Required cascade |
 | --- | --- | --- |
 | Required domain behavior changes. | Functional Design. | Every subsequent stage through Deliver. |
 | A quality requirement changes while functional behavior remains valid. | Non-functional Requirements. | Implementation Planning and every subsequent stage through Deliver. |
 | The implementation approach changes while functional and quality requirements remain valid. | Implementation Planning. | Code Generation and every subsequent stage through Deliver. |
+| Code Validation finds a code defect that requires changes only to generated code. | Code Generation. | Code Validation and every subsequent stage through Deliver. |
 
 ## Decisions still required
 
 The shared [CLI infrastructure contract](runtime.md) must define attempt and revision identifiers, approved-version references, and JSON audit history formats. How to preserve each revision's actual outputs remains a separate decision; an audit event or fingerprint is not an output snapshot.
 
-Rules for editorial corrections and recovery from interrupted work require separate decisions. This document records the shared cascade rule and questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
+Rules for editorial corrections and recovery from interrupted work require separate decisions. This document records revision authority, safeguards, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
+
+The orchestrator's wider workflow responsibilities remain undefined. This document defines its revision authority only.

@@ -28,7 +28,9 @@ A **Unit of Work** replaces the previous **change** concept. Construction operat
 
 A **stage** defines a workflow responsibility. A skill supplies a procedure that can support that responsibility. Stage boundaries do not depend on skill names or packaging.
 
-A **revision** returns work to the earliest affected stage and every downstream stage. [Revision](revision.md) defines the shared rules, artifact cascade, and execution procedure. Upstream stages remain complete while their contracts and outputs remain valid.
+An **orchestrator agent** decides whether to start a revision and where it starts. Stage agents report findings and propose revision boundaries. See [Authority and escalation](revision.md#authority-and-escalation) for its revision authority and safeguards.
+
+A **revision** returns work to the earliest affected stage authorized by the orchestrator and every downstream stage. [Revision](revision.md) defines the shared rules, artifact cascade, and execution procedure. Upstream stages remain complete while their contracts and outputs remain valid.
 
 ## Document scopes
 
