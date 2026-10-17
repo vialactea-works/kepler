@@ -23,7 +23,7 @@ The separation below is agreed. Exact schemas, paths, commands, and persistence 
 
 Keep artifact metadata separate from execution state. Mostly immutable does not mean that every field can never change; the metadata contract must define valid changes.
 
-Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, and `author`. The metadata contract defines their meanings and when they are required. Remaining formats and stage-specific fields remain undecided.
+Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. The metadata contract defines their meanings and when they are required. Remaining formats and stage-specific fields remain undecided.
 
 Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in artifact frontmatter or Markdown status sections.
 

@@ -49,7 +49,9 @@ The authority, internal file structure, and update rules for Project references 
 
 ## Artifact metadata
 
-The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `schema_version`, `unit_id`, and `author` as common frontmatter fields. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Author identity uses Git `user.name` and Git `user.email`.
+The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels` as common frontmatter fields. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Author identity uses Git `user.name` and Git `user.email`.
+
+Optional [labels](metadata.md#labels) can classify any artifact. Canonical labels do not form a closed set; the requester can add labels. Omit the field when empty. Labels must not record execution state.
 
 Remaining field formats and stage-specific fields require further decisions.
 

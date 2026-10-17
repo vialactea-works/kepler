@@ -17,6 +17,7 @@ The common field set and CLI-generated UUIDv4 values for artifact identity are a
 | `schema_version` | Yes. | Integer `3` for the current frontmatter contract, aligned with Kepler versioning. It is not the content revision. |
 | `unit_id` | For unit-owned artifacts. | The owning Unit of Work's `YYYY-MM-DD-<slug>` ID, identical to its directory name. Omit this field from project-scoped artifacts. |
 | `author` | Yes. | One string in `Name <email>` form, using Git `user.name` and Git `user.email`. |
+| `labels` | No. | Classification labels usable by any artifact. Canonical labels and requester-defined labels are allowed. Omit this field when empty. |
 
 ## Rules
 
@@ -50,6 +51,22 @@ Types for supporting documents are deferred as [DF06](authoring_progress.md#defe
 #### Unit ownership
 
 `unit_id` records ownership. Follow the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). The CLI uses the machine-local creation date and a descriptive slug. Unit IDs are unique within a project and remain unchanged across revisions. References to other units do not change ownership.
+
+### Labels
+
+Store `labels` as a list of strings. The field is shared metadata and can be used by any artifact. Omit the field when the list is empty.
+
+Kepler can define canonical labels with documented meanings. The vocabulary is open: the requester can add other labels. A label does not need to be in the canonical list to be valid.
+
+Do not use labels to record execution state, including progress, approval, or completion. That information belongs in CLI-managed JSON.
+
+#### Canonical labels
+
+| Label | Meaning |
+| --- | --- |
+| `walking-skeleton` | Identifies walking skeleton work under the shared [Unit of Work definition](unit-of-work.md#walking-skeleton). |
+
+To classify a unit as a walking skeleton, record this label on its `unit-of-work.md`. The label can also be used on other artifacts to classify those artifacts. Those uses do not replace the classification in the unit definition. Do not require the label to be copied to every unit-owned artifact.
 
 ### Author identity
 

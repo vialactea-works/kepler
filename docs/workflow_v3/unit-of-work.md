@@ -79,7 +79,9 @@ The requester must accept an additional preceding unit and its scope. Record the
 
 ### Metadata
 
-Record Walking skeleton as the unit's kind in mostly immutable artifact frontmatter. The exact field and format remain part of the shared [Artifact metadata contract](metadata.md). Unit kind does not describe execution progress. Dynamic state follows the [CLI infrastructure contract](runtime.md).
+Record the canonical `walking-skeleton` label in `labels` on the unit's `unit-of-work.md`. Its artifact `type` remains `unit-of-work`. Use the shared [labels contract](metadata.md#labels), not a separate `unit_kind` field.
+
+Labels are available to any artifact, and the requester can add labels outside the canonical set. They must not record execution state. Dynamic state follows the [CLI infrastructure contract](runtime.md).
 
 ## Decomposition procedure
 
