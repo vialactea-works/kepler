@@ -65,6 +65,8 @@ The CLI records audit events for its operations. Agents and skills do not edit e
 
 The [evidence and checkpoint model](runtime.md#evidence-and-content-checkpoints) separates attempt identity from commit identity. Each attempt has a distinct identity. Limit each unit/task/stage scope to zero or one active attempt under the [attempt scope rules](runtime.md#attempt-identity-and-active-scope). Material types are open-ended. Git checkpoints cover repository content; other material uses appropriate references. Records bind checks and approvals to the material covered and its relevant inputs.
 
+The [run floor](runtime.md#run-floor) uses the applicable attempt identity, without a separate boundary inside the attempt.
+
 The [parallel execution rules](runtime.md#parallel-execution) permit dependency-ready tasks and independent units to progress concurrently. Task admission captures the current unit integration commit containing all required predecessor outputs. The admitted task then keeps its recorded baseline. A moving global coordinator `HEAD` or unrelated commit does not automatically invalidate its work.
 
 ## Depth

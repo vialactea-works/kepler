@@ -71,7 +71,17 @@ Preserve the limit under concurrent start or resume requests. Two requests for t
 
 This constraint does not require every task to execute every stage. Stage contracts must define applicable task scopes and their relationship to unit-wide stage work.
 
-Attempt ID formats, status values, run floor rules, and exact coordination and binding record formats require further decisions.
+Attempt ID formats, status values, and exact coordination and binding record formats require further decisions.
+
+### Run floor
+
+Use the applicable attempt identity as the run floor for its scope. The run floor is not a separate identifier.
+
+Earlier-attempt evidence and approvals cannot establish completion of the current attempt in that scope. Late results retain their original attempt binding. They must not change a newer attempt's progress or establish its completion, even when the Git checkpoint matches.
+
+Pauses, resumes, and internal correction loops retain the same run floor. Progress in other scopes does not change it. This contract does not define an additional verification-round boundary within an attempt.
+
+Attempt binding and [evidence applicability](#evidence-applicability) are separate checks. A matching attempt identity does not establish that evidence covers the required material and relevant inputs. Stage completion conditions and revision authority still apply.
 
 ### Revision decisions
 
@@ -245,7 +255,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 ## Decisions still required
 
-- JSON state schemas, status transitions, attempt ID formats, and run floor rules.
+- JSON state schemas, status transitions, and attempt ID formats.
 - Audit event types, required fields, format, and storage layout.
 - CLI commands and their validation and authority rules.
 - Consistent state and audit writes, admission and integration coordination, concurrent writers, and recovery after an interrupted operation.
@@ -258,4 +268,4 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 The [AWS AI-DLC audit model](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/docs/guide/10-state-and-audit.md) provides inspiration for command-owned events and retained history. Kepler uses structured JSON for execution state and audit records instead of adopting AWS's Markdown persistence.
 
-The [AWS run floor implementation](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/core/tools/aidlc-lib.ts#L36642-L36839) supplies research for the run floor decision. Its format and boundary rules are not yet part of the Kepler contract.
+The [AWS run floor implementation](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/core/tools/aidlc-lib.ts#L36642-L36839) supplied research for this decision. Kepler uses attempt identity instead of adopting its floor format or boundary rules.
