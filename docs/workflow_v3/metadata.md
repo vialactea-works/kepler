@@ -6,7 +6,7 @@
 
 Define the common frontmatter fields for Kepler Markdown artifacts. These fields apply to required documents, supporting documents, and Project references.
 
-The common field set and CLI-generated UUIDv4 values for artifact identity are agreed. Remaining field formats and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
+The common fields and their validation rules are agreed. Future schema-version rules, remaining metadata change rules, and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
 
 ## Common fields
 
@@ -117,6 +117,17 @@ Preserve invalid content for correction. Do not silently ignore or delete unknow
 
 This restriction applies to field names. Requester-defined label values remain permitted under the shared [labels contract](#labels); the canonical label list is not a closed set.
 
+#### Value validation
+
+- Required shared fields must be present and non-null.
+- `id`, `type`, `author`, and applicable `unit_id` values must be non-empty strings.
+- `author` must contain both a non-empty name and a non-empty email in the agreed format.
+- `schema_version` must be the integer `3`. The string `"3"` is invalid.
+- Omit unused optional fields. Do not set them to `null`.
+- If present, `labels` must be a non-empty list of strings that satisfy the shared label rules.
+
+Validation is read-only. Report errors without converting value types, generating missing IDs, or filling missing attribution. Preserve invalid content for correction. Creation operations can populate fields explicitly; validation must not repair them automatically.
+
 ### Extensions
 
 Stage-specific contracts can add fields. They must not redefine the common fields. Define these extensions with the relevant artifact contracts later.
@@ -127,7 +138,6 @@ Keep execution state out of frontmatter. Progress, approvals, depth selections, 
 
 ## Decisions still required
 
-- Remaining field formats and value-validation rules.
 - Future schema-version change and compatibility rules.
 - Remaining metadata change rules, including changes to artifact classification and unit ownership.
 

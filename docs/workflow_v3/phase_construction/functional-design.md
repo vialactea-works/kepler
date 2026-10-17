@@ -78,7 +78,7 @@ These paths are part of the version 3 draft. They do not migrate existing files 
 
 ### Required information and supporting detail
 
-This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Use the shared [Artifact metadata contract](../metadata.md) for common frontmatter fields. Remaining formats and stage-specific fields require further decisions. Dynamic execution state follows the shared [CLI infrastructure contract](../runtime.md).
+This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Use the shared [Artifact metadata contract](../metadata.md) for common frontmatter fields. Shared field and value validation follows that contract. Stage-specific fields require further decisions. Dynamic execution state follows the shared [CLI infrastructure contract](../runtime.md).
 
 Create the Unit of Work definition when needed. Preserve and refine an existing definition when Inception or earlier work supplies it. Do not create a second definition for the same Unit of Work.
 

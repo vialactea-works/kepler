@@ -12,7 +12,7 @@ The separation below is agreed. Exact schemas, paths, commands, and persistence 
 
 | Data | Representation | Responsibility |
 | --- | --- | --- |
-| Artifact metadata | Frontmatter on the artifact. | Record identity, classification, unit ownership, schema version, and author identity through the shared [Artifact metadata contract](metadata.md). Exact formats and additional fields require further decisions. |
+| Artifact metadata | Frontmatter on the artifact. | Record identity, classification, unit ownership, schema version, and author identity through the shared [Artifact metadata contract](metadata.md). Additional fields and remaining metadata change rules require further decisions. |
 | Authored content | Markdown artifact body. | Define purpose, scope, requirements, design, plans, and supporting evidence. |
 | Execution state | Structured JSON, operated through the `kepler` CLI. | Track current workflow, unit, stage, and implementation progress; active attempts; pause and resume information; approvals; and changing execution settings. |
 | Audit history | Append-only structured JSON events, recorded through CLI-owned operations. | Record transitions, decisions, approvals, revisions, and the evidence they refer to. |
@@ -23,7 +23,7 @@ The separation below is agreed. Exact schemas, paths, commands, and persistence 
 
 Keep artifact metadata separate from execution state. Mostly immutable does not mean that every field can never change; the metadata contract must define valid changes.
 
-Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. The metadata contract defines their meanings and when they are required. Apply its [field validation rules](metadata.md#field-validation): report unknown fields as errors and preserve invalid content for correction. Remaining formats and stage-specific fields remain undecided.
+Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. The metadata contract defines their meanings and when they are required. Apply its [field validation rules](metadata.md#field-validation). Validation is read-only: report invalid names or values and preserve content for correction. Do not convert value types or generate missing values during validation. Creation operations can populate fields explicitly. Stage-specific fields remain undecided.
 
 Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in artifact frontmatter or Markdown status sections.
 
@@ -81,7 +81,7 @@ Audit events and content fingerprints do not preserve artifact contents by thems
 
 ## Decisions still required
 
-- Remaining [artifact metadata decisions](metadata.md#decisions-still-required), including exact field formats, allowed types, schema-version rules, and valid changes.
+- Remaining [artifact metadata decisions](metadata.md#decisions-still-required), including future schema-version rules and remaining metadata change rules. Supporting document types and stage-specific extensions remain deferred.
 - JSON state schemas, status transitions, and attempt identities.
 - Audit event types, required fields, format, and storage layout.
 - CLI commands and their validation and authority rules.
