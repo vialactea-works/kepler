@@ -34,7 +34,20 @@ Keep document purpose in `type`; do not encode it in the ID.
 
 ### Classification and ownership
 
-`type` describes the document. It is separate from the Unit of Work's kind, such as Walking skeleton.
+`type` describes the document. It is separate from the Unit of Work's kind, such as Walking skeleton. Use lowercase words separated by hyphens. A stage transition does not change the document's type.
+
+#### Accepted type values
+
+| Value | Applies to |
+| --- | --- |
+| `unit-of-work` | The Unit of Work definition in `unit-of-work.md`. |
+| `functional-design` | Functional Design in `design.md`. |
+| `non-functional-requirements` | Non-functional Requirements in `quality.md`. |
+| `project-reference` | Shared Project reference documents. |
+
+Types for supporting documents are deferred as [DF06](authoring_progress.md#deferred-decisions). No generic or purpose-specific type is selected by this deferral. Define additional values when their artifact contracts are agreed.
+
+#### Unit ownership
 
 `unit_id` records ownership. Follow the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). The CLI uses the machine-local creation date and a descriptive slug. Unit IDs are unique within a project and remain unchanged across revisions. References to other units do not change ownership.
 
@@ -62,7 +75,6 @@ Keep execution state out of frontmatter. Progress, approvals, depth selections, 
 
 ## Decisions still required
 
-- Allowed `type` values and fields specific to each artifact contract.
 - Remaining field formats and value-validation rules.
 - Future schema-version change and compatibility rules.
 - Valid metadata changes, including changes to author identity and unit ownership.

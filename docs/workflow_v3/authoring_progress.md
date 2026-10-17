@@ -23,6 +23,7 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - [CLI infrastructure](runtime.md) separates mostly immutable artifact identity frontmatter from dynamic JSON execution state and audit records. Agents and skills operate on execution state through the CLI, not direct file edits.
 - This persistence decision supersedes earlier choices to store approvals and changing depth selections in artifact metadata. Approval authority, depth selection rules, and revision semantics remain unchanged.
 - The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `schema_version`, `unit_id`, and `author` as common frontmatter fields. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Stage-specific fields remain deferred.
+- Accepted [artifact types](metadata.md#accepted-type-values) are `unit-of-work`, `functional-design`, `non-functional-requirements`, and `project-reference`. Supporting document types are deferred in DF06; the proposed generic `supporting-detail` value was not accepted.
 - Artifact `id` values are CLI-generated UUIDv4 values with cross-project uniqueness. Store the full lowercase hexadecimal value in `8-4-4-4-12` hyphenated form, without prefixes or braces. Do not shorten IDs. They remain stable across content revisions, renames, and moves. Document purpose stays in `type`, not the ID.
 - [Unit IDs](unit-of-work.md#identity-and-directory) use `YYYY-MM-DD-<slug>`, with the machine-local date when the CLI creates the unit. They are unique within the project and are the exact directory names. Keep them unchanged across revisions and retries. The CLI must detect duplicate IDs without overwriting an existing unit.
 - [`schema_version`](metadata.md#schema-version) is the integer `3`, aligned with Kepler versioning. Future version-change and compatibility rules remain open.
@@ -65,7 +66,7 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 
 | ID | Decision | Open scope |
 | --- | --- | --- |
-| SH02 | Artifact metadata | The [common fields](metadata.md#common-fields) and [CLI-generated UUIDv4 artifact IDs with cross-project uniqueness and full lowercase hyphenated form](metadata.md#identity-and-content-versions) are agreed. The [author string format](metadata.md#author-identity) and [schema version `3`](metadata.md#schema-version) are also agreed. Define remaining formats, allowed types, future schema-version rules, valid changes, and the unit-kind field. Stage-specific extensions remain deferred. Dynamic execution data belongs to SH06. |
+| SH02 | Artifact metadata | Agreed: [common fields](metadata.md#common-fields), [UUIDv4 format](metadata.md#identity-and-content-versions), [author string](metadata.md#author-identity), [schema version `3`](metadata.md#schema-version), and [initial types](metadata.md#accepted-type-values). Define remaining formats and validation, future schema-version rules, valid changes, and the unit-kind field. Supporting document types are deferred in DF06. Stage-specific extensions remain deferred. Dynamic execution data belongs to SH06. |
 | SH04 | Revision and recovery | The [shared cascade rule and questionnaire mechanism](revision.md) are recorded. Still define editorial corrections and recovery from interrupted work. Stage questionnaires belong to stage contracts. |
 | SH05 | Unit of Work scope | The [accepted rules, walking skeleton kind, and decomposition procedure](unit-of-work.md) are recorded in a draft. Still define detailed scope and size criteria, the decomposition questionnaire, and deployment content and location. |
 | SH06 | CLI infrastructure | The [persistence separation and audit ownership](runtime.md) are agreed. Define JSON state and event schemas, paths, CLI commands, attempt identities, approval binding, consistent writes, recovery, and revision output retention. |
@@ -86,6 +87,7 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 | DF03 | Initialization | Define project preparation when we design the Initialization phase. |
 | DF04 | Later construction stages | Define the remaining stage contracts, artifact sections, reopening questionnaires, agents, and skills after Functional Design. Include the location of the technical design record from Implementation Planning. Use the [stage outline](phase_construction/README.md#stage-outline). |
 | DF05 | Migration procedure | Before migration support is implemented, define the procedure for moving from version 2 to version 3. Include moving old artifacts to `.kepler/deprecated/v2/`. |
+| DF06 | Supporting document types | When their artifact contracts are designed, decide whether supporting documents use a generic type or types specific to their purpose or document. No proposed alternative is selected. |
 
 ## Record maintenance
 
