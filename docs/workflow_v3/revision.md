@@ -81,7 +81,9 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 
 ## Decisions still required
 
-The shared [CLI infrastructure contract](runtime.md) must define attempt and revision identifiers, approved-version references, and JSON audit history formats. How to preserve each revision's actual outputs remains a separate decision; an audit event or fingerprint is not an output snapshot.
+Follow the shared [evidence and checkpoint contract](runtime.md#evidence-and-content-checkpoints) for checkpoint and material references. The CLI infrastructure must still define attempt and revision ID formats, exact binding records, and JSON audit event schemas.
+
+The [retention rules](runtime.md#checkpoint-retention) require keeping needed Git checkpoint objects reachable. Detailed retention and recovery remain open. An audit event or fingerprint alone does not preserve output contents.
 
 Rules for editorial corrections and recovery from interrupted work require separate decisions. This document records revision authority, safeguards, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
 

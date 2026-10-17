@@ -218,7 +218,7 @@ The requester must explicitly approve the current functional design. Approval co
 
 Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval permits progression to Non-functional Requirements. It does not authorize implementation or delivery.
 
-Record approval through the `kepler` CLI in JSON execution state and audit history, not artifact frontmatter. Do not require a separate human-authored approval document. Exact state fields, event formats, and approved-version references remain part of the shared [CLI infrastructure contract](../runtime.md).
+Record approval through the `kepler` CLI in JSON execution state and audit history, not artifact frontmatter. Do not require a separate human-authored approval document. Apply the shared [evidence and approval bindings](../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact state fields, event formats, and material reference formats remain undecided.
 
 ### Reopening questionnaire
 
