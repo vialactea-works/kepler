@@ -22,6 +22,8 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - Functional Design requires explicit requester approval, recorded through the `kepler` CLI in JSON execution state and audit history. Exact fields and formats remain in SH06. See [review and approval](phase_construction/functional-design.md#review-and-approval).
 - [CLI infrastructure](runtime.md) separates mostly immutable artifact identity frontmatter from dynamic JSON execution state and audit records. Agents and skills operate on execution state through the CLI, not direct file edits.
 - This persistence decision supersedes earlier choices to store approvals and changing depth selections in artifact metadata. Approval authority, depth selection rules, and revision semantics remain unchanged.
+- The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `schema_version`, `unit_id`, and `author` as common frontmatter fields. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Stage-specific fields remain deferred.
+- `author` uses Git `user.name` and Git `user.email`. A planned [current-author CLI command](runtime.md#current-author) returns this identity from the effective project Git configuration. Exact field and command formats remain open.
 - Required documents have required sections. Additional detail lives in linked files under `details/`, not optional inline sections.
 - Functional Design supporting files live under `details/functional-design/`.
 - The shared [Depth definition](depth.md) uses Minimal, Standard, and Comprehensive levels. Set one unit default with explicit stage overrides. Use Standard when no other level is selected. The agent recommends adjustments; the requester decides.
@@ -61,7 +63,7 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 | ID | Decision | Open scope |
 | --- | --- | --- |
 | SH01 | Unit of Work identity | Identifier format and its relationship to the directory name. |
-| SH02 | Artifact metadata | Mostly immutable identity and classification fields in frontmatter, including unit kind. Define exact fields and valid changes. Dynamic execution data belongs to SH06. |
+| SH02 | Artifact metadata | The [common fields and their meanings](metadata.md#common-fields) are agreed. Define exact formats, identifier uniqueness scope, allowed types, schema-version rules, valid changes, and the unit-kind field. Stage-specific extensions remain deferred. Dynamic execution data belongs to SH06. |
 | SH04 | Revision and recovery | The [shared cascade rule and questionnaire mechanism](revision.md) are recorded. Still define editorial corrections and recovery from interrupted work. Stage questionnaires belong to stage contracts. |
 | SH05 | Unit of Work scope | The [accepted rules, walking skeleton kind, and decomposition procedure](unit-of-work.md) are recorded in a draft. Still define detailed scope and size criteria, the decomposition questionnaire, and deployment content and location. |
 | SH06 | CLI infrastructure | The [persistence separation and audit ownership](runtime.md) are agreed. Define JSON state and event schemas, paths, CLI commands, attempt identities, approval binding, consistent writes, recovery, and revision output retention. |

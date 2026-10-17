@@ -12,7 +12,7 @@ The separation below is agreed. Exact schemas, paths, commands, and persistence 
 
 | Data | Representation | Responsibility |
 | --- | --- | --- |
-| Artifact metadata | Frontmatter on the artifact. | Record identity and other mostly immutable attributes, such as artifact classification and unit membership. Exact fields remain undecided. |
+| Artifact metadata | Frontmatter on the artifact. | Record identity, classification, unit ownership, schema version, and author identity through the shared [Artifact metadata contract](metadata.md). Exact formats and additional fields require further decisions. |
 | Authored content | Markdown artifact body. | Define purpose, scope, requirements, design, plans, and supporting evidence. |
 | Execution state | Structured JSON, operated through the `kepler` CLI. | Track current workflow, unit, stage, and implementation progress; active attempts; pause and resume information; approvals; and changing execution settings. |
 | Audit history | Append-only structured JSON events, recorded through CLI-owned operations. | Record transitions, decisions, approvals, revisions, and the evidence they refer to. |
@@ -22,6 +22,8 @@ The separation below is agreed. Exact schemas, paths, commands, and persistence 
 ### Artifact metadata
 
 Keep artifact metadata separate from execution state. Mostly immutable does not mean that every field can never change; the metadata contract must define valid changes.
+
+Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, and `author`. The metadata contract defines their meanings and when they are required. Exact formats and stage-specific fields remain undecided.
 
 Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in artifact frontmatter or Markdown status sections.
 
@@ -53,6 +55,12 @@ Keep state-transition rules and audit recording in shared application operations
 
 Command names and arguments are not defined here. This document does not add new commands.
 
+### Current author
+
+Provide a CLI command that returns the current author as Git `user.name` and Git `user.email`. Resolve both values from the effective Git configuration for the current project. Repository-specific identity settings must apply.
+
+Skills use this command to obtain the author identity for artifact frontmatter. The command name, output format, and behavior when either value is missing remain undecided.
+
 ## Traceability and revision outputs
 
 Execution records must refer to the artifacts and units they concern. The identity, relationship, and approved-version reference formats require separate decisions.
@@ -61,7 +69,7 @@ Audit events and content fingerprints do not preserve artifact contents by thems
 
 ## Decisions still required
 
-- Frontmatter identity fields, classifications, and valid changes.
+- Remaining [artifact metadata decisions](metadata.md#decisions-still-required), including exact field formats, allowed types, schema-version rules, and valid changes.
 - JSON state schemas, status transitions, and attempt identities.
 - Audit event types, required fields, format, and storage layout.
 - CLI commands and their validation and authority rules.

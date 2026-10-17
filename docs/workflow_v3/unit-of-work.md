@@ -61,7 +61,7 @@ The requester must accept an additional preceding unit and its scope. Record the
 
 ### Metadata
 
-Record Walking skeleton as the unit's kind in mostly immutable artifact frontmatter. The exact field and format remain part of the shared artifact metadata decision. Unit kind does not describe execution progress. Dynamic state follows the [CLI infrastructure contract](runtime.md).
+Record Walking skeleton as the unit's kind in mostly immutable artifact frontmatter. The exact field and format remain part of the shared [Artifact metadata contract](metadata.md). Unit kind does not describe execution progress. Dynamic state follows the [CLI infrastructure contract](runtime.md).
 
 ## Decomposition procedure
 
@@ -77,7 +77,7 @@ Record Walking skeleton as the unit's kind in mostly immutable artifact frontmat
 - Detailed scope and size criteria, and the decomposition questionnaire.
 - Deployment information to record, its location, and when it must be defined.
 
-The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. Identifier formats and artifact metadata remain separate shared decisions. The [CLI infrastructure contract](runtime.md) defines the separation between artifact metadata and execution state.
+The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. Identifier formats and remaining artifact metadata details remain separate shared decisions. The [CLI infrastructure contract](runtime.md) defines the separation between artifact metadata and execution state.
 
 ## Inspiration
 

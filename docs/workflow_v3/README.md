@@ -47,6 +47,12 @@ These paths do not migrate existing artifacts or change current CLI path rules.
 
 The authority, internal file structure, and update rules for Project references require further decisions. The distinction between observed facts and proposed behavior must remain explicit.
 
+## Artifact metadata
+
+The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `schema_version`, `unit_id`, and `author` as common frontmatter fields. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Author identity uses Git `user.name` and Git `user.email`.
+
+Exact field formats and stage-specific fields require further decisions.
+
 ## CLI infrastructure and persistence
 
 [CLI infrastructure](runtime.md) separates mostly immutable artifact metadata from dynamic execution state. Artifact identity belongs in frontmatter. Progress, attempts, approvals, pause checkpoints, and changing execution settings belong in structured JSON, operated through the `kepler` CLI.
