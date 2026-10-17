@@ -93,8 +93,8 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 
 Follow the shared [evidence and checkpoint contract](runtime.md#evidence-and-content-checkpoints) for checkpoint and material references. The CLI infrastructure must still define attempt and revision ID formats, exact binding records, and JSON audit event schemas.
 
-The [retention rules](runtime.md#checkpoint-retention) require keeping needed Git checkpoint objects reachable. Detailed retention and recovery remain open. An audit event or fingerprint alone does not preserve output contents.
+The [retention rules](runtime.md#checkpoint-retention) require keeping needed Git checkpoint objects reachable. Detailed retention remains open. An audit event or fingerprint alone does not preserve output contents.
 
-Recovery from interrupted work still requires a separate decision. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
+The shared [interrupted-work recovery rule](runtime.md#interrupted-work-recovery) is agreed. Lock recovery and interrupted state-write recovery remain open. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
 
 This document defines revision authority. Construction defines the orchestrator's [task execution responsibilities](phase_construction/README.md#implementation-execution). Other responsibilities require their own contracts.

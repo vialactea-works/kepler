@@ -68,6 +68,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH39 | Revision decision recording | [Revision decisions](runtime.md#revision-decisions): record the orchestrator's decision, reason, scope, and starting stage through the CLI. Keep execution state consistent with the decision. |
 | SH40 | Current-author lookup | [Current author](runtime.md#current-author): provide a command returning effective project Git identity. It identifies the current author, not an existing artifact's creator. |
 | SH41 | Filename convention | [Filename convention](#filename-convention): use short filenames with full words, without abbreviations. |
+| SH42 | Interrupted-work recovery | [Recovery](runtime.md#interrupted-work-recovery): resume from verified progress and preserve unfinished work. Continue the same attempt only if it has not ended. |
 | SH80 | Requirement coverage across units | [Coverage](unit-of-work.md#coverage): account for known requirements when defining units. Do not leave required behavior outside the decomposition. |
 | SH81 | Unit dependencies | [Dependencies](unit-of-work.md#dependencies): record dependencies and interaction contracts explicitly. Do not present dependent work as independent. |
 | SH82 | Verifiable unit outcomes | [Verification](unit-of-work.md#verification): give each unit meaningful, observable acceptance conditions. |
@@ -83,7 +84,6 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| SH42 | Interrupted-work recovery | How does interrupted work resume from its actual artifacts, execution state, and evidence? See [recovery scope](revision.md#decisions-still-required). |
 | SH43 | Execution-state schema | What JSON fields and status values represent workflow execution? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH44 | Audit event schema | What event types, required fields, and envelope represent audit history? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH45 | Runtime storage paths | Where do execution-state and audit files live? See [runtime decisions](runtime.md#decisions-still-required). |

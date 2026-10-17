@@ -129,7 +129,7 @@ Still define the task graph representation, detailed stage conditions, artifacts
 
 Lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery remain open in the shared CLI infrastructure contract.
 
-Detailed task-state transitions, dependency invalidation, shutdown coordination, and interrupted-work recovery require separate decisions.
+Detailed task-state transitions, dependency invalidation, and shutdown coordination require separate decisions. Interrupted work follows the shared [recovery rule](../runtime.md#interrupted-work-recovery).
 
 ## Draft use
 

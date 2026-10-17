@@ -87,6 +87,14 @@ Pauses, resumes, and internal correction loops retain the same run floor. Progre
 
 Attempt binding and [evidence applicability](#evidence-applicability) are separate checks. A matching attempt identity does not establish that evidence covers the required material and relevant inputs. Stage completion conditions and revision authority still apply.
 
+### Interrupted-work recovery
+
+Resume from CLI-recorded progress after checking the actual work and evidence. Preserve unfinished work and continue the same attempt if it has not ended. Confirm that no previous worker is still changing the same work. Repeat work only where results are missing or no longer valid. Resolve conflicting records before resuming the affected work.
+
+Use the existing [revision procedure](revision.md#revision-procedure) when upstream contracts are invalid. Independent work can continue while its inputs and contracts remain valid.
+
+This rule does not define lock recovery or repair of interrupted state writes.
+
 ### Revision decisions
 
 Follow the shared [Revision procedure](revision.md#revision-procedure). A stage's proposed boundary does not authorize reopening or a revision cascade.
@@ -261,7 +269,7 @@ Git preserves committed repository material while the required objects remain av
 
 Audit events and content fingerprints do not preserve artifact contents by themselves. Retention periods, publication, storage locations, and cleanup rules remain undecided.
 
-An interrupted attempt may have no output checkpoint. Its record must not claim a completed snapshot. Detailed recovery rules remain undecided.
+An interrupted attempt may have no output checkpoint. Its record must not claim a completed snapshot. Follow the shared [interrupted-work recovery rule](#interrupted-work-recovery).
 
 ## Decisions still required
 
