@@ -109,6 +109,14 @@ This frontmatter field is illustrative:
 author: "Example Author <author@example.com>"
 ```
 
+### Field validation
+
+Allow the six shared fields and additional fields defined by the artifact's agreed contract. Report any other field as a validation error, including misspelled field names.
+
+Preserve invalid content for correction. Do not silently ignore or delete unknown fields.
+
+This restriction applies to field names. Requester-defined label values remain permitted under the shared [labels contract](#labels); the canonical label list is not a closed set.
+
 ### Extensions
 
 Stage-specific contracts can add fields. They must not redefine the common fields. Define these extensions with the relevant artifact contracts later.
