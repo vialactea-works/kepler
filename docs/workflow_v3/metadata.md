@@ -6,23 +6,25 @@
 
 Define the common frontmatter fields for Kepler Markdown artifacts. These fields apply to required documents, supporting documents, and Project references.
 
-The common field set and CLI-generated UUIDs for artifact identity are agreed. Remaining field formats and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
+The common field set and CLI-generated UUIDv4 values for artifact identity are agreed. Remaining field formats and stage-specific fields require further decisions. This document does not implement schemas or change existing artifacts.
 
 ## Common fields
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `id` | Yes. | CLI-generated UUID with cross-project uniqueness. Keep it across content revisions, renames, and moves. |
+| `id` | Yes. | CLI-generated UUIDv4 with cross-project uniqueness, stored in full lowercase hyphenated form. Keep it across content revisions, renames, and moves. |
 | `type` | Yes. | The artifact's purpose. It does not identify the current workflow stage. |
 | `schema_version` | Yes. | Version of the frontmatter contract, not the content revision or Kepler release. |
 | `unit_id` | For unit-owned artifacts. | The owning Unit of Work's `YYYY-MM-DD-<slug>` ID, identical to its directory name. Omit this field from project-scoped artifacts. |
-| `author` | Yes. | Author identity, identified by both Git `user.name` and Git `user.email`. |
+| `author` | Yes. | One string in `Name <email>` form, using Git `user.name` and Git `user.email`. |
 
 ## Rules
 
 ### Identity and content versions
 
-Generate artifact IDs through the `kepler` CLI as UUIDs with cross-project uniqueness. Keep document purpose in `type`; do not encode it in the ID.
+Generate artifact IDs through the `kepler` CLI as UUIDv4 values with cross-project uniqueness. Store the full value as lowercase hexadecimal in `8-4-4-4-12` form, with hyphens between groups. Do not use prefixes, braces, or shortened IDs.
+
+Keep document purpose in `type`; do not encode it in the ID.
 
 `id` identifies the artifact, not one version of its contents. Execution records must bind approvals to content versions separately.
 
@@ -34,7 +36,17 @@ Generate artifact IDs through the `kepler` CLI as UUIDs with cross-project uniqu
 
 ### Author identity
 
-Use the planned [current-author CLI command](runtime.md#current-author) to obtain the Git name and email for artifact frontmatter. The CLI resolves the effective Git configuration for the current project.
+Store `author` as one string in `Name <email>` form. Use Git `user.name` for the name and Git `user.email` for the email.
+
+Use the planned [current-author CLI command](runtime.md#current-author) to obtain these values. The CLI resolves the effective Git configuration for the current project.
+
+#### Example
+
+This frontmatter field is illustrative:
+
+```yaml
+author: "Example Author <author@example.com>"
+```
 
 ### Extensions
 
@@ -46,9 +58,8 @@ Keep execution state out of frontmatter. Progress, approvals, depth selections, 
 
 ## Decisions still required
 
-- UUID variant and text format for artifact IDs.
 - Allowed `type` values and fields specific to each artifact contract.
-- Exact field formats, including the representation of the author's name and email.
+- Remaining field formats and value-validation rules.
 - Schema-version values and change rules.
 - Valid metadata changes, including changes to author identity and unit ownership.
 

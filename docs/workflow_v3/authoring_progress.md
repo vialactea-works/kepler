@@ -23,9 +23,9 @@ The Functional Design contract remains a draft. A saved draft is not approval of
 - [CLI infrastructure](runtime.md) separates mostly immutable artifact identity frontmatter from dynamic JSON execution state and audit records. Agents and skills operate on execution state through the CLI, not direct file edits.
 - This persistence decision supersedes earlier choices to store approvals and changing depth selections in artifact metadata. Approval authority, depth selection rules, and revision semantics remain unchanged.
 - The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `schema_version`, `unit_id`, and `author` as common frontmatter fields. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Stage-specific fields remain deferred.
-- Artifact `id` values are CLI-generated UUIDs with cross-project uniqueness. They remain stable across content revisions, renames, and moves. Document purpose stays in `type`, not the ID.
+- Artifact `id` values are CLI-generated UUIDv4 values with cross-project uniqueness. Store the full lowercase hexadecimal value in `8-4-4-4-12` hyphenated form, without prefixes or braces. Do not shorten IDs. They remain stable across content revisions, renames, and moves. Document purpose stays in `type`, not the ID.
 - [Unit IDs](unit-of-work.md#identity-and-directory) use `YYYY-MM-DD-<slug>`, with the machine-local date when the CLI creates the unit. They are unique within the project and are the exact directory names. Keep them unchanged across revisions and retries. The CLI must detect duplicate IDs without overwriting an existing unit.
-- `author` uses Git `user.name` and Git `user.email`. A planned [current-author CLI command](runtime.md#current-author) returns this identity from the effective project Git configuration. Exact field and command formats remain open.
+- `author` is one string in `Name <email>` form, using Git `user.name` and Git `user.email`. A planned [current-author CLI command](runtime.md#current-author) returns this identity from the effective project Git configuration. The command name, output format, and missing-value behavior remain open.
 - Required documents have required sections. Additional detail lives in linked files under `details/`, not optional inline sections.
 - Functional Design supporting files live under `details/functional-design/`.
 - The shared [Depth definition](depth.md) uses Minimal, Standard, and Comprehensive levels. Set one unit default with explicit stage overrides. Use Standard when no other level is selected. The agent recommends adjustments; the requester decides.
@@ -64,7 +64,7 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 
 | ID | Decision | Open scope |
 | --- | --- | --- |
-| SH02 | Artifact metadata | The [common fields](metadata.md#common-fields) and [CLI-generated UUID artifact IDs with cross-project uniqueness](metadata.md#identity-and-content-versions) are agreed. Define remaining formats, UUID variant, allowed types, schema-version rules, valid changes, and the unit-kind field. Stage-specific extensions remain deferred. Dynamic execution data belongs to SH06. |
+| SH02 | Artifact metadata | The [common fields](metadata.md#common-fields) and [CLI-generated UUIDv4 artifact IDs with cross-project uniqueness and full lowercase hyphenated form](metadata.md#identity-and-content-versions) are agreed. The [author string format](metadata.md#author-identity) is also agreed. Define remaining formats, allowed types, schema-version rules, valid changes, and the unit-kind field. Stage-specific extensions remain deferred. Dynamic execution data belongs to SH06. |
 | SH04 | Revision and recovery | The [shared cascade rule and questionnaire mechanism](revision.md) are recorded. Still define editorial corrections and recovery from interrupted work. Stage questionnaires belong to stage contracts. |
 | SH05 | Unit of Work scope | The [accepted rules, walking skeleton kind, and decomposition procedure](unit-of-work.md) are recorded in a draft. Still define detailed scope and size criteria, the decomposition questionnaire, and deployment content and location. |
 | SH06 | CLI infrastructure | The [persistence separation and audit ownership](runtime.md) are agreed. Define JSON state and event schemas, paths, CLI commands, attempt identities, approval binding, consistent writes, recovery, and revision output retention. |
@@ -84,6 +84,7 @@ Use "Decomposition procedure" instead of "Application mechanism" for this proced
 | DF02 | Inception | Define intent documents, terminology, and the production of one or more Units of Work when we design Inception. Include the previous route concept and its relationship to Units of Work. |
 | DF03 | Initialization | Define project preparation when we design the Initialization phase. |
 | DF04 | Later construction stages | Define the remaining stage contracts, artifact sections, reopening questionnaires, agents, and skills after Functional Design. Include the location of the technical design record from Implementation Planning. Use the [stage outline](phase_construction/README.md#stage-outline). |
+| DF05 | Migration procedure | Before migration support is implemented, define the procedure for moving from version 2 to version 3. Include moving old artifacts to `.kepler/deprecated/v2/`. |
 
 ## Record maintenance
 

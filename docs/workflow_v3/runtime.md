@@ -59,7 +59,7 @@ Command names and arguments are not defined here. This document does not add new
 
 Provide a CLI command that returns the current author as Git `user.name` and Git `user.email`. Resolve both values from the effective Git configuration for the current project. Repository-specific identity settings must apply.
 
-Skills use this command to obtain the author identity for artifact frontmatter. The command name, output format, and behavior when either value is missing remain undecided.
+Skills use this command to obtain the author identity for artifact frontmatter. Store the frontmatter `author` value as one `Name <email>` string under the shared [author identity rules](metadata.md#author-identity). The command name, output format, and behavior when either value is missing remain undecided.
 
 ### Unit creation
 
@@ -69,7 +69,7 @@ Use the exact unit ID as the directory name. The CLI must detect duplicate IDs w
 
 ## Traceability and revision outputs
 
-Execution records must refer to the artifacts and units they concern. The CLI generates artifact IDs as UUIDs with cross-project uniqueness. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions).
+Execution records must refer to the artifacts and units they concern. The CLI generates artifact IDs as UUIDv4 values with cross-project uniqueness and stores them in full lowercase hyphenated form. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions).
 
 Relationship formats and approved-version references require separate decisions.
 
