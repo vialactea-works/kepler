@@ -215,9 +215,9 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 Task outputs can have separate checkpoints. Results for those checkpoints do not establish that their combined result works.
 
-Construction's [Task Integration stage](phase_construction/README.md#task-integration) follows prepare, check, then accept under the unit's integration lock. Check the combined candidate before it becomes the unit's integrated state. Task completion requires successful acceptance and the applicable completion conditions.
+Construction's [Task Integration stage](phase_construction/README.md#task-integration) follows prepare, check, then accept under the unit's integration lock. Check the combined candidate before it becomes the unit's integrated state. Run the project build and full application test suite against the candidate while holding the unit lock. Both must complete successfully before acceptance. Task completion requires successful acceptance and the applicable completion conditions.
 
-Code Validation retains its full-suite and independent-feedback responsibilities under the [stage boundaries](phase_construction/README.md#agreed-boundaries). Exact integration checks and their allocation between the stages remain open.
+Code Validation retains its full-suite and independent-feedback responsibilities under the [stage boundaries](phase_construction/README.md#agreed-boundaries). The integration build and full-suite checks do not replace those Code Validation duties. Any additional integration checks and project-specific check configuration require separate decisions.
 
 A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; integration does not authorize a cascade.
 

@@ -77,7 +77,7 @@ Use one integration lock per unit. All task integrations targeting that unit's i
 
 1. **Acquire the lock.** Wait for the unit's integration lock before preparing a candidate.
 2. **Prepare the candidate.** Read the current unit integration checkpoint after acquiring the lock. Combine it with the task output. Record these integration inputs separately from the task's fixed admission baseline.
-3. **Check the candidate.** Run the required combined-result checks against that candidate. Bind the results to the checked material and relevant inputs.
+3. **Check the candidate.** Run the project build and full application test suite against that candidate. Both must complete successfully. Bind the results to the checked material and relevant inputs.
 4. **Accept the candidate.** Only after the required checks succeed, make the checked candidate the unit's integrated state. A candidate with failed or incomplete required checks must not replace that state.
 5. **Release the lock.** Release it when the integration operation ends. Do not retain it during a return to Task coding.
 
@@ -115,7 +115,7 @@ This structure does not introduce an additional requester approval gate. Define 
 
 ### Remaining stage contracts
 
-Still define the task graph representation, detailed stage conditions, artifacts, agents, skills, and reopening questionnaires. Exact integration checks and their allocation between Code Validation and Task Integration remain open. Candidate checks precede acceptance under the agreed integration procedure.
+Still define the task graph representation, detailed stage conditions, artifacts, agents, skills, and reopening questionnaires. The project build and full application test suite are required integration checks. Any additional integration checks and project-specific check configuration require separate decisions. Candidate checks precede acceptance under the agreed integration procedure.
 
 Lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery remain open in the shared CLI infrastructure contract.
 
