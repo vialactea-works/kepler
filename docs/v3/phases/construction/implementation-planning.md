@@ -12,7 +12,7 @@ Saving this draft does not approve its proposals or an executing Unit of Work. I
 
 Select a technical solution that satisfies the unit's functional design and quality requirements. Divide the work into tasks with explicit outcomes, dependencies, and verification obligations.
 
-Give Implementation Execution enough information to implement and verify the unit without guessing material requirements or technical decisions.
+Give Implementation enough information to implement and verify the unit without guessing material requirements or technical decisions.
 
 ## Inputs
 
@@ -51,7 +51,7 @@ A complete implementation plan, existing test infrastructure, and a selected tec
 - Account for applicable functional requirements, quality requirements, and known deployment constraints.
 - Define how later stages will verify the tasks and complete integrated outcome.
 - Report upstream conflicts and unresolved consequential choices to their decision owners.
-- Hand off the plan and its evidence to Implementation Execution.
+- Hand off the plan and its evidence to Implementation.
 
 ### Excluded
 
@@ -165,7 +165,7 @@ Account for every applicable functional requirement and quality obligation throu
 
 Coverage includes necessary verification, integration, compatibility, and deployment preparation where applicable. A list of task titles does not establish coverage.
 
-Graph structure does not establish runtime readiness. Implementation Execution applies the agreed [admission rules](../../runtime.md#task-admission-and-baselines) to actual integrated outputs and valid inputs.
+Graph structure does not establish runtime readiness. Implementation applies the agreed [admission rules](../../runtime.md#task-admission-and-baselines) to actual integrated outputs and valid inputs.
 
 Independent ready tasks retain their agreed parallelism. The plan must not introduce global Git gates, shared admission commits, or batch-completion barriers.
 
@@ -175,7 +175,7 @@ These prerequisite rules are accepted under the [task graph specification](task-
 
 For each material external prerequisite, state whether its absence blocks task work or required verification. For blocking prerequisites, state when they are needed and how availability will be established. When a task establishes a required condition, represent its output through a dependency instead of duplicating an external prerequisite.
 
-Explain why each nonblocking prerequisite does not prevent the task's required work or verification. Execution checks each blocking condition before the affected work starts. Independent ready work can continue.
+Explain why each nonblocking prerequisite does not prevent the task's required work or verification. Implementation checks each blocking condition before the affected work starts. Independent ready work can continue.
 
 Planning need not establish future prerequisite availability before completing the plan. External prerequisites do not automatically become graph edges; task-output dependencies follow the graph contract.
 
@@ -225,7 +225,7 @@ The owner needs architecture analysis, source investigation, task decomposition,
 
 The requester retains authority over scope, product obligations, consequential trade-offs, and required approvals. The [orchestrator](../../revision.md#authority-and-escalation) controls revision authorization.
 
-This role assignment does not select a worker model for Planning. [CN22](../../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Planning or other phases. The orchestrator schedules execution under the Implementation Execution contract.
+This role assignment does not select a worker model for Planning. [CN22](../../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation. It does not select role profiles or skill implementations for Planning or other phases. The orchestrator schedules execution under the Implementation contract.
 
 ## Supporting skills
 
@@ -264,7 +264,7 @@ Require separate whole-plan approval only when an applicable authority rule or r
 
 When approval is required, identify the selected solution, task plan, assumptions, or decisions that it covers. Record explicit approval through CLI-owned operations under the shared [approval bindings](../../runtime.md#evidence-and-approval-bindings).
 
-Saving or committing a plan, receiving positive review, or completing self-review does not grant requester approval. Completion makes the unit ready for Implementation Execution under that stage's contract. It does not dispatch workers or authorize delivery.
+Saving or committing a plan, receiving positive review, or completing self-review does not grant requester approval. Completion makes the unit ready for Implementation under that stage's contract. It does not dispatch workers or authorize delivery.
 
 ### Reopening questionnaire
 
@@ -332,12 +332,12 @@ No separate evidence document or application test run is required by this stage.
 
 ## Handoff
 
-**Standard workflow next stage:** [Implementation Execution](implementation-execution.md).
+**Standard workflow next stage:** [Implementation](implementation.md).
 
 Identify the unit directory, `plan.md`, `tasks-dag.json`, current upstream artifacts, supporting files, and the material covered by completion evidence.
 
 Supply the selected solution, task identities, dependencies, required outputs, task acceptance conditions, verification strategy, and coordination constraints. Include external prerequisites and their readiness conditions, nonblocking implementation questions, and any applicable requester approval.
 
-Implementation Execution determines readiness from actual integrated outputs and records task baselines at admission. Planning does not preassign those future checkpoints or create execution attempts for each task.
+Implementation determines readiness from actual integrated outputs and records task baselines at admission. Planning does not preassign those future checkpoints or create execution attempts for each task.
 
 Preserve agreed concurrent ready-task execution and per-unit integration locking. A completed plan does not establish completed tasks, approval of the integrated unit, or permission to deliver.

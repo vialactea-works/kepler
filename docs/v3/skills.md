@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Define version 3 skill names and responsibilities. Functional Design and Quality Requirements responsibilities are accepted. Planning, Execution, Review, and Deliver responsibilities remain proposed under their stage drafts. Code Generation, Code Validation, and Code Integration are Activities within Implementation Execution; their detailed skill responsibilities remain proposed.
+Define version 3 skill names and responsibilities. Functional Design and Quality Requirements responsibilities are accepted. Planning, Implementation, Review, and Deliver responsibilities remain proposed under their stage drafts. Code Generation, Code Validation, and Code Integration are Activities within Implementation; their detailed skill responsibilities remain proposed.
 
 Stage and Activity contracts define their own scopes, completion conditions, and authority. Skills supply procedures under those contracts. Skill names and packaging do not define stage or Activity boundaries.
 
@@ -17,7 +17,7 @@ These specifications do not rename skill files or change current implementations
 | [kepler-design](#kepler-design) | Perform Functional Design. |
 | [kepler-quality](#kepler-quality) | Perform Quality Requirements. |
 | [kepler-plan](#kepler-plan) | Proposed entry skill for Implementation Planning; not yet approved. |
-| [kepler-orchestrate](#kepler-orchestrate) | Proposed procedures for Implementation Execution and the Code Integration Activity. |
+| [kepler-orchestrate](#kepler-orchestrate) | Proposed procedures for Implementation and the Code Integration Activity. |
 | [kepler-code](#kepler-code) | Proposed entry skill for Code Generation. |
 | [kepler-code-feedback](#kepler-code-feedback) | Proposed entry skill for Code Validation, including independent feedback. |
 | [kepler-review](#kepler-review) | Proposed entry skill for Unit of Work Review. |
@@ -97,7 +97,7 @@ The draft proposes this entry skill to:
 - Perform self-review and record the proposed stage's validation and review evidence through CLI-owned operations.
 - Resolve consequential choices with the requester and record applicable approval through the CLI.
 - Report upstream findings and proposed revision boundaries to the orchestrator.
-- Hand off the current plan, inputs, evidence, and constraints to Implementation Execution.
+- Hand off the current plan, inputs, evidence, and constraints to Implementation.
 
 Self-review belongs in this skill. External review remains requester-triggered under the proposal; separate whole-plan approval applies only when required.
 
@@ -105,16 +105,16 @@ These responsibilities do not approve the current skill implementation or decide
 
 ## kepler-orchestrate
 
-**Status:** Proposed under the [Implementation Execution](phases/construction/implementation-execution.md#supporting-skills) and [Code Integration Activity](phases/construction/activities/code-integration.md#roles-and-skills) drafts.
+**Status:** Proposed under the [Implementation](phases/construction/implementation.md#supporting-skills) and [Code Integration Activity](phases/construction/activities/code-integration.md#roles-and-skills) drafts.
 
-For unit-scoped Implementation Execution, the draft proposes this skill to:
+For unit-scoped Implementation, the draft proposes this skill to:
 
 - Read the current graph, upstream contracts, prerequisites, and execution records.
 - Coordinate ready-task admissions with fixed baselines and complete scoped worker handoffs.
 - Dispatch scoped subagents and coordinate each Code Generation, Code Validation, and Code Integration handoff.
 - Preserve concurrent ready-task work without global Git gates or batch barriers.
 - Consume worker facts and apply authorized progress, revision, and acceptance decisions through CLI-owned operations.
-- Resolve routine issues within existing authority and request requester decisions only for [hard blockers](phases/construction/implementation-execution.md#requester-intervention).
+- Resolve routine issues within existing authority and request requester decisions only for [hard blockers](phases/construction/implementation.md#requester-intervention).
 - Record blocker decisions and apply authorized revision boundaries.
 - Assess task coverage, final integrated evidence, and unit completion.
 - Apply the proposed post-completion return rule, preserving valid original Activity bindings and executing reopened Activities under new attempts.
@@ -200,6 +200,6 @@ Use relevant domain concepts. Do not invent model elements to fill a section. Fo
 
 Investigate uncertain facts through source code and primary references. Return findings with sources at the caller's supporting-file path.
 
-Use the caller's stage-specific supporting-file path. Functional Design uses `details/functional-design/`. Quality Requirements uses `details/quality-requirements/`. The Implementation Planning draft proposes `details/implementation-planning/`. Later drafts propose `details/implementation-execution/`, `details/unit-of-work-review/`, and `details/deliver/`.
+Use the caller's stage-specific supporting-file path. Functional Design uses `details/functional-design/`. Quality Requirements uses `details/quality-requirements/`. The Implementation Planning draft proposes `details/implementation-planning/`. Later drafts propose `details/implementation/`, `details/unit-of-work-review/`, and `details/deliver/`.
 
 Link supporting detail from the relevant required section in the root Unit of Work documents.

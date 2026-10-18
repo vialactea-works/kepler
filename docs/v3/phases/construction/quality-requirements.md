@@ -159,7 +159,7 @@ The stage owner needs quality-attribute analysis, requirements discovery, source
 
 The requester retains authority over consequential targets, quality trade-offs, and approval. The [orchestrator](../../revision.md#authority-and-escalation) controls reopening and revision boundaries.
 
-The role assignment does not select a worker model for Quality Requirements. [CN22](../../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Quality Requirements or other phases.
+The role assignment does not select a worker model for Quality Requirements. [CN22](../../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation. It does not select role profiles or skill implementations for Quality Requirements or other phases.
 
 ## Supporting skills
 

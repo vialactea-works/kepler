@@ -1,6 +1,6 @@
 # Code Validation Activity
 
-[Shared Activity rules](README.md) | [Implementation Execution](../implementation-execution.md)
+[Shared Activity rules](README.md) | [Implementation](../implementation.md)
 
 **Status:** Draft for discussion. Independent non-author feedback and check duties remain binding; detailed assignments and completion evidence remain proposed.
 

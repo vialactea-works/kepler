@@ -32,13 +32,13 @@ Use the shared CLI-owned journal and attempt mechanics. Do not add a second life
 
 ## Construction MVP
 
-Within Construction's Implementation Execution stage, run a fixed Activity procedure for each task:
+Within Construction's Implementation stage, run a fixed Activity procedure for each task:
 
 1. **Code Generation** implements the task outcome, runs typechecking and modification-related tests, and performs self-review.
 2. **Code Validation** runs typechecking, the project build, and the full application test suite. A non-author reviewer gives independent feedback without editing the candidate.
 3. **Code Integration** checks and accepts the combined candidate under the unit's integration lock.
 
-The owning stage controls handoffs. Activity workers report findings; they cannot authorize returns or reopen upstream stages. Authorized returns route required code changes to Code Generation, then repeat Validation and Integration as required. Integration-only retries stay within the current Code Integration attempt. See [Implementation Execution](phases/construction/implementation-execution.md) for coordination and recovery rules.
+The owning stage controls handoffs. Activity workers report findings; they cannot authorize returns or reopen upstream stages. Authorized returns route required code changes to Code Generation, then repeat Validation and Integration as required. Integration-only retries stay within the current Code Integration attempt. See [Implementation](phases/construction/implementation.md) for coordination and recovery rules.
 
 This fixed procedure does not replace the accepted task dependency graph. The plan defines task dependencies and prerequisite conditions. The orchestrator assesses readiness from those requirements and current execution facts. Activity order is separate from task scheduling. Feedback routes are not task dependencies.
 

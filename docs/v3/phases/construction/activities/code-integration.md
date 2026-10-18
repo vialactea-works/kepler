@@ -1,6 +1,6 @@
 # Code Integration Activity
 
-[Shared Activity rules](README.md) | [Implementation Execution](../implementation-execution.md)
+[Shared Activity rules](README.md) | [Implementation](../implementation.md)
 
 **Status:** Draft for discussion. The unit lock, check duties, acceptance boundary, attempts, and return paths remain binding. Detailed assignments and completion evidence remain proposed.
 
@@ -58,7 +58,7 @@ The draft also requires valid originating Generation and Validation evidence, cu
 
 The accepted bytes must match the checked candidate. Keep actual Integration inputs separate from the admission baseline. Preserve the checked candidate, accepted checkpoint, logs, provenance, and external evidence under the [shared retention rules](README.md#records-and-supporting-detail).
 
-Dependent tasks become eligible only after successful predecessor Integration and satisfaction of their admission conditions. Integration does not complete Implementation Execution or whole-unit review.
+Dependent tasks become eligible only after successful predecessor Integration and satisfaction of their admission conditions. Integration does not complete Implementation or whole-unit review.
 
 ## Evidence coverage
 
@@ -72,8 +72,8 @@ The additional-review row is conditional on requester instruction. Preserve [ori
 
 ## Handoff
 
-**Return to:** [Implementation Execution coordination](../implementation-execution.md#admission-and-coordination).
+**Return to:** [Implementation coordination](../implementation.md#admission-and-coordination).
 
 Supply task identity, accepted checkpoint, actual Integration inputs, and originating Generation, Validation, and Integration evidence. Identify established task completion and any nonblocking limitations.
 
-The unit coordinator assesses dependent readiness and continues the graph. Unit of Work Review follows only after Implementation Execution completes its own assessment.
+The unit coordinator assesses dependent readiness and continues the graph. Unit of Work Review follows only after Implementation completes its own assessment.

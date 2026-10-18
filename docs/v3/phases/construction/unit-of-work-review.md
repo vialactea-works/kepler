@@ -4,7 +4,7 @@
 
 **Status:** Draft for discussion.
 
-The requester agreed that this stage reviews the complete integrated result after Implementation Execution under [CN17](../../authoring_progress.md#completed-construction-decisions). This draft proposes the remaining review procedure, roles, skills, evidence, approval conditions, and handoff.
+The requester agreed that this stage reviews the complete integrated result after Implementation under [CN17](../../authoring_progress.md#completed-construction-decisions). This draft proposes the remaining review procedure, roles, skills, evidence, approval conditions, and handoff.
 
 Saving this draft does not approve its proposals, accept an executing unit, or authorize delivery.
 
@@ -17,7 +17,7 @@ Assess the unit as a whole, including interactions between task outputs. A colle
 ## Inputs
 
 - Current `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, `tasks-dag.json`, and relevant supporting files.
-- The completed Implementation Execution handoff and final integrated checkpoint.
+- The completed Implementation handoff and final integrated checkpoint.
 - Required Activity results, independent feedback, integration provenance, and completion evidence.
 - Relevant project constraints, verification conditions, requester decisions, and applicable approvals.
 - Known deployment constraints and planned delivery dependencies.
@@ -29,7 +29,7 @@ Treat earlier results as inputs with their original bindings. They do not establ
 
 The draft proposes starting when:
 
-- Implementation Execution is complete under its applicable contract for the current unit.
+- Implementation is complete under its applicable contract for the current unit.
 - The integrated result, relevant upstream artifacts, and required execution evidence are identified and available.
 - Review scope and unit acceptance conditions are explicit enough to assess the complete outcome.
 
@@ -80,7 +80,7 @@ Successful task checks are relevant evidence, not automatic proof of every unit 
 
 Assess the final integrated material, not only isolated worker branches or changed files. Use relevant unchanged behavior and configuration when they affect the outcome.
 
-The draft does not require an unconditional repeat of typechecking, the build, and the full suite in this stage. Their required Execution results must remain applicable.
+The draft does not require an unconditional repeat of typechecking, the build, and the full suite in this stage. Their required Implementation results must remain applicable.
 
 Run additional checks when needed to establish an uncovered review obligation, subject to applicable permissions. Do not claim compliance from an unexecuted check.
 
@@ -99,14 +99,14 @@ The reviewer reports facts and proposed boundaries. The orchestrator decides whe
 | Finding | Proposed boundary for assessment |
 | --- | --- |
 | The review assessment or its references need correction, with unchanged valid implementation. | Correct within the current review attempt when the stage remains active. |
-| The implementation or required Execution evidence is invalid. | Implementation Execution, followed by a new Unit of Work Review and Deliver. |
+| The implementation or required Implementation evidence is invalid. | Implementation, followed by a new Unit of Work Review and Deliver. |
 | The task graph or technical solution must change. | Implementation Planning and every subsequent unit stage. |
 | Functional or quality obligations are invalid. | The earliest affected upstream stage and its downstream cascade. |
 | Delivery instructions alone need correction after valid review. | Deliver, while its inputs and the reviewed result remain valid. |
 
 An upstream revision invalidates current downstream completion immediately. Reexecute the affected stages even when some artifact bytes remain unchanged.
 
-Code Generation, Code Validation, and Code Integration are Activities within Implementation Execution. Apply its proposed [post-completion return rule](implementation-execution.md#return-after-completed-execution) when that unit stage reopens. Reopened Activities require new attempts and evidence. Unaffected Activity records retain their original bindings after applicability assessment; the new unit attempt still requires its own completion assessment.
+Code Generation, Code Validation, and Code Integration are Activities within Implementation. Apply its proposed [post-completion return rule](implementation.md#return-after-completed-implementation) when that unit stage reopens. Reopened Activities require new attempts and evidence. Unaffected Activity records retain their original bindings after applicability assessment; the new unit attempt still requires its own completion assessment.
 
 ## Effort
 
@@ -130,7 +130,7 @@ Review independence does not require a different model, vendor, or human. The re
 
 The orchestrator owns revision decisions and coordination. The requester retains authority over the intended outcome, scope, consequential trade-offs, and applicable acceptance.
 
-These assignments do not implement agent profiles. [CN22](../../authoring_progress.md#completed-construction-decisions) selects an orchestrator-controlled subagent model for Implementation Execution only. It does not select a worker model for Unit of Work Review.
+These assignments do not implement agent profiles. [CN22](../../authoring_progress.md#completed-construction-decisions) selects an orchestrator-controlled subagent model for Implementation only. It does not select a worker model for Unit of Work Review.
 
 ## Supporting skills
 
@@ -194,7 +194,7 @@ Publication, release, deployment, and completed delivery operations are not revi
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
-| Execution evidence assessment | Final integrated material, upstream contracts, required Activity records, conditions, and integration provenance. | Required earlier evidence is present, applicable, and retained. Claimed coverage and any gaps are explicit. |
+| Implementation evidence assessment | Final integrated material, upstream contracts, required Activity records, conditions, and integration provenance. | Required earlier evidence is present, applicable, and retained. Claimed coverage and any gaps are explicit. |
 | Whole-unit review result | Complete integrated outcome against unit scope, functional design, quality requirements, plan, and known delivery constraints. | Independent assessment establishes the required outcome. Blocking findings are resolved; self-review confirms coverage and handoff accuracy. |
 | Additional check result | Material, obligation, and conditions that require additional verification during review. | The identified check succeeds and supplies the missing review proof without replacing mandatory upstream records. |
 | Requested additional review result | Material and scope identified in an additional review request. | The requested review is complete and its blocking findings are resolved. |

@@ -6,7 +6,7 @@
 
 Define the shared revision rules for the stages of one Unit of Work. These rules apply across stages, not only to Functional Design.
 
-Use the selected workflow's stage order and each owning phase's execution scopes. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP sequence. Construction defines its [task execution structure](phases/construction/README.md#implementation-execution).
+Use the selected workflow's stage order and each owning phase's execution scopes. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP sequence. Construction defines its [task execution structure](phases/construction/README.md#implementation).
 
 Apply execution-state changes through the `kepler` CLI. Record reopening, attempts, completion, and approval facts in phase-owned JSON event journals under the shared [execution-state representation](runtime.md#execution-state-representation). Current execution state is derived from those events, not artifact frontmatter or Markdown status fields.
 
@@ -41,7 +41,7 @@ An agent may correct editorial errors in prose without reopening stages or reque
 
 Upstream stages occur before the revision boundary. Downstream stages occur after it within the applicable scope. Effort does not change the revision boundary or remove the required cascade.
 
-Construction's task-local [Activity return paths](phases/construction/README.md#return-paths) apply within an active Implementation Execution attempt. The orchestrator authorizes returns. They do not automatically restart that enclosing attempt. Independent task work continues while its inputs and contracts remain valid.
+Construction's task-local [Activity return paths](phases/construction/README.md#return-paths) apply within an active Implementation attempt. The orchestrator authorizes returns. They do not automatically restart that enclosing attempt. Independent task work continues while its inputs and contracts remain valid.
 
 A unit-wide upstream revision still applies the full unit-stage cascade. Construction defines the [handling of running task work](phases/construction/README.md#unit-wide-upstream-revision) during that cascade. Detailed task-state transitions and shutdown coordination remain open.
 
@@ -87,9 +87,9 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 | --- | --- | --- |
 | Required domain behavior changes. | Functional Design. | Every subsequent stage through Deliver. |
 | A quality requirement changes while functional behavior remains valid. | Quality Requirements. | Implementation Planning and every subsequent stage through Deliver. |
-| The implementation approach changes while functional and quality requirements remain valid. | Implementation Planning. | Implementation Execution, Unit of Work Review, and Deliver. |
-| During active Implementation Execution, Code Validation finds a task-local code defect. | Code Generation Activity for that task. | Code Validation and Code Integration for that task, as required. The enclosing Execution attempt remains active. |
-| Code Integration requires changes to the task implementation during active Implementation Execution. | Code Generation Activity for that task. | Code Validation and Code Integration for that task, as required. Independent work continues while its contracts and inputs remain valid. |
+| The implementation approach changes while functional and quality requirements remain valid. | Implementation Planning. | Implementation, Unit of Work Review, and Deliver. |
+| During active Implementation, Code Validation finds a task-local code defect. | Code Generation Activity for that task. | Code Validation and Code Integration for that task, as required. The enclosing Implementation attempt remains active. |
+| Code Integration requires changes to the task implementation during active Implementation. | Code Generation Activity for that task. | Code Validation and Code Integration for that task, as required. Independent work continues while its contracts and inputs remain valid. |
 | Code Integration needs an integration-only retry. | The current Code Integration Activity attempt. | Retry within that attempt. A failed command alone does not create another attempt. |
 
 ## Decisions still required
@@ -100,4 +100,4 @@ The [retention rules](runtime.md#checkpoint-retention) require keeping needed Gi
 
 The shared [interrupted-work recovery rule](runtime.md#interrupted-work-recovery) is agreed. Lock recovery and interrupted state-write recovery remain open. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
 
-This document defines revision authority. Construction defines the orchestrator's [task execution responsibilities](phases/construction/README.md#implementation-execution). Other responsibilities require their own contracts.
+This document defines revision authority. Construction defines the orchestrator's [task execution responsibilities](phases/construction/README.md#implementation). Other responsibilities require their own contracts.

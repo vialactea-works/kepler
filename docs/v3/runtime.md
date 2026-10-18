@@ -57,7 +57,7 @@ Markdown views can present execution state, but they remain derived views, not a
 
 A stage attempt is one execution of a stage within the scope defined by its phase contract. It includes the stage's internal correction loops.
 
-Construction uses unit-scoped stage attempts. Implementation Execution coordinates its Activity attempts under one unit-scoped attempt. Other phases define their own execution scopes.
+Construction uses unit-scoped stage attempts. Implementation coordinates its Activity attempts under one unit-scoped attempt. Other phases define their own execution scopes.
 
 - Create a stage attempt when the stage starts for the first time.
 - Self-review and repeated edits after failed checks keep the same attempt while corrections remain within that stage.
@@ -83,7 +83,7 @@ Preserve each limit under concurrent start or resume requests. Two requests for 
 
 This constraint does not require every task to execute every Activity. Phase and stage contracts define the applicable scopes.
 
-Construction defines its [Implementation Execution structure](phases/construction/README.md#implementation-execution). Record the relationship between its unit-scoped stage attempt and each Activity attempt through the shared journal mechanics. Derive relationship views from those events.
+Construction defines its [Implementation structure](phases/construction/README.md#implementation). Record the relationship between its unit-scoped stage attempt and each Activity attempt through the shared journal mechanics. Derive relationship views from those events.
 
 Task implementation and Task coding are execution contexts, not additional attempt identities. Do not infer Construction's Activity structure for other phases.
 
@@ -127,7 +127,7 @@ Follow the shared [Revision procedure](revision.md#revision-procedure). A stage'
 
 Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Retain those facts in the phase's append-only event journals. Derive current execution state from the recorded decision. CLI-owned operations record the events; agents must not write them separately.
 
-Follow Construction's [unit-wide upstream revision rules](phases/construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and Activity attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stage or Activity executes again.
+Follow Construction's [unit-wide upstream revision rules](phases/construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation and Activity attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stage or Activity executes again.
 
 Phase-owned projection fields and revision command names remain undecided. The implementation defines revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
 
@@ -271,7 +271,7 @@ A material mismatch does not authorize a revision cascade. Report suspected upst
 
 ## Parallel execution
 
-In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages follow the selected workflow's order. Apply the fixed [Activity order](phases/construction/README.md#implementation-execution) within each task, not across different tasks. Activity feedback routes do not add or change task dependency edges. Other phases define their own execution relationships.
+In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages follow the selected workflow's order. Apply the fixed [Activity order](phases/construction/README.md#implementation) within each task, not across different tasks. Activity feedback routes do not add or change task dependency edges. Other phases define their own execution relationships.
 
 Starting tasks and recording progress must not depend on shared admission commits or a global coordinator `HEAD`. Independent work must not require unrelated workspaces to become clean or stop progressing.
 
@@ -318,7 +318,7 @@ A conflict can block the affected integration. Unrelated ready tasks and units c
 
 Stage and Activity contracts define their named evidence, covered material, and required results. Shared bindings do not replace those definitions.
 
-The dedicated [Generation](phases/construction/activities/code-generation.md#evidence-coverage), [Validation](phases/construction/activities/code-validation.md#evidence-coverage), and [Integration](phases/construction/activities/code-integration.md#evidence-coverage) Activity contracts define Activity evidence. The [Execution draft](phases/construction/implementation-execution.md#evidence-coverage) defines stage-level completion evidence. The [Review draft](phases/construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phases/construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
+The dedicated [Generation](phases/construction/activities/code-generation.md#evidence-coverage), [Validation](phases/construction/activities/code-validation.md#evidence-coverage), and [Integration](phases/construction/activities/code-integration.md#evidence-coverage) Activity contracts define Activity evidence. The [Implementation draft](phases/construction/implementation.md#evidence-coverage) defines stage-level completion evidence. The [Review draft](phases/construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phases/construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
 
 These detailed Activity and stage definitions remain proposed except where the accepted rules above say otherwise. Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage or Activity completion.
 

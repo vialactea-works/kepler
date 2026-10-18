@@ -1,6 +1,6 @@
 # Code Generation Activity
 
-[Shared Activity rules](README.md) | [Implementation Execution](../implementation-execution.md)
+[Shared Activity rules](README.md) | [Implementation](../implementation.md)
 
 **Status:** Draft for discussion. Existing check duties and shared execution rules remain binding; detailed assignments and completion evidence remain proposed.
 
