@@ -4,9 +4,13 @@
 
 ## Status and scope
 
+**Status:** Accepted by the requester under [IP26](../authoring_progress.md#implementation-planning-decisions).
+
+Approval covers this specification's field definitions, dependency rules, prerequisite rules, example, validation rules, and JSON Schema. Task identity lifecycle and broader [Planning policies](implementation-planning.md) remain separate. This approval does not accept the complete Planning stage or an executing Unit of Work. It does not implement a writer or validator.
+
 The requester selected a Kepler-specific JSON format and UUIDv4 task IDs. Do not adopt JGF or another graph interchange format.
 
-This document defines the concrete representation for `tasks-dag.json`. Task content and dependency policies remain subject to the [Planning draft](implementation-planning.md). Defining this representation does not accept the complete stage specification or implement a writer or validator.
+This document defines the concrete representation for `tasks-dag.json`.
 
 `plan.md` owns technical rationale. `tasks-dag.json` owns the authored task graph. Record actual progress, attempts, approvals, and check results through CLI-owned event journals, not this file.
 

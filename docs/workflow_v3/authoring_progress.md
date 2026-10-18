@@ -32,7 +32,7 @@ For each missing stage, define essential inputs, outputs, responsibilities, comp
 | --- | --- | --- |
 | 1 | Functional Design | The stage specification is accepted under FD13. Use the agreed `supporting-document` type under DF06. |
 | 2 | [Quality Requirements](phase_construction/quality-requirements.md) | The stage specification, including evidence and skill responsibilities, is accepted under NF12. |
-| 3 | [Implementation Planning](phase_construction/implementation-planning.md) | Review the remaining Planning proposals. The output pair, rationale coverage, custom JSON representation, and UUIDv4 task-ID format are defined. |
+| 3 | [Implementation Planning](phase_construction/implementation-planning.md) | Review the remaining Planning proposals. The task graph specification is accepted under IP26, including task content, dependencies, and prerequisites. |
 | 4 | [Implementation Execution](phase_construction/implementation-execution.md) | Review the detailed unit and task-stage proposals. Preserve agreed task loops, checks, concurrency, returns, and integration rules. |
 | 5 | [Unit of Work Review](phase_construction/unit-of-work-review.md) | Review whole-unit assessment, findings, evidence, completion, applicable acceptance, and handoff proposals. |
 | 6 | [Deliver](phase_construction/deliver.md) | Review outcome, instructions, authorization, verification, recovery, and deployment information proposals. |
@@ -66,7 +66,7 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 ### Stage contract decisions
 
-No pending Functional Design or Quality Requirements decisions remain in this queue. Some [Planning decisions](#implementation-planning-decisions) are accepted. The [Implementation Planning draft](phase_construction/implementation-planning.md) proposes the remaining policies below. Saving a draft does not accept those proposals. These rows do not add separate execution approval steps.
+No pending Functional Design or Quality Requirements decisions remain in this queue. The task graph specification is accepted under [IP26](#implementation-planning-decisions). The [Implementation Planning draft](phase_construction/implementation-planning.md) proposes the remaining policies below. Saving a draft does not accept those proposals. These rows do not add separate execution approval steps.
 
 | ID | Decision | Proposal to review |
 | --- | --- | --- |
@@ -74,8 +74,6 @@ No pending Functional Design or Quality Requirements decisions remain in this qu
 | IP03 | Plan sections | Are the four proposed [required sections](phase_construction/implementation-planning.md#required-sections) sufficient for the plan? |
 | IP04 | Technical solution content | Does the proposed [technical solution contract](phase_construction/implementation-planning.md#technical-solution) adequately define choices, boundaries, and consequences? Rationale coverage is agreed under IP21. |
 | IP05 | Task identity | Should tasks retain unique unit-scoped identities and preserve historical bindings under the proposed [identity lifecycle](phase_construction/implementation-planning.md#task-identities-and-definitions)? UUIDv4 syntax is agreed under IP22. |
-| IP06 | Task definition content | Does the proposed [task content](phase_construction/implementation-planning.md#task-identities-and-definitions) supply sufficient context, outputs, acceptance conditions, and verification obligations? |
-| IP07 | Dependency contract | Should graph validity require justified task dependencies, resolving references, and no cycles under the proposed [dependency contract](phase_construction/implementation-planning.md#dependencies-and-coverage)? |
 | IP08 | Requirement coverage | Should Planning account for every applicable obligation through planned work or justified unchanged behavior under the proposed [coverage rule](phase_construction/implementation-planning.md#dependencies-and-coverage)? |
 | IP09 | Verification strategy | Does the proposed [verification strategy](phase_construction/implementation-planning.md#verification-strategy) cover test design, expected results, environments, and missing infrastructure? Stage check duties are agreed under CN07, CN08, and CN11. |
 | IP10 | Entry conditions | Are the proposed [entry conditions](phase_construction/implementation-planning.md#entry-conditions) sufficient after the preceding stages complete under their own contracts? |
@@ -88,7 +86,6 @@ No pending Functional Design or Quality Requirements decisions remain in this qu
 | IP17 | Completion conditions | Are the proposed [completion conditions](phase_construction/implementation-planning.md#completion-conditions) sufficient for handoff to Implementation Execution? |
 | IP18 | Stage evidence coverage | Are the named [evidence results](phase_construction/implementation-planning.md#evidence-coverage), covered material, and conditional approval record sufficient? |
 | IP19 | Whole-draft acceptance | Does the requester accept the complete [Implementation Planning specification](phase_construction/implementation-planning.md)? |
-| IP20 | External prerequisite readiness | Should the plan classify [external prerequisites](phase_construction/implementation-planning.md#external-prerequisites), define blocking availability conditions and timing, and explain nonblocking treatment? |
 
 ### Implementation Execution proposals
 
@@ -169,9 +166,9 @@ The [Deliver draft](phase_construction/deliver.md) proposes the following polici
 
 ## Review result
 
-The MVP decision queue contains 82 items: 7 earlier decisions, 19 Planning proposals, and 56 later-stage proposals. CN20 and whole-stage Planning acceptance remain open. Another 33 required MVP implementation choices remain. Defer 13 questions beyond the MVP; 1 speculative approval gate is removed.
+The MVP decision queue contains 79 items: 7 earlier decisions, 16 Planning proposals, and 56 later-stage proposals. CN20 and whole-stage Planning acceptance remain open. Another 33 required MVP implementation choices remain. Defer 13 questions beyond the MVP; 1 speculative approval gate is removed.
 
-The MVP review preserved the 87 previously completed decisions. Later requester decisions bring the completed total to 111. Reclassification must not fabricate approval or claim implementation is complete.
+The MVP review preserved the 87 previously completed decisions. Later requester decisions bring the completed total to 115. Reclassification must not fabricate approval or claim implementation is complete.
 
 ## Register rules
 
@@ -379,6 +376,10 @@ These scoped decisions are complete. They do not accept the whole stage specific
 | IP23 | Verification setup placement | Complete | The graph's [verification object](phase_construction/task-graph.md#verification-object) records procedure, fixtures, versions, resources, and isolation conditions in `method`. Remove the separate `environment` field. |
 | IP24 | Dependency object fields | Complete | Each [dependency object](phase_construction/task-graph.md#dependency-object) contains only `task_id` and `reason`. Explain required predecessor work in `reason`; retain task-level `outputs`. |
 | IP25 | Task resource instruction placement | Complete | Remove the graph's `coordination` field. Place [resource-use instructions](phase_construction/task-graph.md#shared-file-and-resource-instructions) in `guidance`, verification `method`, or `prerequisites`, according to their scope. |
+| IP06 | Task definition content | Complete | [Task content](phase_construction/task-graph.md#task-object) defines identity, goal, inputs, outputs, acceptance criteria, guidance, verification, dependencies, and external prerequisites. Accepted under IP26. |
+| IP07 | Dependency contract | Complete | [Dependencies](phase_construction/task-graph.md#dependency-object) require justified predecessor work in `reason`. Resolve predecessor references and reject self-dependencies, duplicate edges, and cycles. Accepted under IP26. |
+| IP20 | External prerequisite readiness | Complete | [Prerequisites](phase_construction/task-graph.md#prerequisite-object) identify affected work, timing, availability conditions, blocking behavior, and nonblocking rationale. Check blocking conditions before affected work, not Planning completion. Accepted under IP26. |
+| IP26 | Task graph specification acceptance | Complete | The requester accepted the complete [task graph specification](phase_construction/task-graph.md), including its field meanings, example, validation rules, and JSON Schema. This does not accept the whole Planning stage or approve an executing unit. |
 
 ## Deferred decisions
 

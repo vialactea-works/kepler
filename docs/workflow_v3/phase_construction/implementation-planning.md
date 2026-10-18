@@ -4,7 +4,7 @@
 
 **Status:** Draft for discussion.
 
-Technical solution selection, task decomposition, and the dependency graph are agreed responsibilities. The requester has specified `plan.md`, `tasks-dag.json`, rationale for every planning decision, and the verification duties below. A Kepler-specific JSON format and UUIDv4 task IDs are also agreed. Remaining artifact details, procedure, roles, review rules, evidence, and completion conditions are proposals.
+Technical solution selection, task decomposition, and the dependency graph are agreed responsibilities. The requester has specified `plan.md`, `tasks-dag.json`, rationale for every planning decision, and the verification duties below. The requester has accepted the [task graph specification](task-graph.md), including its task fields, dependency rules, and prerequisite rules. Remaining artifact details, identity-lifecycle policies, procedure, roles, review rules, evidence, and stage completion conditions are proposals.
 
 Saving this draft does not approve its proposals or an executing Unit of Work. It does not authorize implementation.
 
@@ -80,9 +80,9 @@ Use the existing `.kepler/units-of-work/<unit-id>/` directory and shared [unit i
 
 Both planning outputs are required. This stage owns them and consumes upstream artifacts without taking ownership of those inputs.
 
-The draft proposes that `tasks-dag.json` own task definitions, identities, and dependency edges. `plan.md` records the technical solution, rationale, and verification strategy. Reference tasks by identity without maintaining a second graph in Markdown.
+The accepted task graph specification assigns task definitions, identities, and dependency edges to `tasks-dag.json`. `plan.md` records the technical solution, rationale, and verification strategy. Reference tasks by identity without maintaining a second graph in Markdown.
 
-Use the [Kepler task graph format](task-graph.md) under [DF12](../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. The format reference defines the task-oriented JSON representation; it does not accept the remaining stage policies.
+Use the [accepted task graph specification](task-graph.md) under [IP26](../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. Graph approval does not accept the remaining stage policies.
 
 Keep one authoritative definition for each task and dependency. A diagram or generated view must not become a second authority. Keep references and explanations consistent across both artifacts. Link `tasks-dag.json` from `plan.md`.
 
@@ -135,7 +135,7 @@ Preserve historical definitions and their execution bindings when tasks are repl
 
 Task identities are separate from artifact UUIDs and stage-attempt identities. Use UUIDv4 task IDs under the [format contract](task-graph.md#task-identity). Task identity continuity does not preserve completion after an authorized revision cascade.
 
-The draft places task definitions in `tasks-dag.json`. The [task object](task-graph.md#task-object) defines their JSON representation. The task-content and identity-lifecycle policies remain proposals. For each task, define:
+Task definitions belong in `tasks-dag.json`. The accepted [task object](task-graph.md#task-object) defines their fields and meanings. Identity-lifecycle policies remain proposed. For each task, define:
 
 - Its identity, goal, and bounded implementation outcome.
 - Applicable requirements, quality constraints, and relevant technical decisions, using precise references where useful.
@@ -157,7 +157,7 @@ A dependency means that one task needs another task's integrated work to perform
 
 Do not derive dependencies from task numbering, document order, worker availability, or convenience. Shared-file overlap alone does not establish an output dependency. Record [shared-file and resource instructions](task-graph.md#shared-file-and-resource-instructions) in their owning task fields, not as dependency edges.
 
-The proposed graph must have unique task identities and resolve every dependency reference. Reject self-dependencies, cycles, missing predecessor references, and edges without a justified required-work relationship.
+The graph must have unique task identities and resolve every dependency reference. Reject self-dependencies, cycles, missing predecessor references, and edges without a justified required-work relationship.
 
 Resolve a cycle by correcting task boundaries or identifying a real shared prerequisite. Do not hide it behind an arbitrary execution order.
 
@@ -170,6 +170,8 @@ Graph structure does not establish runtime readiness. Implementation Execution a
 Independent ready tasks retain their agreed parallelism. The plan must not introduce global Git gates, shared admission commits, or batch-completion barriers.
 
 ### External prerequisites
+
+These prerequisite rules are accepted under the [task graph specification](task-graph.md#prerequisite-object).
 
 For each material external prerequisite, state whether its absence blocks task work or required verification. For blocking prerequisites, state when they are needed and how availability will be established. When a task establishes a required condition, represent its output through a dependency instead of duplicating an external prerequisite.
 

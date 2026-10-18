@@ -18,7 +18,7 @@ This table gives the unit-scoped stage order. Task-scoped stages execute inside 
 | --- | --- | --- |
 | 1 | [Functional Design](functional-design.md) | Accepted by the requester. |
 | 2 | [Quality Requirements](quality-requirements.md) | Accepted by the requester under [NF12](../authoring_progress.md#quality-requirements-decisions). |
-| 3 | [Implementation Planning](implementation-planning.md) | Draft for discussion. Technical selection, task decomposition, and the dependency graph are agreed. |
+| 3 | [Implementation Planning](implementation-planning.md) | Draft for discussion. The task graph specification is accepted; remaining stage policies stay proposed. |
 | 4 | [Implementation Execution](implementation-execution.md) | Structure and shared execution rules agreed. Detailed stage and nested task-stage contracts are draft proposals. |
 | 5 | [Unit of Work Review](unit-of-work-review.md) | Whole integrated result is the agreed scope. Remaining contract is a draft proposal. |
 | 6 | [Deliver](deliver.md) | Draft for discussion, including proposed deployment information and operation boundaries. |
@@ -31,7 +31,7 @@ Functional Design defines domain behavior, the domain model, and functional cont
 
 Quality Requirements defines quality targets and constraints in `.kepler/units-of-work/<unit-id>/quality.md`. This document is required for that stage. Applicable requirements include performance, availability, security, accessibility, compatibility, operability, observability, and maintainability.
 
-Implementation Planning selects the technical solution against the functional design and quality requirements. It then divides the work into implementation tasks. It produces `plan.md` with technical rationale and `tasks-dag.json` with the task graph at the unit root. The [stage draft](implementation-planning.md) defines the agreed artifact split and proposes the remaining contract. Use the custom [Kepler task graph JSON format](task-graph.md) with UUIDv4 task IDs.
+Implementation Planning selects the technical solution against the functional design and quality requirements. It then divides the work into implementation tasks. It produces `plan.md` with technical rationale and `tasks-dag.json` with the task graph at the unit root. The [stage draft](implementation-planning.md) defines the agreed artifact split and proposes the remaining contract. Use the [accepted task graph specification](task-graph.md) with UUIDv4 task IDs.
 
 Code Generation runs typechecking and tests related to its modifications. Code Validation runs typechecking, the project build, and the complete application test suite. It also owns independent code feedback.
 

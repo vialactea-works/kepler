@@ -91,7 +91,7 @@ The draft proposes this entry skill to:
 - Select the technical solution against current functional and quality requirements.
 - Define task outcomes, dependencies, prerequisite conditions, coverage, coordination constraints, and verification obligations.
 - Maintain `plan.md`, `tasks-dag.json`, and relevant linked supporting files.
-- Use the [Kepler task graph format](phase_construction/task-graph.md), including the agreed UUIDv4 task identifiers.
+- Use the [accepted task graph specification](phase_construction/task-graph.md), including its task fields, dependency rules, and prerequisite rules.
 - Record the technical rationale for every planning decision in `plan.md`.
 - Apply the shared depth definition.
 - Perform self-review and record the proposed stage's validation and review evidence through CLI-owned operations.
