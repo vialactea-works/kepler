@@ -33,7 +33,7 @@ Project initialization can establish standards and language before inception. It
 
 ## Authority and generation
 
-This folder defines the version 2 workflow. [The version 3 reference](../workflow_v3/README.md) is a separate document set.
+This folder defines the version 2 workflow. [The version 3 reference](../../v3/README.md) is a separate document set.
 
 This reorganization does not migrate active work, change artifact schemas, or authorize execution under another generation.
 

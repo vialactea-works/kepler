@@ -1,6 +1,6 @@
-# Stage 3: Implementation Planning
+# Implementation Planning
 
-[Construction phase index](README.md) | [Workflow phase index](../README.md)
+[Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
 **Status:** Draft for discussion.
 
@@ -67,7 +67,7 @@ Plan necessary implementation and verification work without claiming that it has
 
 ### Paths and organization
 
-Use the existing `.kepler/units-of-work/<unit-id>/` directory and shared [unit identity rules](../unit-of-work.md#identity-and-directory).
+Use the existing `.kepler/units-of-work/<unit-id>/` directory and shared [unit identity rules](../../unit-of-work.md#identity-and-directory).
 
 | Artifact | Location | Responsibility |
 | --- | --- | --- |
@@ -82,17 +82,17 @@ Both planning outputs are required. This stage owns them and consumes upstream a
 
 The accepted task graph specification assigns task definitions, identities, and dependency edges to `tasks-dag.json`. `plan.md` records the technical solution, rationale, and verification strategy. Reference tasks by identity without maintaining a second graph in Markdown.
 
-Use the [accepted task graph specification](task-graph.md) under [IP26](../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. Graph approval does not accept the remaining stage policies.
+Use the [accepted task graph specification](task-graph.md) under [IP26](../../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. Graph approval does not accept the remaining stage policies.
 
 Keep one authoritative definition for each task and dependency. A diagram or generated view must not become a second authority. Keep references and explanations consistent across both artifacts. Link `tasks-dag.json` from `plan.md`.
 
 Keep essential information in the required sections. Link useful supporting files from those sections and explain their purpose. Do not create empty files or unexplained links.
 
-The requester selected these filenames under [DF04](../authoring_progress.md#implementation-planning-decisions) and the planning artifact contract. This specification does not change current CLI paths or migrate artifacts.
+The requester selected these filenames under [DF04](../../authoring_progress.md#implementation-planning-decisions) and the planning artifact contract. This specification does not change current CLI paths or migrate artifacts.
 
 ### Artifact metadata
 
-Apply the shared [metadata contract](../metadata.md) to `plan.md` and supporting Markdown documents. Preserve stable artifact identity, unit ownership, original author, and schema version.
+Apply the shared [metadata contract](../../metadata.md) to `plan.md` and supporting Markdown documents. Preserve stable artifact identity, unit ownership, original author, and schema version.
 
 The draft proposes `type: implementation-plan` for `plan.md`. This value is not yet an accepted metadata type. Optional supporting Markdown documents keep `type: supporting-document`.
 
@@ -125,7 +125,7 @@ Compare materially viable alternatives when the choice affects constraints, risk
 
 Identify relevant effects on existing data, consumers, configuration, operation, and deployment. Plan compatibility or migration work where required; do not assume permission for destructive changes.
 
-Known deployment constraints remain binding. Deployment record content, location, and timing remain open under [SH77 through SH79](../authoring_progress.md#shared-decisions-still-pending).
+Known deployment constraints remain binding. Deployment record content, location, and timing remain open under [SH77 through SH79](../../authoring_progress.md#shared-decisions-still-pending).
 
 ### Task identities and definitions
 
@@ -165,7 +165,7 @@ Account for every applicable functional requirement and quality obligation throu
 
 Coverage includes necessary verification, integration, compatibility, and deployment preparation where applicable. A list of task titles does not establish coverage.
 
-Graph structure does not establish runtime readiness. Implementation Execution applies the agreed [admission rules](../runtime.md#task-admission-and-baselines) to actual integrated outputs and valid inputs.
+Graph structure does not establish runtime readiness. Implementation Execution applies the agreed [admission rules](../../runtime.md#task-admission-and-baselines) to actual integrated outputs and valid inputs.
 
 Independent ready tasks retain their agreed parallelism. The plan must not introduce global Git gates, shared admission commits, or batch-completion barriers.
 
@@ -197,21 +197,21 @@ Integration holds the unit lock through preparation, checks, and acceptance. The
 
 Identify which commands perform each required check. A build that omits typechecking does not satisfy that separate duty.
 
-Project check configuration remains implementation work under [DF14](../authoring_progress.md#mvp-implementation-choices). Preserve additional applicable project obligations without selecting the deferred general extra-check policy.
+Project check configuration remains implementation work under [DF14](../../authoring_progress.md#mvp-implementation-choices). Preserve additional applicable project obligations without selecting the deferred general extra-check policy.
 
 This stage defines verification work; later stages execute it. Planning completion does not establish that implementation checks have passed.
 
-## Depth
+## Effort
 
-Apply the shared [depth definition](../depth.md). Use the unit default unless an explicit stage override applies.
+Apply the shared [effort definition](../../effort.md). Use the unit default unless an explicit stage override applies.
 
-| Depth | Implementation Planning guidance |
+| Effort | Implementation Planning guidance |
 | --- | --- |
 | Minimal | State the solution, rationale for every planning decision, tasks, dependencies, coverage, and verification obligations concisely. Reference suitable existing patterns. |
 | Standard | Explain significant alternatives, boundary interactions, compatibility concerns, task coordination, and verification setup. Link focused supporting analysis. |
 | Comprehensive | Analyze complex alternatives, failure conditions, integration risks, migrations, and cross-boundary consequences. Keep detailed analysis linked to the plan. |
 
-Depth does not remove required information, task coverage, verification duties, or requester authority. It does not impose task counts, document length, or automatic external review.
+Effort does not remove required information, task coverage, verification duties, or requester authority. It does not impose task counts, document length, or automatic external review.
 
 ## Agent roles
 
@@ -223,15 +223,15 @@ The draft proposes this stage owner:
 
 The owner needs architecture analysis, source investigation, task decomposition, test design, and technical writing capabilities.
 
-The requester retains authority over scope, product obligations, consequential trade-offs, and required approvals. The [orchestrator](../revision.md#authority-and-escalation) controls revision authorization.
+The requester retains authority over scope, product obligations, consequential trade-offs, and required approvals. The [orchestrator](../../revision.md#authority-and-escalation) controls revision authorization.
 
-This role assignment does not select a worker model for Planning. [CN20](../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Planning or other phases. The orchestrator schedules execution under the Implementation Execution contract.
+This role assignment does not select a worker model for Planning. [CN20](../../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Planning or other phases. The orchestrator schedules execution under the Implementation Execution contract.
 
 ## Supporting skills
 
 ### Entry skill
 
-The draft proposes [kepler-plan](../skills.md#kepler-plan) as the entry skill. It investigates context, develops the technical solution and task graph, performs self-review, and prepares the handoff.
+The draft proposes [kepler-plan](../../skills.md#kepler-plan) as the entry skill. It investigates context, develops the technical solution and task graph, performs self-review, and prepares the handoff.
 
 This proposes version 3 responsibilities, not approval of the current skill implementation or its legacy artifact contracts.
 
@@ -239,10 +239,10 @@ This proposes version 3 responsibilities, not approval of the current skill impl
 
 | Responsibility | Skill | Use in this stage |
 | --- | --- | --- |
-| Structured questioning | [kepler-grilling](../skills.md#kepler-grilling) | Resolve consequential trade-offs, assumptions, and planning ambiguity with the requester. |
-| Research | [kepler-research](../skills.md#kepler-research) | Verify uncertain technical capabilities and integration assumptions through source code and primary references. |
+| Structured questioning | [kepler-grilling](../../skills.md#kepler-grilling) | Resolve consequential trade-offs, assumptions, and planning ambiguity with the requester. |
+| Research | [kepler-research](../../skills.md#kepler-research) | Verify uncertain technical capabilities and integration assumptions through source code and primary references. |
 
-Apply the [common skill rules](../skills.md#common-rules). Supporting skills do not introduce agent roles, authorize revisions, or dispatch implementation workers.
+Apply the [common skill rules](../../skills.md#common-rules). Supporting skills do not introduce agent roles, authorize revisions, or dispatch implementation workers.
 
 ## Review and approval
 
@@ -254,7 +254,7 @@ Self-review belongs in `kepler-plan`, not a separate skill. Check technical cons
 
 ### External review
 
-The draft proposes external review only when the requester asks for it. Depth, risk, and complexity do not automatically create that gate. Self-review remains required.
+The draft proposes external review only when the requester asks for it. Effort, risk, and complexity do not automatically create that gate. Self-review remains required.
 
 ### Requester decisions and approval
 
@@ -262,13 +262,13 @@ Resolve consequential trade-offs with the requester before completing the plan. 
 
 Require separate whole-plan approval only when an applicable authority rule or requester instruction requires it. Obtain any required approval before handoff.
 
-When approval is required, identify the selected solution, task plan, assumptions, or decisions that it covers. Record explicit approval through CLI-owned operations under the shared [approval bindings](../runtime.md#evidence-and-approval-bindings).
+When approval is required, identify the selected solution, task plan, assumptions, or decisions that it covers. Record explicit approval through CLI-owned operations under the shared [approval bindings](../../runtime.md#evidence-and-approval-bindings).
 
 Saving or committing a plan, receiving positive review, or completing self-review does not grant requester approval. Completion makes the unit ready for Implementation Execution under that stage's contract. It does not dispatch workers or authorize delivery.
 
 ### Reopening questionnaire
 
-Evaluate these questions against the current plan and its relevant inputs. Report findings and the proposed boundary under the shared [revision procedure](../revision.md#revision-procedure).
+Evaluate these questions against the current plan and its relevant inputs. Report findings and the proposed boundary under the shared [revision procedure](../../revision.md#revision-procedure).
 
 1. Does the finding require changing the selected technical solution, a technical contract, or a material implementation assumption?
 2. Does it change task outcomes, required outputs, acceptance conditions, or coverage of an upstream obligation?
@@ -276,7 +276,7 @@ Evaluate these questions against the current plan and its relevant inputs. Repor
 4. Does it invalidate the planned verification approach, environment, or ability to run required checks?
 5. Does it expose an unresolved consequential decision or invalidate a stage completion condition?
 
-Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires). Answers support the orchestrator's decision; they do not authorize reopening or exempt downstream stages from a cascade.
+Apply the shared [questionnaire rules](../../revision.md#stage-reopening-questionnaires). Answers support the orchestrator's decision; they do not authorize reopening or exempt downstream stages from a cascade.
 
 A planning-only change does not reopen valid upstream stages. Report invalid functional or quality inputs so the orchestrator can assess an earlier boundary.
 
@@ -320,19 +320,19 @@ This stage defines its proposed evidence coverage. Requester approval is a separ
 | Requested external review result | Material and scope identified in the request, when external review is requested. | The requested review is complete and its blocking findings are resolved. |
 | Applicable requester approval record | The material and consequential decisions covered by a required approval or explicit plan-approval request. | The requester explicitly approves the identified material for the applicable attempt. No approval is inferred from artifact presence or review success. |
 
-Keep results bound to their original scope, unit-scoped attempt, covered material, and relevant inputs under the shared [evidence rules](../runtime.md#evidence-and-approval-bindings).
+Keep results bound to their original scope, unit-scoped attempt, covered material, and relevant inputs under the shared [evidence rules](../../runtime.md#evidence-and-approval-bindings).
 
-Record results through CLI-owned operations and retain supporting output. Identify the checkpoint and reviewed versions of both planning artifacts, together with relevant inputs. Reassess evidence applicability when either artifact changes. Create the output checkpoint before recording any required approval. Apply the shared applicability and [retention rules](../runtime.md#checkpoint-retention).
+Record results through CLI-owned operations and retain supporting output. Identify the checkpoint and reviewed versions of both planning artifacts, together with relevant inputs. Reassess evidence applicability when either artifact changes. Create the output checkpoint before recording any required approval. Apply the shared applicability and [retention rules](../../runtime.md#checkpoint-retention).
 
 Graph validation does not replace semantic review of dependencies, coverage, or the selected solution. The self-review result must cover those judgments.
 
 No separate evidence document or application test run is required by this stage. Exact record formats, validation commands, and event types remain implementation work.
 
-[SH52](../authoring_progress.md#shared-decisions-still-pending) tracks evidence decisions for the remaining stage contracts. This section defines Planning's coverage without settling later stages' obligations.
+[SH52](../../authoring_progress.md#shared-decisions-still-pending) tracks evidence decisions for the remaining stage contracts. This section defines Planning's coverage without settling later stages' obligations.
 
 ## Handoff
 
-**Next stage:** [Implementation Execution](implementation-execution.md).
+**Standard workflow next stage:** [Implementation Execution](implementation-execution.md).
 
 Identify the unit directory, `plan.md`, `tasks-dag.json`, current upstream artifacts, supporting files, and the material covered by completion evidence.
 

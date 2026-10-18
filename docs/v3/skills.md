@@ -47,14 +47,14 @@ Supporting skills do not introduce additional agent roles. Use CLI-owned operati
 
 ## kepler-design
 
-Entry skill for [Functional Design](phase_construction/functional-design.md). It must:
+Entry skill for [Functional Design](phases/construction/functional-design.md). It must:
 
 - Investigate relevant context and resolve functional questions with the requester.
 - Maintain `unit-of-work.md`, `design.md`, and relevant linked supporting files.
-- Apply the shared [depth definition](depth.md).
-- Perform self-review against required content and [completion conditions](phase_construction/functional-design.md#completion-conditions).
+- Apply the shared [effort definition](effort.md).
+- Perform self-review against required content and [completion conditions](phases/construction/functional-design.md#completion-conditions).
 - Request explicit approval and record it through the `kepler` CLI.
-- Use the [reopening questionnaire](phase_construction/functional-design.md#reopening-questionnaire) to report findings and a proposed revision boundary to the orchestrator.
+- Use the [reopening questionnaire](phases/construction/functional-design.md#reopening-questionnaire) to report findings and a proposed revision boundary to the orchestrator.
 - Hand off known quality concerns and questions to Quality Requirements.
 
 Self-review belongs in this skill, not a separate supporting skill. It checks required content, acceptance criteria, consistency, blocking questions, and concerns passed to later stages.
@@ -63,14 +63,14 @@ Technical solution selection remains in Implementation Planning. External review
 
 ## kepler-quality
 
-**Status:** Accepted under the [Quality Requirements contract](phase_construction/quality-requirements.md#supporting-skills).
+**Status:** Accepted under the [Quality Requirements contract](phases/construction/quality-requirements.md#supporting-skills).
 
 This entry skill must:
 
 - Investigate relevant context and assess the stage's quality categories.
 - Resolve applicable targets, conditions, constraints, and material trade-offs with the requester.
 - Maintain `quality.md` and relevant linked supporting files.
-- Apply the shared depth definition.
+- Apply the shared effort definition.
 - Perform self-review against required content and the stage completion conditions.
 - Record the stage's required validation and review evidence through CLI-owned operations.
 - Request explicit quality approval and record it through the `kepler` CLI.
@@ -83,7 +83,7 @@ This skill does not extend `kepler-design`, select a technical solution, or deci
 
 ## kepler-plan
 
-**Status:** Proposed under the [Implementation Planning draft](phase_construction/implementation-planning.md#supporting-skills).
+**Status:** Proposed under the [Implementation Planning draft](phases/construction/implementation-planning.md#supporting-skills).
 
 The draft proposes this entry skill to:
 
@@ -91,9 +91,9 @@ The draft proposes this entry skill to:
 - Select the technical solution against current functional and quality requirements.
 - Define task outcomes, dependencies, prerequisite conditions, coverage, coordination constraints, and verification obligations.
 - Maintain `plan.md`, `tasks-dag.json`, and relevant linked supporting files.
-- Use the [accepted task graph specification](phase_construction/task-graph.md), including its task fields, dependency rules, and prerequisite rules.
+- Use the [accepted task graph specification](phases/construction/task-graph.md), including its task fields, dependency rules, and prerequisite rules.
 - Record the technical rationale for every planning decision in `plan.md`.
-- Apply the shared depth definition.
+- Apply the shared effort definition.
 - Perform self-review and record the proposed stage's validation and review evidence through CLI-owned operations.
 - Resolve consequential choices with the requester and record applicable approval through the CLI.
 - Report upstream findings and proposed revision boundaries to the orchestrator.
@@ -105,7 +105,7 @@ These responsibilities do not approve the current skill implementation or decide
 
 ## kepler-orchestrate
 
-**Status:** Proposed under the [Implementation Execution](phase_construction/implementation-execution.md#supporting-skills) and [Code Integration Activity](phase_construction/code-integration.md#supporting-skills) drafts.
+**Status:** Proposed under the [Implementation Execution](phases/construction/implementation-execution.md#supporting-skills) and [Code Integration Activity](phases/construction/activities/code-integration.md#roles-and-skills) drafts.
 
 For unit-scoped Implementation Execution, the draft proposes this skill to:
 
@@ -114,19 +114,19 @@ For unit-scoped Implementation Execution, the draft proposes this skill to:
 - Dispatch scoped subagents and coordinate each Code Generation, Code Validation, and Code Integration handoff.
 - Preserve concurrent ready-task work without global Git gates or batch barriers.
 - Consume worker facts and apply authorized progress, revision, and acceptance decisions through CLI-owned operations.
-- Resolve routine issues within existing authority and request requester decisions only for [hard blockers](phase_construction/implementation-execution.md#requester-intervention).
+- Resolve routine issues within existing authority and request requester decisions only for [hard blockers](phases/construction/implementation-execution.md#requester-intervention).
 - Record blocker decisions and apply authorized revision boundaries.
 - Assess task coverage, final integrated evidence, and unit completion.
 - Apply the proposed post-completion return rule, preserving valid original Activity bindings and executing reopened Activities under new attempts.
 - Perform self-review and prepare the Unit of Work Review handoff.
 
-For the [Code Integration Activity](phase_construction/code-integration.md#supporting-skills), the skill reads the current unit checkpoint after acquiring the lock. It prepares the combined candidate and runs required checks under the lock. It presents only checked bytes for authorized acceptance. It records actual Integration inputs separately from admission baselines. It self-checks evidence and releases the lock before a return to Code Generation.
+For the [Code Integration Activity](phases/construction/activities/code-integration.md#roles-and-skills), the skill reads the current unit checkpoint after acquiring the lock. It prepares the combined candidate and runs required checks under the lock. It presents only checked bytes for authorized acceptance. It records actual Integration inputs separately from admission baselines. It self-checks evidence and releases the lock before a return to Code Generation.
 
 These are separate stage and Activity scopes with distinct attempts. The skill does not create a task-coding attempt, expose a worker-topology selector, or grant publication authority.
 
 ## kepler-code
 
-**Status:** Proposed under the dedicated [Code Generation Activity contract](phase_construction/code-generation.md#supporting-skills).
+**Status:** Proposed under the dedicated [Code Generation Activity contract](phases/construction/activities/code-generation.md#roles-and-skills).
 
 The draft proposes this entry skill to:
 
@@ -141,7 +141,7 @@ This procedure does not approve upstream changes, bypass Validation, or complete
 
 ## kepler-code-feedback
 
-**Status:** Proposed under the dedicated [Code Validation Activity contract](phase_construction/code-validation.md#supporting-skills).
+**Status:** Proposed under the dedicated [Code Validation Activity contract](phases/construction/activities/code-validation.md#roles-and-skills).
 
 The draft proposes this entry skill to:
 
@@ -156,7 +156,7 @@ Independent feedback remains required. The proposed procedure does not import le
 
 ## kepler-review
 
-**Status:** Proposed under the [Unit of Work Review draft](phase_construction/unit-of-work-review.md#supporting-skills).
+**Status:** Proposed under the [Unit of Work Review draft](phases/construction/unit-of-work-review.md#supporting-skills).
 
 The draft proposes this entry skill to:
 
@@ -171,7 +171,7 @@ This procedure does not automatically rerun all application checks, create exter
 
 ## kepler-finish-work
 
-**Status:** Proposed under the [Deliver draft](phase_construction/deliver.md#supporting-skills).
+**Status:** Proposed under the [Deliver draft](phases/construction/deliver.md#supporting-skills).
 
 The draft proposes this entry skill to:
 

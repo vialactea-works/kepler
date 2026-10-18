@@ -1,8 +1,8 @@
-# Stage 1: Functional Design
+# Functional Design
 
-[Construction phase index](README.md) | [Workflow phase index](../README.md)
+[Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
-**Status:** Accepted by the requester under [FD13](../authoring_progress.md#functional-design-decisions).
+**Status:** Accepted by the requester under [FD13](../../authoring_progress.md#functional-design-decisions).
 
 ## Goal
 
@@ -72,13 +72,13 @@ All paths are relative to the project repository root. `<unit-id>` is the stable
 | Functional design | `.kepler/units-of-work/<unit-id>/design.md` | Define domain behavior, the domain model, functional contracts, and design decisions. |
 | Supporting Functional Design files | `.kepler/units-of-work/<unit-id>/details/functional-design/` | Supply linked detail for this stage. |
 
-The Unit of Work directory remains unchanged across stages, retries, and design revisions. Do not derive its identity from a branch, worktree, skill, or task number. Use the shared [unit identity and directory rules](../unit-of-work.md#identity-and-directory): `YYYY-MM-DD-<slug>`, with the machine-local creation date and the exact ID as the directory name.
+The Unit of Work directory remains unchanged across stages, retries, and design revisions. Do not derive its identity from a branch, worktree, skill, or task number. Use the shared [unit identity and directory rules](../../unit-of-work.md#identity-and-directory): `YYYY-MM-DD-<slug>`. Use the machine-local creation date and the exact ID as the directory name.
 
 These paths are part of the version 3 draft. They do not migrate existing files or change current CLI path rules.
 
 ### Required information and supporting detail
 
-This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Use the shared [Artifact metadata contract](../metadata.md) for common frontmatter fields. Shared field and value validation follows that contract. Stage-specific fields require further decisions. Dynamic execution state follows the shared [CLI infrastructure contract](../runtime.md).
+This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Use the shared [Artifact metadata contract](../../metadata.md) for common frontmatter fields. Shared field and value validation follows that contract. Stage-specific fields require further decisions. Dynamic execution state follows the shared [CLI infrastructure contract](../../runtime.md).
 
 Create the Unit of Work definition when needed. Preserve and refine an existing definition when Inception or earlier work supplies it. Do not create a second definition for the same Unit of Work.
 
@@ -139,17 +139,17 @@ Documents must distinguish existing facts, proposed behavior, and assumptions. R
 
 The authority, internal file structure, and update rules for Project references remain separate decisions.
 
-## Depth
+## Effort
 
-Apply the shared [Depth definition](../depth.md). Use the Unit of Work default unless an explicit stage override applies. Depth controls the detail of analysis and documentation. It does not remove required information or weaken verification.
+Apply the shared [Effort definition](../../effort.md). Use the Unit of Work default unless an explicit stage override applies. Effort controls the detail of analysis and documentation. It does not remove required information or weaken verification.
 
-| Depth | Functional Design guidance |
+| Effort | Functional Design guidance |
 | --- | --- |
 | Minimal | State the purpose, required behavior, acceptance criteria, and relevant contracts concisely. Reference existing models. Add supporting detail where needed to resolve material ambiguity. |
 | Standard | Explain significant functional decisions, interactions, and risks. Add focused supporting files when the required documents would become difficult to read. |
 | Comprehensive | Analyze complex models, alternatives, failure conditions, and interactions across boundaries in detail. Link supporting files from the relevant required sections. |
 
-Depth does not prescribe a file count or page length. Add diagrams, tables, or model descriptions only when they explain relevant information. Do not invent complexity to satisfy a depth level.
+Effort does not prescribe a file count or page length. Add diagrams, tables, or model descriptions only when they explain relevant information. Do not invent complexity to satisfy a effort level.
 
 ## Agent roles
 
@@ -163,13 +163,13 @@ The agent can inspect existing source and tests and maintain this stage's docume
 
 The requester retains authority over product behavior, scope, consequential trade-offs, and approval. No other agent roles are defined for this stage. Requester-triggered external review remains available without selecting a reviewer agent profile here.
 
-The shared [orchestrator role](../revision.md#authority-and-escalation) controls revision authorization outside this stage. It does not replace the Functional Design owner or requester approval.
+The shared [orchestrator role](../../revision.md#authority-and-escalation) controls revision authorization outside this stage. It does not replace the Functional Design owner or requester approval.
 
 ## Supporting skills
 
 ### Entry skill
 
-[kepler-design](../skills.md#kepler-design) is the entry skill for Functional Design. The skill reference defines its procedure responsibilities.
+[kepler-design](../../skills.md#kepler-design) is the entry skill for Functional Design. The skill reference defines its procedure responsibilities.
 
 Technical solution selection remains in Implementation Planning. Skill names and packaging do not define stage boundaries.
 
@@ -177,15 +177,15 @@ Technical solution selection remains in Implementation Planning. Skill names and
 
 | Responsibility | Version 3 skill | Adaptation |
 | --- | --- | --- |
-| Structured questioning | [kepler-grilling](../skills.md#kepler-grilling) | Keep focused requester discussion, recommendations, and caller-supplied context and exit conditions. Record confirmed answers where the calling artifact contract requires them. |
-| Domain modeling | [kepler-domain-modelling](../skills.md#kepler-domain-modelling) | Develop domain language, rules, invariants, and boundaries. Use caller-supplied paths and distinguish existing application facts from proposed changes. |
-| Research | [kepler-research](../skills.md#kepler-research) | Investigate uncertain facts through source code and primary references. Return findings with sources at the caller's supporting-file path. |
+| Structured questioning | [kepler-grilling](../../skills.md#kepler-grilling) | Keep focused requester discussion, recommendations, and caller-supplied context and exit conditions. Record confirmed answers where the calling artifact contract requires them. |
+| Domain modeling | [kepler-domain-modelling](../../skills.md#kepler-domain-modelling) | Develop domain language, rules, invariants, and boundaries. Use caller-supplied paths and distinguish existing application facts from proposed changes. |
+| Research | [kepler-research](../../skills.md#kepler-research) | Investigate uncertain facts through source code and primary references. Return findings with sources at the caller's supporting-file path. |
 
-The [skill reference](../skills.md) defines these responsibilities and records the version 3 name changes. These skills supply behavior to adapt, not old artifact contracts to preserve.
+The [skill reference](../../skills.md) defines these responsibilities and records the version 3 name changes. These skills supply behavior to adapt, not old artifact contracts to preserve.
 
 For this stage, required content belongs in the root Unit of Work documents. Supporting detail belongs under `details/functional-design/` and must be linked from the relevant required section. Use caller-supplied paths when a supporting skill serves another stage.
 
-Apply the [common skill rules](../skills.md#common-rules). Supporting skills do not introduce additional agent roles. This specification does not modify their current implementations.
+Apply the [common skill rules](../../skills.md#common-rules). Supporting skills do not introduce additional agent roles. This specification does not modify their current implementations.
 
 ## Review and approval
 
@@ -195,7 +195,7 @@ Self-review is part of `kepler-design`, not a separate supporting skill. `kepler
 
 ### External review
 
-External review by another agent or person occurs only when the requester asks for it. Risk, complexity, and depth do not trigger external review. Self-review remains required whether or not the requester asks for external review.
+External review by another agent or person occurs only when the requester asks for it. Risk, complexity, and effort do not trigger external review. Self-review remains required whether or not the requester asks for external review.
 
 ### Requester approval
 
@@ -208,11 +208,11 @@ The requester must explicitly approve the current functional design. Approval co
 
 Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval permits progression to Quality Requirements. It does not authorize implementation or delivery.
 
-Record approval through CLI-owned JSON journal events, not artifact frontmatter. Derive current approval views from those events. Do not require a separate human-authored approval document. Apply the shared [evidence and approval bindings](../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact projection fields, event formats, and material reference formats remain undecided.
+Record approval through CLI-owned JSON journal events, not artifact frontmatter. Derive current approval views from those events. Do not require a separate human-authored approval document. Apply the shared [evidence and approval bindings](../../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact projection fields, event formats, and material reference formats remain undecided.
 
 ### Reopening questionnaire
 
-Evaluate each question against the agreed functional design, including linked supporting files. Report the answers and proposed revision boundary to the orchestrator under the shared [Revision procedure](../revision.md#revision-procedure).
+Evaluate each question against the agreed functional design, including linked supporting files. Report the answers and proposed revision boundary to the orchestrator under the shared [Revision procedure](../../revision.md#revision-procedure).
 
 1. Does the finding require a change to the intended outcome, scope, or exclusions of the Unit of Work?
 2. Does it require a change to domain behavior, acceptance criteria, failure behavior, or boundary conditions?
@@ -221,9 +221,9 @@ Evaluate each question against the agreed functional design, including linked su
 5. Does it invalidate an assumption or decision that the agreed functional design depends on?
 6. Does it expose a required functional decision that remains unresolved, or show that a Functional Design completion condition is no longer met?
 
-Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid.
+Apply the shared [questionnaire rules](../../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid.
 
-The orchestrator authorizes reopening under the shared [Revision procedure](../revision.md#revision-procedure). Questionnaire answers do not authorize the stage agent to reopen stages.
+The orchestrator authorizes reopening under the shared [Revision procedure](../../revision.md#revision-procedure). Questionnaire answers do not authorize the stage agent to reopen stages.
 
 A reopened Functional Design stage must repeat self-review. The requester must explicitly approve the revised functional design. Record that approval through CLI-owned JSON journal events. External review remains requester-triggered only.
 
@@ -258,8 +258,8 @@ These examples are not mandatory questions or additional completion conditions. 
 
 ## Handoff
 
-**Next stage:** Quality Requirements.
+**Standard workflow next stage:** [Quality Requirements](quality-requirements.md).
 
 The handoff identifies the Unit of Work directory, `unit-of-work.md`, `design.md`, and any linked supporting files. It includes relevant Project references, their paths, known constraints, and questions for the next stage.
 
-The next stage records quality targets and constraints in `quality.md` at the Unit of Work root. Include observability among the applicable concerns passed to that stage. Implementation Planning then selects the technical solution against the functional design and quality requirements.
+In Standard, Quality Requirements records quality targets and constraints in `quality.md` at the Unit of Work root. Include observability among the applicable concerns passed to that stage. Implementation Planning then selects the technical solution against the functional design and quality requirements.

@@ -18,25 +18,42 @@ The version 2 reference remains a separate document set. Its contracts do not au
 | --- | --- | --- |
 | Initialization | Prepare the project, its standards, and its workspace. | Phase contract not yet defined. |
 | Inception | Investigate the intended outcome and define one or more Units of Work. | Phase contract not yet defined. |
-| Construction | Design, plan, implement, validate, review, and deliver one Unit of Work. | See [Construction](phase_construction/README.md). |
+| Construction | Own stages for designing, planning, implementing, reviewing, and delivering a Unit of Work. | See [Construction](phases/construction/README.md). |
 
 Each phase is a bounded context and owns its execution state model and projection schemas. Shared tracking mechanics do not impose a universal unit/task hierarchy.
 
 Project preparation belongs to Initialization, not Construction. A clear request can enter Construction without Inception.
 
-Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains task scopes that can run in parallel when dependencies permit. Each task follows the fixed [Activity](activity.md) sequence: Code Generation, Code Validation, then Code Integration. Dedicated [Code Generation](phase_construction/code-generation.md), [Code Validation](phase_construction/code-validation.md), and [Code Integration](phase_construction/code-integration.md) contracts define those Activities. These execution relationships apply only to Construction.
+The [Standard workflow](workflows/standard/README.md#stages) places Implementation Execution between Implementation Planning and Unit of Work Review. Construction defines that stage's [task execution rules](phases/construction/README.md#implementation-execution). This unit-scoped stage contains task scopes that can run in parallel when dependencies permit. Each task follows the fixed [Activity](activity.md) sequence: Code Generation, Code Validation, then Code Integration. Dedicated [Code Generation](phases/construction/activities/code-generation.md), [Code Validation](phases/construction/activities/code-validation.md), and [Code Integration](phases/construction/activities/code-integration.md) contracts define those Activities. These execution relationships apply only to Construction.
 
-[Code Integration](phase_construction/code-integration.md#integration-procedure) prepares and checks each combined candidate under the unit lock. Authorized operations accept only the checked material. Typechecking, the project build, and the full application test suite must succeed before acceptance. This serializes integrations within that unit while preserving permitted work on other tasks and units.
+[Code Integration](phases/construction/activities/code-integration.md#integration-procedure) prepares and checks each combined candidate under the unit lock. Authorized operations accept only the checked material. Typechecking, the project build, and the full application test suite must succeed before acceptance. This serializes integrations within that unit while preserving permitted work on other tasks and units.
 
-During Construction's [unit-wide upstream revision](phase_construction/README.md#unit-wide-upstream-revision), the orchestrator stops new task admissions and active implementation work for that unit. Independent units continue while their inputs and contracts remain valid.
+During Construction's [unit-wide upstream revision](phases/construction/README.md#unit-wide-upstream-revision), the orchestrator stops new task admissions and active implementation work for that unit. Independent units continue while their inputs and contracts remain valid.
 
 Intent documents belong to Inception. Their structure and the terms for their organization remain outside the current design scope.
 
+## Workflows
+
+[Standard](workflows/standard/README.md) defines the complete Construction MVP sequence and its stage handoffs. Its stages retain the contracts defined by their owning phase.
+
+## Reference organization
+
+| Area | Location | Responsibility |
+| --- | --- | --- |
+| Core concepts | This directory. | Define shared concepts, artifact rules, effort, revision, and tracking mechanics. |
+| Phase contracts | `phases/<phase>/` | Define phase-owned stage contracts and execution scopes. |
+| Construction Activities | [activities/](phases/construction/activities/README.md) within Construction. | Define compact contracts for Activities inside Implementation Execution. |
+| Workflow composition | [workflows/standard/](workflows/standard/README.md) | Select stages and define their order and routing. |
+
+These locations organize the specification. They do not change generated unit paths or implement a workflow engine.
+
 ## Shared concepts
+
+A **workflow** selects a series of stages defined within phases. Its definition sets their order and routing. The selected stages retain their own contracts.
 
 A **Unit of Work** replaces the previous **change** concept. Construction operates on one Unit of Work. A Unit of Work can contain several implementation tasks. The shared [Unit of Work draft](unit-of-work.md) defines the acceptance boundary, decomposition procedure, and walking skeleton kind.
 
-A **stage** defines a workflow responsibility. Its phase contract defines its execution scope. A skill supplies a procedure that can support that responsibility. Stage boundaries do not depend on skill names or packaging.
+A **stage** defines a phase-owned responsibility that workflows can use. Its phase contract defines its execution scope. A skill supplies a procedure that can support that responsibility. Stage boundaries do not depend on skill names or packaging.
 
 An [Activity](activity.md) is a bounded execution responsibility within a stage. Its owning phase or stage defines its scope, outcomes, procedure, checks, evidence, completion, correction paths, and handoffs. Activities are not stages, agents, skills, planned tasks, or independent lifecycle milestones.
 
@@ -55,9 +72,9 @@ Paths are relative to the project repository root. `<unit-id>` uses `YYYY-MM-DD-
 
 Required Unit of Work documents live directly under `.kepler/units-of-work/<unit-id>/`. Additional detail lives in linked files under `details/`. Stage-specific detail uses a stage subdirectory, such as `details/functional-design/`.
 
-The accepted [Functional Design artifact contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md` at the Unit of Work root. The contract defines the required sections of both documents for Functional Design. Quality Requirements uses a separate required `quality.md` at the same root. Its [accepted contract](phase_construction/quality-requirements.md) defines the stage and artifact requirements. Implementation Planning produces required `plan.md` and `tasks-dag.json` at the unit root. The [accepted task graph specification](phase_construction/task-graph.md) defines its task content, dependency and prerequisite rules, validation, and JSON Schema. Its [stage draft](phase_construction/implementation-planning.md) defines the agreed artifact split and proposes the remaining contract.
+The accepted [Functional Design artifact contract](phases/construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md` at the Unit of Work root. The contract defines the required sections of both documents for Functional Design. Quality Requirements uses a separate required `quality.md` at the same root. Its [accepted contract](phases/construction/quality-requirements.md) defines the stage and artifact requirements. Implementation Planning produces required `plan.md` and `tasks-dag.json` at the unit root. The [accepted task graph specification](phases/construction/task-graph.md) defines its task content, dependency and prerequisite rules, validation, and JSON Schema. Its [stage draft](phases/construction/implementation-planning.md) defines the agreed artifact split and proposes the remaining contract.
 
-The [Execution draft](phase_construction/implementation-execution.md#artifacts-and-records) proposes implementation outputs and scoped CLI-owned evidence, without a required execution Markdown document. The [Review draft](phase_construction/unit-of-work-review.md#artifacts-and-records) proposes review records without a required review Markdown document. The [Deliver draft](phase_construction/deliver.md#artifacts) proposes required `delivery.md` for authored instructions. Operation results and changing execution state remain separate CLI-owned records. These artifact proposals do not mark the remaining stage contracts as accepted.
+The [Execution draft](phases/construction/implementation-execution.md#artifacts-and-records) proposes implementation outputs and scoped CLI-owned evidence, without a required execution Markdown document. The [Review draft](phases/construction/unit-of-work-review.md#artifacts-and-records) proposes review records without a required review Markdown document. The [Deliver draft](phases/construction/deliver.md#artifacts) proposes required `delivery.md` for authored instructions. Operation results and changing execution state remain separate CLI-owned records. These artifact proposals do not mark the remaining stage contracts as accepted.
 
 These paths do not migrate existing artifacts or change current CLI path rules.
 
@@ -85,18 +102,18 @@ The [run floor](runtime.md#run-floor) uses the applicable attempt identity, with
 
 The [parallel execution rules](runtime.md#parallel-execution) permit dependency-ready tasks and independent units to progress concurrently. Task admission captures the current unit integration commit containing all required predecessor outputs. The admitted task then keeps its recorded baseline. A moving global coordinator `HEAD` or unrelated commit does not automatically invalidate its work.
 
-## Depth
+## Effort
 
-[Depth](depth.md) defines the shared Minimal, Standard, and Comprehensive levels. Depth controls the detail of analysis and documentation. It does not remove required information or weaken verification.
+[Effort](effort.md) defines the shared Minimal, Standard, and Comprehensive levels. The Standard Effort level is separate from the Standard workflow name. Effort controls the detail of analysis and documentation. It does not remove required information or weaken verification.
 
-Each Unit of Work has one default depth. Use Standard when the requester has not selected another level. Stages inherit the unit default unless an explicit stage override exists. The agent recommends adjustments; the requester decides whether to accept them.
+Each Unit of Work has one default effort. Use Standard when the requester has not selected another level. Stages inherit the unit default unless an explicit stage override exists. The agent recommends adjustments; the requester decides whether to accept them.
 
-Stages apply this shared definition to their work. Activities inherit their owning stage's depth and do not have separate overrides. Depth does not prescribe a file count or page length. Record depth selections as journal events through the CLI. Derive current settings from those events. Exact payloads, projection fields, and CLI operations remain part of the shared CLI infrastructure contract.
+Stages apply this shared definition to their work. Activities inherit their owning stage's effort and do not have separate overrides. Effort does not prescribe a file count or page length. Record effort selections as journal events through the CLI. Derive current settings from those events. Exact payloads, projection fields, and CLI operations remain part of the shared CLI infrastructure contract.
 
 ## Writing convention
 
 Use ASD-STE100 Simplified Technical English for text added or changed in this reference. Keep commands, paths, schema fields, and stored values in their exact spelling.
 
-Keep links in this specification within `workflow_v3/`. Use the local skill reference instead of links to current skill implementations.
+Keep links in this specification within `v3/`. Use the local skill reference instead of links to current skill implementations.
 
 The ASD-STE100 site provides the standard: `https://www.asd-ste100.org/`. This reference does not claim certified language validation.

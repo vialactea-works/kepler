@@ -29,7 +29,7 @@ For Markdown artifacts, apply the shared [schema-version rules](metadata.md#sche
 
 Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in authored artifacts. This includes Markdown frontmatter, Markdown status sections, and `tasks-dag.json`.
 
-Construction records technical rationale in `plan.md` and the task graph in `tasks-dag.json`. Both are authored content. Task graphs use the [Kepler JSON format](phase_construction/task-graph.md), including its UUID identities and independent format version. Execution progress is derived from event journals, not Markdown checkboxes or task-graph status fields.
+Construction records technical rationale in `plan.md` and the task graph in `tasks-dag.json`. Both are authored content. Task graphs use the [Kepler JSON format](phases/construction/task-graph.md), including its UUID identities and independent format version. Execution progress is derived from event journals, not Markdown checkboxes or task-graph status fields.
 
 ### Execution state
 
@@ -47,7 +47,7 @@ The CLI can calculate views directly or use rebuildable projections. Rebuilding 
 
 This representation does not require one shared journal or a global total order. The [event envelope](#event-envelope-choices) is agreed. Exact type definitions and the event catalog belong to implementation. Journal layout, collection, and write protocols remain separate decisions.
 
-Record the unit depth default and explicit stage overrides as journal events through the CLI. Derive their current values from those events. Their selection and approval rules remain in the shared [Depth definition](depth.md).
+Record the unit effort default and explicit stage overrides as journal events through the CLI. Derive their current values from those events. Their selection and approval rules remain in the shared [Effort definition](effort.md).
 
 Record requester approvals and their reviewed-material bindings as journal events through the CLI. Approval views are derived from those events. A frontmatter flag, an existing artifact, or a Git commit does not establish approval or completion.
 
@@ -83,7 +83,7 @@ Preserve each limit under concurrent start or resume requests. Two requests for 
 
 This constraint does not require every task to execute every Activity. Phase and stage contracts define the applicable scopes.
 
-Construction defines its [Implementation Execution structure](phase_construction/README.md#implementation-execution). Record the relationship between its unit-scoped stage attempt and each Activity attempt through the shared journal mechanics. Derive relationship views from those events.
+Construction defines its [Implementation Execution structure](phases/construction/README.md#implementation-execution). Record the relationship between its unit-scoped stage attempt and each Activity attempt through the shared journal mechanics. Derive relationship views from those events.
 
 Task implementation and Task coding are execution contexts, not additional attempt identities. Do not infer Construction's Activity structure for other phases.
 
@@ -127,7 +127,7 @@ Follow the shared [Revision procedure](revision.md#revision-procedure). A stage'
 
 Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Retain those facts in the phase's append-only event journals. Derive current execution state from the recorded decision. CLI-owned operations record the events; agents must not write them separately.
 
-Follow Construction's [unit-wide upstream revision rules](phase_construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and Activity attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stage or Activity executes again.
+Follow Construction's [unit-wide upstream revision rules](phases/construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and Activity attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stage or Activity executes again.
 
 Phase-owned projection fields and revision command names remain undecided. The implementation defines revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
 
@@ -271,7 +271,7 @@ A material mismatch does not authorize a revision cascade. Report suspected upst
 
 ## Parallel execution
 
-In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages retain their phase order. Apply the fixed [Activity order](phase_construction/README.md#implementation-execution) within each task, not across different tasks. Activity feedback routes do not add or change task dependency edges. Other phases define their own execution relationships.
+In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages follow the selected workflow's order. Apply the fixed [Activity order](phases/construction/README.md#implementation-execution) within each task, not across different tasks. Activity feedback routes do not add or change task dependency edges. Other phases define their own execution relationships.
 
 Starting tasks and recording progress must not depend on shared admission commits or a global coordinator `HEAD`. Independent work must not require unrelated workspaces to become clean or stop progressing.
 
@@ -279,7 +279,7 @@ Each task records its actual starting inputs. Running tasks do not need to match
 
 Workflow event writes and derived views must support concurrent work. Keep event-update coordination short. Test resources need isolation where concurrent runs could interfere.
 
-Construction's [integration lock](phase_construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current checkpoint, candidate preparation, checks, and acceptance. This lock can cover long-running checks; it is not a global agent, task admission, or test gate.
+Construction's [integration lock](phases/construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current checkpoint, candidate preparation, checks, and acceptance. This lock can cover long-running checks; it is not a global agent, task admission, or test gate.
 
 Separate unit integration workspaces and isolated workspaces for concurrent writers are one possible arrangement. Exact workspace and branch layouts remain undecided.
 
@@ -308,9 +308,9 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 Task outputs can have separate checkpoints. Results for those checkpoints do not establish that their combined result works.
 
-Construction's [Code Integration Activity](phase_construction/code-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Read the current checkpoint after acquiring the lock. Check the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against that candidate while holding the lock. All three must succeed before authorized acceptance. Record actual Integration inputs separately from the fixed admission baseline. Task completion requires successful acceptance and the applicable completion conditions.
+Construction's [Code Integration Activity](phases/construction/activities/code-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Read the current checkpoint after acquiring the lock. Check the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against that candidate while holding the lock. All three must succeed before authorized acceptance. Record actual Integration inputs separately from the fixed admission baseline. Task completion requires successful acceptance and the applicable completion conditions.
 
-Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phase_construction/README.md#agreed-boundaries) defines these duties. Integration checks do not replace them. A build result establishes typechecking only when the command also performs the required typechecking. Any additional integration checks and project-specific check configuration require separate decisions.
+Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phases/construction/README.md#agreed-boundaries) defines these duties. Integration checks do not replace them. A build result establishes typechecking only when the command also performs the required typechecking. Any additional integration checks and project-specific check configuration require separate decisions.
 
 A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; Integration does not authorize a cascade.
 
@@ -318,7 +318,7 @@ A conflict can block the affected integration. Unrelated ready tasks and units c
 
 Stage and Activity contracts define their named evidence, covered material, and required results. Shared bindings do not replace those definitions.
 
-The dedicated [Generation](phase_construction/code-generation.md#evidence-coverage), [Validation](phase_construction/code-validation.md#evidence-coverage), and [Integration](phase_construction/code-integration.md#evidence-coverage) Activity contracts define Activity evidence. The [Execution draft](phase_construction/implementation-execution.md#evidence-coverage) defines stage-level completion evidence. The [Review draft](phase_construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phase_construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
+The dedicated [Generation](phases/construction/activities/code-generation.md#evidence-coverage), [Validation](phases/construction/activities/code-validation.md#evidence-coverage), and [Integration](phases/construction/activities/code-integration.md#evidence-coverage) Activity contracts define Activity evidence. The [Execution draft](phases/construction/implementation-execution.md#evidence-coverage) defines stage-level completion evidence. The [Review draft](phases/construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phases/construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
 
 These detailed Activity and stage definitions remain proposed except where the accepted rules above say otherwise. Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage or Activity completion.
 

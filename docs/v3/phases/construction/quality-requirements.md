@@ -1,8 +1,8 @@
-# Stage 2: Quality Requirements
+# Quality Requirements
 
-[Construction phase index](README.md) | [Workflow phase index](../README.md)
+[Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
-**Status:** Accepted by the requester under [NF12](../authoring_progress.md#quality-requirements-decisions).
+**Status:** Accepted by the requester under [NF12](../../authoring_progress.md#quality-requirements-decisions).
 
 The requester has accepted this stage specification, including Maintainability, the evidence requirements, and the skill reference.
 
@@ -64,7 +64,7 @@ Security-related functional behavior remains in Functional Design. Report a requ
 
 ### Paths and organization
 
-All paths are relative to the project repository root. Use the existing Unit of Work directory and shared [unit identity rules](../unit-of-work.md#identity-and-directory).
+All paths are relative to the project repository root. Use the existing Unit of Work directory and shared [unit identity rules](../../unit-of-work.md#identity-and-directory).
 
 | Artifact | Location | Responsibility |
 | --- | --- | --- |
@@ -75,7 +75,7 @@ All paths are relative to the project repository root. Use the existing Unit of 
 
 This stage owns `quality.md` and consumes `design.md` without taking ownership of the functional design.
 
-Use the shared [metadata contract](../metadata.md). The required document keeps `type: non-functional-requirements`. The stage rename does not change this accepted metadata value. Optional supporting Markdown documents use `type: supporting-document`.
+Use the shared [metadata contract](../../metadata.md). The required document keeps `type: non-functional-requirements`. The stage rename does not change this accepted metadata value. Optional supporting Markdown documents use `type: supporting-document`.
 
 Create supporting files only when useful, and explain their purpose in links from the relevant required sections. Keep essential information in the root document. Do not create empty files or unexplained links.
 
@@ -95,7 +95,7 @@ Each section can be short. State when no relevant constraint or open question ex
 
 ### Quality categories
 
-The original seven categories are agreed under [CN02](README.md#agreed-boundaries). Maintainability is accepted under [NF13](../authoring_progress.md#quality-requirements-decisions). The examples explain possible concerns; they do not prescribe targets or tools.
+The original seven categories are agreed under [CN02](README.md#agreed-boundaries). Maintainability is accepted under [NF13](../../authoring_progress.md#quality-requirements-decisions). The examples explain possible concerns; they do not prescribe targets or tools.
 
 | Category | Concerns to assess where applicable |
 | --- | --- |
@@ -135,17 +135,17 @@ Do not invent a target because a category exists. Resolve material target choice
 
 Record proposed changes to Project references as proposals. Their authority and update rules remain separate decisions.
 
-## Depth
+## Effort
 
-Apply the shared [depth definition](../depth.md). Use the unit default unless an explicit stage override applies.
+Apply the shared [effort definition](../../effort.md). Use the unit default unless an explicit stage override applies.
 
-| Depth | Quality Requirements guidance |
+| Effort | Quality Requirements guidance |
 | --- | --- |
 | Minimal | State applicable requirements, acceptance conditions, constraints, and essential rationale concisely. Reference unchanged requirements. |
 | Standard | Explain significant quality trade-offs, conditions, dependencies, and risks. Link focused supporting analysis where needed. |
 | Comprehensive | Analyze complex operating conditions, interacting requirements, alternatives, and consequences across boundaries. Keep detailed analysis linked to the requirements. |
 
-Depth changes detail, not required information or authority. It does not remove applicable quality obligations, require invented targets, or trigger automatic external review.
+Effort changes detail, not required information or authority. It does not remove applicable quality obligations, require invented targets, or trigger automatic external review.
 
 ## Agent roles
 
@@ -157,15 +157,15 @@ The stage owner is:
 
 The stage owner needs quality-attribute analysis, requirements discovery, source investigation, and technical writing capabilities. It must distinguish targets from measurements and existing constraints from proposed technical choices.
 
-The requester retains authority over consequential targets, quality trade-offs, and approval. The [orchestrator](../revision.md#authority-and-escalation) controls reopening and revision boundaries.
+The requester retains authority over consequential targets, quality trade-offs, and approval. The [orchestrator](../../revision.md#authority-and-escalation) controls reopening and revision boundaries.
 
-The role assignment does not select a worker model for Quality Requirements. [CN20](../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Quality Requirements or other phases.
+The role assignment does not select a worker model for Quality Requirements. [CN20](../../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Quality Requirements or other phases.
 
 ## Supporting skills
 
 ### Entry skill
 
-[kepler-quality](../skills.md#kepler-quality) is the entry skill. It investigates applicable quality requirements, maintains the stage artifacts, performs self-review, and hands off to Implementation Planning.
+[kepler-quality](../../skills.md#kepler-quality) is the entry skill. It investigates applicable quality requirements, maintains the stage artifacts, performs self-review, and hands off to Implementation Planning.
 
 These responsibilities do not implement the skill or extend the `kepler-design` contract.
 
@@ -173,10 +173,10 @@ These responsibilities do not implement the skill or extend the `kepler-design` 
 
 | Responsibility | Skill | Use in this stage |
 | --- | --- | --- |
-| Structured questioning | [kepler-grilling](../skills.md#kepler-grilling) | Resolve applicability, targets, conditions, and material trade-offs with the requester. |
-| Research | [kepler-research](../skills.md#kepler-research) | Investigate uncertain constraints and existing guarantees through source code and primary references. |
+| Structured questioning | [kepler-grilling](../../skills.md#kepler-grilling) | Resolve applicability, targets, conditions, and material trade-offs with the requester. |
+| Research | [kepler-research](../../skills.md#kepler-research) | Investigate uncertain constraints and existing guarantees through source code and primary references. |
 
-Apply the [common skill rules](../skills.md#common-rules). Supporting skills neither add agent roles nor authorize upstream revisions.
+Apply the [common skill rules](../../skills.md#common-rules). Supporting skills neither add agent roles nor authorize upstream revisions.
 
 ## Review and approval
 
@@ -188,7 +188,7 @@ Self-review belongs in `kepler-quality`, not a separate supporting skill. Check 
 
 ### External review
 
-External review occurs only when the requester asks for it. Depth, risk, and complexity do not automatically create an external review gate. Self-review remains required.
+External review occurs only when the requester asks for it. Effort, risk, and complexity do not automatically create an external review gate. Self-review remains required.
 
 ### Requester approval
 
@@ -196,11 +196,11 @@ The requester must explicitly approve the current quality requirements. Approval
 
 Saving or committing a draft, or receiving a positive review, does not grant requester approval. Stage approval permits progression to Implementation Planning. It does not select a technical solution or authorize implementation or delivery.
 
-Record approval through CLI-owned JSON journal events, not frontmatter. Apply the shared [approval bindings](../runtime.md#evidence-and-approval-bindings) to the current attempt and reviewed material.
+Record approval through CLI-owned JSON journal events, not frontmatter. Apply the shared [approval bindings](../../runtime.md#evidence-and-approval-bindings) to the current attempt and reviewed material.
 
 ### Reopening questionnaire
 
-Evaluate these questions against the current quality requirements and relevant linked files. Report findings and the proposed boundary under the shared [revision procedure](../revision.md#revision-procedure).
+Evaluate these questions against the current quality requirements and relevant linked files. Report findings and the proposed boundary under the shared [revision procedure](../../revision.md#revision-procedure).
 
 1. Does the finding change which quality requirements apply to the unit?
 2. Does it change a target, constraint, acceptance condition, or the material covered?
@@ -208,7 +208,7 @@ Evaluate these questions against the current quality requirements and relevant l
 4. Does it invalidate an assumption or quality trade-off on which the requirements depend?
 5. Does it expose a material quality question that remains unresolved or invalidate a completion condition?
 
-Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires). Answers support the orchestrator's decision; they do not authorize reopening or exempt downstream stages from a cascade.
+Apply the shared [questionnaire rules](../../revision.md#stage-reopening-questionnaires). Answers support the orchestrator's decision; they do not authorize reopening or exempt downstream stages from a cascade.
 
 A required change to functional behavior can move the boundary to Functional Design. Report it to the orchestrator. Do not revise the functional design through this stage's quality document.
 
@@ -244,7 +244,7 @@ This contract defines required check and review evidence and a separate requeste
 | Requested external review result | The material and scope identified in the request, when external review is requested. | The requested review is complete and its blocking findings are resolved. |
 | Requester approval record | The reviewed quality requirements and supporting detail, including targets, constraints, and material assumptions. | The requester explicitly approves the identified material for the applicable attempt. |
 
-Keep these results bound to their original scope, attempt, covered material, and relevant inputs under the shared [evidence rules](../runtime.md#evidence-and-approval-bindings).
+Keep these results bound to their original scope, attempt, covered material, and relevant inputs under the shared [evidence rules](../../runtime.md#evidence-and-approval-bindings).
 
 Record results through CLI-owned operations and retain necessary supporting output. For repository material, identify the checkpoint and relevant files. Create the output checkpoint before recording approval. Apply the shared rules for evidence applicability and retention.
 
@@ -252,11 +252,11 @@ A separate evidence document is not required. Exact event types, record formats,
 
 These records establish the quality specification's validity and requester approval. They do not prove that an implementation meets the quality targets. No application test run is required by this stage.
 
-[SH52](../authoring_progress.md#shared-decisions-still-pending) tracks evidence decisions for the remaining stage contracts. This section defines Quality Requirements evidence coverage; other stage contracts define their own obligations.
+[SH52](../../authoring_progress.md#shared-decisions-still-pending) tracks evidence decisions for the remaining stage contracts. This section defines Quality Requirements evidence coverage; other stage contracts define their own obligations.
 
 ## Handoff
 
-**Next stage:** [Implementation Planning](implementation-planning.md).
+**Standard workflow next stage:** [Implementation Planning](implementation-planning.md).
 
 Identify the Unit of Work directory, `unit-of-work.md`, accepted `design.md`, current `quality.md`, and relevant linked supporting files.
 

@@ -97,7 +97,7 @@ Labels are available to any artifact, and the requester can add labels outside t
 - Additional scope and size criteria, and the detailed decomposition questionnaire, remain unresolved beyond the MVP under [SH75/SH76](authoring_progress.md#deferred-decisions).
 - Deployment information, its location, and its timing remain [MVP decisions](authoring_progress.md#shared-decisions-still-pending).
 
-The [Deliver draft](phase_construction/deliver.md#deployment-information) proposes deployment information, unit-root `delivery.md` instructions, and stage-specific timing. These proposals do not close SH77 through SH79 or alter the accepted obligation to record known deployment constraints.
+The [Deliver draft](phases/construction/deliver.md#deployment-information) proposes deployment information, unit-root `delivery.md` instructions, and stage-specific timing. These proposals do not close SH77 through SH79 or alter the accepted obligation to record known deployment constraints.
 
 Use the accepted cohesion, coverage, dependency, verification, and decomposition rules for the Construction MVP. This does not select additional criteria or a questionnaire contract.
 

@@ -1,12 +1,12 @@
-# Stage 6: Deliver
+# Deliver
 
-[Construction phase index](README.md) | [Workflow phase index](../README.md)
+[Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
 **Status:** Draft for discussion.
 
 Deliver is the final agreed Construction stage. Its detailed outcome, artifacts, operations, roles, skills, evidence, and completion conditions are proposals.
 
-This draft proposes deployment content, location, and timing under [SH77 through SH79](../authoring_progress.md#shared-decisions-still-pending). Those decisions remain open until requester agreement.
+This draft proposes deployment content, location, and timing under [SH77 through SH79](../../authoring_progress.md#shared-decisions-still-pending). Those decisions remain open until requester agreement.
 
 Saving this draft does not approve its proposals or authorize a release, publication, deployment, or other delivery operation.
 
@@ -137,7 +137,7 @@ Record failed operations and partial effects without claiming completion. Preser
 
 Before retrying, inspect actual effects and confirm earlier workers or operations are no longer active. Determine whether retrying would duplicate publication, deployment, or other side effects.
 
-An operation retry within the active stage keeps its attempt when no authorized reopening occurred. Follow the shared [recovery rule](../runtime.md#interrupted-work-recovery); a failed command alone does not create another attempt.
+An operation retry within the active stage keeps its attempt when no authorized reopening occurred. Follow the shared [recovery rule](../../runtime.md#interrupted-work-recovery); a failed command alone does not create another attempt.
 
 Recovery, rollback, and compensating operations need applicable authority. They are not automatically safe or authorized because the original operation failed.
 
@@ -145,17 +145,17 @@ Do not automatically reverse external effects when an upstream revision starts. 
 
 Independent units continue while their inputs, contracts, and shared-resource conditions permit it. This stage does not introduce a global release or deployment lock.
 
-## Depth
+## Effort
 
-Apply the shared [depth definition](../depth.md).
+Apply the shared [effort definition](../../effort.md).
 
-| Depth | Deliver guidance |
+| Effort | Deliver guidance |
 | --- | --- |
 | Minimal | State the outcome, target, material, required operations, verification, recovery, and recipient handoff concisely. |
 | Standard | Explain significant prerequisites, operational decisions, compatibility concerns, failure handling, and recipient responsibilities. |
 | Comprehensive | Analyze complex migrations, target interactions, partial effects, recovery limits, and operational verification in linked detail. |
 
-Depth does not remove required instructions, permissions, checks, retention, or recovery information. It does not turn every unit into a production deployment.
+Effort does not remove required instructions, permissions, checks, retention, or recovery information. It does not turn every unit into a production deployment.
 
 ## Agent roles
 
@@ -169,9 +169,9 @@ This role assignment does not implement an agent profile or decide inline work, 
 
 ## Supporting skills
 
-The draft proposes [kepler-finish-work](../skills.md#kepler-finish-work) as the entry skill. It prepares instructions, checks readiness, coordinates authorized delivery, verifies results, and supplies the final handoff.
+The draft proposes [kepler-finish-work](../../skills.md#kepler-finish-work) as the entry skill. It prepares instructions, checks readiness, coordinates authorized delivery, verifies results, and supplies the final handoff.
 
-Use [kepler-grilling](../skills.md#kepler-grilling) for requester-owned choices and [kepler-research](../skills.md#kepler-research) for uncertain operational facts. Follow the [common skill rules](../skills.md#common-rules).
+Use [kepler-grilling](../../skills.md#kepler-grilling) for requester-owned choices and [kepler-research](../../skills.md#kepler-research) for uncertain operational facts. Follow the [common skill rules](../../skills.md#common-rules).
 
 Self-review belongs in the entry skill. Its version 3 responsibilities do not adopt current release gates, legacy artifacts, cleanup rules, or implemented commands.
 
@@ -208,7 +208,7 @@ Record any required requester authorization or acceptance through CLI-owned oper
 5. Does a failure or partial effect invalidate the planned recovery, retry, or recipient handoff?
 6. Does the finding require an implementation or upstream contract change rather than a delivery-only correction?
 
-Report findings and the proposed earliest boundary under the shared [revision procedure](../revision.md#revision-procedure). Answers do not authorize reopening or permit unauthorized external operations.
+Report findings and the proposed earliest boundary under the shared [revision procedure](../../revision.md#revision-procedure). Answers do not authorize reopening or permit unauthorized external operations.
 
 Local instruction or operation corrections can remain within the active Deliver attempt when upstream contracts stay valid. Authorized reopening requires a new attempt when the stage executes again.
 
@@ -245,7 +245,7 @@ Authorization, additional review, and final approval rows apply when their state
 
 Bind evidence to this unit-scoped attempt, relevant inputs, repository checkpoint, external material, conditions, result, and retained supporting output. Preserve original bindings when referring to upstream review evidence.
 
-Apply the shared [evidence and approval bindings](../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. For repository approval material, create the output checkpoint before recording approval.
+Apply the shared [evidence and approval bindings](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. For repository approval material, create the output checkpoint before recording approval.
 
 Retain required package or image identities, external responses, verification output, and observed target information when they establish the outcome. A mutable tag, branch, or URL alone does not preserve the reviewed material.
 
@@ -253,10 +253,10 @@ Exact event payloads, commands, record storage, and delivery adapters remain imp
 
 ## Handoff
 
-**Next stage:** None within this Construction sequence.
+**Standard workflow next stage:** None.
 
 Supply the actual delivery location or recipient reference, material identity, verification result, current delivery instructions, and retained evidence references.
 
 Identify known nonblocking limitations, recovery information, and recipient-owned next actions within the agreed outcome. Do not present missing required delivery work as future work.
 
-Deliver completion closes this execution of Construction. It does not remove revision authority, authorize destructive cleanup, or require unrelated units to stop.
+Deliver completion closes this execution of the Standard workflow. It does not remove revision authority, authorize destructive cleanup, or require unrelated units to stop.

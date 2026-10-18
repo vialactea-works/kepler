@@ -1,10 +1,10 @@
-# Stage 5: Unit of Work Review
+# Unit of Work Review
 
-[Construction phase index](README.md) | [Workflow phase index](../README.md)
+[Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
 **Status:** Draft for discussion.
 
-The requester agreed that this stage reviews the complete integrated result after Implementation Execution under [CN17](../authoring_progress.md#completed-construction-decisions). This draft proposes the remaining review procedure, roles, skills, evidence, approval conditions, and handoff.
+The requester agreed that this stage reviews the complete integrated result after Implementation Execution under [CN17](../../authoring_progress.md#completed-construction-decisions). This draft proposes the remaining review procedure, roles, skills, evidence, approval conditions, and handoff.
 
 Saving this draft does not approve its proposals, accept an executing unit, or authorize delivery.
 
@@ -86,7 +86,7 @@ Run additional checks when needed to establish an uncovered review obligation, s
 
 Missing mandatory upstream evidence invalidates the relevant upstream completion. Report it for revision; new review checks do not retroactively complete an earlier stage attempt.
 
-A changed checkpoint alone does not require repeating valid checks. Apply the shared [evidence applicability rules](../runtime.md#evidence-applicability) to covered material and relevant inputs.
+A changed checkpoint alone does not require repeating valid checks. Apply the shared [evidence applicability rules](../../runtime.md#evidence-applicability) to covered material and relevant inputs.
 
 ### Findings and correction
 
@@ -94,7 +94,7 @@ A blocking finding prevents establishing an applicable unit obligation or requir
 
 A nonblocking limitation must not conceal an unmet requirement. Describe its actual scope and why it does not prevent the agreed outcome.
 
-The reviewer reports facts and proposed boundaries. The orchestrator decides whether clarification, investigation, or reopening is required under the shared [revision authority](../revision.md#authority-and-escalation).
+The reviewer reports facts and proposed boundaries. The orchestrator decides whether clarification, investigation, or reopening is required under the shared [revision authority](../../revision.md#authority-and-escalation).
 
 | Finding | Proposed boundary for assessment |
 | --- | --- |
@@ -108,17 +108,17 @@ An upstream revision invalidates current downstream completion immediately. Reex
 
 Code Generation, Code Validation, and Code Integration are Activities within Implementation Execution. Apply its proposed [post-completion return rule](implementation-execution.md#return-after-completed-execution) when that unit stage reopens. Reopened Activities require new attempts and evidence. Unaffected Activity records retain their original bindings after applicability assessment; the new unit attempt still requires its own completion assessment.
 
-## Depth
+## Effort
 
-Apply the shared [depth definition](../depth.md).
+Apply the shared [effort definition](../../effort.md).
 
-| Depth | Unit of Work Review guidance |
+| Effort | Unit of Work Review guidance |
 | --- | --- |
 | Minimal | State coverage, material findings, evidence applicability, and the whole-unit conclusion concisely. |
 | Standard | Explain significant interactions, quality concerns, verification gaps, and correction rationale. |
 | Comprehensive | Analyze complex failure paths, cross-boundary effects, operational concerns, and evidence limitations in supporting detail. |
 
-Depth does not remove whole-unit coverage, independent assessment, blocking-finding resolution, or applicable requester authority.
+Effort does not remove whole-unit coverage, independent assessment, blocking-finding resolution, or applicable requester authority.
 
 ## Agent roles
 
@@ -130,15 +130,15 @@ Review independence does not require a different model, vendor, or human. The re
 
 The orchestrator owns revision decisions and coordination. The requester retains authority over the intended outcome, scope, consequential trade-offs, and applicable acceptance.
 
-These assignments do not implement agent profiles. [CN20](../authoring_progress.md#completed-construction-decisions) selects an orchestrator-controlled subagent model for Implementation Execution only. It does not select a worker model for Unit of Work Review.
+These assignments do not implement agent profiles. [CN20](../../authoring_progress.md#completed-construction-decisions) selects an orchestrator-controlled subagent model for Implementation Execution only. It does not select a worker model for Unit of Work Review.
 
 ## Supporting skills
 
-The draft proposes [kepler-review](../skills.md#kepler-review) as the entry skill. It performs whole-unit assessment, self-checks its coverage, records evidence, and prepares the handoff.
+The draft proposes [kepler-review](../../skills.md#kepler-review) as the entry skill. It performs whole-unit assessment, self-checks its coverage, records evidence, and prepares the handoff.
 
-Use [kepler-research](../skills.md#kepler-research) for uncertain facts and [kepler-grilling](../skills.md#kepler-grilling) for requester-owned questions. These supporting procedures do not authorize revisions.
+Use [kepler-research](../../skills.md#kepler-research) for uncertain facts and [kepler-grilling](../../skills.md#kepler-grilling) for requester-owned questions. These supporting procedures do not authorize revisions.
 
-Apply the [common skill rules](../skills.md#common-rules). Current skill implementations and legacy review artifacts do not automatically apply.
+Apply the [common skill rules](../../skills.md#common-rules). Current skill implementations and legacy review artifacts do not automatically apply.
 
 ## Review and approval
 
@@ -170,7 +170,7 @@ A positive review, successful checks, or a repository commit does not grant requ
 4. Does evidence fail to establish required upstream completion or an applicable unit acceptance condition?
 5. Does an applicable requester acceptance no longer cover the current reviewed material or consequential decision?
 
-Report answers and the proposed earliest boundary to the orchestrator under the shared [revision procedure](../revision.md#revision-procedure).
+Report answers and the proposed earliest boundary to the orchestrator under the shared [revision procedure](../../revision.md#revision-procedure).
 
 Answers do not authorize reopening or exempt this stage from an upstream cascade. Satisfy the stage conditions again after authorized reopening, including any applicable acceptance.
 
@@ -204,13 +204,13 @@ Additional check and review rows apply only when their stated conditions occur. 
 
 Bind this stage's new assessment to its unit-scoped attempt, material, relevant inputs, result, and supporting output. Preserve originating bindings when referencing earlier evidence.
 
-Apply the shared [evidence and approval rules](../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Create the output checkpoint before recording any required requester acceptance.
+Apply the shared [evidence and approval rules](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Create the output checkpoint before recording any required requester acceptance.
 
 Exact event types, record formats, commands, and derived report layouts remain implementation work. No new execution-state authority or mandatory report filename is proposed.
 
 ## Handoff
 
-**Next stage:** [Deliver](deliver.md).
+**Standard workflow next stage:** [Deliver](deliver.md).
 
 Supply the reviewed integrated checkpoint, current upstream artifacts, review result, evidence references, and any applicable requester acceptance.
 

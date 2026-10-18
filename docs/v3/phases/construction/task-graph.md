@@ -1,10 +1,10 @@
 # Task graph JSON format
 
-[Implementation Planning](implementation-planning.md) | [Construction phase index](README.md) | [Workflow phase index](../README.md)
+[Implementation Planning](implementation-planning.md) | [Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
 ## Status and scope
 
-**Status:** Accepted by the requester under [IP26](../authoring_progress.md#implementation-planning-decisions).
+**Status:** Accepted by the requester under [IP26](../../authoring_progress.md#implementation-planning-decisions).
 
 Approval covers this specification's field definitions, dependency rules, prerequisite rules, example, validation rules, and JSON Schema. Task identity lifecycle and broader [Planning policies](implementation-planning.md) remain separate. This approval does not accept the complete Planning stage or an executing Unit of Work. It does not implement a writer or validator.
 
@@ -28,9 +28,9 @@ The file contains one JSON object with these required fields:
 
 `version` identifies the JSON format. It is not the Kepler release, Markdown schema version, content revision, event version, or attempt identity.
 
-Apply the shared [unit identity rules](../unit-of-work.md#identity-and-directory).
+Apply the shared [unit identity rules](../../unit-of-work.md#identity-and-directory).
 
-Generate the graph artifact ID through the `kepler` CLI under the shared [artifact identity rules](../metadata.md#identity-and-content-versions). Use a fresh, cross-project-unique UUIDv4 string. Preserve it across content revisions and moves. It must differ from every task ID and the `plan.md` artifact ID.
+Generate the graph artifact ID through the `kepler` CLI under the shared [artifact identity rules](../../metadata.md#identity-and-content-versions). Use a fresh, cross-project-unique UUIDv4 string. Preserve it across content revisions and moves. It must differ from every task ID and the `plan.md` artifact ID.
 
 The graph's JSON fields are defined here, not copied from Markdown frontmatter.
 
@@ -70,7 +70,7 @@ The task must remain understandable with its referenced inputs, without reconstr
 
 Local references use repository-relative file paths and optional Markdown fragments. Resolve them within the repository. External references use explicit URIs. Do not store machine-local absolute paths or credentials.
 
-A reference does not establish approval or waive the task's acceptance criteria. Evidence must identify and retain the material actually used under the shared [material rules](../runtime.md#material-references).
+A reference does not establish approval or waive the task's acceptance criteria. Evidence must identify and retain the material actually used under the shared [material rules](../../runtime.md#material-references).
 
 ### Verification object
 
@@ -103,7 +103,7 @@ Reject missing predecessors, self-dependencies, duplicate predecessor references
 
 Only `depends_on` defines edges. Do not add a second root-level edge array or infer edges from guidance, shared files, or external prerequisites.
 
-Graph structure does not establish readiness. Apply the shared [admission rules](../runtime.md#task-admission-and-baselines) to actual integrated outputs and valid inputs.
+Graph structure does not establish readiness. Apply the shared [admission rules](../../runtime.md#task-admission-and-baselines) to actual integrated outputs and valid inputs.
 
 ### Prerequisite object
 

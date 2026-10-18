@@ -1,12 +1,12 @@
-# Stage 4: Implementation Execution
+# Implementation Execution
 
-[Construction phase index](README.md) | [Workflow phase index](../README.md)
+[Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
 **Status:** Draft for discussion.
 
 The [phase contract](README.md#implementation-execution) defines the agreed execution structure, concurrency, attempts, check duties, integration procedure, and return paths. Requester intervention is limited to hard blockers under the rule below. This draft proposes additional inputs, responsibilities, role assignments, skills, evidence, and completion details. New proposals do not replace agreed rules.
 
-[Code Generation](code-generation.md), [Code Validation](code-validation.md), and [Code Integration](code-integration.md) have dedicated Activity contracts. Those contracts define their procedures, evidence, completion conditions, reopening questions, and handoffs. Their Activity classification, fixed execution model, and existing check duties are agreed. Their remaining detailed proposals stay open.
+[Code Generation](activities/code-generation.md), [Code Validation](activities/code-validation.md), and [Code Integration](activities/code-integration.md) have dedicated Activity contracts. Those contracts define their procedures, evidence, completion conditions, reopening questions, and handoffs. Their Activity classification, fixed execution model, and existing check duties are agreed. Their remaining detailed proposals stay open.
 
 Saving this draft does not approve its proposals, accept Planning, or authorize an executing Unit of Work.
 
@@ -60,7 +60,7 @@ Do not require every future task prerequisite to be available before starting in
 - Publishing, merging into an external target, releasing, or deploying merely because Code Integration succeeds.
 - Selecting a worker topology other than the agreed orchestrator-controlled subagent model, or allowing workers to select their own topology.
 
-[CN20](../authoring_progress.md#completed-construction-decisions) records the MVP working discipline for Implementation Execution. It does not constrain other phases or remove ready-task parallelism.
+[CN20](../../authoring_progress.md#completed-construction-decisions) records the MVP working discipline for Implementation Execution. It does not constrain other phases or remove ready-task parallelism.
 
 ## Artifacts and records
 
@@ -73,7 +73,7 @@ Do not require every future task prerequisite to be available before starting in
 
 No separate required execution Markdown document is proposed. Do not duplicate task definitions or store changing completion information in authored documents.
 
-Upstream artifacts retain their stage ownership. Report required changes through the [revision procedure](../revision.md#revision-procedure).
+Upstream artifacts retain their stage ownership. Report required changes through the [revision procedure](../../revision.md#revision-procedure).
 
 Apply shared metadata to optional supporting Markdown documents, using `supporting-document`. Evidence logs and generated application files follow their own contracts, not Markdown frontmatter rules.
 
@@ -81,7 +81,7 @@ Apply shared metadata to optional supporting Markdown documents, using `supporti
 
 ### Admission and coordination
 
-The orchestrator applies the agreed [admission rules](../runtime.md#task-admission-and-baselines). Record the current unit integration checkpoint containing required predecessor outputs; keep that admitted baseline fixed.
+The orchestrator applies the agreed [admission rules](../../runtime.md#task-admission-and-baselines). Record the current unit integration checkpoint containing required predecessor outputs; keep that admitted baseline fixed.
 
 Supply each worker with its task identity, current definition, relevant contracts, baseline, attempt scope, and verification obligations. Include prerequisite conditions and coordination constraints.
 
@@ -95,17 +95,17 @@ For each admitted task, use this fixed Activity order:
 
 ### Code Generation
 
-Execute the [Code Generation Activity contract](code-generation.md) for the admitted task. It owns implementation, typechecking, modification-related tests, self-review, and its Validation handoff.
+Execute the [Code Generation Activity contract](activities/code-generation.md) for the admitted task. It owns implementation, typechecking, modification-related tests, self-review, and its Validation handoff.
 
 ### Code Validation
 
-Execute the [Code Validation Activity contract](code-validation.md) against the generated task output. It owns typechecking, the build, the full suite, independent non-author feedback, and its Integration handoff.
+Execute the [Code Validation Activity contract](activities/code-validation.md) against the generated task output. It owns typechecking, the build, the full suite, independent non-author feedback, and its Integration handoff.
 
 Use a worker context separate from Code Generation for independent Validation. Workers report facts; they do not need to spawn reviewers or call one another. The orchestrator dispatches scoped workers and coordinates each Activity handoff. Successful Validation makes the task eligible for Integration; it does not complete the task.
 
 ### Code Integration
 
-Execute the [Code Integration Activity contract](code-integration.md) after successful Validation. It owns locked candidate preparation and combined checks. Authorized orchestrator and CLI operations control acceptance and record task completion.
+Execute the [Code Integration Activity contract](activities/code-integration.md) after successful Validation. It owns locked candidate preparation and combined checks. Authorized orchestrator and CLI operations control acceptance and record task completion.
 
 Successful Integration returns the accepted checkpoint and evidence to unit coordination. Release dependent tasks only after successful predecessor Integration. Independent ready tasks and units continue. Activity handoffs do not add dependencies to the authored task graph. The enclosing Execution stage still requires its own completion assessment.
 
@@ -141,17 +141,17 @@ Reassessment does not replace execution of a reopened Activity or transfer old e
 
 This proposal does not reopen unrelated task scopes automatically. It does not permit retaining completion whose material, inputs, or evidence are invalid.
 
-## Depth
+## Effort
 
-Apply the shared [depth definition](../depth.md), including the unit default and any explicit Implementation Execution override. Its Activities inherit that depth and have no separate overrides.
+Apply the shared [effort definition](../../effort.md), including the unit default and any explicit Implementation Execution override. Its Activities inherit that effort and have no separate overrides.
 
-| Depth | Implementation Execution guidance |
+| Effort | Implementation Execution guidance |
 | --- | --- |
 | Minimal | Supply concise task handoffs, necessary implementation rationale, check evidence, findings, and integrated-result references. |
 | Standard | Explain significant implementation choices, interactions, corrections, and coordination. Link focused supporting detail. |
 | Comprehensive | Analyze complex failures, boundary interactions, recovery concerns, and verification limitations in supporting detail. |
 
-Depth does not remove tasks, checks, independent feedback, evidence, or authority requirements. It does not create automatic reviews or select worker topology.
+Effort does not remove tasks, checks, independent feedback, evidence, or authority requirements. It does not create automatic reviews or select worker topology.
 
 ## Agent roles
 
@@ -161,7 +161,7 @@ These assignments are proposals, not implemented agent profiles.
 | --- | --- | --- |
 | Implementation Execution owner | `kepler-orchestrator` | Coordinate admissions, workers, findings, execution records, completion, and the review handoff. |
 
-The dedicated [Generation](code-generation.md#agent-roles), [Validation](code-validation.md#agent-roles), and [Integration](code-integration.md#agent-roles) Activity contracts define proposed role assignments.
+The dedicated [Generation](activities/code-generation.md#roles-and-skills), [Validation](activities/code-validation.md#roles-and-skills), and [Integration](activities/code-integration.md#roles-and-skills) Activity contracts define proposed role assignments.
 
 The MVP uses one orchestrator-controlled subagent model for Implementation Execution. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they do not need to spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. This model does not select role profiles or add a per-task topology selector. The working-discipline decision does not constrain Design, Quality Requirements, Planning, or other phases.
 
@@ -173,13 +173,13 @@ The draft proposes these entry procedures:
 
 | Stage | Entry skill | Responsibility |
 | --- | --- | --- |
-| Implementation Execution | [kepler-orchestrate](../skills.md#kepler-orchestrate) | Coordinate the unit graph, scoped handoffs, completion evidence, and review handoff. |
+| Implementation Execution | [kepler-orchestrate](../../skills.md#kepler-orchestrate) | Coordinate the unit graph, scoped handoffs, completion evidence, and review handoff. |
 
-The dedicated [Generation](code-generation.md#supporting-skills), [Validation](code-validation.md#supporting-skills), and [Integration](code-integration.md#supporting-skills) Activity contracts define their proposed entry skills.
+The dedicated [Generation](activities/code-generation.md#roles-and-skills), [Validation](activities/code-validation.md#roles-and-skills), and [Integration](activities/code-integration.md#roles-and-skills) Activity contracts define their proposed entry skills.
 
 Self-review belongs in each applicable entry procedure. These names do not adopt current skill implementations or legacy execution records.
 
-Use [kepler-research](../skills.md#kepler-research) for uncertain facts. Use [kepler-grilling](../skills.md#kepler-grilling) for a requester decision needed to resolve a hard blocker. Supporting work cannot authorize revisions or edit journals directly.
+Use [kepler-research](../../skills.md#kepler-research) for uncertain facts. Use [kepler-grilling](../../skills.md#kepler-grilling) for a requester decision needed to resolve a hard blocker. Supporting work cannot authorize revisions or edit journals directly.
 
 ## Review and approval
 
@@ -213,7 +213,7 @@ A requester decision does not turn failed checks into successful results or waiv
 
 Evaluate these stage-specific questions and report the proposed boundary to the orchestrator.
 
-Use the dedicated [Generation](code-generation.md#reopening-questionnaire), [Validation](code-validation.md#reopening-questionnaire), and [Integration](code-integration.md#reopening-questionnaire) questionnaires for those Activities.
+Use the dedicated [Generation](activities/code-generation.md#reopening-questionnaire), [Validation](activities/code-validation.md#reopening-questionnaire), and [Integration](activities/code-integration.md#reopening-questionnaire) questionnaires for those Activities.
 
 #### Implementation Execution
 
@@ -222,7 +222,7 @@ Use the dedicated [Generation](code-generation.md#reopening-questionnaire), [Val
 3. Does a finding invalidate scheduling assumptions, task contracts, or the selected solution?
 4. Does the review handoff misidentify the integrated result, relevant inputs, or unresolved material concerns?
 
-Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionnaires). Suspected upstream invalidity can move the boundary earlier. Answers do not authorize reopening or exempt downstream stages from a cascade.
+Apply the shared [questionnaire rules](../../revision.md#stage-reopening-questionnaires). Suspected upstream invalidity can move the boundary earlier. Answers do not authorize reopening or exempt downstream stages from a cascade.
 
 A task-local return during active execution follows the agreed return paths. Findings after completed Execution follow the proposed [scoped-return rule](#return-after-completed-execution) after the orchestrator authorizes that unit-stage boundary.
 
@@ -245,7 +245,7 @@ This does not require unrelated workspaces to be clean or independent units to s
 
 ### Evidence coverage
 
-The dedicated [Generation](code-generation.md#evidence-coverage), [Validation](code-validation.md#evidence-coverage), and [Integration](code-integration.md#evidence-coverage) Activity contracts own their named evidence and required results.
+The dedicated [Generation](activities/code-generation.md#evidence-coverage), [Validation](activities/code-validation.md#evidence-coverage), and [Integration](activities/code-integration.md#evidence-coverage) Activity contracts own their named evidence and required results.
 
 The rows below cover the enclosing Execution stage. Refer to originating Activity records without rebinding their results as unit-attempt results.
 
@@ -257,7 +257,7 @@ The rows below cover the enclosing Execution stage. Refer to originating Activit
 
 The requester-decision row applies only when a hard blocker needs requester intervention. It is not a routine task-approval record.
 
-Apply the shared [evidence bindings](../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Preserve each check's task or unit scope, attempt, checkpoint, relevant inputs, conditions, result, and supporting output.
+Apply the shared [evidence bindings](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Preserve each check's task or unit scope, attempt, checkpoint, relevant inputs, conditions, result, and supporting output.
 
 The completion assessment is new unit-scoped work. It consumes Activity evidence without transferring earlier attempts' completion or replacing mandatory Activity checks.
 
@@ -267,7 +267,7 @@ Record results through CLI-owned operations. Exact payloads, commands, status tr
 
 ## Handoff
 
-**Next stage:** [Unit of Work Review](unit-of-work-review.md).
+**Standard workflow next stage:** [Unit of Work Review](unit-of-work-review.md).
 
 Identify the unit directory, current upstream artifacts, final integrated checkpoint, complete task set, and originating evidence records.
 

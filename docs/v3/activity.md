@@ -1,6 +1,6 @@
 # Activity
 
-[Workflow phase index](README.md) | [Construction phase index](phase_construction/README.md)
+[Workflow phase index](README.md) | [Construction phase index](phases/construction/README.md)
 
 ## Purpose
 
@@ -16,7 +16,7 @@ An Activity occurrence binds that definition to one stage execution and a work s
 
 The owning phase or stage defines its scope, inputs, outputs, outcomes, role limits, procedures, checks, evidence, completion, corrections, and handoffs. Phases do not share a universal unit or task schema for Activities.
 
-An Activity inherits the depth of its owning stage. It does not have a separate depth setting. Activity completion does not complete the enclosing stage or grant requester consent or permission to operate.
+An Activity inherits the effort of its owning stage. It does not have a separate effort setting. Activity completion does not complete the enclosing stage or grant requester consent or permission to operate.
 
 ## Activity attempts
 
@@ -38,7 +38,7 @@ Within Construction's Implementation Execution stage, run a fixed Activity proce
 2. **Code Validation** runs typechecking, the project build, and the full application test suite. A non-author reviewer gives independent feedback without editing the candidate.
 3. **Code Integration** checks and accepts the combined candidate under the unit's integration lock.
 
-The owning stage controls handoffs. Activity workers report findings; they cannot authorize returns or reopen upstream stages. Authorized returns route required code changes to Code Generation, then repeat Validation and Integration as required. Integration-only retries stay within the current Code Integration attempt. See [Implementation Execution](phase_construction/implementation-execution.md) for coordination and recovery rules.
+The owning stage controls handoffs. Activity workers report findings; they cannot authorize returns or reopen upstream stages. Authorized returns route required code changes to Code Generation, then repeat Validation and Integration as required. Integration-only retries stay within the current Code Integration attempt. See [Implementation Execution](phases/construction/implementation-execution.md) for coordination and recovery rules.
 
 This fixed procedure does not replace the accepted task dependency graph. The plan defines task dependencies and prerequisite conditions. The orchestrator assesses readiness from those requirements and current execution facts. Activity order is separate from task scheduling. Feedback routes are not task dependencies.
 
@@ -46,4 +46,4 @@ No generic Activity registry, arbitrary graph language, interpreter, or Basic/Wo
 
 ## Related contracts
 
-[Code Generation](phase_construction/code-generation.md), [Code Validation](phase_construction/code-validation.md), and [Code Integration](phase_construction/code-integration.md) define separate Activity contracts. They remain proposals except for their Activity classification and the accepted Construction rules recorded in [authoring progress](authoring_progress.md).
+[Code Generation](phases/construction/activities/code-generation.md), [Code Validation](phases/construction/activities/code-validation.md), and [Code Integration](phases/construction/activities/code-integration.md) define separate Activity contracts. They remain proposals except for their Activity classification and the accepted Construction rules recorded in [authoring progress](authoring_progress.md).

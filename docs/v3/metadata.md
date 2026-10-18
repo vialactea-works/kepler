@@ -39,7 +39,7 @@ Keep document purpose in `type`; do not encode it in the ID.
 
 `id` identifies the artifact, not one version of its contents. Execution records must bind approvals to content versions separately.
 
-Task UUIDs identify tasks, not their containing artifact or execution attempt. The [task graph format](phase_construction/task-graph.md#task-identity) defines those identifiers separately.
+Task UUIDs identify tasks, not their containing artifact or execution attempt. The [task graph format](phases/construction/task-graph.md#task-identity) defines those identifiers separately.
 
 ### Classification and ownership
 
@@ -57,7 +57,7 @@ Task UUIDs identify tasks, not their containing artifact or execution attempt. T
 
 Use the generic `supporting-document` type under [DF06](authoring_progress.md#completed-shared-decisions). Describe each document's purpose in its content and in the link from its owning stage. Keep the existing required-document and Project reference types unchanged. Define additional values when their artifact contracts are agreed.
 
-The [Implementation Planning draft](phase_construction/implementation-planning.md#artifact-metadata) proposes `implementation-plan` for `plan.md`. The [Deliver draft](phase_construction/deliver.md#required-delivery-instructions) proposes `delivery-plan` for `delivery.md`. Both values remain proposed and are outside the accepted type table. No new common fields are proposed.
+The [Implementation Planning draft](phases/construction/implementation-planning.md#artifact-metadata) proposes `implementation-plan` for `plan.md`. The [Deliver draft](phases/construction/deliver.md#required-delivery-instructions) proposes `delivery-plan` for `delivery.md`. Both values remain proposed and are outside the accepted type table. No new common fields are proposed.
 
 #### Unit ownership
 
@@ -160,7 +160,7 @@ Stage-specific contracts can add fields. They must not redefine the common field
 
 ### Execution state
 
-Keep execution state out of frontmatter. Record progress, approvals, depth selections, attempts, and pause checkpoints as CLI-owned JSON journal events. Derive current views from those events. Content fingerprints and execution timestamps also belong in that event history. See the shared [execution-state representation](runtime.md#execution-state-representation).
+Keep execution state out of frontmatter. Record progress, approvals, effort selections, attempts, and pause checkpoints as CLI-owned JSON journal events. Derive current views from those events. Content fingerprints and execution timestamps also belong in that event history. See the shared [execution-state representation](runtime.md#execution-state-representation).
 
 ## Remaining decisions
 
