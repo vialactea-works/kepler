@@ -125,7 +125,7 @@ Describe entities, value objects, aggregates, domain services, and domain events
 
 Keep essential information in these sections. Put substantial supporting detail in linked files under `details/functional-design/`. Reference the purpose and scope in `unit-of-work.md` instead of repeating them.
 
-These sections define the Functional Design contribution. Quality Requirements uses `quality.md`. Implementation Planning selects the technical solution before it divides the work into tasks. The location of its technical design record requires a separate decision.
+These sections define the Functional Design contribution. Quality Requirements uses `quality.md`. Implementation Planning selects the technical solution before it divides the work into tasks. It records the technical solution and rationale in `plan.md`, with the task graph in `tasks-dag.json`.
 
 ### Content boundaries
 

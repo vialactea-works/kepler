@@ -8,7 +8,7 @@ Construction operates on one Unit of Work. Its stages define responsibilities in
 
 Construction owns its execution state model and projection schemas under the shared [execution-state representation](../runtime.md#execution-state-representation).
 
-The stage order and execution structure are agreed. The requester has accepted the Functional Design stage specification. Other detailed stage contracts remain under development.
+The stage order and execution structure are agreed. The requester has accepted the Functional Design and Quality Requirements stage specifications. Other detailed stage contracts remain under development.
 
 ## Stage outline
 
@@ -17,8 +17,8 @@ This table gives the unit-scoped stage order. Task-scoped stages execute inside 
 | Order | Stage | Contract status |
 | --- | --- | --- |
 | 1 | [Functional Design](functional-design.md) | Accepted by the requester. |
-| 2 | [Quality Requirements](quality-requirements.md) | Draft for discussion. Stage name, required document, and original seven quality categories are agreed. |
-| 3 | Implementation Planning | Name agreed. Contract not yet defined. |
+| 2 | [Quality Requirements](quality-requirements.md) | Accepted by the requester under [NF12](../authoring_progress.md#quality-requirements-decisions). |
+| 3 | [Implementation Planning](implementation-planning.md) | Draft for discussion. Technical selection, task decomposition, and the dependency graph are agreed. |
 | 4 | [Implementation Execution](#implementation-execution) | Structure agreed. Detailed contract not yet defined. |
 | 5 | Unit of Work Review | Contract not yet defined. |
 | 6 | Deliver | Contract not yet defined. |
@@ -29,11 +29,11 @@ Project preparation belongs to the Initialization phase.
 
 Functional Design defines domain behavior, the domain model, and functional contracts in `design.md`.
 
-Quality Requirements defines quality targets and constraints in `.kepler/units-of-work/<unit-id>/quality.md`. This document is required for that stage. Applicable requirements include performance, availability, security, accessibility, compatibility, operability, and observability.
+Quality Requirements defines quality targets and constraints in `.kepler/units-of-work/<unit-id>/quality.md`. This document is required for that stage. Applicable requirements include performance, availability, security, accessibility, compatibility, operability, observability, and maintainability.
 
-Implementation Planning selects the technical solution against the functional design and quality requirements. It then divides the work into implementation tasks. It produces a task plan that represents tasks and their dependencies as a graph. The graph format and location of the technical design record require separate decisions.
+Implementation Planning selects the technical solution against the functional design and quality requirements. It then divides the work into implementation tasks. It produces `plan.md` with technical rationale and `tasks-dag.json` with the task graph at the unit root. The [stage draft](implementation-planning.md) defines the agreed artifact split and proposes the remaining contract. Use the custom [Kepler task graph JSON format](task-graph.md) with UUIDv4 task IDs.
 
-Code Generation runs tests related to its modifications. Code Validation runs the complete application test suite and owns independent code feedback.
+Code Generation runs typechecking and tests related to its modifications. Code Validation runs typechecking, the project build, and the complete application test suite. It also owns independent code feedback.
 
 Code Generation and Code Validation form the Task coding loop inside each task implementation. Unit of Work Review examines the complete integrated result after Implementation Execution.
 
@@ -79,7 +79,7 @@ Use one integration lock per unit. All task integrations targeting that unit's i
 
 1. **Acquire the lock.** Wait for the unit's integration lock before preparing a candidate.
 2. **Prepare the candidate.** Read the current unit integration checkpoint after acquiring the lock. Combine it with the task output. Record these integration inputs separately from the task's fixed admission baseline.
-3. **Check the candidate.** Run the project build and full application test suite against that candidate. Both must complete successfully. Bind the results to the checked material and relevant inputs.
+3. **Check the candidate.** Run typechecking, the project build, and the full application test suite against that candidate. All three must complete successfully. Bind the results to the checked material and relevant inputs.
 4. **Accept the candidate.** Only after the required checks succeed, make the checked candidate the unit's integrated state. A candidate with failed or incomplete required checks must not replace that state.
 5. **Release the lock.** Release it when the integration operation ends. Do not retain it during a return to Task coding.
 
@@ -127,7 +127,7 @@ This structure does not introduce an additional requester approval gate. Define 
 
 ### Remaining stage contracts
 
-Still define the task graph representation, detailed stage conditions, artifacts, agents, skills, and reopening questionnaires. The project build and full application test suite are required integration checks. Any additional integration checks and project-specific check configuration require separate decisions. Candidate checks precede acceptance under the agreed integration procedure.
+Review the proposed [Planning contract](implementation-planning.md), including its task definitions, evidence, and handoff. Its writer and validator remain implementation work. Define the remaining stage conditions, artifacts, agents, skills, and reopening questionnaires. Typechecking, the project build, and the full application test suite are required integration checks. Any additional integration checks and project-specific check configuration require separate decisions. Candidate checks precede acceptance under the agreed integration procedure.
 
 Lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery remain open in the shared CLI infrastructure contract.
 

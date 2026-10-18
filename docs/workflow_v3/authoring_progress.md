@@ -8,7 +8,7 @@ Plan the decisions needed to ship a minimum viable product (MVP) for Constructio
 
 Track specification decisions, not Unit of Work execution state. Each row records one decision with one unique ID. Required implementation work is not a separate requester approval gate.
 
-The requester has accepted the complete Functional Design stage specification under FD13. This does not approve a particular Unit of Work or establish completed implementation.
+The requester has accepted the complete Functional Design and Quality Requirements stage specifications under FD13 and NF12. This does not approve a particular Unit of Work or establish completed implementation.
 
 ## Construction MVP boundary
 
@@ -31,8 +31,8 @@ For each missing stage, define essential inputs, outputs, responsibilities, comp
 | Order | Work package | Minimum work |
 | --- | --- | --- |
 | 1 | Functional Design | The stage specification is accepted under FD13. Use the agreed `supporting-document` type under DF06. |
-| 2 | [Quality Requirements](phase_construction/quality-requirements.md) | Review the stage draft, including its named evidence requirements. Its proposed policies remain open. |
-| 3 | Implementation Planning | Define the technical solution and task-plan contract. Keep the dependency graph; let implementation choose its concrete representation. |
+| 2 | [Quality Requirements](phase_construction/quality-requirements.md) | The stage specification, including evidence and skill responsibilities, is accepted under NF12. |
+| 3 | [Implementation Planning](phase_construction/implementation-planning.md) | Review the remaining Planning proposals. The output pair, rationale coverage, custom JSON representation, and UUIDv4 task-ID format are defined. |
 | 4 | Implementation Execution | Define responsibilities, evidence, completion conditions, and any applicable approval. Reuse agreed task loops, returns, concurrency, and integration rules. |
 | 5 | Unit of Work Review | Define whole-unit findings, evidence, correction routes, completion conditions, and any applicable approval. Integration success is not review or delivery approval. |
 | 6 | Deliver | Define the delivery outcome, permitted side effects, authorization, outputs, and failure handling. Resolve deployment content, location, and timing. |
@@ -66,30 +66,35 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 ### Stage contract decisions
 
-No pending Functional Design decisions remain in this queue. The [Quality Requirements draft](phase_construction/quality-requirements.md) proposes the following policies. None is accepted by saving the draft. These rows do not add separate execution approval steps.
+No pending Functional Design or Quality Requirements decisions remain in this queue. Some [Planning decisions](#implementation-planning-decisions) are accepted. The [Implementation Planning draft](phase_construction/implementation-planning.md) proposes the remaining policies below. Saving a draft does not accept those proposals. These rows do not add separate execution approval steps.
 
 | ID | Decision | Proposal to review |
 | --- | --- | --- |
-| NF01 | Quality document sections | Are the three proposed [required sections](phase_construction/quality-requirements.md#required-sections) sufficient for `quality.md`? |
-| NF02 | Quality requirement content | Does the proposed [requirement content](phase_construction/quality-requirements.md#requirement-content) define adequate scope, conditions, and acceptance criteria? |
-| NF03 | Category applicability procedure | Should the stage assess its categories and briefly explain inapplicable categories under the proposed [category procedure](phase_construction/quality-requirements.md#quality-categories)? |
-| NF04 | Entry conditions | Are the proposed [entry conditions](phase_construction/quality-requirements.md#entry-conditions) sufficient to start after Functional Design? |
-| NF05 | Stage owner | Should `kepler-architect` own this stage under the proposed [agent role](phase_construction/quality-requirements.md#agent-roles)? |
-| NF06 | Entry skill | Should [kepler-quality](skills.md#kepler-quality) be the stage's entry skill with the proposed responsibilities? |
-| NF07 | Self-review | Should the entry skill perform the proposed [self-review](phase_construction/quality-requirements.md#self-review)? |
-| NF08 | External review trigger | Should [external review](phase_construction/quality-requirements.md#external-review) occur only on requester request? |
-| NF09 | Requester approval | Should completion require the proposed [explicit quality approval](phase_construction/quality-requirements.md#requester-approval)? |
-| NF10 | Reopening questionnaire | Do the proposed [reopening questions](phase_construction/quality-requirements.md#reopening-questionnaire) identify this stage's revision triggers? |
-| NF11 | Completion conditions | Are the proposed [completion conditions](phase_construction/quality-requirements.md#completion-conditions) sufficient for handoff to Implementation Planning? |
-| NF12 | Whole-draft acceptance | Does the requester accept the complete [Quality Requirements specification](phase_construction/quality-requirements.md)? |
-| NF13 | Design quality category | Should [Maintainability](phase_construction/quality-requirements.md#maintainability-proposal) cover extensibility, modularity, decoupling, and replaceable technology dependencies? |
-| NF14 | Stage evidence coverage | Are the named [evidence requirements](phase_construction/quality-requirements.md#evidence-coverage), covered material, and required results sufficient for this stage? |
+| IP02 | Planning artifact type | Should the plan use proposed [type `implementation-plan`](phase_construction/implementation-planning.md#artifact-metadata) for its required artifact? |
+| IP03 | Plan sections | Are the four proposed [required sections](phase_construction/implementation-planning.md#required-sections) sufficient for the plan? |
+| IP04 | Technical solution content | Does the proposed [technical solution contract](phase_construction/implementation-planning.md#technical-solution) adequately define choices, boundaries, and consequences? Rationale coverage is agreed under IP21. |
+| IP05 | Task identity | Should tasks retain unique unit-scoped identities and preserve historical bindings under the proposed [identity lifecycle](phase_construction/implementation-planning.md#task-identities-and-definitions)? UUIDv4 syntax is agreed under IP22. |
+| IP06 | Task definition content | Does the proposed [task content](phase_construction/implementation-planning.md#task-identities-and-definitions) supply sufficient context, outputs, acceptance conditions, and verification obligations? |
+| IP07 | Dependency contract | Should graph validity require justified output dependencies, resolving references, and no cycles under the proposed [dependency contract](phase_construction/implementation-planning.md#dependencies-and-coverage)? |
+| IP08 | Requirement coverage | Should Planning account for every applicable obligation through planned work or justified unchanged behavior under the proposed [coverage rule](phase_construction/implementation-planning.md#dependencies-and-coverage)? |
+| IP09 | Verification strategy | Does the proposed [verification strategy](phase_construction/implementation-planning.md#verification-strategy) cover test design, expected results, environments, and missing infrastructure? Stage check duties are agreed under CN07, CN08, and CN11. |
+| IP10 | Entry conditions | Are the proposed [entry conditions](phase_construction/implementation-planning.md#entry-conditions) sufficient after the preceding stages complete under their own contracts? |
+| IP11 | Stage owner | Should `kepler-architect` own Planning under the proposed [agent role](phase_construction/implementation-planning.md#agent-roles)? |
+| IP12 | Entry skill | Should [kepler-plan](skills.md#kepler-plan) supply the proposed version 3 Planning responsibilities? |
+| IP13 | Self-review | Should the entry skill perform the proposed [self-review](phase_construction/implementation-planning.md#self-review)? |
+| IP14 | External review trigger | Should [external review](phase_construction/implementation-planning.md#external-review) occur only on requester request? |
+| IP15 | Requester approval trigger | Should [approval](phase_construction/implementation-planning.md#requester-decisions-and-approval) apply under requester instructions or existing authority rules, without an automatic whole-plan gate? |
+| IP16 | Reopening questionnaire | Do the proposed [reopening questions](phase_construction/implementation-planning.md#reopening-questionnaire) identify Planning's revision triggers? |
+| IP17 | Completion conditions | Are the proposed [completion conditions](phase_construction/implementation-planning.md#completion-conditions) sufficient for handoff to Implementation Execution? |
+| IP18 | Stage evidence coverage | Are the named [evidence results](phase_construction/implementation-planning.md#evidence-coverage), covered material, and conditional approval record sufficient? |
+| IP19 | Whole-draft acceptance | Does the requester accept the complete [Implementation Planning specification](phase_construction/implementation-planning.md)? |
+| IP20 | External prerequisite readiness | Should the plan classify [external prerequisites](phase_construction/implementation-planning.md#external-prerequisites), define blocking availability conditions and timing, and explain nonblocking treatment? |
 
 ## Review result
 
-The queue contains 7 earlier MVP authoring decisions and 14 proposed Quality Requirements decisions, for 21 in total. CN20 on working discipline remains open. Another 35 are required MVP implementation choices. Defer 13 beyond the MVP and remove 1 speculative approval gate. FD13 and DF06 are complete after requester acceptance.
+The queue contains 7 earlier MVP decisions and 19 Implementation Planning proposals: 26 in total. CN20 remains open. Another 33 required MVP implementation choices remain. Defer 13 questions beyond the MVP; 1 speculative approval gate is removed.
 
-The MVP review preserved the 87 previously completed decisions. Acceptance of FD13 and DF06 brings the completed total to 89. Reclassification must not fabricate approval or claim implementation is complete.
+The MVP review preserved the 87 previously completed decisions. Later requester decisions bring the completed total to 108. Reclassification must not fabricate approval or claim implementation is complete.
 
 ## Register rules
 
@@ -102,7 +107,7 @@ The MVP review preserved the 87 previously completed decisions. Acceptance of FD
 
 A requester decision is needed when the answer changes required behavior, authority, evidence obligations, or material scope. Technical formats, command names, and mechanisms belong to implementation within the agreed contracts.
 
-SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. NF identifies Quality Requirements decisions. Keep existing NF identifiers after the stage rename. DF preserves the existing deferred-decision series. An ID does not determine its status.
+SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. NF identifies Quality Requirements decisions. Keep existing NF identifiers after the stage rename. IP identifies Implementation Planning decisions. DF preserves the existing deferred-decision series. An ID does not determine its status.
 
 ## Completed shared decisions
 
@@ -115,7 +120,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH03 | Depth levels | [Levels](depth.md#levels): Minimal, Standard, and Comprehensive change analysis and documentation detail. They do not remove required information, verification, or approval. |
 | SH04 | Editorial corrections | [Editorial corrections](revision.md#editorial-corrections): agents can correct prose without reopening or new approval when meaning stays unchanged. Use existing history, approval bindings, and evidence rules. Refer uncertain changes to the orchestrator. |
 | SH05 | Unit acceptance boundary | [Acceptance cohesion](unit-of-work.md#acceptance-cohesion): define a coherent outcome that the requester can accept as a whole. Implementation size alone does not define the boundary. |
-| SH06 | Persistence responsibilities | [Data responsibilities](runtime.md#data-responsibilities): frontmatter holds artifact metadata; Markdown holds authored content. CLI-owned JSON journals retain workflow history. Execution state is derived under SH43, replacing the earlier state-plus-audit representation. |
+| SH06 | Persistence responsibilities | [Data responsibilities](runtime.md#data-responsibilities): frontmatter holds Markdown artifact metadata; Markdown and authored JSON hold content. CLI-owned JSON journals retain workflow history. Execution state is derived under SH43, replacing the earlier state-plus-audit representation. |
 | SH07 | Unit decomposition procedure | [Decomposition procedure](unit-of-work.md#decomposition-procedure): identify outcomes, group by cohesion, check coverage, record dependencies, verify outcomes, and agree boundaries. Use "Decomposition procedure", not "Application mechanism". |
 | SH08 | Walking skeleton | [Walking skeleton](unit-of-work.md#walking-skeleton): minimal executable, deployable, observable functionality across important boundaries. Use normal stages, artifacts, and approval. A proposed predecessor needs requester agreement and an explicit dependency. Retain its implementation; do not require a redundant skeleton. |
 | SH09 | Walking skeleton classification | [Metadata](unit-of-work.md#metadata): use the canonical `walking-skeleton` label on the unit definition. Do not introduce `unit_kind`. |
@@ -150,7 +155,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH38 | Audit ownership | [Audit ownership](runtime.md#audit-ownership): CLI-owned operations validate transitions and append resulting events. Current state is derived; agents and skills must not write journals or projections directly. |
 | SH39 | Revision decision recording | [Revision decisions](runtime.md#revision-decisions): record the orchestrator's decision, reason, scope, and starting stage through the CLI. Derive current execution state from the recorded decision. |
 | SH40 | Current-author lookup | [Current author](runtime.md#current-author): provide a command returning effective project Git identity. It identifies the current author, not an existing artifact's creator. |
-| SH41 | Filename convention | [Filename convention](#filename-convention): use short filenames with full words, without abbreviations. |
+| SH41 | Filename convention | [Filename convention](#filename-convention): use short filenames with full words. The requester-selected `tasks-dag.json` is an explicit exception. |
 | SH42 | Interrupted-work recovery | [Recovery](runtime.md#interrupted-work-recovery): resume from verified progress and preserve unfinished work. Continue the same attempt only if it has not ended. |
 | SH43 | Execution-state representation | [Representation](runtime.md#execution-state-representation): derive execution state from phase-owned event journals without independently authoritative state files. Each phase owns its state model and projection schemas. Materialized views are disposable. |
 | SH44 | Audit event schema | [Event envelope](runtime.md#event-envelope-choices): all ten approved fields are required. Use `[]` for no causal predecessors. Record RFC3339 UTC timestamps with `Z`. Exact types and the event catalog belong to implementation. |
@@ -173,7 +178,7 @@ Remove these questions from the requester approval queue. Implement and test the
 
 Safe appends, recovery, scoped locks, and concurrent work must ship. Preserve original attempts, material bindings, fixed admission baselines, and reachable evidence. Do not replace these obligations with global serialization, unsafe lock takeover, or unchecked acceptance.
 
-The implementation must provide the project build and full-suite commands needed by the required checks. It must preserve project-required checks without waiting for a general extra-check policy.
+The implementation must provide typechecking, project build, and full-suite commands for the required checks. It must preserve project-required checks without waiting for a general extra-check policy.
 
 | ID | Implementation choice | Work to resolve during implementation |
 | --- | --- | --- |
@@ -206,8 +211,6 @@ The implementation must provide the project build and full-suite commands needed
 | SH85 | Checkpoint reference names | How are retained Git references named? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH86 | Retained evidence storage | Where is retained evidence content stored? See [retention](runtime.md#checkpoint-retention). |
 | SH87 | Interrupted event-write recovery | How does an interrupted append or journal import recover without losing or duplicating events? See [runtime decisions](runtime.md#decisions-still-required). |
-| DF04 | Technical design location | Where does Implementation Planning record the selected technical solution? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
-| DF12 | Task graph representation | What concrete format represents the planning graph? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
 | DF14 | Integration check configuration | How are project-specific integration checks configured? See [Task Integration](phase_construction/README.md#task-integration). |
 | DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
 | DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
@@ -227,11 +230,11 @@ These decisions apply to Construction. Do not generalize its nested execution st
 | CN04 | Plan dependency model | [Stage boundaries](phase_construction/README.md#agreed-boundaries): the plan represents tasks and dependencies as a graph. |
 | CN05 | Implementation scheduling | [Implementation Execution](phase_construction/README.md#implementation-execution): the orchestrator schedules independent dependency-ready task implementations concurrently within the unit-scoped stage. |
 | CN06 | Task execution structure | [Task coding](phase_construction/README.md#task-coding): Task implementation contains Task coding, then Task Integration. Task coding contains Code Generation and Code Validation. The contexts add no stages, attempts, run floors, or requester approval gates. |
-| CN07 | Code Generation testing | [Stage boundaries](phase_construction/README.md#agreed-boundaries): run tests related to the modifications. |
-| CN08 | Code Validation test scope | [Stage boundaries](phase_construction/README.md#agreed-boundaries): run the full application test suite. |
+| CN07 | Code Generation testing | [Stage boundaries](phase_construction/README.md#agreed-boundaries): run typechecking and tests related to the modifications. |
+| CN08 | Code Validation test scope | [Stage boundaries](phase_construction/README.md#agreed-boundaries): run typechecking, the project build, and the full application test suite. |
 | CN09 | Task coding completion | [Task coding](phase_construction/README.md#task-coding): required validation succeeds and no blocking findings remain. Coding completion means ready for integration, not completed task implementation. |
 | CN10 | Integration serialization | [Integration order and locking](phase_construction/README.md#integration-order-and-locking): prepare, check, then accept under one lock per unit. Hold it through checks and acceptance. Release before returning to coding. All integrated-state changes respect this lock; unrelated scopes continue. |
-| CN11 | Required integration checks | [Task Integration](phase_construction/README.md#task-integration): build the combined candidate and run its full application test suite under the unit lock. Both must succeed before acceptance. These checks do not replace Code Validation. |
+| CN11 | Required integration checks | [Task Integration](phase_construction/README.md#task-integration): run typechecking, the project build, and the full suite against the combined candidate under the unit lock. All three must succeed before acceptance. These checks do not replace Code Validation. |
 | CN12 | Task implementation completion | [Task Integration](phase_construction/README.md#task-integration): successful candidate acceptance and the task's other completion conditions establish task completion. Acceptance changes integrated state; it is not requester approval. |
 | CN13 | Implementation Execution completion | [Attempts and completion](phase_construction/README.md#attempts-and-completion): complete required tasks and required integrated-result checks. The unit becomes ready for Unit of Work Review, not delivery approval. |
 | CN14 | Task-local correction return | [Return paths](phase_construction/README.md#return-paths): the orchestrator authorizes a return to coding when task output must change. Execute Code Generation, Code Validation, and Task Integration again. The enclosing execution attempt remains active. |
@@ -262,6 +265,41 @@ The decisions below are complete. FD13 records requester acceptance of the compl
 | FD13 | Whole-draft acceptance | Complete | [Functional Design](phase_construction/functional-design.md): the requester accepted the complete stage specification, including the skill reference. This does not approve a Unit of Work or establish completed implementation. |
 | FD14 | Blocking functional questions | Complete | [Blocking rule](phase_construction/functional-design.md#blocking-rule): unresolved questions block completion when answers could change scope, behavior, invariants, or functional contracts. |
 
+## Quality Requirements decisions
+
+The decisions below are complete. The requester confirmed acceptance of the complete stage specification under NF12, including its [skill reference](skills.md#kepler-quality).
+
+This approval concerns the specification, not an executing Unit of Work or completed implementation.
+
+| ID | Decision | Status | Record |
+| --- | --- | --- | --- |
+| NF01 | Quality document sections | Complete | [Required sections](phase_construction/quality-requirements.md#required-sections): require Quality requirements, Constraints and dependencies, and Decisions and open questions in `quality.md`. |
+| NF02 | Quality requirement content | Complete | [Requirement content](phase_construction/quality-requirements.md#requirement-content): define covered material, targets or constraints, relevant conditions, objective acceptance conditions, assumptions, and dependencies. |
+| NF03 | Category applicability procedure | Complete | [Applicability](phase_construction/quality-requirements.md#quality-categories): assess all eight categories and briefly explain inapplicable categories. Do not invent targets or waive relevant obligations. |
+| NF04 | Entry conditions | Complete | [Entry](phase_construction/quality-requirements.md#entry-conditions): completed Functional Design, current artifacts, and requester availability for consequential quality choices. Existing code and measurements are not prerequisites. |
+| NF05 | Stage owner | Complete | [Agent role](phase_construction/quality-requirements.md#agent-roles): `kepler-architect` owns the stage and maintains consistent quality requirements. |
+| NF06 | Entry skill | Complete | [kepler-quality](skills.md#kepler-quality) performs the stage's investigation, artifact maintenance, self-review, evidence recording, approval request, and handoff. |
+| NF07 | Self-review | Complete | [Self-review](phase_construction/quality-requirements.md#self-review) belongs in the entry skill and covers applicability, scope, acceptance conditions, consistency, blocking questions, and handoff. |
+| NF08 | External review trigger | Complete | [External review](phase_construction/quality-requirements.md#external-review) occurs only when the requester asks for it. Self-review remains required. |
+| NF09 | Requester approval | Complete | [Approval](phase_construction/quality-requirements.md#requester-approval) requires explicit requester acceptance of the current quality material, recorded through CLI-owned events. |
+| NF10 | Reopening questionnaire | Complete | [Reopening questions](phase_construction/quality-requirements.md#reopening-questionnaire) identify stage-specific findings for the orchestrator's revision decision. Apply the shared authority and cascade rules. |
+| NF11 | Completion conditions | Complete | [Completion](phase_construction/quality-requirements.md#completion-conditions) requires valid artifacts, consistent requirements, resolved blocking questions, named evidence, requester approval, and handoff to Implementation Planning. |
+| NF12 | Whole-draft acceptance | Complete | [Quality Requirements](phase_construction/quality-requirements.md): the requester confirmed acceptance of the complete stage specification, including evidence and skill responsibilities. This does not approve an executing Unit of Work. |
+| NF13 | Design quality category | Complete | [Maintainability](phase_construction/quality-requirements.md#maintainability) covers modularity, extensibility, decoupling, and safe change or technology replacement. Planning selects the mechanisms. |
+| NF14 | Stage evidence coverage | Complete | [Evidence](phase_construction/quality-requirements.md#evidence-coverage) requires artifact validation, quality self-review, requested external review, and a separate requester approval record. Apply shared evidence bindings, applicability rules, and retention rules. |
+
+## Implementation Planning decisions
+
+These scoped decisions are complete. They do not accept the whole stage specification; IP19 remains open.
+
+| ID | Decision | Status | Record |
+| --- | --- | --- | --- |
+| IP01 | Required planning document | Complete | [Artifacts](phase_construction/implementation-planning.md#paths-and-organization): require `plan.md` for technical rationale and `tasks-dag.json` for the task graph at the unit root. |
+| DF04 | Technical design location | Complete | [Technical solution](phase_construction/implementation-planning.md#technical-solution): record the selected technical solution and its rationale in `plan.md` at the unit root. |
+| IP21 | Technical rationale coverage | Complete | [Rationale](phase_construction/implementation-planning.md#technical-solution): `plan.md` must record the technical rationale for every planning decision. Concise explanations or precise references can be sufficient. |
+| DF12 | Task graph representation | Complete | Define the custom [Kepler task graph JSON format](phase_construction/task-graph.md); do not adopt JGF. Its writer and validator remain MVP implementation work. |
+| IP22 | Task ID format | Complete | Use [UUIDv4 task IDs](phase_construction/task-graph.md#task-identity) in full lowercase hyphenated form, independently of titles, artifact IDs, and attempt IDs. |
+
 ## Deferred decisions
 
 These questions are deferred beyond the Construction MVP. Deferral selects no fallback, precedence rule, expiry period, or destructive operation.
@@ -278,7 +316,7 @@ Supporting-document types are agreed under [DF06](#completed-shared-decisions). 
 | DF08 | Project reference updates | How are Project references maintained? See [document scopes](README.md#document-scopes). |
 | DF09 | Intent document format | What documents represent Inception intents? See [phase organization](README.md#phase-organization). |
 | DF10 | Inception unit-definition procedure | How does Inception produce one or more Units of Work? See [phase organization](README.md#phase-organization). |
-| DF13 | Additional integration checks | Defer general extra-check policy. Honor unit/project obligations and the existing [build/full-suite minimum](phase_construction/README.md#task-integration). |
+| DF13 | Additional integration checks | Defer general extra-check policy. Honor unit/project obligations and the existing [typechecking/build/full-suite minimum](phase_construction/README.md#task-integration). |
 | SH71 | Evidence retention period | No retention period is selected. Required checkpoints and external evidence must remain available under the [retention contract](runtime.md#checkpoint-retention). |
 | SH73 | Retention cleanup | Defer destructive cleanup policy. This does not authorize expiry, checkpoint deletion, or loss of [required evidence](runtime.md#checkpoint-retention). |
 | SH75 | Additional unit scope guidance | Defer additional [scope and size guidance](unit-of-work.md#decisions-still-required). Existing cohesion, coverage, dependency, and verification rules still apply. No additional criteria are approved. |
@@ -294,7 +332,7 @@ Delete this speculative comparison from the approval queue. Keep its ID only as 
 
 ## Contract coverage
 
-The MVP needs all six Construction stages and their task-scoped stages. The Functional Design specification is accepted. Quality Requirements has a draft for review. Four later unit-stage contracts still need authoring. Supporting-document types are agreed under DF06.
+The MVP needs all six Construction stages and their task-scoped stages. The Functional Design and Quality Requirements specifications are accepted. Implementation Planning has a draft for review. Three later unit-stage contracts still need authoring. Supporting-document types are agreed under DF06.
 
 The MVP path above defines bounded authoring work, not omnibus decision IDs. Add a question only when a material choice remains unanswered. Do not create separate approval gates for implementation-owned field types, event catalogs, or command syntax.
 
@@ -302,7 +340,7 @@ Do not require Initialization, Inception, managed reference features, or migrati
 
 ## Filename convention
 
-Use short filenames with full words, without abbreviations. The agreed `quality.md` replaces the proposed `requirements.md` name. Quality Requirements does not share `design.md` with Functional Design.
+Use short filenames with full words, without abbreviations. The requester-selected `tasks-dag.json` is an explicit exception. The agreed `quality.md` replaces the proposed `requirements.md` name. Quality Requirements does not share `design.md` with Functional Design.
 
 ## Record maintenance
 

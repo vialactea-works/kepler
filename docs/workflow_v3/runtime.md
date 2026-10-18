@@ -12,8 +12,8 @@ The persistence responsibilities, event envelope, event-derived execution state,
 
 | Data | Representation | Responsibility |
 | --- | --- | --- |
-| Artifact metadata | Frontmatter on the artifact. | Record identity, classification, unit ownership, schema version, and author identity through the shared [Artifact metadata contract](metadata.md). Additional fields require further decisions. |
-| Authored content | Markdown artifact body. | Define purpose, scope, requirements, design, plans, and supporting evidence. |
+| Artifact metadata | Frontmatter on Markdown artifacts; JSON artifact representation follows its own contract. | For Markdown, record identity, classification, ownership, schema version, and author under the shared [metadata contract](metadata.md). JSON metadata follows its own artifact contract. |
+| Authored content | Markdown artifact bodies and authored JSON task graphs. | Define purpose, scope, requirements, design, plans, and supporting evidence. |
 | Execution state | Derived phase-owned views, queried through the `kepler` CLI. | Represent current progress, attempts, approvals, and changing settings from each phase's journals. |
 | Audit history | Authoritative append-only structured JSON event journals, recorded through CLI-owned operations. | Preserve lifecycle facts, decisions, settings, revisions, approvals, and evidence bindings needed to derive execution state. |
 
@@ -23,13 +23,13 @@ The persistence responsibilities, event envelope, event-derived execution state,
 
 Keep artifact metadata separate from execution state. Mostly immutable does not mean that every field can never change. Follow the shared [metadata change rules](metadata.md#metadata-changes).
 
-Use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. The metadata contract defines their meanings and when they are required. Apply its [field validation rules](metadata.md#field-validation). Validation is read-only: report invalid names or values and preserve content for correction. Do not convert value types or generate missing values during validation. Creation operations can populate fields explicitly. Stage-specific fields remain undecided.
+For Markdown artifacts, use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. The metadata contract defines their meanings and when they are required. Apply its [field validation rules](metadata.md#field-validation). Validation is read-only: report invalid names or values and preserve content for correction. Do not convert value types or generate missing values during validation. Creation operations can populate fields explicitly. Stage-specific fields remain undecided.
 
-Apply the shared [schema-version rules](metadata.md#schema-version). Report unsupported schema versions and leave those artifacts unchanged. Do not migrate data automatically. The migration procedure remains deferred under DF05.
+For Markdown artifacts, apply the shared [schema-version rules](metadata.md#schema-version). Report unsupported schema versions and leave those artifacts unchanged. JSON artifact metadata and schema identification follow the JSON artifact's own contract. Do not migrate data automatically. The migration procedure remains deferred under DF05.
 
-Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in artifact frontmatter or Markdown status sections.
+Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in authored artifacts. This includes Markdown frontmatter, Markdown status sections, and `tasks-dag.json`.
 
-Implementation plans can describe the work in Markdown. Their execution progress is derived from event journals, not Markdown checkboxes.
+Construction records technical rationale in `plan.md` and the task graph in `tasks-dag.json`. Both are authored content. Task graphs use the [Kepler JSON format](phase_construction/task-graph.md), including its UUID identities and independent format version. Execution progress is derived from event journals, not Markdown checkboxes or task-graph status fields.
 
 ### Execution state
 
@@ -297,9 +297,9 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 Task outputs can have separate checkpoints. Results for those checkpoints do not establish that their combined result works.
 
-Construction's [Task Integration stage](phase_construction/README.md#task-integration) follows prepare, check, then accept under the unit's integration lock. Check the combined candidate before it becomes the unit's integrated state. Run the project build and full application test suite against the candidate while holding the unit lock. Both must complete successfully before acceptance. Task completion requires successful acceptance and the applicable completion conditions.
+Construction's [Task Integration stage](phase_construction/README.md#task-integration) follows prepare, check, then accept under the unit's integration lock. Check the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against the candidate while holding the unit lock. All three must complete successfully before acceptance. Task completion requires successful acceptance and the applicable completion conditions.
 
-Code Validation retains its full-suite and independent-feedback responsibilities under the [stage boundaries](phase_construction/README.md#agreed-boundaries). The integration build and full-suite checks do not replace those Code Validation duties. Any additional integration checks and project-specific check configuration require separate decisions.
+Code Validation runs typechecking, the project build, and the full application test suite, and owns independent code feedback. The [stage boundaries](phase_construction/README.md#agreed-boundaries) define these duties. Integration checks do not replace them. A build result establishes typechecking only when the command also performs the required typechecking. Any additional integration checks and project-specific check configuration require separate decisions.
 
 A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; integration does not authorize a cascade.
 

@@ -39,6 +39,8 @@ Keep document purpose in `type`; do not encode it in the ID.
 
 `id` identifies the artifact, not one version of its contents. Execution records must bind approvals to content versions separately.
 
+Task UUIDs identify tasks, not their containing artifact or execution attempt. The [task graph format](phase_construction/task-graph.md#task-identity) defines those identifiers separately.
+
 ### Classification and ownership
 
 `type` describes the document. It is separate from the Unit of Work's kind, such as Walking skeleton. Use lowercase words separated by hyphens. A stage transition does not change the document's type.
@@ -54,6 +56,8 @@ Keep document purpose in `type`; do not encode it in the ID.
 | `supporting-document` | Optional supporting Markdown documents, such as research notes or domain-model detail. |
 
 Use the generic `supporting-document` type under [DF06](authoring_progress.md#completed-shared-decisions). Describe each document's purpose in its content and in the link from its owning stage. Keep the existing required-document and Project reference types unchanged. Define additional values when their artifact contracts are agreed.
+
+The [Implementation Planning draft](phase_construction/implementation-planning.md#artifact-metadata) proposes `implementation-plan` for `plan.md`. This value remains proposed and is not in the accepted type table.
 
 #### Unit ownership
 

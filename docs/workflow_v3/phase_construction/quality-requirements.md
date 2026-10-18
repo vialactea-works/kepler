@@ -2,11 +2,11 @@
 
 [Construction phase index](README.md) | [Workflow phase index](../README.md)
 
-**Status:** Draft for discussion.
+**Status:** Accepted by the requester under [NF12](../authoring_progress.md#quality-requirements-decisions).
 
-The stage name, required `quality.md`, original seven quality categories, and stage order are agreed. This draft proposes Maintainability as an eighth category. Document structure, agent and skill assignments, review rules, completion conditions, and evidence requirements also remain proposals.
+The requester has accepted this stage specification, including Maintainability, the evidence requirements, and the skill reference.
 
-Saving this draft does not approve those proposals or complete a Unit of Work.
+This acceptance does not approve a particular Unit of Work or establish completed implementation.
 
 ## Goal
 
@@ -81,7 +81,7 @@ Create supporting files only when useful, and explain their purpose in links fro
 
 ### Required sections
 
-The draft proposes three required sections in `quality.md`.
+This stage requires three sections in `quality.md`.
 
 | Section | Required content |
 | --- | --- |
@@ -95,7 +95,7 @@ Each section can be short. State when no relevant constraint or open question ex
 
 ### Quality categories
 
-The original seven categories are agreed under [CN02](README.md#agreed-boundaries). Maintainability is a proposed eighth category. The examples explain possible concerns; they do not prescribe targets or tools.
+The original seven categories are agreed under [CN02](README.md#agreed-boundaries). Maintainability is accepted under [NF13](../authoring_progress.md#quality-requirements-decisions). The examples explain possible concerns; they do not prescribe targets or tools.
 
 | Category | Concerns to assess where applicable |
 | --- | --- |
@@ -106,13 +106,13 @@ The original seven categories are agreed under [CN02](README.md#agreed-boundarie
 | Compatibility | Supported environments and compatibility obligations for existing users, consumers, and dependencies. |
 | Operability | Conditions for operation, configuration, maintenance, and support. |
 | Observability | Information needed to detect, understand, and diagnose relevant behavior and failures. |
-| Maintainability (proposed) | Modularity, extensibility, decoupling, and the ability to change or replace parts without unrelated changes. |
+| Maintainability | Modularity, extensibility, decoupling, and the ability to change or replace parts without unrelated changes. |
 
-The draft proposes assessing all eight categories. Add requirements only where they apply to the unit. Briefly explain when a category has no relevant requirement; one concise note can cover several categories.
+Assess all eight categories. Add requirements only where they apply to the unit. Briefly explain when a category has no relevant requirement; one concise note can cover several categories.
 
 Reference unchanged requirements precisely instead of copying them. Explain their relevance to the unit. Do not silently reduce existing obligations or turn unknown applicability into an exemption.
 
-### Maintainability proposal
+### Maintainability
 
 Maintainability covers software design and system architecture qualities that support safe change, extension, and replacement.
 
@@ -149,7 +149,7 @@ Depth changes detail, not required information or authority. It does not remove 
 
 ## Agent roles
 
-The draft proposes this stage owner:
+The stage owner is:
 
 | Role | Agent | Responsibility |
 | --- | --- | --- |
@@ -165,9 +165,9 @@ The role assignment does not decide whether work runs inline, through subagents,
 
 ### Entry skill
 
-The draft proposes [kepler-quality](../skills.md#kepler-quality) as the entry skill. It investigates applicable quality requirements, maintains the stage artifacts, performs self-review, and hands off to Implementation Planning.
+[kepler-quality](../skills.md#kepler-quality) is the entry skill. It investigates applicable quality requirements, maintains the stage artifacts, performs self-review, and hands off to Implementation Planning.
 
-Its name and responsibilities are proposed, not an implemented skill or an approved extension of `kepler-design`.
+These responsibilities do not implement the skill or extend the `kepler-design` contract.
 
 ### Supporting responsibilities
 
@@ -180,7 +180,7 @@ Apply the [common skill rules](../skills.md#common-rules). Supporting skills nei
 
 ## Review and approval
 
-These stage-specific review rules are proposals. They do not add approval gates to other stages.
+These review rules apply to Quality Requirements. They do not add approval gates to other stages.
 
 ### Self-review
 
@@ -188,11 +188,11 @@ Self-review belongs in `kepler-quality`, not a separate supporting skill. Check 
 
 ### External review
 
-The draft proposes external review only when the requester asks for it. Depth, risk, and complexity do not automatically create an external review gate. Self-review remains required.
+External review occurs only when the requester asks for it. Depth, risk, and complexity do not automatically create an external review gate. Self-review remains required.
 
 ### Requester approval
 
-The draft proposes explicit requester approval of the current quality requirements. Approval covers applicable targets, constraints, material assumptions, and quality trade-offs.
+The requester must explicitly approve the current quality requirements. Approval covers applicable targets, constraints, material assumptions, and quality trade-offs.
 
 Saving or committing a draft, or receiving a positive review, does not grant requester approval. Stage approval permits progression to Implementation Planning. It does not select a technical solution or authorize implementation or delivery.
 
@@ -212,11 +212,11 @@ Apply the shared [questionnaire rules](../revision.md#stage-reopening-questionna
 
 A required change to functional behavior can move the boundary to Functional Design. Report it to the orchestrator. Do not revise the functional design through this stage's quality document.
 
-After reopening, satisfy the stage's applicable completion conditions again, including self-review and the proposed requester approval. Preserve unaffected upstream work and historical records under the shared rules.
+After reopening, satisfy the stage's applicable completion conditions again, including self-review and the required requester approval. Preserve unaffected upstream work and historical records under the shared rules.
 
 ## Completion conditions
 
-The draft proposes completion when:
+The stage is complete when:
 
 - `quality.md` exists at the unit root and satisfies its required content and the shared metadata contract.
 - Applicable quality requirements have explicit scope, relevant conditions, and objective acceptance conditions.
@@ -226,7 +226,7 @@ The draft proposes completion when:
 - Relevant supporting files exist and are linked from their required sections.
 - Document validation and self-review succeed against the current material under the evidence requirements below.
 - Any requested external review is complete and its blocking findings are resolved.
-- The proposed requester approval is recorded through the CLI and binds the reviewed material.
+- Requester approval is recorded through the CLI and binds the reviewed material.
 - The handoff identifies requirements, constraints, and questions for Implementation Planning.
 
 A selected technical solution, completed implementation, or runtime proof of compliance is not required at this stage.
@@ -235,7 +235,7 @@ A question blocks completion when its answer changes an applicable quality oblig
 
 ### Evidence coverage
 
-This proposed contract defines required check and review evidence and a separate requester approval record. It does not delegate that definition to another stage or a shared evidence checklist.
+This contract defines required check and review evidence and a separate requester approval record. It does not delegate that definition to another stage or a shared evidence checklist.
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
@@ -256,7 +256,7 @@ These records establish the quality specification's validity and requester appro
 
 ## Handoff
 
-**Next stage:** Implementation Planning.
+**Next stage:** [Implementation Planning](implementation-planning.md).
 
 Identify the Unit of Work directory, `unit-of-work.md`, accepted `design.md`, current `quality.md`, and relevant linked supporting files.
 

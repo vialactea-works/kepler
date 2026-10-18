@@ -26,7 +26,7 @@ Project preparation belongs to Initialization, not Construction. A clear request
 
 Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains parallel task implementation contexts. Each context contains the Task coding loop and Task Integration. These execution relationships are specific to Construction.
 
-[Task Integration](phase_construction/README.md#integration-order-and-locking) prepares, checks, then accepts each candidate under a unit-scoped lock. The project build and full application test suite must succeed against the candidate before acceptance. This serializes integrations within that unit while preserving permitted coding, validation, and cross-unit parallelism.
+[Task Integration](phase_construction/README.md#integration-order-and-locking) prepares, checks, then accepts each candidate under a unit-scoped lock. Typechecking, the project build, and the full application test suite must succeed against the candidate before acceptance. This serializes integrations within that unit while preserving permitted coding, validation, and cross-unit parallelism.
 
 During Construction's [unit-wide upstream revision](phase_construction/README.md#unit-wide-upstream-revision), the orchestrator stops new task admissions and active implementation work for that unit. Independent units continue while their inputs and contracts remain valid.
 
@@ -53,7 +53,7 @@ Paths are relative to the project repository root. `<unit-id>` uses `YYYY-MM-DD-
 
 Required Unit of Work documents live directly under `.kepler/units-of-work/<unit-id>/`. Additional detail lives in linked files under `details/`. Stage-specific detail uses a stage subdirectory, such as `details/functional-design/`.
 
-The accepted [Functional Design artifact contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md` at the Unit of Work root. The contract defines the required sections of both documents for Functional Design. Quality Requirements uses a separate required `quality.md` at the same root. Its [stage draft](phase_construction/quality-requirements.md) proposes the detailed artifact and stage contract. Other artifact contracts for later stages remain undecided.
+The accepted [Functional Design artifact contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md` at the Unit of Work root. The contract defines the required sections of both documents for Functional Design. Quality Requirements uses a separate required `quality.md` at the same root. Its [accepted contract](phase_construction/quality-requirements.md) defines the stage and artifact requirements. Implementation Planning produces required `plan.md` and `tasks-dag.json` at the unit root. The [task graph format](phase_construction/task-graph.md) defines its custom JSON representation and UUIDv4 task IDs. Its [stage draft](phase_construction/implementation-planning.md) defines the agreed artifact split and proposes the remaining contract. Later stage artifact contracts remain undecided.
 
 These paths do not migrate existing artifacts or change current CLI path rules.
 
@@ -69,7 +69,7 @@ The metadata contract defines field and value validation, metadata changes, and 
 
 ## CLI infrastructure and persistence
 
-[CLI infrastructure](runtime.md) separates mostly immutable artifact metadata from dynamic execution state. Artifact identity belongs in frontmatter. Execution state is derived from authoritative phase-owned JSON event journals under the shared [representation contract](runtime.md#execution-state-representation).
+[CLI infrastructure](runtime.md) separates mostly immutable artifact metadata from dynamic execution state. Markdown artifact identity belongs in frontmatter. Execution state is derived from authoritative phase-owned JSON event journals under the shared [representation contract](runtime.md#execution-state-representation).
 
 No independently authoritative state files are required. Materialized views are rebuildable, not sources of workflow truth.
 
