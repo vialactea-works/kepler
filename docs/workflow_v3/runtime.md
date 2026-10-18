@@ -303,6 +303,14 @@ Code Validation runs typechecking, the project build, and the full application t
 
 A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; integration does not authorize a cascade.
 
+## Stage-owned evidence
+
+Stage contracts define required evidence, covered material, and required results. Shared bindings do not replace those definitions.
+
+The [Execution draft](phase_construction/implementation-execution.md#evidence-coverage) distinguishes task-stage evidence from the unit completion assessment. The [Review draft](phase_construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phase_construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
+
+These new definitions remain proposed. Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage completion.
+
 ## CLI responsibilities
 
 Expose operations for reading progress, changing execution state, recording interactions and approvals, managing pause and resume checkpoints, and applying the shared [Revision procedure](revision.md#revision-procedure).
@@ -350,7 +358,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 - CLI commands and their validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
-- Required material scopes for each check and stage, external reference formats, and exact evidence and approval record formats.
+- Acceptance of proposed evidence coverage in the remaining stage drafts, external reference formats, and exact evidence and approval record formats.
 - Traceability relationship formats, checkpoint reference names, retention periods, publication, storage locations, and cleanup rules.
 - Workspace and branch layouts, and shared test resource isolation.
 - Which journals, projections, and retained records belong in version control or remain local to a checkout.

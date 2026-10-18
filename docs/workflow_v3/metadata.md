@@ -57,7 +57,7 @@ Task UUIDs identify tasks, not their containing artifact or execution attempt. T
 
 Use the generic `supporting-document` type under [DF06](authoring_progress.md#completed-shared-decisions). Describe each document's purpose in its content and in the link from its owning stage. Keep the existing required-document and Project reference types unchanged. Define additional values when their artifact contracts are agreed.
 
-The [Implementation Planning draft](phase_construction/implementation-planning.md#artifact-metadata) proposes `implementation-plan` for `plan.md`. This value remains proposed and is not in the accepted type table.
+The [Implementation Planning draft](phase_construction/implementation-planning.md#artifact-metadata) proposes `implementation-plan` for `plan.md`. The [Deliver draft](phase_construction/deliver.md#required-delivery-instructions) proposes `delivery-plan` for `delivery.md`. Both values remain proposed and are outside the accepted type table. No new common fields are proposed.
 
 #### Unit ownership
 

@@ -8,7 +8,7 @@ Construction operates on one Unit of Work. Its stages define responsibilities in
 
 Construction owns its execution state model and projection schemas under the shared [execution-state representation](../runtime.md#execution-state-representation).
 
-The stage order and execution structure are agreed. The requester has accepted the Functional Design and Quality Requirements stage specifications. Other detailed stage contracts remain under development.
+The stage order and execution structure are agreed. The requester has accepted the Functional Design and Quality Requirements stage specifications. The other four unit-stage contracts have drafts for discussion; their remaining proposals are not accepted.
 
 ## Stage outline
 
@@ -19,9 +19,9 @@ This table gives the unit-scoped stage order. Task-scoped stages execute inside 
 | 1 | [Functional Design](functional-design.md) | Accepted by the requester. |
 | 2 | [Quality Requirements](quality-requirements.md) | Accepted by the requester under [NF12](../authoring_progress.md#quality-requirements-decisions). |
 | 3 | [Implementation Planning](implementation-planning.md) | Draft for discussion. Technical selection, task decomposition, and the dependency graph are agreed. |
-| 4 | [Implementation Execution](#implementation-execution) | Structure agreed. Detailed contract not yet defined. |
-| 5 | Unit of Work Review | Contract not yet defined. |
-| 6 | Deliver | Contract not yet defined. |
+| 4 | [Implementation Execution](implementation-execution.md) | Structure and shared execution rules agreed. Detailed stage and nested task-stage contracts are draft proposals. |
+| 5 | [Unit of Work Review](unit-of-work-review.md) | Whole integrated result is the agreed scope. Remaining contract is a draft proposal. |
+| 6 | [Deliver](deliver.md) | Draft for discussion, including proposed deployment information and operation boundaries. |
 
 ## Agreed boundaries
 
@@ -38,6 +38,8 @@ Code Generation runs typechecking and tests related to its modifications. Code V
 Code Generation and Code Validation form the Task coding loop inside each task implementation. Unit of Work Review examines the complete integrated result after Implementation Execution.
 
 ## Implementation Execution
+
+The [stage draft](implementation-execution.md) adds proposed detailed contracts for unit execution, Code Generation, Code Validation, and Task Integration. The agreed rules below remain binding.
 
 Implementation Execution is a unit-scoped stage. The orchestrator executes the task graph and coordinates task implementation, integration, and completion.
 
@@ -127,7 +129,9 @@ This structure does not introduce an additional requester approval gate. Define 
 
 ### Remaining stage contracts
 
-Review the proposed [Planning contract](implementation-planning.md), including its task definitions, evidence, and handoff. Its writer and validator remain implementation work. Define the remaining stage conditions, artifacts, agents, skills, and reopening questionnaires. Typechecking, the project build, and the full application test suite are required integration checks. Any additional integration checks and project-specific check configuration require separate decisions. Candidate checks precede acceptance under the agreed integration procedure.
+Review the proposed [Planning](implementation-planning.md), [Execution](implementation-execution.md), [Unit of Work Review](unit-of-work-review.md), and [Deliver](deliver.md) contracts. Each draft proposes evidence coverage, completion conditions, role and skill assignments, reopening questions, and handoffs. These details remain proposed. The task graph writer and validator remain implementation work.
+
+Typechecking, the project build, and the full application test suite remain required integration checks. Additional applicable obligations remain binding; general extra-check policy is deferred. Project check configuration remains MVP implementation work. Candidate checks precede acceptance under the agreed integration procedure.
 
 Lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery remain open in the shared CLI infrastructure contract.
 

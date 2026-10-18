@@ -328,7 +328,7 @@ No separate evidence document or application test run is required by this stage.
 
 ## Handoff
 
-**Next stage:** [Implementation Execution](README.md#implementation-execution).
+**Next stage:** [Implementation Execution](implementation-execution.md).
 
 Identify the unit directory, `plan.md`, `tasks-dag.json`, current upstream artifacts, supporting files, and the material covered by completion evidence.
 

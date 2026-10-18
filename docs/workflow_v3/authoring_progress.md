@@ -33,9 +33,9 @@ For each missing stage, define essential inputs, outputs, responsibilities, comp
 | 1 | Functional Design | The stage specification is accepted under FD13. Use the agreed `supporting-document` type under DF06. |
 | 2 | [Quality Requirements](phase_construction/quality-requirements.md) | The stage specification, including evidence and skill responsibilities, is accepted under NF12. |
 | 3 | [Implementation Planning](phase_construction/implementation-planning.md) | Review the remaining Planning proposals. The output pair, rationale coverage, custom JSON representation, and UUIDv4 task-ID format are defined. |
-| 4 | Implementation Execution | Define responsibilities, evidence, completion conditions, and any applicable approval. Reuse agreed task loops, returns, concurrency, and integration rules. |
-| 5 | Unit of Work Review | Define whole-unit findings, evidence, correction routes, completion conditions, and any applicable approval. Integration success is not review or delivery approval. |
-| 6 | Deliver | Define the delivery outcome, permitted side effects, authorization, outputs, and failure handling. Resolve deployment content, location, and timing. |
+| 4 | [Implementation Execution](phase_construction/implementation-execution.md) | Review the detailed unit and task-stage proposals. Preserve agreed task loops, checks, concurrency, returns, and integration rules. |
+| 5 | [Unit of Work Review](phase_construction/unit-of-work-review.md) | Review whole-unit assessment, findings, evidence, completion, applicable acceptance, and handoff proposals. |
+| 6 | [Deliver](phase_construction/deliver.md) | Review outcome, instructions, authorization, verification, recovery, and deployment information proposals. |
 | 7 | Shared runtime | Resolve SH74 record portability. Implement journals, guarded transitions, safe recovery, material retention, and isolated concurrent work. |
 | 8 | MVP release | Implement the CLI, templates, agents, and skills. Verify the complete path, recovery, scoped concurrency, and rejection of invalid transitions. |
 
@@ -51,12 +51,12 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| SH52 | Required evidence coverage | Each stage contract must name its required evidence and covered material. Review the remaining definitions within their contracts. Existing [test duties](phase_construction/README.md#agreed-boundaries) remain binding. |
+| SH52 | Required evidence coverage | Each stage contract owns evidence, covered material, and required results. Review proposed coverage in Planning and the three later drafts. Existing [test duties](phase_construction/README.md#agreed-boundaries) remain binding. |
 | SH61 | Missing author identity | What must happen when effective Git name or email is missing? Resolve before creating an affected artifact. Do not invent [author identity](metadata.md#author-identity). |
 | SH74 | Record version-control policy | Which authoritative records travel with the repository, and which remain local? Define how workers and later sessions retain [required history](runtime.md#execution-state-representation). |
-| SH77 | Deployment record content | What deployment information must the MVP record for an acceptable unit? Keep known [deployment constraints](unit-of-work.md#deployment) visible to Planning. |
-| SH78 | Deployment record location | Where is the authoritative deployment information recorded? Resolve with Planning and Deliver under the [unit document layout](README.md#document-scopes). |
-| SH79 | Deployment record timing | When must deployment information be complete for Planning, review, and Deliver? Known constraints already belong in the [unit definition](unit-of-work.md#deployment). |
+| SH77 | Deployment record content | Is the [proposed deployment information](phase_construction/deliver.md#deployment-information) sufficient for the actual delivery outcome? Known constraints remain visible to Planning. |
+| SH78 | Deployment record location | Should required unit-root [delivery.md](phase_construction/deliver.md#required-delivery-instructions) contain authored instructions, while CLI-owned journals record actual operations and results? |
+| SH79 | Deployment record timing | Is the proposed [stage-specific timing](phase_construction/deliver.md#timing-and-upstream-ownership) sufficient without requiring future external availability during Planning? |
 
 ### Construction decisions still pending
 
@@ -90,9 +90,86 @@ No pending Functional Design or Quality Requirements decisions remain in this qu
 | IP19 | Whole-draft acceptance | Does the requester accept the complete [Implementation Planning specification](phase_construction/implementation-planning.md)? |
 | IP20 | External prerequisite readiness | Should the plan classify [external prerequisites](phase_construction/implementation-planning.md#external-prerequisites), define blocking availability conditions and timing, and explain nonblocking treatment? |
 
+### Implementation Execution proposals
+
+The [Execution draft](phase_construction/implementation-execution.md) preserves accepted structure and check duties. These additional proposals remain open.
+
+| ID | Decision | Proposal to review |
+| --- | --- | --- |
+| IE01 | Execution entry conditions | Are the proposed [entry conditions](phase_construction/implementation-execution.md#entry-conditions) sufficient, including greenfield checkpoint establishment and scoped prerequisite timing? |
+| IE02 | Execution outputs and ownership | Should Execution produce implementation material and CLI-owned records without a separate required [execution Markdown document](phase_construction/implementation-execution.md#artifacts-and-records)? |
+| IE03 | Execution stage owner | Should `kepler-orchestrator` own the proposed [unit execution responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
+| IE04 | Generation stage owner | Should `kepler-coder` own the proposed [Code Generation responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
+| IE05 | Validation stage owner | Should `kepler-reviewer` own the proposed [Code Validation responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
+| IE06 | Integration stage owner | Should `kepler-orchestrator` own the proposed [Task Integration responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
+| IE07 | Execution entry skill | Should [kepler-orchestrate](skills.md#kepler-orchestrate) supply the proposed separate unit execution and task integration procedures? |
+| IE08 | Generation entry skill | Should [kepler-code](skills.md#kepler-code) supply the proposed Generation procedure? |
+| IE09 | Validation entry skill | Should [kepler-code-feedback](skills.md#kepler-code-feedback) supply the proposed Validation procedure? |
+| IE10 | Validation reviewer independence | Should the [independent reviewer](phase_construction/implementation-execution.md#code-validation) assess actual candidate material without authoring or editing that implementation? |
+| IE11 | Execution self-review rule | Should self-review belong in each applicable [entry procedure](phase_construction/implementation-execution.md#self-review), without separate stages or attempt identities? |
+| IE12 | Additional execution review trigger | Should [additional external review](phase_construction/implementation-execution.md#additional-review) be requester-triggered, while required Validation feedback and Unit of Work Review remain mandatory? |
+| IE13 | Execution approval trigger | Should [additional execution approval](phase_construction/implementation-execution.md#requester-decisions-and-approval) apply only under existing authority rules or requester instructions? |
+| IE14 | Execution reopening questionnaires | Do the proposed [unit and task-stage questions](phase_construction/implementation-execution.md#reopening-questionnaires) identify relevant findings without changing revision authority? |
+| IE15 | Generation completion evidence | Are the named [Generation results](phase_construction/implementation-execution.md#evidence-coverage), covered material, and required results sufficient for its proposed completion details? |
+| IE16 | Validation completion evidence | Are the named [Validation results](phase_construction/implementation-execution.md#evidence-coverage), covered material, and required results sufficient for its proposed completion details? |
+| IE17 | Integration completion evidence | Are the named [Integration results](phase_construction/implementation-execution.md#evidence-coverage), covered material, and required results sufficient without replacing accepted lock and check rules? |
+| IE18 | Execution completion evidence | Is the proposed [unit completion assessment](phase_construction/implementation-execution.md#evidence-coverage) sufficient while preserving originating task-stage evidence bindings? |
+| IE19 | Execution completion details | Are the proposed [completion details](phase_construction/implementation-execution.md#completion-conditions) sufficient for the already agreed unit completion boundary? |
+| IE20 | Execution handoff | Does the proposed [review handoff](phase_construction/implementation-execution.md#handoff) identify sufficient integrated material, provenance, evidence, and remaining concerns? |
+| IE21 | Execution whole-draft acceptance | Does the requester accept the complete [Implementation Execution specification](phase_construction/implementation-execution.md), including nested task-stage contracts and skill responsibilities? |
+| IE22 | Post-completion execution return | Should the [scoped-return rule](phase_construction/implementation-execution.md#return-after-completed-execution) reopen affected task stages, reassess retained scopes, and require new unit completion and downstream execution? |
+
+### Unit of Work Review proposals
+
+The [Review draft](phase_construction/unit-of-work-review.md) preserves the agreed whole-integrated-result scope. These detailed policies remain proposed.
+
+| ID | Decision | Proposal to review |
+| --- | --- | --- |
+| UR01 | Unit review entry conditions | Are the proposed [entry conditions](phase_construction/unit-of-work-review.md#entry-conditions) sufficient without requiring delivery or acceptance before assessment? |
+| UR02 | Unit review record outputs | Should review use [CLI-owned records](phase_construction/unit-of-work-review.md#artifacts-and-records) and retained evidence without another required Markdown document? |
+| UR03 | Whole-unit review procedure | Does the proposed [review procedure](phase_construction/unit-of-work-review.md#review-procedure) establish complete outcome assessment beyond individual task reports? |
+| UR04 | Unit review evidence assessment | Should review [assess applicable Execution evidence](phase_construction/unit-of-work-review.md#evidence-assessment) without an unconditional rerun, while resolving uncovered review obligations? |
+| UR05 | Unit review findings and correction | Does the proposed [finding treatment](phase_construction/unit-of-work-review.md#findings-and-correction) distinguish blocking defects, advice, local corrections, and authorized upstream revision? |
+| UR06 | Unit review stage owner | Should `kepler-reviewer` own the proposed [whole-unit assessment](phase_construction/unit-of-work-review.md#agent-roles)? |
+| UR07 | Unit review independence | Should the proposed [reviewer independence rule](phase_construction/unit-of-work-review.md#agent-roles) exclude the primary implementation author without excluding earlier task reviewers? |
+| UR08 | Unit review entry skill | Should [kepler-review](skills.md#kepler-review) supply the proposed version 3 whole-unit review procedure? |
+| UR09 | Unit review self-review | Should the entry skill [self-check coverage and evidence](phase_construction/unit-of-work-review.md#self-review) without replacing independent assessment? |
+| UR10 | Additional unit review trigger | Should [additional external review](phase_construction/unit-of-work-review.md#additional-review) be requester-triggered while the unit stage remains required? |
+| UR11 | Unit acceptance trigger | Should [separate requester acceptance](phase_construction/unit-of-work-review.md#requester-acceptance) apply only under an applicable authority rule or requester instruction? |
+| UR12 | Unit review reopening questions | Are the proposed [reopening questions](phase_construction/unit-of-work-review.md#reopening-questionnaire) sufficient under shared revision authority? |
+| UR13 | Unit review completion conditions | Are the proposed [completion conditions](phase_construction/unit-of-work-review.md#completion-conditions) sufficient before the Deliver handoff? |
+| UR14 | Unit review evidence coverage | Are the named [review results](phase_construction/unit-of-work-review.md#evidence-coverage), covered material, required results, and conditional acceptance record sufficient? |
+| UR15 | Unit review handoff | Does the proposed [Deliver handoff](phase_construction/unit-of-work-review.md#handoff) preserve reviewed material, evidence, limitations, and operation boundaries? |
+| UR16 | Unit review whole-draft acceptance | Does the requester accept the complete [Unit of Work Review specification](phase_construction/unit-of-work-review.md), including its skill responsibilities? |
+
+### Deliver proposals
+
+The [Deliver draft](phase_construction/deliver.md) proposes the following policies. SH77, SH78, and SH79 separately track deployment content, location, and timing.
+
+| ID | Decision | Proposal to review |
+| --- | --- | --- |
+| DL01 | Deliver entry conditions | Are the proposed [entry conditions](phase_construction/deliver.md#entry-conditions) sufficient while applying authority and prerequisites before affected operations? |
+| DL02 | Delivery outcome scope | Should Deliver establish the [requested outcome](phase_construction/deliver.md#goal) without assuming publication or deployment for every unit? |
+| DL03 | Delivery artifact type | Should proposed [type delivery-plan](phase_construction/deliver.md#required-delivery-instructions) identify authored `delivery.md` instructions, separately from execution history? |
+| DL04 | Delivery document sections | Are the four proposed [required sections](phase_construction/deliver.md#required-sections) sufficient for delivery instructions? |
+| DL05 | Delivery procedure | Does the proposed [delivery procedure](phase_construction/deliver.md#delivery-procedure) establish outcome, readiness, authority, execution, verification, and recipient handoff? |
+| DL06 | Delivery provenance and verification | Does the proposed [material and verification contract](phase_construction/deliver.md#material-and-verification) establish actual delivered effects and their relationship to reviewed source? |
+| DL07 | Delivery partial effects and recovery | Does the proposed [failure and recovery treatment](phase_construction/deliver.md#failure-and-interrupted-work) preserve partial effects and prevent blind or unauthorized retries? |
+| DL08 | Deliver stage owner | Should `kepler-orchestrator` own the proposed [Deliver responsibilities](phase_construction/deliver.md#agent-roles)? |
+| DL09 | Deliver entry skill | Should [kepler-finish-work](skills.md#kepler-finish-work) supply the proposed version 3 Deliver procedure? |
+| DL10 | Deliver self-review | Should the entry skill perform the proposed [preparation and result self-review](phase_construction/deliver.md#self-review)? |
+| DL11 | Additional delivery review trigger | Should [additional external review](phase_construction/deliver.md#additional-review) be requester-triggered while preserving existing project-required reviews? |
+| DL12 | Delivery operation authority | Does the proposed [authority assessment](phase_construction/deliver.md#operation-authority-and-requester-approval) preserve existing permissions without treating earlier completion as operation authorization? |
+| DL13 | Final delivery approval trigger | Should [additional final approval](phase_construction/deliver.md#operation-authority-and-requester-approval) apply only under an applicable authority rule or requester instruction? |
+| DL14 | Deliver reopening questions | Are the proposed [reopening questions](phase_construction/deliver.md#reopening-questionnaire) sufficient for outcome, material, authority, verification, recovery, and upstream findings? |
+| DL15 | Deliver completion conditions | Are the proposed [completion conditions](phase_construction/deliver.md#completion-conditions) sufficient without converting unfinished delivery into a narrower handoff? |
+| DL16 | Deliver evidence coverage | Are the named [delivery results](phase_construction/deliver.md#evidence-coverage), material scopes, required results, and conditional authorization or approval records sufficient? |
+| DL17 | Recipient handoff | Does the proposed [final handoff](phase_construction/deliver.md#handoff) supply actual result references, verification, limitations, recovery information, and agreed recipient responsibilities? |
+| DL18 | Deliver whole-draft acceptance | Does the requester accept the complete [Deliver specification](phase_construction/deliver.md), including its skill responsibilities? |
+
 ## Review result
 
-The queue contains 7 earlier MVP decisions and 19 Implementation Planning proposals: 26 in total. CN20 remains open. Another 33 required MVP implementation choices remain. Defer 13 questions beyond the MVP; 1 speculative approval gate is removed.
+The MVP decision queue contains 82 items: 7 earlier decisions, 19 Planning proposals, and 56 later-stage proposals. CN20 and whole-stage Planning acceptance remain open. Another 33 required MVP implementation choices remain. Defer 13 questions beyond the MVP; 1 speculative approval gate is removed.
 
 The MVP review preserved the 87 previously completed decisions. Later requester decisions bring the completed total to 108. Reclassification must not fabricate approval or claim implementation is complete.
 
@@ -107,7 +184,7 @@ The MVP review preserved the 87 previously completed decisions. Later requester 
 
 A requester decision is needed when the answer changes required behavior, authority, evidence obligations, or material scope. Technical formats, command names, and mechanisms belong to implementation within the agreed contracts.
 
-SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. NF identifies Quality Requirements decisions. Keep existing NF identifiers after the stage rename. IP identifies Implementation Planning decisions. DF preserves the existing deferred-decision series. An ID does not determine its status.
+SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. NF identifies Quality Requirements decisions. Keep existing NF identifiers after the stage rename. IP identifies Implementation Planning decisions. IE identifies Implementation Execution decisions, including its nested task stages. UR identifies Unit of Work Review decisions. DL identifies Deliver decisions. DF preserves the existing deferred-decision series. An ID does not determine its status.
 
 ## Completed shared decisions
 
@@ -332,7 +409,7 @@ Delete this speculative comparison from the approval queue. Keep its ID only as 
 
 ## Contract coverage
 
-The MVP needs all six Construction stages and their task-scoped stages. The Functional Design and Quality Requirements specifications are accepted. Implementation Planning has a draft for review. Three later unit-stage contracts still need authoring. Supporting-document types are agreed under DF06.
+The MVP needs all six Construction stages and their task-scoped stages. Functional Design and Quality Requirements are accepted. Planning, Execution, Unit of Work Review, and Deliver now have drafts for discussion. The Execution draft includes detailed Generation, Validation, and Integration contracts. All new proposals remain open. Writing these drafts does not accept Planning or close SH52. Supporting-document types are agreed under DF06.
 
 The MVP path above defines bounded authoring work, not omnibus decision IDs. Add a question only when a material choice remains unanswered. Do not create separate approval gates for implementation-owned field types, event catalogs, or command syntax.
 
