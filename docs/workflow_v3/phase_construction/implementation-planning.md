@@ -143,7 +143,9 @@ The draft places task definitions in `tasks-dag.json`. The [task object](task-gr
 - Expected outputs and observable acceptance conditions, including relevant failure and boundary cases.
 - Necessary implementation guidance and affected areas, without prescribing irrelevant edits.
 - Verification scope, expected results, and required environments or resources.
-- Shared-file or resource conflicts and the coordination needed to prevent interference.
+- Task-wide shared-file or resource access instructions in `guidance` to prevent interference.
+
+Place check-specific setup and isolation in verification `method`. Record blocking external availability in `prerequisites`, with its affected work and timing.
 
 Keep each task cohesive and verifiable. Do not require every task to create a separate deployable feature or repeat the complete unit outcome.
 
@@ -151,11 +153,11 @@ Identify the relevant context in each task handoff. Workers must not reconstruct
 
 ### Dependencies and coverage
 
-A dependency means that one task needs another task's integrated output to perform or verify its work. Identify that output and the reason it is required.
+A dependency means that one task needs another task's integrated work to perform or verify its own work. Describe the required predecessor work and why it is needed in the dependency's `reason`. The graph does not require a separate per-dependency output list.
 
-Do not derive dependencies from task numbering, document order, worker availability, or convenience. Shared-file overlap alone does not establish an output dependency. Record genuine coordination constraints separately.
+Do not derive dependencies from task numbering, document order, worker availability, or convenience. Shared-file overlap alone does not establish an output dependency. Record [shared-file and resource instructions](task-graph.md#shared-file-and-resource-instructions) in their owning task fields, not as dependency edges.
 
-The proposed graph must have unique task identities and resolve every dependency reference. Reject self-dependencies, cycles, missing predecessor references, and edges with no required output.
+The proposed graph must have unique task identities and resolve every dependency reference. Reject self-dependencies, cycles, missing predecessor references, and edges without a justified required-work relationship.
 
 Resolve a cycle by correcting task boundaries or identifying a real shared prerequisite. Do not hide it behind an arbitrary execution order.
 
@@ -179,7 +181,7 @@ Planning need not establish future prerequisite availability before completing t
 
 Plan the lowest test level that proves each behavior. Use unit tests for isolated contracts, integration tests for real collaborations, and end-to-end tests for critical complete workflows.
 
-Include relevant failures and boundary conditions. Define expected results and required fixtures, environments, and resource isolation. Identify any execution permissions required for planned checks. Planning does not grant those permissions.
+Include relevant failures and boundary conditions. Define expected results and required fixtures, environments, and resource isolation. Each graph verification object's `method` records its procedure and required setup, including applicable versions, resources, and isolation conditions. Identify any execution permissions required for planned checks. Planning does not grant those permissions.
 
 Identify available project commands and their scope. For missing infrastructure, plan the work that establishes usable checks before dependent verification needs them. Do not invent successful results or waive required checks because infrastructure is absent.
 
@@ -311,7 +313,7 @@ This stage defines its proposed evidence coverage. Requester approval is a separ
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
 | Artifact validation result | Current `plan.md`, `tasks-dag.json`, and relevant linked supporting Markdown documents. | Required Markdown sections and metadata are valid. The graph conforms to the [JSON format](task-graph.md). Relevant local links and cross-artifact references resolve. |
-| Task graph validation result | The complete planned task set and dependency structure in `tasks-dag.json`, including identities and required predecessor outputs. | Task UUIDs are valid and unique. Predecessors and required output names resolve. No self-dependencies, duplicate edges, or cycles exist. Required outputs and coordination constraints are explicit. |
+| Task graph validation result | The complete planned task set and dependency structure in `tasks-dag.json`, including task identities and dependency reasons. | Task UUIDs are valid and unique. Predecessor references resolve, and reasons describe required work. No self-dependencies, duplicate edges, or cycles exist. Task outputs and resource-use instructions are explicit in their owning fields. |
 | Planning self-review result | Both planning outputs and supporting detail against upstream artifacts, project constraints, and relevant context. | Every planning decision has rationale. Obligations are covered, choices are consistent, and verification is feasible. Prerequisite conditions are explicit. No blocking planning decisions or unsupported material assumptions remain. |
 | Requested external review result | Material and scope identified in the request, when external review is requested. | The requested review is complete and its blocking findings are resolved. |
 | Applicable requester approval record | The material and consequential decisions covered by a required approval or explicit plan-approval request. | The requester explicitly approves the identified material for the applicable attempt. No approval is inferred from artifact presence or review success. |

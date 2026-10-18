@@ -26,19 +26,13 @@ The file contains one JSON object with these required fields:
 
 Apply the shared [unit identity rules](../unit-of-work.md#identity-and-directory).
 
-Generate the graph artifact ID through the `kepler` CLI under the shared [artifact identity rules](../metadata.md#identity-and-content-versions). Use a fresh, cross-project-unique UUIDv4 in full lowercase `8-4-4-4-12` form, without prefixes, braces, or shortening. Preserve it across content revisions and moves. It must differ from every task ID and the `plan.md` artifact ID.
+Generate the graph artifact ID through the `kepler` CLI under the shared [artifact identity rules](../metadata.md#identity-and-content-versions). Use a fresh, cross-project-unique UUIDv4 string. Preserve it across content revisions and moves. It must differ from every task ID and the `plan.md` artifact ID.
 
 The graph's JSON fields are defined here, not copied from Markdown frontmatter.
 
 ## Task identity
 
-Use independently allocated UUIDv4 values for task IDs. Store lowercase hexadecimal in the full `8-4-4-4-12` form, without prefixes, braces, or shortening.
-
-A valid task ID matches:
-
-```text
-^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
-```
+Each task ID is an independently allocated UUIDv4 string.
 
 Task IDs must be unique within the graph. Do not use the graph artifact's UUID as a task ID. A task title is a readable description, not its identity.
 
@@ -56,11 +50,10 @@ Each task contains these required fields. Use empty arrays where the table permi
 | `inputs` | Array of input objects; can be empty. | Applicable requirements, quality constraints, technical decisions, existing material, and their relevance. |
 | `outputs` | Non-empty array of unique non-empty strings. | Names of the results this task must produce. These are planned outputs, not completion claims. |
 | `acceptance_criteria` | Non-empty array of non-empty strings. | Observable completion conditions, including relevant failures and boundaries. |
-| `guidance` | Array of non-empty strings; can be empty. | Necessary implementation guidance and affected areas. This is not a second task graph. |
-| `verification` | Non-empty array of verification objects. | Task-specific checks and their expected outcomes and environments. |
-| `depends_on` | Array of dependency objects; can be empty. | Required predecessor outputs. This is the only dependency representation. |
+| `guidance` | Array of non-empty strings; can be empty. | Implementation instructions, affected areas, and task-wide shared-file or resource constraints. This is not a second task graph. |
+| `verification` | Non-empty array of verification objects. | Task-specific checks, required setup, and expected outcomes. |
+| `depends_on` | Array of dependency objects; can be empty. | Required predecessor tasks and their reasons. This is the only dependency representation. |
 | `prerequisites` | Array of prerequisite objects; can be empty. | External availability conditions not supplied by another task's output. |
-| `coordination` | Array of non-empty strings; can be empty. | Shared-file or resource constraints that require coordination without inventing output dependencies. |
 
 The task must remain understandable with its referenced inputs, without reconstructing contracts from sibling task descriptions or conversation history.
 
@@ -79,10 +72,11 @@ A reference does not establish approval or waive the task's acceptance criteria.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `scope` | Non-empty string. | Behavior, contract, or material checked. |
-| `method` | Non-empty string. | Exact available command or a defined verification procedure. |
+| `scope` | Non-empty string. | Behavior, contract, or other material covered by verification. |
+| `method` | Non-empty string. | Exact available command or defined verification procedure, including required fixtures, versions, resources, and isolation conditions. |
 | `expected_result` | Non-empty string. | Observable condition that establishes success. |
-| `environment` | Array of non-empty strings; can be empty. | Required fixtures, versions, resources, and isolation conditions where applicable. |
+
+`method` describes how to run the check, including its setup. `prerequisites` defines when required external conditions must be available.
 
 Record expectations here, not actual results. Missing verification infrastructure must have planned coverage under the [verification strategy](implementation-planning.md#verification-strategy).
 
@@ -90,19 +84,18 @@ The shared stage check duties apply independently of this array. Task data canno
 
 ### Dependency object
 
-Store each dependency on the task that consumes the output:
+Store each dependency on the task that requires the predecessor's work:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `task_id` | UUIDv4 string. | Identity of the required predecessor task in this graph. |
-| `outputs` | Non-empty array of unique non-empty strings. | Exact output names consumed from that predecessor's `outputs` array. |
-| `reason` | Non-empty string. | Explain why the predecessor's integrated outputs are required. |
+| `reason` | Non-empty string. | Describe the predecessor work needed and why it is required. |
 
-The dependency's `reason` explains the required-input relationship. Keep the technical decision rationale in `plan.md`; use references instead of competing explanations.
+The dependency's `reason` explains the required work without a separate output-name list. Review the reason against the predecessor's task contract. Keep task-level `outputs` to define each task's expected results. Keep the technical decision rationale in `plan.md`; use references instead of competing explanations.
 
-A dependency creates a directed edge from the predecessor to the task containing it. Declare at most one dependency object per predecessor; combine its required output names there.
+A dependency creates a directed edge from the predecessor to the task containing it. Declare at most one dependency object per predecessor.
 
-Reject missing predecessors, self-dependencies, duplicate predecessor references, unknown output names, and cycles. Task array order and titles do not establish dependencies.
+Reject missing predecessors, self-dependencies, duplicate predecessor references, and cycles. Task array order and titles do not establish dependencies.
 
 Only `depends_on` defines edges. Do not add a second root-level edge array or infer edges from guidance, shared files, or external prerequisites.
 
@@ -123,13 +116,25 @@ When another task establishes a required condition, name its output and use `dep
 
 These fields define future conditions, not current availability. Planning need not establish that availability before completion. Check blocking conditions before the affected work starts; independent ready work can continue.
 
+### Shared-file and resource instructions
+
+Record instructions in the field that owns their scope:
+
+- Use `guidance` for task-wide shared-file and resource access constraints.
+- Use verification `method` for check-specific setup and isolation conditions.
+- Use `prerequisites` for blocking external availability conditions, including the affected work and required timing.
+
+Two independent tasks can share a broker namespace and interfere with each other's test data. Separate namespaces or isolated instances can prevent that conflict without adding an execution-order dependency.
+
+The orchestrator and workers interpret these instructions; they do not create graph edges or allocate locks automatically. Separate Git workspaces alone do not isolate shared external resources.
+
 ## Validation rules
 
 - Parse strict JSON. Reject duplicate object keys, comments, and trailing commas.
 - Require exactly the defined fields at each object level. Reject unknown fields, missing fields, incorrect types, and `null` values.
 - Reject empty or whitespace-only strings. Enforce the stated array cardinalities and unique output names.
 - Require `format: kepler-task-dag`, integer `version: 1`, valid artifact and task UUIDv4 values, and the owning unit identity.
-- Validate dependency references, consumed output names, duplicate edges, and acyclicity across the complete task set.
+- Validate dependency references, duplicate edges, and acyclicity across the complete task set.
 - Resolve relevant local input paths and Markdown fragments without escaping the repository.
 - Check consistency with `plan.md` and relevant upstream requirements. Structural validity alone does not establish coverage or technical correctness.
 - Reject execution-state fields, including task status, completion, attempts, approvals, admission checkpoints, and actual check results.
@@ -168,13 +173,11 @@ This example illustrates the format, not a real unit or an approved implementati
         {
           "scope": "Publishing boundary behavior",
           "method": "Run the boundary's unit tests.",
-          "expected_result": "Normal and failure outcomes satisfy the declared contract.",
-          "environment": []
+          "expected_result": "Normal and failure outcomes satisfy the declared contract."
         }
       ],
       "depends_on": [],
-      "prerequisites": [],
-      "coordination": []
+      "prerequisites": []
     },
     {
       "id": "6fa217c8-5078-4b15-81da-a9e979d74e64",
@@ -191,19 +194,20 @@ This example illustrates the format, not a real unit or an approved implementati
         "Messages reach the broker through the publishing boundary.",
         "Provider failures produce the declared application errors."
       ],
-      "guidance": ["Keep the broker client inside the adapter."],
+      "guidance": [
+        "Keep the broker client inside the adapter.",
+        "Keep broker resources isolated from concurrent tasks."
+      ],
       "verification": [
         {
           "scope": "Adapter and broker collaboration",
-          "method": "Run the adapter's integration tests against an isolated broker.",
-          "expected_result": "Publishing and provider-failure cases satisfy the boundary contract.",
-          "environment": ["Disposable broker instance and isolated test data"]
+          "method": "Run the adapter's integration tests against a disposable broker instance with test data isolated from concurrent tasks.",
+          "expected_result": "Publishing and provider-failure cases satisfy the boundary contract."
         }
       ],
       "depends_on": [
         {
           "task_id": "2a0a7e72-d468-43ed-bc89-54a2139c56ab",
-          "outputs": ["Publishing boundary contract"],
           "reason": "The adapter implements the predecessor's publishing contract."
         }
       ],
@@ -216,9 +220,139 @@ This example illustrates the format, not a real unit or an approved implementati
           "condition": "The test environment supplies a reachable broker and disposable test credentials.",
           "reason": "Adapter verification requires collaboration with a real broker."
         }
-      ],
-      "coordination": ["Keep broker resources and test data isolated from concurrent tasks."]
+      ]
     }
   ]
+}
+```
+
+## JSON Schema
+
+This Draft 2020-12 schema defines the current structural format. It does not implement a production validator. The remaining Planning proposals remain open.
+
+Configure the validator to assert the `uuid` format. The standard `uuid` format does not restrict the UUID version. Check version 4 separately and apply shared artifact identity rules to the root ID.
+
+Separate semantic checks must establish task-ID uniqueness, artifact/task identity separation, valid predecessor references, duplicate-edge rejection, and acyclicity. Check unit ownership and local paths against the repository and `plan.md`. Assess requirement coverage and technical consistency separately.
+
+Reject duplicate JSON object keys during parsing. Schema validation cannot recover duplicate keys after a parser has discarded them.
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Kepler task DAG format version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "id", "unit_id", "tasks"],
+  "properties": {
+    "format": { "const": "kepler-task-dag" },
+    "version": { "type": "integer", "const": 1 },
+    "id": { "$ref": "#/$defs/uuid" },
+    "unit_id": { "$ref": "#/$defs/text" },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/task" }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "description": "A UUIDv4 string. Check version 4 separately."
+    },
+    "texts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "purpose"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/text" },
+        "purpose": { "$ref": "#/$defs/text" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "method", "expected_result"],
+      "properties": {
+        "scope": { "$ref": "#/$defs/text" },
+        "method": { "$ref": "#/$defs/text" },
+        "expected_result": { "$ref": "#/$defs/text" }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "reason"],
+      "properties": {
+        "task_id": { "$ref": "#/$defs/uuid" },
+        "reason": { "$ref": "#/$defs/text" }
+      }
+    },
+    "prerequisite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "needed_for", "needed_when", "blocking", "condition", "reason"],
+      "properties": {
+        "description": { "$ref": "#/$defs/text" },
+        "needed_for": { "enum": ["implementation", "verification"] },
+        "needed_when": { "$ref": "#/$defs/text" },
+        "blocking": { "type": "boolean" },
+        "condition": { "$ref": "#/$defs/text" },
+        "reason": { "$ref": "#/$defs/text" }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "title", "goal", "inputs", "outputs", "acceptance_criteria",
+        "guidance", "verification", "depends_on", "prerequisites"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "title": { "$ref": "#/$defs/text" },
+        "goal": { "$ref": "#/$defs/text" },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/input" }
+        },
+        "outputs": { "$ref": "#/$defs/outputs" },
+        "acceptance_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "guidance": { "$ref": "#/$defs/texts" },
+        "verification": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/verification" }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dependency" }
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/prerequisite" }
+        }
+      }
+    }
+  }
 }
 ```
