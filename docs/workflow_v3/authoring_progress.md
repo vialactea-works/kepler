@@ -4,9 +4,74 @@
 
 ## Purpose
 
-Track specification decisions, not Unit of Work execution state. Each row records one decision with one unique ID.
+Plan the decisions needed to ship a minimum viable product (MVP) for Construction. Do not require the complete version 3 framework before implementation can start.
+
+Track specification decisions, not Unit of Work execution state. Each row records one decision with one unique ID. Required implementation work is not a separate requester approval gate.
 
 The Functional Design contract remains a draft. Agreement on individual decisions does not approve the whole draft.
+
+## Construction MVP boundary
+
+Use the agreed [direct Construction entry](README.md#phase-organization) with a clear Unit of Work request. Greenfield work remains in scope; pre-existing application code and tests are not required. Supply relevant context without requiring completed Initialization or Inception contracts.
+
+Ship the complete [Construction stage sequence](phase_construction/README.md#stage-outline), from Functional Design through Deliver. This includes the task coding loop, independent validation, integration, and whole-unit review.
+
+Preserve ready-task parallelism, fixed admission baselines, attempt identity, requester authority, and evidence bindings. Hold each unit's integration lock through candidate preparation, required checks, and acceptance.
+
+The CLI, templates, agents, and skills must support that sequence before the MVP ships. Their implementation and verification are release work, not completed specification decisions.
+
+Standalone Initialization and Inception are outside this MVP. Removing a question from the approval queue does not remove its required behavior or implementation.
+
+## Construction MVP path
+
+These rows are work packages, not new decision IDs. Define only the behavior needed by this release.
+
+For each missing stage, define essential inputs, outputs, responsibilities, completion conditions, failure/reopening, and handoff. Define requester approval only when applicable; do not add a gate by convention.
+
+| Order | Work package | Minimum work |
+| --- | --- | --- |
+| 1 | Functional Design | Review and accept the complete draft under FD13. Resolve DF06 before producing supporting documents. |
+| 2 | Non-functional Requirements | Define essential `quality.md` content, measurable evidence, responsibility, completion conditions, and handoff. Define approval only when applicable. |
+| 3 | Implementation Planning | Define the technical solution and task-plan contract. Keep the dependency graph; let implementation choose its concrete representation. |
+| 4 | Implementation Execution | Define responsibilities, evidence, completion conditions, and any applicable approval. Reuse agreed task loops, returns, concurrency, and integration rules. |
+| 5 | Unit of Work Review | Define whole-unit findings, evidence, correction routes, completion conditions, and any applicable approval. Integration success is not review or delivery approval. |
+| 6 | Deliver | Define the delivery outcome, permitted side effects, authorization, outputs, and failure handling. Resolve deployment content, location, and timing. |
+| 7 | Shared runtime | Resolve SH74 record portability. Implement journals, guarded transitions, safe recovery, material retention, and isolated concurrent work. |
+| 8 | MVP release | Implement the CLI, templates, agents, and skills. Verify the complete path, recovery, scoped concurrency, and rejection of invalid transitions. |
+
+Start implementation from agreed contracts without waiting for unrelated v3 decisions. Resolve unchosen stage behavior before deriving that stage's skills or runtime transitions.
+
+The release must preserve separate Code Validation and candidate integration checks. A reduced approval queue does not make the MVP implemented or ready to ship.
+
+## MVP decisions
+
+### Shared decisions still pending
+
+Resolve these questions within the work packages above. SH61 is conditional on missing identity; work with valid identity need not wait for that case.
+
+| ID | Decision | Question to resolve |
+| --- | --- | --- |
+| SH52 | Required evidence coverage | What evidence must each remaining Construction stage produce, and what material must it cover? Existing [test duties](phase_construction/README.md#agreed-boundaries) remain binding. |
+| SH61 | Missing author identity | What must happen when effective Git name or email is missing? Resolve before creating an affected artifact. Do not invent [author identity](metadata.md#author-identity). |
+| SH74 | Record version-control policy | Which authoritative records travel with the repository, and which remain local? Define how workers and later sessions retain [required history](runtime.md#execution-state-representation). |
+| SH77 | Deployment record content | What deployment information must the MVP record for an acceptable unit? Keep known [deployment constraints](unit-of-work.md#deployment) visible to Planning. |
+| SH78 | Deployment record location | Where is the authoritative deployment information recorded? Resolve with Planning and Deliver under the [unit document layout](README.md#document-scopes). |
+| SH79 | Deployment record timing | When must deployment information be complete for Planning, review, and Deliver? Known constraints already belong in the [unit definition](unit-of-work.md#deployment). |
+
+### Stage contract decisions
+
+FD13 concerns acceptance of this stage specification, not approval of a particular Unit of Work. Supporting files remain part of the Functional Design contract; no supporting-document type default is approved.
+
+| ID | Decision | Question to resolve |
+| --- | --- | --- |
+| FD13 | Whole-draft acceptance | Review and accept the complete [Functional Design draft](phase_construction/functional-design.md). Saving or committing it does not establish acceptance. |
+| DF06 | Supporting document types | Choose generic or purpose-specific types before emitting supporting documents. Metadata requires `type`; [neither alternative is approved](metadata.md#classification-and-ownership). |
+
+## Review result
+
+Of the 57 previously open or deferred rows, 8 remain MVP authoring decisions. Another 35 are required MVP implementation choices. Defer 13 beyond the MVP and remove 1 speculative approval gate.
+
+Keep all 87 completed decisions unchanged. The source review found no additional open row with a complete prior answer. Reclassification must not fabricate approval or claim implementation is complete.
 
 ## Register rules
 
@@ -15,9 +80,9 @@ The Functional Design contract remains a draft. Agreement on individual decision
 - Do not combine completed policy with unresolved questions.
 - Mark a decision complete only after requester agreement and a canonical specification record.
 - Preserve IDs when decisions move between sections. Give new questions new IDs.
-- Do not change policy or deferred ownership when reorganizing this register.
+- Classification does not approve unchosen policy or change decision ownership.
 
-The former topic rows have been split. Their IDs now identify only the decisions named below. This reorganization does not approve unresolved policy.
+A requester decision is needed when the answer changes required behavior, authority, evidence obligations, or material scope. Technical formats, command names, and mechanisms belong to implementation within the agreed contracts.
 
 SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. DF preserves the existing deferred-decision series. An ID does not determine its status.
 
@@ -83,11 +148,15 @@ Every decision in this section is complete. The linked specification contains it
 | SH93 | Causal event references | [Causal references](runtime.md#causal-references): require `caused_by` as a list of direct causal event IDs. Use `[]` when no recorded causes exist. Causal links do not replace attempt or material bindings. |
 | SH94 | Journal order representation | [Journal order](runtime.md#journal-identity-and-order): keep `journal_id` and preserve stored local order during collection. Use stable event IDs for duplicate detection. Do not persist numeric positions or allocate separate sequence counters. |
 
-## Shared decisions still pending
+## MVP implementation choices
 
-Each row is open. The additional unit-definition questions have no agreed allocation to core, phase, or stage contracts.
+Remove these questions from the requester approval queue. Implement and test them for the MVP under the linked contracts. They are neither deferred features nor completed implementations.
 
-| ID | Decision | Question to resolve |
+Safe appends, recovery, scoped locks, and concurrent work must ship. Preserve original attempts, material bindings, fixed admission baselines, and reachable evidence. Do not replace these obligations with global serialization, unsafe lock takeover, or unchecked acceptance.
+
+The implementation must provide the project build and full-suite commands needed by the required checks. It must preserve project-required checks without waiting for a general extra-check policy.
+
+| ID | Implementation choice | Work to resolve during implementation |
 | --- | --- | --- |
 | SH45 | Runtime storage paths | Where do authoritative journals and derived projections live? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH46 | Event-write consistency | How do event appends and journal reconciliation preserve valid workflow histories? See [runtime decisions](runtime.md#decisions-still-required). |
@@ -96,7 +165,6 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 | SH49 | Evidence record format | What JSON structure stores evidence bindings and results? See [evidence bindings](runtime.md#evidence-and-approval-bindings). |
 | SH50 | Approval record format | What JSON structure stores requester approval and its bindings? See [approval bindings](runtime.md#evidence-and-approval-bindings). |
 | SH51 | Material reference format | How do records identify repository and external material? See [material references](runtime.md#material-references). |
-| SH52 | Required evidence coverage | Which material must each check and stage cover? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH53 | Progress query interface | What commands and arguments read workflow progress? See [CLI responsibilities](runtime.md#cli-responsibilities). |
 | SH54 | State transition interface | What commands, arguments, validation, and authority checks govern execution-state transitions? See [CLI responsibilities](runtime.md#cli-responsibilities). |
 | SH55 | Approval recording interface | What command inputs record requester approval? See [CLI responsibilities](runtime.md#cli-responsibilities). |
@@ -105,7 +173,6 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 | SH58 | Pause/resume interface | What commands and arguments manage pause checkpoints and resumption? See [CLI responsibilities](runtime.md#cli-responsibilities). |
 | SH59 | Unit creation interface | What command inputs create a unit under the agreed identity rules? See [unit creation](runtime.md#unit-creation). |
 | SH60 | Current-author command interface | What command name and output format expose current Git identity? See [current author](runtime.md#current-author). |
-| SH61 | Missing author identity | What happens when the effective Git name or email is missing? See [current author](runtime.md#current-author). |
 | SH62 | Depth selection representation | What event payloads and derived fields represent the unit default and stage overrides? See [depth decisions](depth.md#decisions-still-required). |
 | SH63 | Depth change interface | What CLI operation changes depth settings? See [depth decisions](depth.md#decisions-still-required). |
 | SH64 | Lock mechanism | What mechanism enforces the agreed lock scopes? See [runtime decisions](runtime.md#decisions-still-required). |
@@ -115,19 +182,19 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 | SH68 | Workspace layout | How are isolated writer and unit integration workspaces arranged? See [parallel execution](runtime.md#parallel-execution). |
 | SH69 | Branch layout | How do branches represent concurrent work and integrated unit state? See [parallel execution](runtime.md#parallel-execution). |
 | SH70 | Test resource isolation | How are shared test resources isolated between concurrent runs? See [parallel execution](runtime.md#parallel-execution). |
-| SH71 | Evidence retention period | How long must required checkpoints and external evidence remain available? See [retention](runtime.md#checkpoint-retention). |
 | SH72 | Checkpoint publication | How are required checkpoint references published? See [retention](runtime.md#checkpoint-retention). |
-| SH73 | Retention cleanup | When and how can retained material be removed? See [retention](runtime.md#checkpoint-retention). |
-| SH74 | Record version-control policy | Which journals, projections, and retained records are version-controlled or checkout-local? See [runtime decisions](runtime.md#decisions-still-required). |
-| SH75 | Additional unit scope guidance | What further scope and size guidance is needed beyond acceptance cohesion? See [remaining unit decisions](unit-of-work.md#decisions-still-required). |
-| SH76 | Decomposition questionnaire | What questions support unit decomposition? See [remaining unit decisions](unit-of-work.md#decisions-still-required). |
-| SH77 | Deployment record content | What deployment information must a unit record? See [remaining unit decisions](unit-of-work.md#decisions-still-required). |
-| SH78 | Deployment record location | Where must deployment information be recorded? See [remaining unit decisions](unit-of-work.md#decisions-still-required). |
-| SH79 | Deployment record timing | When must deployment information be defined? See [remaining unit decisions](unit-of-work.md#decisions-still-required). |
 | SH84 | Traceability relationship format | How are relationships between execution records and artifacts represented? See [traceability](runtime.md#traceability-and-revision-outputs). |
 | SH85 | Checkpoint reference names | How are retained Git references named? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH86 | Retained evidence storage | Where is retained evidence content stored? See [retention](runtime.md#checkpoint-retention). |
 | SH87 | Interrupted event-write recovery | How does an interrupted append or journal import recover without losing or duplicating events? See [runtime decisions](runtime.md#decisions-still-required). |
+| DF04 | Technical design location | Where does Implementation Planning record the selected technical solution? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
+| DF12 | Task graph representation | What concrete format represents the planning graph? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
+| DF14 | Integration check configuration | How are project-specific integration checks configured? See [Task Integration](phase_construction/README.md#task-integration). |
+| DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
+| DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
+| DF17 | Revision shutdown coordination | How is active implementation stopped during an authorized unit-wide revision? See [upstream revision](phase_construction/README.md#unit-wide-upstream-revision). |
+
+Implement DF15 through DF17 under the agreed attempt, evidence-applicability, and revision rules. Do not invalidate tasks merely because unrelated commits arrive. Ended attempts cannot complete tasks or accept candidates. Verify that previous workers stopped before resuming affected work.
 
 ## Completed Construction decisions
 
@@ -157,7 +224,7 @@ These decisions apply to Construction. Do not generalize its nested execution st
 
 ## Functional Design decisions
 
-Individual decisions below are complete except whole-draft acceptance. They do not establish approval of the complete stage contract.
+The decisions below are complete. FD13 remains open in the [MVP stage contract queue](#stage-contract-decisions). These choices do not establish approval of the complete stage contract.
 
 | ID | Decision | Status | Record |
 | --- | --- | --- | --- |
@@ -173,38 +240,45 @@ Individual decisions below are complete except whole-draft acceptance. They do n
 | FD10 | External review trigger | Complete | [External review](phase_construction/functional-design.md#external-review): external review occurs only when the requester asks for it. |
 | FD11 | Completion conditions | Complete | [Completion](phase_construction/functional-design.md#completion-conditions): valid artifacts, observable criteria, consistent contracts, resolved material functional questions, explicit handoffs, self-review, and requester approval. Completion permits Non-functional Requirements, not implementation. |
 | FD12 | Supporting skill responsibilities | Complete | [Supporting skills](phase_construction/functional-design.md#supporting-skills): adapt `kepler-grilling`, `kepler-wayfinder-domain-modeling`, and `kepler-wayfinder-research` for version 3. |
-| FD13 | Whole-draft acceptance | Open | The requester must review and accept the complete [Functional Design draft](phase_construction/functional-design.md). Saving or committing it does not establish acceptance. |
 | FD14 | Blocking functional questions | Complete | [Blocking rule](phase_construction/functional-design.md#blocking-rule): unresolved questions block completion when answers could change scope, behavior, invariants, or functional contracts. |
 
 ## Deferred decisions
 
-Each row records one deferred question. Deferral does not select an answer or approve a proposal.
+These questions are deferred beyond the Construction MVP. Deferral selects no fallback, precedence rule, expiry period, or destructive operation.
+
+Supporting-document types remain an [MVP decision](#stage-contract-decisions), not a post-MVP deferral. Read supplied project context and resolve material conflicts during Construction. Deferring reference governance does not permit ignoring relevant facts or inventing current behavior.
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| DF01 | Project reference authority | What authority do Project references have relative to unit artifacts? See [document scopes](README.md#document-scopes). |
+| DF01 | Project reference authority | Defer formal [reference authority](README.md#document-scopes). Investigate actual conflicts; do not choose an implicit precedence rule. |
 | DF02 | Inception terminology | What terms organize Inception intents? See [phase organization](README.md#phase-organization). |
 | DF03 | Project preparation requirements | What project standards and workspace preparation does Initialization require? See [phase organization](README.md#phase-organization). |
-| DF04 | Technical design location | Where does Implementation Planning record the selected technical solution? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
-| DF05 | Version 2 migration procedure | How does migration preserve legacy data and move old artifacts to `.kepler/deprecated/v2/`? No migration is authorized here. |
-| DF06 | Supporting document types | Do supporting documents use one generic type or purpose-specific types? See [metadata decisions](metadata.md#deferred-decisions). Neither alternative is selected. |
+| DF05 | Version 2 migration procedure | Keep migration outside the MVP. Preserve legacy data and report unsupported schemas without [automatic conversion](metadata.md#schema-version). |
 | DF07 | Project reference structure | What internal document structure do Project references use? See [document scopes](README.md#document-scopes). |
 | DF08 | Project reference updates | How are Project references maintained? See [document scopes](README.md#document-scopes). |
 | DF09 | Intent document format | What documents represent Inception intents? See [phase organization](README.md#phase-organization). |
 | DF10 | Inception unit-definition procedure | How does Inception produce one or more Units of Work? See [phase organization](README.md#phase-organization). |
-| DF11 | Previous route concept | What relationship, if any, does the previous route concept have to Units of Work? |
-| DF12 | Task graph representation | What concrete format represents the planning graph? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
-| DF13 | Additional integration checks | What checks are required beyond the agreed build and full suite? See [Task Integration](phase_construction/README.md#task-integration). |
-| DF14 | Integration check configuration | How are project-specific integration checks configured? See [Task Integration](phase_construction/README.md#task-integration). |
-| DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
-| DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
-| DF17 | Revision shutdown coordination | How is active implementation stopped during an authorized unit-wide revision? See [upstream revision](phase_construction/README.md#unit-wide-upstream-revision). |
+| DF13 | Additional integration checks | Defer general extra-check policy. Honor unit/project obligations and the existing [build/full-suite minimum](phase_construction/README.md#task-integration). |
+| SH71 | Evidence retention period | No retention period is selected. Required checkpoints and external evidence must remain available under the [retention contract](runtime.md#checkpoint-retention). |
+| SH73 | Retention cleanup | Defer destructive cleanup policy. This does not authorize expiry, checkpoint deletion, or loss of [required evidence](runtime.md#checkpoint-retention). |
+| SH75 | Additional unit scope guidance | Defer additional [scope and size guidance](unit-of-work.md#decisions-still-required). Existing cohesion, coverage, dependency, and verification rules still apply. No additional criteria are approved. |
+| SH76 | Decomposition questionnaire | Defer the detailed questionnaire. Use the accepted [decomposition procedure](unit-of-work.md#decomposition-procedure); no questionnaire contract is selected. |
+
+## Removed decision gates
+
+Delete this speculative comparison from the approval queue. Keep its ID only as a short disposition record. This does not select a legacy compatibility policy.
+
+| ID | Removed question | Reason |
+| --- | --- | --- |
+| DF11 | Previous route concept | Delete speculative comparison with the old route model. No compatibility answer is selected; [migration remains deferred](metadata.md#schema-version). |
 
 ## Contract coverage
 
-Initialization, Inception, and later Construction stage contracts remain under development. Their remaining work includes artifact sections, entry and completion conditions, agents, skills, questionnaires, and metadata extensions.
+The MVP needs all six Construction stages and their task-scoped stages. Five unit-stage contracts still need work; Functional Design still needs whole-draft acceptance.
 
-These are authoring areas, not single decisions. Add concrete questions as separate rows when designing each contract. Do not give an entire unfinished contract one decision ID.
+The MVP path above defines bounded authoring work, not omnibus decision IDs. Add a question only when a material choice remains unanswered. Do not create separate approval gates for implementation-owned field types, event catalogs, or command syntax.
+
+Do not require Initialization, Inception, managed reference features, or migration to be complete before shipping this Construction path.
 
 ## Filename convention
 
@@ -212,8 +286,10 @@ Use short filenames with full words, without abbreviations. The agreed `quality.
 
 ## Record maintenance
 
-Update the relevant row when its decision changes. Add a new row for a different question, even when it concerns the same contract. Never reuse an ID for unrelated work or define it in both completed and pending sections.
+Update a row when its decision or disposition changes. Keep exactly one row per ID. Retain prior approval and source references when reorganizing the file.
 
-Keep proposed choices distinct from agreed choices. Do not move deferred work into the current scope without an explicit decision. Preserve whole-draft approval boundaries when closing individual decisions.
+Implementation choices require working behavior and tests, not new requester approval for every mechanism. Post-MVP rows remain unresolved; they do not authorize destructive or unsafe defaults.
+
+Preserve whole-draft approval boundaries. This file does not grant permission to implement unapproved behavior or claim the release is complete.
 
 Use ASD-STE100 Simplified Technical English. Do not run workflow-reference tests.

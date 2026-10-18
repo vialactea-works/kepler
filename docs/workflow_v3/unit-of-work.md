@@ -94,10 +94,12 @@ Labels are available to any artifact, and the requester can add labels outside t
 
 ## Decisions still required
 
-- Detailed scope and size criteria, and the decomposition questionnaire.
-- Deployment information to record, its location, and when it must be defined.
+- Additional scope and size criteria, and the detailed decomposition questionnaire, remain unresolved beyond the MVP under [SH75/SH76](authoring_progress.md#deferred-decisions).
+- Deployment information, its location, and its timing remain [MVP decisions](authoring_progress.md#shared-decisions-still-pending).
 
-The [authoring progress record](authoring_progress.md#shared-decisions-still-pending) tracks these decisions. Remaining artifact metadata details are shared decisions. The [CLI infrastructure contract](runtime.md) defines the separation between artifact metadata and execution state.
+Use the accepted cohesion, coverage, dependency, verification, and decomposition rules for the Construction MVP. This does not select additional criteria or a questionnaire contract.
+
+The [authoring progress record](authoring_progress.md#mvp-decisions) tracks these decisions. Remaining artifact metadata details are shared decisions. The [CLI infrastructure contract](runtime.md) defines the separation between artifact metadata and execution state.
 
 ## Inspiration
 
