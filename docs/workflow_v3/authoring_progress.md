@@ -78,6 +78,9 @@ Every decision in this section is complete. The linked specification contains it
 | SH89 | Direct Construction entry | [Phase organization](README.md#phase-organization): a clear request can enter Construction without Inception. |
 | SH90 | Stage and skill distinction | [Shared concepts](README.md#shared-concepts): stages define workflow responsibilities; skills supply procedures. Skill packaging does not determine stage boundaries. |
 | SH91 | Revision contract location | [Revision](revision.md) owns shared revision authority and procedure; [runtime](runtime.md#revision-decisions) owns attempt rules and CLI recording. Do not create a separate orchestrator document for this authority. |
+| SH92 | Event producer identity | [Producer identity](runtime.md#producer-identity): record the original CLI name and actual version in `producer`. Preserve those values on import. Actor identity and approval authority remain separate. |
+| SH93 | Causal event references | [Causal references](runtime.md#causal-references): use optional `caused_by` lists of direct causal event IDs. Phase contracts define required references. Causal links do not replace attempt or material bindings. |
+| SH94 | Journal order representation | [Journal order](runtime.md#journal-identity-and-order): keep `journal_id` and preserve stored local order during collection. Use stable event IDs for duplicate detection. Do not persist numeric positions or allocate separate sequence counters. |
 
 ## Shared decisions still pending
 
@@ -85,7 +88,7 @@ Each row is open. The additional unit-definition questions have no agreed alloca
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| SH44 | Audit event schema | What event types, required fields, and envelope represent audit history? See [runtime decisions](runtime.md#decisions-still-required). |
+| SH44 | Audit event schema | Which event types and remaining envelope fields, field types, and validation rules complete the schema? Preserve the [agreed choices](runtime.md#event-envelope-choices). See [runtime decisions](runtime.md#decisions-still-required). |
 | SH45 | Runtime storage paths | Where do authoritative journals and derived projections live? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH46 | Event-write consistency | How do event appends and journal reconciliation preserve valid workflow histories? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH47 | Attempt ID format | What format identifies a stage attempt? See [attempts](runtime.md#stage-attempts). |

@@ -129,6 +129,43 @@ The journals retain earlier events when work is revised or approved again. Rebui
 
 The CLI records the requester's approval. It does not replace the requester as the approval authority.
 
+## Event envelope choices
+
+These choices are agreed. They do not define the complete event schema.
+
+### Producer identity
+
+Use `producer` to identify the software that originally recorded the event. The CLI supplies an object with these values:
+
+| Field | Value |
+| --- | --- |
+| `name` | `kepler` |
+| `version` | The actual version of the CLI that recorded the event. |
+
+Use this information to investigate recorded events. Imported events retain their original producer values. The importing CLI must not replace those values with its own identity.
+
+The field does not identify the requester, agent, model, or host. Record required actor identities in the phase-owned event data. Producer values do not prove approval or authorize a transition.
+
+### Causal references
+
+Use `caused_by`, not `causes`, for an optional list of direct causal event IDs. The references point from the current event to its causes. Omit the field when no recorded causal predecessor exists. Phase-owned event contracts define which references are required.
+
+An event can have several direct causes. Referenced events can belong to other journals. Do not repeat indirect ancestors solely to reconstruct the causal chain.
+
+A timestamp alone does not establish causality. Causal references do not replace attempt or material bindings. They do not prove that a transition was valid.
+
+Workers can receive applicable event IDs with their assignments. This does not require workers to inspect global history.
+
+### Journal identity and order
+
+Keep `journal_id` as the event's originating journal identity. Use stable event IDs to detect duplicates.
+
+Do not persist a numeric `position` field or allocate a separate sequence counter. Local order is the order of events stored in each journal. Collection must preserve the original journals or their relative event order. Do not flatten and reorder history by timestamp while discarding local journal order.
+
+Use `caused_by` for explicit causal references across journals. Local order does not resolve conflicting control decisions. Apply the existing transition, attempt, evidence, and approval rules.
+
+The protocols for safe appends, retries, interrupted writes, and collection remain undecided. This choice does not establish a physical storage layout or a global total order.
+
 ## Evidence and content checkpoints
 
 ### Concepts
@@ -290,7 +327,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 ## Decisions still required
 
 - Phase-owned state models, projection schemas, status transitions, and attempt ID formats.
-- Audit event types, required fields, format, and storage layout.
+- Event types and remaining envelope fields, field types, validation, identifier formats, version compatibility, and storage layout. Preserve the agreed [envelope choices](#event-envelope-choices).
 - CLI commands and their validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
