@@ -105,7 +105,13 @@ Do not use a UUID as the readable unit ID. Attempt and event IDs follow their ow
 
 **Proposed operation.** Return `user.name` and `user.email` from the effective Git configuration for the selected project. This supports the shared [author identity rules](metadata.md#author-identity). It returns the current Git identity, not the stored author of an existing artifact.
 
-Do not replace an artifact's original author during later edits. Define failure behavior when either value is missing or invalid. Do not invent a fallback identity.
+Do not replace an artifact's original author during later edits.
+
+**Accepted failure policy under [SH61](authoring_progress.md#completed-shared-decisions).** An absent, empty, or whitespace-only name or email makes lookup fail. Return a nonzero result identifying each missing key. Do not prompt inside the CLI, change Git configuration automatically, or invent a fallback identity.
+
+Callers must check identity before writing an artifact that requires `author`. Do not write incomplete author metadata or record successful creation or completion after this failure. The calling agent explains the problem and retries after the appropriate identity is configured. Preserve existing authors and continue unaffected work. Apply the [shared identity policy](metadata.md#missing-identity) and existing metadata validation rules.
+
+Exact error codes and response fields remain implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices). This accepted failure policy does not accept the remaining command proposal.
 
 ### `kepler lint`
 
@@ -269,6 +275,16 @@ For a task-local code correction, the orchestrator can return the task to Code G
 
 Reconsider affected evidence and artifacts under the shared [revision procedure](revision.md#revision-procedure). Do not delete prior artifacts, transfer old completion into a new attempt, or reopen unrelated scopes without authorization. Exact boundary arguments, evidence inputs, cascade events, and partial-failure recovery remain open.
 
+## Record portability
+
+Apply the accepted [SH74 policy](runtime.md#record-portability) to authored artifacts, event journals, derived views, live coordination data, and evidence. Version authoritative history; keep projections and live runtime coordination data unversioned.
+
+Provide relevant journals, required causal records, checkpoint material, and accessible evidence for cross-checkout or cross-machine handoff. Missing required material blocks only the affected handoff or work. Apply existing recovery and revision rules; do not infer success or new consent from history transfer.
+
+Current durable journals and preserved unfinished work can support same-checkout recovery. No new commit is required solely for recording an event, dispatching a worker, or resuming a session. Keep existing checkpoint and unit Integration lock requirements.
+
+This policy does not accept proposed CLI syntax or define publication and synchronization protocols.
+
 ## Failure and recovery rules
 
 These rules apply to the proposed command contracts. They do not define a storage or lock implementation.
@@ -290,8 +306,8 @@ The following details remain open. This draft does not resolve them:
 - Exact arguments, selectors, path handling, project-root resolution, and response schemas for every command.
 - The common result and error envelopes, exit-code map, output stream placement, and any explicit human-output flag.
 - The full acceptance of the Unit of Work create contract, including strict slug characters, project selection, directory creation, persistence, concurrency, retries, and interrupted-write reconciliation.
-- The UUID command's arguments and response shape, and missing or invalid Git identity behavior.
-- Event payload schemas, operation identifiers, append and collection protocols, projections, portability, and recovery after partial writes.
+- The UUID command's arguments and response shape, and the current-author command's exact response fields and error codes. Validation details for other invalid identity values must follow the existing metadata contract. Missing or blank identity behavior is accepted under [SH61](authoring_progress.md#completed-shared-decisions).
+- Event payload schemas, operation identifiers, append and collection protocols, projections, and recovery after partial writes. Portability policy is accepted under [SH74](runtime.md#record-portability); exact storage and transfer mechanics remain implementation work.
 - Lock storage, ownership, coordination across workspaces, and interrupted-lock recovery.
 - Stage selector grammar, active workflow selection, and all proposed stage completion guards.
 - CLI syntax, operation placement, payloads, and persistence mechanics for stage-effort overrides and later adjustments. Requester authority and the existing adjustment rules remain accepted. The proposed `--stage-effort` option is not accepted.

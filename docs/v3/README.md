@@ -96,6 +96,8 @@ The metadata contract defines field and value validation, metadata changes, and 
 
 No independently authoritative state files are required. Materialized views are rebuildable, not sources of workflow truth.
 
+The accepted [record-portability policy](runtime.md#record-portability) versions authored project artifacts and authoritative journals. Derived projections and live runtime coordination data remain unversioned. Git history does not replace current coordination or require a commit per event, dispatch, or session resume.
+
 Agents and skills use CLI-owned operations; they do not edit journals or projections directly. This decision does not change authored artifact content or implement new CLI commands.
 
 The [evidence and checkpoint model](runtime.md#evidence-and-content-checkpoints) separates attempt identity from commit identity. Each attempt has a distinct identity. Construction limits each unit/stage and fixed Activity occurrence to zero or one active attempt under the [attempt scope rules](runtime.md#attempt-identity-and-active-scope). Activity attempts link to their occurrence and enclosing stage attempt. Other phases define their own execution scopes. Material types are open-ended. Git checkpoints cover repository content; other material uses appropriate references. Records bind checks and approvals to the material covered and its relevant inputs.

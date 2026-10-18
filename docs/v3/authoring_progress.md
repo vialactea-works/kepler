@@ -44,25 +44,18 @@ All Construction stage and Activity contracts in this MVP are accepted. Implemen
 | 4 | [Implementation](phases/construction/implementation.md) | Implement the accepted unit and Activity contracts, preserving independence, checks, concurrency, recovery, and blocker-only requester intervention. |
 | 5 | [Unit of Work Review](phases/construction/unit-of-work-review.md) | Implement whole-unit assessment, findings, evidence, completion, applicable acceptance, and handoff. |
 | 6 | [Deliver](phases/construction/deliver.md) | Implement the accepted outcome, instructions, authorization, verification, recovery, and deployment information contracts. |
-| 7 | Shared runtime | Resolve SH74 record portability. Implement journals, guarded transitions, safe recovery, material retention, and isolated concurrent work. |
+| 7 | Shared runtime | Implement journals under the accepted portability policy, guarded transitions, safe recovery, material retention, and isolated concurrent work. |
 | 8 | MVP release | Implement the CLI, templates, agents, and skills. Verify the complete path, recovery, scoped concurrency, and rejection of invalid transitions. |
 
-Start implementation from accepted contracts without waiting for unrelated v3 decisions. Resolve the two remaining shared questions only when their affected behavior requires a decision. Derive skills and runtime transitions from the accepted contracts.
+Start implementation from accepted contracts without waiting for unrelated v3 decisions. The MVP policy approval queue is complete. Derive skills and runtime transitions from the accepted contracts.
 
 The release must preserve separate non-author Code Validation and combined-candidate Code Integration checks. A reduced approval queue does not make the MVP implemented or ready to ship.
 
 ## MVP decisions
 
-### Shared decisions still pending
+No MVP policy decisions remain pending. The completed shared and stage contracts provide the basis for implementation. The 33 implementation choices and 14 deferred questions retain their current status.
 
-Only SH61 and SH74 remain pending shared MVP policy questions. Resolve them within the work packages above. SH61 is conditional on missing identity; work with valid identity need not wait for that case.
-
-| ID | Decision | Question to resolve |
-| --- | --- | --- |
-| SH61 | Missing author identity | What must happen when effective Git name or email is missing? Resolve before creating an affected artifact. Do not invent [author identity](metadata.md#author-identity). |
-| SH74 | Record version-control policy | Which authoritative records travel with the repository, and which remain local? Define how workers and later sessions retain [required history](runtime.md#execution-state-representation). |
-
-### Construction decisions still pending
+### Coordination boundary
 
 No coordination-protocol definition is required for this MVP. [CN20](#deferred-decisions) tracks later protocol definitions. [CN22](#completed-construction-decisions) preserves the agreed MVP execution model.
 
@@ -72,7 +65,7 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 ## Review result
 
-The register contains 257 unique IDs, including 207 completed decisions and 2 pending MVP decisions. It also contains 33 MVP implementation choices, 14 deferred questions, and 1 retired question. The requester accepted 78 previously pending decisions: 16 Planning, 24 Implementation and Activity, 16 Review, and 18 Deliver. The shared approvals are SH52 and SH77-SH79. SH61 and SH74 remain pending. The seven whole-contract acceptance rows remain distinct. CN22 preserves the accepted Implementation model; CN20 tracks deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or establish implementation.
+The register contains 257 unique IDs, including 209 completed decisions and no pending MVP policy decisions. It also contains 33 MVP implementation choices, 14 deferred questions, and 1 retired question. The requester accepted 78 decisions with the Construction contracts: 16 Planning, 24 Implementation and Activity, 16 Review, and 18 Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately. The seven whole-contract acceptance rows remain distinct. CN22 preserves the accepted Implementation model; CN20 tracks deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or establish implementation.
 
 ## Register rules
 
@@ -160,6 +153,8 @@ Every decision in this section is complete. The linked specification contains it
 | SH77 | Deployment record content | The accepted [Deliver contract](phases/construction/deliver.md#deployment-information) covers the destination, environment, recipient, intended outcome, reviewed source, and deliverable identity. It also covers configuration, dependencies, operator duties, operations, permissions, verification, and observation. It identifies failure boundaries, recovery, irreversible effects, and safe-retry limits. Apply this to the requested outcome; a repository handoff needs no invented production instructions. |
 | SH78 | Deployment record location | Keep authored delivery instructions and acceptance conditions in unit-root [`delivery.md`](phases/construction/deliver.md#required-delivery-instructions). CLI-owned journals record actual operations, approvals, identities, and results. |
 | SH79 | Deployment record timing | Record known constraints in the unit definition. Planning resolves implementation-affecting choices; Review assesses preparation and constraints; Deliver completes instructions, prerequisites, and permissions before affected operations. Planning completion does not require future external availability. [Deliver timing and ownership](phases/construction/deliver.md#timing-and-upstream-ownership). |
+| SH61 | Missing author identity | [Missing identity](metadata.md#missing-identity): fail lookup with a nonzero result when either effective project Git identity value is missing or blank. Identify missing `user.name` or `user.email` keys. Check before artifact creation; do not write incomplete author metadata or record successful creation or completion after failure. Do not invent identity, prompt inside the CLI, or change Git configuration automatically. The caller explains remediation and retries after the appropriate identity is configured. Preserve existing authors and continue unaffected work. Exact error codes and response fields remain under SH60. |
+| SH74 | Record version-control policy | [Record portability](runtime.md#record-portability): version authored project artifacts and phase journals. Keep projections and live runtime coordination data unversioned. Version suitable evidence; retain large or sensitive content externally with durable references and preserved material. Preserve event and journal identities, order, causality, attempts, and evidence bindings. Provide relevant history, checkpoint material, and accessible evidence during cross-checkout or cross-machine handoff. Missing required material blocks only affected work. No new commit is required solely for an event, dispatch, or session resume. Git merge success does not validate workflow history. Replay does not start workers, restore locks, or grant new consent. Keep secrets out of versioned records; full session transcripts are not required journal contents. Paths and synchronization remain implementation work; retention periods and cleanup remain deferred. |
 
 ## MVP implementation choices
 

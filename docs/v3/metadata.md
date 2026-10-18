@@ -119,6 +119,22 @@ Preserve `author` during subsequent edits, including edits by another person. A 
 
 Record later contributions through Git history and audit records.
 
+#### Missing identity
+
+Before creating an artifact that requires `author`, resolve both effective project Git identity values.
+
+Treat an absent, empty, or whitespace-only `user.name` or `user.email` as missing. If either value is missing, return a nonzero result and identify each missing key.
+
+Check identity before writing the artifact. Do not leave incomplete author metadata or record successful creation or completion for the affected operation.
+
+Do not invent a fallback identity, prompt inside the CLI, or change Git configuration automatically.
+
+The calling agent explains the problem and the required configuration. Retry the affected creation after the appropriate Git identity is configured.
+
+Preserve existing authors and allow unaffected work to continue. Other operations retain their own identity and authority requirements.
+
+[SH61](authoring_progress.md#completed-shared-decisions) records this policy. Exact error codes and response fields remain implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices). Existing identity-format and read-only validation rules remain unchanged.
+
 #### Example
 
 This frontmatter field is illustrative:

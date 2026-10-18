@@ -17,6 +17,50 @@ The persistence responsibilities, event envelope, event-derived execution state,
 | Execution state | Derived phase-owned views, queried through the `kepler` CLI. | Represent current progress, attempts, approvals, and changing settings from each phase's journals. |
 | Audit history | Authoritative append-only structured JSON event journals, recorded through CLI-owned operations. | Preserve lifecycle facts, decisions, settings, revisions, approvals, and evidence bindings needed to derive execution state. |
 
+## Record portability
+
+[SH74](authoring_progress.md#completed-shared-decisions) defines which records travel with the project. These rules preserve the existing journal authority, evidence bindings, and concurrency contracts.
+
+| Record | Portability rule |
+| --- | --- |
+| Authored project artifacts | Version with the project under their authored-content and metadata contracts. |
+| Phase-owned append-only JSON journals | Version as portable workflow history. Preserve their event identities and original bindings. |
+| Derived projections and caches | Keep local and disposable. Rebuild them from retained journals. |
+| Live locks and process registries | Keep as unversioned runtime coordination data. Copying history must not restore ownership. |
+| Evidence content | Version suitable files. Retain large or sensitive content externally with durable references and preserved material. |
+
+### Current journals and Git snapshots
+
+Working journals can contain uncommitted events. The CLI uses current durable history under the owning phase's validation rules.
+
+Do not require a new commit solely for an event append, worker dispatch, or session resume. Existing checkpoint requirements still apply to the material being checked or handed off. Do not add global `HEAD` agreement or shared admission commits.
+
+Separate worker or workspace journals remain permitted. Preserve event and journal identities, local event order, causal references, original attempts, and evidence bindings. Do not flatten or reorder history by timestamps. Git merge success alone does not validate workflow history.
+
+Git can transfer a committed history snapshot made available to the receiver. It does not synchronize ongoing events or establish live worker or lock ownership.
+
+### Handoff and recovery
+
+Same-checkout recovery can use current durable journals and preserved unfinished work under the [recovery rule](#interrupted-work-recovery).
+
+Before a cross-checkout or cross-machine handoff completes, provide the history relevant to the receiving scope. Include required causal records, checkpoint material, and accessible evidence.
+
+Missing required records, checkpoint objects, or evidence block only the affected handoff or work. Use existing recovery and revision rules to resolve missing material. Do not infer successful completion or recreate requester approval.
+
+History transfer does not start workers, restore locks, or grant new consent. Confirm current assignment and that earlier workers stopped before resuming the same work. A stale snapshot cannot establish that no newer event or live lock exists.
+
+### Evidence and privacy
+
+Keep secrets out of versioned records. Journals need necessary workflow facts, not full session transcripts.
+
+Retain required evidence content, not only its reference or fingerprint. Keep required Git checkpoint objects reachable through retained references. Make required references and objects available to the receiver. Names and commit IDs alone do not preserve material.
+
+Version-control policy does not authorize publication or other delivery operations.
+
+### Implementation boundary
+
+Storage paths, journal collection, synchronization, locking, and checkpoint publication mechanics remain implementation choices. Retention periods and cleanup remain [deferred](authoring_progress.md#deferred-decisions). This policy does not implement a storage engine, transfer command, or live coordination protocol.
+
 ## Rules
 
 ### Artifact metadata
@@ -338,7 +382,11 @@ Skills use this command to obtain the original creator's identity when creating 
 
 The command returns the current Git identity, not the stored creator of an existing artifact. Do not use its result to replace `author` during later edits. Explicit correction of incorrect attribution is permitted. Record later contributions through Git history and audit records.
 
-The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git author`. Structured output is the default. Its exact response schema and behavior when either identity value is missing remain open.
+Apply the accepted [missing-identity policy](metadata.md#missing-identity) under SH61. A missing or blank name or email makes lookup fail with a nonzero result identifying each missing key. Check identity before writing an artifact that requires `author`. Do not write incomplete author metadata or record successful creation or completion after this failure.
+
+Do not prompt inside the CLI, change Git configuration automatically, or invent a fallback identity. The calling agent explains the problem and retries after the appropriate identity is configured. Preserve existing authors and continue unaffected work.
+
+The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git author`. Structured output is the default. The command name, exact response fields, and error codes remain implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices).
 
 ### Unit creation
 
@@ -360,7 +408,7 @@ Keep required checkpoint commits reachable through retained Git references. A co
 
 Git preserves committed repository material while the required objects remain available. External environments, ignored outputs, and separate evidence logs need their own retention rules.
 
-Audit events and content fingerprints do not preserve artifact contents by themselves. Retention periods, publication, storage locations, and cleanup rules remain undecided.
+Audit events and content fingerprints do not preserve artifact contents by themselves. Apply the accepted [record-portability policy](#record-portability) to journals, local runtime data, and retained evidence. Retention periods and cleanup remain deferred; publication mechanics and storage locations remain implementation choices.
 
 An interrupted attempt may have no output checkpoint. Its record must not claim a completed snapshot. Follow the shared [interrupted-work recovery rule](#interrupted-work-recovery).
 
@@ -374,7 +422,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 - External reference formats and exact evidence and approval record formats. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
 - Traceability relationship formats, checkpoint reference names, retention periods, publication, storage locations, and cleanup rules.
 - Workspace and branch layouts, and shared test resource isolation.
-- Which journals, projections, and retained records belong in version control or remain local to a checkout.
+- Storage and transfer mechanics under the accepted [record-portability policy](#record-portability).
 
 ## Inspiration
 
