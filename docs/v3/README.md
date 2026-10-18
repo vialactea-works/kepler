@@ -10,6 +10,8 @@ The specification is under development. A draft contract records a proposal for 
 
 [Skills](skills.md) defines version 3 skill names and responsibilities.
 
+[CLI commands and contracts](cli.md) records accepted CLI decisions, proposed command contracts, and open interface details.
+
 The version 2 reference remains a separate document set. Its contracts do not automatically apply to version 3.
 
 ## Phase organization

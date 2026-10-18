@@ -129,7 +129,7 @@ Record the orchestrator's decision and reason through the CLI. Include the selec
 
 Follow Construction's [unit-wide upstream revision rules](phases/construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation and Activity attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stage or Activity executes again.
 
-Phase-owned projection fields and revision command names remain undecided. The implementation defines revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
+Phase-owned projection fields and detailed revision arguments remain undecided. The [CLI command reference](cli.md#revision-operation) records the agreed `revise` placement. The implementation defines revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
 
 ### Audit ownership
 
@@ -328,7 +328,7 @@ Expose operations to read progress, change execution state, and record interacti
 
 Keep phase transition rules and event recording in their owning application operations. The CLI invokes those operations; JSON journals retain the resulting facts. Current state and query views are derived. Skills must not implement separate event or state writers.
 
-Command names and arguments are not defined here. This document does not add new commands.
+The [CLI command reference](cli.md) records accepted command decisions and proposed operation contracts. It owns command organization and interface details. This infrastructure contract owns persistence and shared execution rules. Neither document implements CLI behavior.
 
 ### Current author
 
@@ -338,13 +338,15 @@ Skills use this command to obtain the original creator's identity when creating 
 
 The command returns the current Git identity, not the stored creator of an existing artifact. Do not use its result to replace `author` during later edits. Explicit correction of incorrect attribution is permitted. Record later contributions through Git history and audit records.
 
-The command name, output format, and behavior when either value is missing remain undecided.
+The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git author`. Structured output is the default. Its exact response schema and behavior when either identity value is missing remain open.
 
 ### Unit creation
 
 Create unit IDs in the format `YYYY-MM-DD-<slug>` under the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). Use the machine's local timezone to determine the date when the CLI creates the unit.
 
 Use the exact unit ID as the directory name. The CLI must detect duplicate IDs within the project and must not overwrite an existing unit. Do not regenerate an existing ID during revision or resume.
+
+The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement and proposes inputs, effects, output, and failure behavior. Its detailed contract remains a draft.
 
 ## Traceability and revision outputs
 
@@ -366,7 +368,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 - Phase-owned state models, projection schemas, status transitions, and attempt ID formats.
 - Journal and projection storage layout.
-- CLI commands and their validation and authority rules.
+- Remaining CLI command contracts, selectors, response schemas, and validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
 - Acceptance of proposed stage and Activity evidence coverage, external reference formats, and exact evidence and approval record formats.
