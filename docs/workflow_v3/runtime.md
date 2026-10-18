@@ -6,7 +6,7 @@
 
 Record decisions about the Kepler CLI, structured persistence, and audit system.
 
-The persistence responsibilities, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. Exact event schemas, phase-owned projections, paths, commands, and write protocols remain under design. This document does not implement CLI behavior or migrate existing data.
+The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. Phase-owned projections, paths, commands, and write protocols remain under design. This document does not implement CLI behavior or migrate existing data.
 
 ## Data responsibilities
 
@@ -45,7 +45,7 @@ Each phase is a bounded context. Shared tracking mechanics do not impose Constru
 
 The CLI can calculate views directly or use rebuildable projections. Rebuilding a projection does not rerun work or create approvals. A projection does not replace retained evidence or checks against actual work.
 
-This representation does not require one shared journal or a global total order. Exact event schemas, journal layout, collection, and write protocols remain separate decisions.
+This representation does not require one shared journal or a global total order. The [event envelope](#event-envelope-choices) is agreed. Exact type definitions and the event catalog belong to implementation. Journal layout, collection, and write protocols remain separate decisions.
 
 Record the unit depth default and explicit stage overrides as journal events through the CLI. Derive their current values from those events. Their selection and approval rules remain in the shared [Depth definition](depth.md).
 
@@ -119,7 +119,7 @@ Record the orchestrator's decision and reason through the CLI. Include the selec
 
 Follow Construction's [unit-wide upstream revision rules](phase_construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and task-stage attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stages execute again.
 
-Exact state fields, event formats, and command names remain undecided.
+Phase-owned projection fields and revision command names remain undecided. The implementation defines revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
 
 ### Audit ownership
 
@@ -131,7 +131,26 @@ The CLI records the requester's approval. It does not replace the requester as t
 
 ## Event envelope choices
 
-These choices are agreed. They do not define the complete event schema.
+These choices define the approved shared event envelope. All fields in the following table are required.
+
+| Field | Purpose |
+| --- | --- |
+| `id` | Stable event identity. |
+| `phase` | Owning workflow phase. |
+| `type` | The recorded fact, defined by its owning phase. |
+| `envelope_version` | Version of the shared envelope. |
+| `event_version` | Version of the phase-owned event payload. |
+| `journal_id` | Originating journal identity. |
+| `recorded_at` | Event recording time. |
+| `producer` | Original recording software identity. |
+| `caused_by` | Direct causal event references. Use `[]` when there are none. |
+| `data` | Phase-owned event payload. |
+
+Envelope and event versions are separate from artifact frontmatter versions. Exact type definitions and the event catalog are implementation work, not pending specification decisions.
+
+### Recording timestamp
+
+Use RFC3339 in UTC with a literal `Z` suffix for `recorded_at`. For example, `2026-10-18T14:30:00Z`. Do not use `+00:00` or another offset representation.
 
 ### Producer identity
 
@@ -148,7 +167,7 @@ The field does not identify the requester, agent, model, or host. Record require
 
 ### Causal references
 
-Use `caused_by`, not `causes`, for an optional list of direct causal event IDs. The references point from the current event to its causes. Omit the field when no recorded causal predecessor exists. Phase-owned event contracts define which references are required.
+Use `caused_by`, not `causes`, for the required list of direct causal event IDs. Use `[]` when no recorded causal predecessor exists. The references point from the current event to its causes. Each phase's implementation defines its event catalog and required causal references.
 
 An event can have several direct causes. Referenced events can belong to other journals. Do not repeat indirect ancestors solely to reconstruct the causal chain.
 
@@ -327,7 +346,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 ## Decisions still required
 
 - Phase-owned state models, projection schemas, status transitions, and attempt ID formats.
-- Event types and remaining envelope fields, field types, validation, identifier formats, version compatibility, and storage layout. Preserve the agreed [envelope choices](#event-envelope-choices).
+- Journal and projection storage layout.
 - CLI commands and their validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
