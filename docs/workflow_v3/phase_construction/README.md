@@ -39,7 +39,7 @@ Code Generation and Code Validation form the Task coding loop inside each task i
 
 ## Implementation Execution
 
-The [unit-stage draft](implementation-execution.md) adds proposed details for Execution and Task Integration. Dedicated [Generation](code-generation.md) and [Validation](code-validation.md) contracts define their task-stage responsibilities. The agreed rules below remain binding.
+The [unit-stage draft](implementation-execution.md) adds proposed details for Execution. Dedicated [Generation](code-generation.md), [Validation](code-validation.md), and [Integration](task-integration.md) contracts define their task-stage responsibilities. The agreed rules below remain binding.
 
 Implementation Execution is a unit-scoped stage. The orchestrator executes the task graph and coordinates task implementation, integration, and completion.
 
@@ -72,6 +72,8 @@ Internal corrections within one stage remain in its attempt. An authorized retur
 ### Task Integration
 
 Task Integration is a task-scoped stage after successful Task coding. Prepare the combined candidate, check it, then accept it as the unit's integrated state.
+
+The [dedicated stage contract](task-integration.md) owns Integration's procedures, evidence, completion conditions, and coordination handoff.
 
 Separate worker results do not establish combined correctness. Retain the checked candidate, integrated checkpoint, and supporting evidence under the shared [integration and verification rules](../runtime.md#integration-and-verification).
 

@@ -6,7 +6,7 @@
 
 The [phase contract](README.md#implementation-execution) defines the agreed execution structure, concurrency, attempts, check duties, integration procedure, and return paths. Requester intervention is limited to hard blockers under the rule below. This draft proposes additional inputs, responsibilities, role assignments, skills, evidence, and completion details. New proposals do not replace agreed rules.
 
-[Code Generation](code-generation.md) and [Code Validation](code-validation.md) have dedicated task-stage contracts. Those contracts own their procedures, evidence, completion conditions, reopening questions, and handoffs.
+[Code Generation](code-generation.md), [Code Validation](code-validation.md), and [Task Integration](task-integration.md) have dedicated task-stage contracts. Those contracts own their procedures, evidence, completion conditions, reopening questions, and handoffs.
 
 Saving this draft does not approve its proposals, accept Planning, or authorize an executing Unit of Work.
 
@@ -103,19 +103,9 @@ The orchestrator coordinates stage handoffs. Successful Validation makes the tas
 
 ### Task Integration
 
-Task Integration follows successful Task coding. Use the agreed [prepare, check, and accept procedure](README.md#integration-order-and-locking).
+Execute the [Task Integration contract](task-integration.md) after successful Task coding. It owns locked candidate preparation, combined checks, acceptance, task completion, and its coordination handoff.
 
-Acquire the unit integration lock before reading the current integrated checkpoint and preparing the combined candidate. Keep the task admission baseline unchanged; record current integration inputs separately.
-
-Run typechecking, the project build, and the full application test suite against the combined candidate while holding the lock. Accept only the checked candidate after all required checks succeed.
-
-Record the candidate, integration inputs, required results, and accepted checkpoint through CLI-owned operations. Verify that the accepted material matches the checked candidate.
-
-Release the lock when the operation ends, including before returning to coding. Other permitted coding, validation, and unit work can continue.
-
-If task output needs changes, report the finding for an authorized return to coding. Do not hide implementation changes inside an integration-only retry.
-
-Self-check input bindings, check coverage, acceptance, and retained evidence. Complete task implementation only after successful candidate acceptance and the task's other completion conditions.
+Successful Integration returns the completed task and accepted checkpoint to unit coordination. The enclosing Execution stage still requires its own completion assessment.
 
 ## Attempts, failures, and recovery
 
@@ -168,9 +158,8 @@ These assignments are proposals, not implemented agent profiles.
 | Role | Proposed agent | Responsibility |
 | --- | --- | --- |
 | Implementation Execution owner | `kepler-orchestrator` | Coordinate admissions, workers, findings, execution records, completion, and the review handoff. |
-| Task Integration owner | `kepler-orchestrator` | Ensure locked candidate preparation, checks, acceptance, evidence, and integration return handling. |
 
-The dedicated [Generation](code-generation.md#agent-roles) and [Validation](code-validation.md#agent-roles) contracts define their proposed role assignments.
+The dedicated [Generation](code-generation.md#agent-roles), [Validation](code-validation.md#agent-roles), and [Integration](task-integration.md#agent-roles) contracts define their proposed role assignments.
 
 Role ownership does not require one worker to perform every operation. Scoped workers report results; the owner remains responsible for the stage contract.
 
@@ -183,9 +172,8 @@ The draft proposes these entry procedures:
 | Stage | Entry skill | Responsibility |
 | --- | --- | --- |
 | Implementation Execution | [kepler-orchestrate](../skills.md#kepler-orchestrate) | Coordinate the unit graph, scoped handoffs, completion evidence, and review handoff. |
-| Task Integration | [kepler-orchestrate](../skills.md#kepler-orchestrate) | Apply the task-scoped integration procedure separately from unit scheduling. |
 
-The dedicated [Generation](code-generation.md#supporting-skills) and [Validation](code-validation.md#supporting-skills) contracts define their proposed entry skills.
+The dedicated [Generation](code-generation.md#supporting-skills), [Validation](code-validation.md#supporting-skills), and [Integration](task-integration.md#supporting-skills) contracts define their proposed entry skills.
 
 Self-review belongs in each applicable entry procedure. These names do not adopt current skill implementations or legacy execution records.
 
@@ -197,7 +185,7 @@ New review details are proposals. Required independent Code Validation feedback 
 
 ### Self-review
 
-Generation and Validation own self-review under their dedicated contracts. Integration checks candidate bindings and acceptance. The unit owner checks coverage, integrated completion, and handoff completeness.
+Each task-stage contract owns its self-review. The unit owner checks coverage, integrated completion, and handoff completeness.
 
 These checks belong in the entry skills. They do not create separate self-review stages or attempt identities.
 
@@ -223,13 +211,7 @@ A requester decision does not turn failed checks into successful results or waiv
 
 Evaluate these stage-specific questions and report the proposed boundary to the orchestrator.
 
-Use the dedicated [Generation](code-generation.md#reopening-questionnaire) and [Validation](code-validation.md#reopening-questionnaire) questionnaires for those stages.
-
-#### Task Integration
-
-1. Does the candidate combine the wrong inputs or omit required task output?
-2. Do required checks fail, remain incomplete, or cover material other than the accepted candidate?
-3. Does a correction require task implementation changes rather than an integration-only retry?
+Use the dedicated [Generation](code-generation.md#reopening-questionnaire), [Validation](code-validation.md#reopening-questionnaire), and [Integration](task-integration.md#reopening-questionnaire) questionnaires for those stages.
 
 #### Implementation Execution
 
@@ -247,7 +229,7 @@ A task-local return during active execution follows the agreed return paths. Fin
 The draft proposes these details for the agreed execution completion rule:
 
 - Every task required by the current graph has satisfied its task contract and completed successful integration.
-- Generation and Validation have their required checks, reviews, and applicable completion evidence.
+- Generation, Validation, and Integration have their required checks, reviews, and applicable completion evidence.
 - Each accepted candidate passed required combined-result checks under the unit lock.
 - The final integrated checkpoint contains the required outputs, with their inclusion established through history or integration provenance.
 - Required combined-result evidence applies to the final integrated material and relevant inputs.
@@ -261,14 +243,12 @@ This does not require unrelated workspaces to be clean or independent units to s
 
 ### Evidence coverage
 
-The dedicated [Generation](code-generation.md#evidence-coverage) and [Validation](code-validation.md#evidence-coverage) contracts own their named evidence and required results.
+The dedicated [Generation](code-generation.md#evidence-coverage), [Validation](code-validation.md#evidence-coverage), and [Integration](task-integration.md#evidence-coverage) contracts own their named evidence and required results.
 
-The rows below cover Integration and the enclosing Execution stage. Refer to originating task-stage records without rebinding their results as unit-attempt results.
+The rows below cover the enclosing Execution stage. Refer to originating task-stage records without rebinding their results as unit-attempt results.
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
-| Integration check result | Combined candidate, current unit checkpoint, task output, and relevant conditions. | Typechecking, the project build, and the full application test suite succeed against the candidate under the unit lock. |
-| Integration acceptance result | Checked candidate, accepted unit checkpoint, integration inputs, and required check records. | The accepted material matches the successful candidate. Integration self-review confirms bindings and task completion conditions. |
 | Execution completion assessment | Final unit checkpoint, current task graph, upstream obligations, current or retained task-stage evidence, and integration provenance. | Required tasks and integrated checks are complete. Reopened task stages have current-attempt evidence; retained scopes have valid original bindings. Unit self-review confirms coverage and handoff accuracy. |
 | Requested additional review result | Material and scope identified by the request, when additional review is requested. | The requested review is complete and its blocking findings are resolved. |
 | Requester blocker decision | Blocking issue, affected work, relevant contracts, and required requester input. | Record the requester's actual decision and its scope. Resume affected work only when the blocker is resolved. |

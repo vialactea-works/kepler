@@ -105,7 +105,7 @@ These responsibilities do not approve the current skill implementation or decide
 
 ## kepler-orchestrate
 
-**Status:** Proposed under the [Implementation Execution draft](phase_construction/implementation-execution.md#supporting-skills).
+**Status:** Proposed under the [Execution](phase_construction/implementation-execution.md#supporting-skills) and [Task Integration](phase_construction/task-integration.md#supporting-skills) drafts.
 
 For unit-scoped Implementation Execution, the draft proposes this skill to:
 
@@ -119,7 +119,7 @@ For unit-scoped Implementation Execution, the draft proposes this skill to:
 - Apply the proposed post-completion return rule, preserving valid original task bindings and executing reopened stages under new attempts.
 - Perform self-review and prepare the Unit of Work Review handoff.
 
-For Task Integration, the skill prepares the combined candidate and runs required checks under the unit lock. It accepts the candidate only after every required check passes. It records integration inputs separately from admission baselines, self-checks acceptance evidence, and releases the lock before coding returns.
+For [Task Integration](phase_construction/task-integration.md#supporting-skills), the skill prepares the combined candidate and runs required checks under the unit lock. It accepts the candidate only after every required check passes. It records integration inputs separately from admission baselines, self-checks acceptance evidence, and releases the lock before coding returns.
 
 These are separate stage procedures with distinct applicable attempt scopes. The skill does not create Task coding attempts, decide worker topology, or grant publication authority.
 

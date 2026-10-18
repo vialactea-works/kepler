@@ -179,7 +179,7 @@ An assessment or check record retains its originating attempt and material bindi
 
 ## Handoff
 
-**Next stage:** [Task Integration](README.md#task-integration).
+**Next stage:** [Task Integration](task-integration.md).
 
 Identify the unit, task, current definition, admitted baseline, reviewed output checkpoint, and originating Generation and Validation evidence.
 

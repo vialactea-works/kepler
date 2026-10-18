@@ -297,7 +297,7 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 Task outputs can have separate checkpoints. Results for those checkpoints do not establish that their combined result works.
 
-Construction's [Task Integration stage](phase_construction/README.md#task-integration) follows prepare, check, then accept under the unit's integration lock. Check the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against the candidate while holding the unit lock. All three must complete successfully before acceptance. Task completion requires successful acceptance and the applicable completion conditions.
+Construction's [Task Integration stage](phase_construction/task-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Check the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against the candidate while holding the unit lock. All three must complete successfully before acceptance. Task completion requires successful acceptance and the applicable completion conditions.
 
 Code Validation runs typechecking, the project build, and the full application test suite, and owns independent code feedback. The [stage boundaries](phase_construction/README.md#agreed-boundaries) define these duties. Integration checks do not replace them. A build result establishes typechecking only when the command also performs the required typechecking. Any additional integration checks and project-specific check configuration require separate decisions.
 
@@ -307,7 +307,7 @@ A conflict can block the affected integration. Unrelated ready tasks and units c
 
 Stage contracts define required evidence, covered material, and required results. Shared bindings do not replace those definitions.
 
-The dedicated [Generation](phase_construction/code-generation.md#evidence-coverage) and [Validation](phase_construction/code-validation.md#evidence-coverage) contracts define their task-stage evidence. The [Execution draft](phase_construction/implementation-execution.md#evidence-coverage) defines Integration evidence and the unit completion assessment. The [Review draft](phase_construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phase_construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
+The dedicated [Generation](phase_construction/code-generation.md#evidence-coverage), [Validation](phase_construction/code-validation.md#evidence-coverage), and [Integration](phase_construction/task-integration.md#evidence-coverage) contracts define their task-stage evidence. The [Execution draft](phase_construction/implementation-execution.md#evidence-coverage) defines the unit completion assessment. The [Review draft](phase_construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phase_construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
 
 These new definitions remain proposed. Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage completion.
 
