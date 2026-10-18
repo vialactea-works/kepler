@@ -252,7 +252,7 @@ A separate evidence document is not required. Exact event types, record formats,
 
 These records establish the quality specification's validity and requester approval. They do not prove that an implementation meets the quality targets. No application test run is required by this stage.
 
-[SH52](../../authoring_progress.md#shared-decisions-still-pending) tracks evidence decisions for the remaining stage contracts. This section defines Quality Requirements evidence coverage; other stage contracts define their own obligations.
+[SH52](../../authoring_progress.md#completed-shared-decisions) records that each stage and Activity defines its own named evidence, covered material, and required results. This section defines Quality Requirements evidence coverage; other contracts define their own obligations.
 
 ## Handoff
 

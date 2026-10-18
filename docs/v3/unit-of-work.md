@@ -48,7 +48,7 @@ Define meaningful acceptance conditions for each unit, considering its dependenc
 
 ### Deployment
 
-Include the deployment aspect in the Unit of Work definition. Its detailed content and artifact location require a separate decision.
+Include the deployment aspect in the Unit of Work definition. The accepted [Deliver contract](phases/construction/deliver.md#deployment-information) defines deployment information, unit-root `delivery.md` instructions, and stage-specific timing under [SH77 through SH79](authoring_progress.md#completed-shared-decisions).
 
 Record known deployment constraints without moving technical solution selection out of Implementation Planning.
 
@@ -95,9 +95,6 @@ Labels are available to any artifact, and the requester can add labels outside t
 ## Decisions still required
 
 - Additional scope and size criteria, and the detailed decomposition questionnaire, remain unresolved beyond the MVP under [SH75/SH76](authoring_progress.md#deferred-decisions).
-- Deployment information, its location, and its timing remain [MVP decisions](authoring_progress.md#shared-decisions-still-pending).
-
-The [Deliver draft](phases/construction/deliver.md#deployment-information) proposes deployment information, unit-root `delivery.md` instructions, and stage-specific timing. These proposals do not close SH77 through SH79 or alter the accepted obligation to record known deployment constraints.
 
 Use the accepted cohesion, coverage, dependency, verification, and decomposition rules for the Construction MVP. This does not select additional criteria or a questionnaire contract.
 

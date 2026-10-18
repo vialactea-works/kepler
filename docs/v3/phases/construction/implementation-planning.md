@@ -2,11 +2,9 @@
 
 [Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
-**Status:** Draft for discussion.
+**Status:** Accepted by the requester under [IP19](../../authoring_progress.md#implementation-planning-decisions).
 
-Technical solution selection, task decomposition, and the dependency graph are agreed responsibilities. The requester has specified `plan.md`, `tasks-dag.json`, rationale for every planning decision, and the verification duties below. The requester has accepted the [task graph specification](task-graph.md), including its task fields, dependency rules, and prerequisite rules. Remaining artifact details, identity-lifecycle policies, procedure, roles, review rules, evidence, and stage completion conditions are proposals.
-
-Saving this draft does not approve its proposals or an executing Unit of Work. It does not authorize implementation.
+The requester accepted this complete Implementation Planning contract. It defines artifacts, task identity rules, procedures, roles, review rules, evidence, and completion conditions. The requester separately accepted the [task graph specification](task-graph.md) under IP26. These approvals concern specifications. They do not approve an executing Unit of Work or authorize implementation.
 
 ## Goal
 
@@ -29,15 +27,15 @@ Existing application code, tests, and completed Initialization or Inception cont
 
 ## Entry conditions
 
-The draft proposes starting when:
+Start when:
 
 - Functional Design and Quality Requirements are complete under their applicable contracts for the current unit.
 - Their current outputs and relevant supporting files are available.
 - Consequential choices outside the stage owner's authority have an identified requester decision path.
 
-Apply each upstream stage's own approval rules. This entry condition does not accept an unapproved stage specification.
+Apply each upstream stage's own approval rules. This condition does not approve a Unit of Work.
 
-A complete implementation plan, existing test infrastructure, and a selected technical solution are not entry requirements.
+A complete plan, existing test infrastructure, and a selected technical solution are not entry requirements.
 
 ## Scope
 
@@ -82,7 +80,7 @@ Both planning outputs are required. This stage owns them and consumes upstream a
 
 The accepted task graph specification assigns task definitions, identities, and dependency edges to `tasks-dag.json`. `plan.md` records the technical solution, rationale, and verification strategy. Reference tasks by identity without maintaining a second graph in Markdown.
 
-Use the [accepted task graph specification](task-graph.md) under [IP26](../../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. Graph approval does not accept the remaining stage policies.
+Use the [accepted task graph specification](task-graph.md) under [IP26](../../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. IP19 accepts this complete stage contract; IP26 separately accepts the graph format.
 
 Keep one authoritative definition for each task and dependency. A diagram or generated view must not become a second authority. Keep references and explanations consistent across both artifacts. Link `tasks-dag.json` from `plan.md`.
 
@@ -94,7 +92,7 @@ The requester selected these filenames under [DF04](../../authoring_progress.md#
 
 Apply the shared [metadata contract](../../metadata.md) to `plan.md` and supporting Markdown documents. Preserve stable artifact identity, unit ownership, original author, and schema version.
 
-The draft proposes `type: implementation-plan` for `plan.md`. This value is not yet an accepted metadata type. Optional supporting Markdown documents keep `type: supporting-document`.
+Use `type: implementation-plan` for `plan.md`. Optional supporting Markdown documents keep `type: supporting-document`.
 
 Identify `tasks-dag.json` in evidence by its unit-relative path and checkpoint. The [root object](task-graph.md#root-object) defines its artifact identity, unit ownership, and JSON format version. That version is independent of the Markdown schema version. Task IDs follow the separate [UUIDv4 rules](task-graph.md#task-identity).
 
@@ -102,7 +100,7 @@ No additional Markdown frontmatter fields are proposed. `tasks-dag.json` is auth
 
 ### Required sections
 
-The draft proposes four required sections in `plan.md`. A section can be short when a precise reference supplies unchanged information.
+Use these four required sections in `plan.md`. A section can be short when a precise reference supplies unchanged information.
 
 | Section | Required content |
 | --- | --- |
@@ -125,17 +123,17 @@ Compare materially viable alternatives when the choice affects constraints, risk
 
 Identify relevant effects on existing data, consumers, configuration, operation, and deployment. Plan compatibility or migration work where required; do not assume permission for destructive changes.
 
-Known deployment constraints remain binding. Deployment record content, location, and timing remain open under [SH77 through SH79](../../authoring_progress.md#shared-decisions-still-pending).
+Known deployment constraints remain binding. [SH77 through SH79](../../authoring_progress.md#completed-shared-decisions) define accepted deployment information, its location, and its timing.
 
 ### Task identities and definitions
 
-The draft proposes unique task identities within the unit. Keep surviving identities when reordering tasks or revising their descriptions. Do not reuse a retired identity for unrelated work.
+Use unique task identities within the unit. Keep surviving identities when reordering tasks or revising their descriptions. Do not reuse a retired identity for unrelated work.
 
 Preserve historical definitions and their execution bindings when tasks are replaced, split, or removed. Do not rewrite earlier evidence or present historical completion as current completion.
 
 Task identities are separate from artifact UUIDs and stage-attempt identities. Use UUIDv4 task IDs under the [format contract](task-graph.md#task-identity). Task identity continuity does not preserve completion after an authorized revision cascade.
 
-Task definitions belong in `tasks-dag.json`. The accepted [task object](task-graph.md#task-object) defines their fields and meanings. Identity-lifecycle policies remain proposed. For each task, define:
+Task definitions belong in `tasks-dag.json`. The accepted [task object](task-graph.md#task-object) defines their fields and meanings. Apply the accepted identity-lifecycle rules above. For each task, define:
 
 - Its identity, goal, and bounded implementation outcome.
 - Applicable requirements, quality constraints, and relevant technical decisions, using precise references where useful.
@@ -215,7 +213,7 @@ Effort does not remove required information, task coverage, verification duties,
 
 ## Agent roles
 
-The draft proposes this stage owner:
+The accepted stage owner is:
 
 | Role | Agent | Responsibility |
 | --- | --- | --- |
@@ -231,9 +229,9 @@ This role assignment does not select a worker model for Planning. [CN22](../../a
 
 ### Entry skill
 
-The draft proposes [kepler-plan](../../skills.md#kepler-plan) as the entry skill. It investigates context, develops the technical solution and task graph, performs self-review, and prepares the handoff.
+[kepler-plan](../../skills.md#kepler-plan) is the accepted entry skill. It investigates context, develops the technical solution and task graph, performs self-review, and prepares the handoff.
 
-This proposes version 3 responsibilities, not approval of the current skill implementation or its legacy artifact contracts.
+This contract defines version 3 responsibilities. It does not implement or adopt the current skill implementation or its legacy artifact contracts.
 
 ### Supporting responsibilities
 
@@ -246,7 +244,7 @@ Apply the [common skill rules](../../skills.md#common-rules). Supporting skills 
 
 ## Review and approval
 
-These stage-specific rules are proposals. They do not add approval gates to other stages.
+These stage-specific rules are accepted. They do not add approval gates to other stages.
 
 ### Self-review
 
@@ -254,7 +252,7 @@ Self-review belongs in `kepler-plan`, not a separate skill. Check technical cons
 
 ### External review
 
-The draft proposes external review only when the requester asks for it. Effort, risk, and complexity do not automatically create that gate. Self-review remains required.
+External review occurs only when the requester asks for it. Effort, risk, and complexity do not create that gate. Self-review remains required.
 
 ### Requester decisions and approval
 
@@ -286,7 +284,7 @@ Satisfy Planning's applicable completion conditions again after reopening. Repea
 
 ## Completion conditions
 
-The draft proposes completion when:
+Complete the stage when:
 
 - `plan.md` and `tasks-dag.json` exist at the unit root and satisfy their applicable content and metadata contracts.
 - `plan.md` records the technical rationale for every planning decision.
@@ -310,7 +308,7 @@ A question blocks completion when its answer changes the selected solution, task
 
 ### Evidence coverage
 
-This stage defines its proposed evidence coverage. Requester approval is a separate record and applies only when required under the proposed approval rule.
+This stage defines its required evidence coverage. Requester approval is a separate record and applies only when an authority rule or requester instruction requires it.
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
@@ -328,7 +326,7 @@ Graph validation does not replace semantic review of dependencies, coverage, or 
 
 No separate evidence document or application test run is required by this stage. Exact record formats, validation commands, and event types remain implementation work.
 
-[SH52](../../authoring_progress.md#shared-decisions-still-pending) tracks evidence decisions for the remaining stage contracts. This section defines Planning's coverage without settling later stages' obligations.
+[SH52](../../authoring_progress.md#completed-shared-decisions) records that each stage and Activity defines its own named evidence, covered material, and required results. This section defines Planning's coverage; each later contract defines its own obligations.
 
 ## Handoff
 

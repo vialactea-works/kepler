@@ -2,13 +2,13 @@
 
 [Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
-**Status:** Draft for discussion.
+**Status:** Accepted by the requester under [IE21](../../authoring_progress.md#completed-implementation-decisions).
 
-The [phase contract](README.md#implementation) defines the agreed execution structure, concurrency, attempts, check duties, integration procedure, and return paths. Requester intervention is limited to hard blockers under the rule below. This draft proposes additional inputs, responsibilities, role assignments, skills, evidence, and completion details. New proposals do not replace agreed rules.
+The [phase contract](README.md#implementation) and this specification define the accepted execution structure, concurrency, attempts, check duties, integration procedure, and return paths. They also define roles, skills, evidence, and completion conditions. Requester intervention is limited to hard blockers.
 
-[Code Generation](activities/code-generation.md), [Code Validation](activities/code-validation.md), and [Code Integration](activities/code-integration.md) have dedicated Activity contracts. Those contracts define their procedures, evidence, completion conditions, reopening questions, and handoffs. Their Activity classification, fixed execution model, and existing check duties are agreed. Their remaining detailed proposals stay open.
+[Code Generation](activities/code-generation.md), [Code Validation](activities/code-validation.md), and [Code Integration](activities/code-integration.md) have separate accepted Activity contracts under [IE24](../../authoring_progress.md#completed-implementation-decisions), [IE25](../../authoring_progress.md#completed-implementation-decisions), and [IE27](../../authoring_progress.md#completed-implementation-decisions). Each approval covers its complete Activity contract.
 
-Saving this draft does not approve its proposals, accept Planning, or authorize an executing Unit of Work.
+These approvals concern specifications. They do not authorize an executing Unit of Work, implement the assigned roles or skills, or authorize delivery.
 
 ## Goal
 
@@ -31,14 +31,14 @@ Existing application code and tests are not entry requirements. Greenfield tasks
 
 ## Entry conditions
 
-The draft proposes starting when:
+Start when:
 
 - Implementation Planning and earlier unit stages are complete under their applicable contracts for the current material.
 - The current task graph, technical solution, verification obligations, and relevant inputs are available and consistent.
 - Authority to execute the requested implementation work is established under applicable requester instructions and project rules.
 - The unit's initial integration checkpoint is identified, or established from the current repository material before the first task admission.
 
-Meeting these entry conditions does not mean the requester has accepted the stage contract. An empty application can supply the initial repository checkpoint; pre-existing implementation and passing application checks are not required.
+Meeting these entry conditions does not approve a particular Unit of Work. An empty application can supply the initial repository checkpoint; pre-existing implementation and passing application checks are not required.
 
 Do not require every future task prerequisite to be available before starting independent ready work. Apply each prerequisite before its affected work or verification.
 
@@ -71,7 +71,7 @@ Do not require every future task prerequisite to be available before starting in
 | Stage and Activity evidence | Bind unit and Activity checks, reviews, admissions, integration inputs, acceptance, and completion through CLI-owned operations. |
 | Optional supporting detail | Explain useful implementation findings under `details/implementation/`, referenced from the relevant owning artifact or evidence record. |
 
-No separate required execution Markdown document is proposed. Do not duplicate task definitions or store changing completion information in authored documents.
+No separate execution Markdown document is required. Do not duplicate task definitions or store changing completion information in authored documents.
 
 Upstream artifacts retain their stage ownership. Report required changes through the [revision procedure](../../revision.md#revision-procedure).
 
@@ -126,7 +126,7 @@ The [unit-wide revision rule](README.md#unit-wide-upstream-revision) prevents en
 
 ### Return after completed Implementation
 
-This proposed rule applies when the orchestrator selects Implementation as the unit-stage revision boundary after its completion. Earlier upstream boundaries retain their own cascade rules.
+This rule applies when the orchestrator selects Implementation as the unit-stage revision boundary after its completion. Earlier upstream boundaries retain their own cascade rules.
 
 1. **Reopen the unit stages.** Reopen Implementation, Unit of Work Review, and Deliver. Start a new unit Implementation attempt when execution resumes.
 2. **Select affected task scopes.** Identify each task's earliest invalid Activity and reopen it and every following Activity. Include dependent tasks when changed outputs invalidate their work or evidence. Start new Activity attempts when those Activities execute.
@@ -139,7 +139,7 @@ Keep recorded admission baselines fixed. Identify current task material and chan
 
 Reassessment does not replace execution of a reopened Activity or transfer old evidence into its new attempt. Do not reparent historical Activity evidence to a new Implementation attempt. An old unit completion assessment cannot complete the new unit attempt, even when its checkpoint is unchanged.
 
-This proposal does not reopen unrelated task scopes automatically. It does not permit retaining completion whose material, inputs, or evidence are invalid.
+This rule does not reopen unrelated task scopes automatically. It does not permit retaining completion whose material, inputs, or evidence are invalid.
 
 ## Effort
 
@@ -155,13 +155,13 @@ Effort does not remove tasks, checks, independent feedback, evidence, or authori
 
 ## Agent roles
 
-These assignments are proposals, not implemented agent profiles.
+These role assignments are accepted contract responsibilities. They do not implement or adopt agent profiles.
 
-| Role | Proposed agent | Responsibility |
+| Role | Agent | Responsibility |
 | --- | --- | --- |
 | Implementation owner | `kepler-orchestrator` | Coordinate admissions, workers, findings, execution records, completion, and the review handoff. |
 
-The dedicated [Generation](activities/code-generation.md#roles-and-skills), [Validation](activities/code-validation.md#roles-and-skills), and [Integration](activities/code-integration.md#roles-and-skills) Activity contracts define proposed role assignments.
+The dedicated [Generation](activities/code-generation.md#roles-and-skills), [Validation](activities/code-validation.md#roles-and-skills), and [Integration](activities/code-integration.md#roles-and-skills) Activity contracts define their accepted role assignments.
 
 The MVP uses one orchestrator-controlled subagent model for Implementation. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they do not need to spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. This model does not select role profiles or add a per-task topology selector. The MVP execution model does not constrain Design, Quality Requirements, Planning, or other phases.
 
@@ -169,21 +169,21 @@ The requester retains product and consequential trade-off authority. The orchest
 
 ## Supporting skills
 
-The draft proposes these entry procedures:
+The accepted entry procedure is:
 
 | Stage | Entry skill | Responsibility |
 | --- | --- | --- |
 | Implementation | [kepler-orchestrate](../../skills.md#kepler-orchestrate) | Coordinate the unit graph, scoped handoffs, completion evidence, and review handoff. |
 
-The dedicated [Generation](activities/code-generation.md#roles-and-skills), [Validation](activities/code-validation.md#roles-and-skills), and [Integration](activities/code-integration.md#roles-and-skills) Activity contracts define their proposed entry skills.
+The dedicated [Generation](activities/code-generation.md#roles-and-skills), [Validation](activities/code-validation.md#roles-and-skills), and [Integration](activities/code-integration.md#roles-and-skills) Activity contracts define their accepted entry skills.
 
-Self-review belongs in each applicable entry procedure. These names do not adopt current skill implementations or legacy execution records.
+Self-review belongs in each applicable entry procedure. These assignments do not implement or adopt current skill implementations or legacy execution records.
 
 Use [kepler-research](../../skills.md#kepler-research) for uncertain facts. Use [kepler-grilling](../../skills.md#kepler-grilling) for a requester decision needed to resolve a hard blocker. Supporting work cannot authorize revisions or edit journals directly.
 
 ## Review and approval
 
-New review details are proposals. Required independent Code Validation feedback and the agreed check duties remain binding.
+These review rules are accepted. Required independent Code Validation feedback and the agreed check duties remain binding.
 
 ### Self-review
 
@@ -193,7 +193,7 @@ These checks belong in the entry skills. They do not create separate self-review
 
 ### Additional review
 
-The draft proposes additional external review only when the requester asks for it. This does not make Code Validation's independent feedback or Unit of Work Review optional.
+Additional external review occurs only when the requester asks for it. This does not make Code Validation's independent feedback or Unit of Work Review optional.
 
 ### Requester intervention
 
@@ -224,11 +224,11 @@ Use the dedicated [Generation](activities/code-generation.md#reopening-questionn
 
 Apply the shared [questionnaire rules](../../revision.md#stage-reopening-questionnaires). Suspected upstream invalidity can move the boundary earlier. Answers do not authorize reopening or exempt downstream stages from a cascade.
 
-A task-local return during active execution follows the agreed return paths. Findings after completed Implementation follow the proposed [scoped-return rule](#return-after-completed-implementation) after the orchestrator authorizes that unit-stage boundary.
+A task-local return during active execution follows the agreed return paths. Findings after completed Implementation follow the accepted [scoped-return rule](#return-after-completed-implementation) after the orchestrator authorizes that unit-stage boundary.
 
 ## Completion conditions
 
-The draft proposes these details for the agreed execution completion rule:
+Complete Implementation only when these conditions and its Activity contracts are satisfied:
 
 - Every task required by the current graph has satisfied its task contract and completed successful Code Integration.
 - Code Generation, Code Validation, and Code Integration have their required checks, reviews, and applicable completion evidence.
@@ -245,7 +245,7 @@ This does not require unrelated workspaces to be clean or independent units to s
 
 ### Evidence coverage
 
-The dedicated [Generation](activities/code-generation.md#evidence-coverage), [Validation](activities/code-validation.md#evidence-coverage), and [Integration](activities/code-integration.md#evidence-coverage) Activity contracts own their named evidence and required results.
+The accepted [Generation](activities/code-generation.md#evidence-coverage), [Validation](activities/code-validation.md#evidence-coverage), and [Integration](activities/code-integration.md#evidence-coverage) Activity contracts define their named evidence and required results.
 
 The rows below cover the enclosing Implementation stage. Refer to originating Activity records without rebinding their results as unit-attempt results.
 
@@ -263,7 +263,7 @@ The completion assessment is new unit-scoped work. It consumes Activity evidence
 
 Retain the final integrated checkpoint and necessary task checkpoints, candidate material, logs, and external evidence. A commit identifier or mutable external link alone does not retain them.
 
-Record results through CLI-owned operations. Exact payloads, commands, status transitions, and lock mechanisms remain implementation work. This draft does not implement those operations.
+Record results through CLI-owned operations. Exact payloads, commands, status transitions, and lock mechanisms remain implementation work. This specification does not implement those operations.
 
 ## Handoff
 

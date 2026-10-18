@@ -43,7 +43,7 @@ Upstream stages occur before the revision boundary. Downstream stages occur afte
 
 Construction's task-local [Activity return paths](phases/construction/README.md#return-paths) apply within an active Implementation attempt. The orchestrator authorizes returns. They do not automatically restart that enclosing attempt. Independent task work continues while its inputs and contracts remain valid.
 
-A unit-wide upstream revision still applies the full unit-stage cascade. Construction defines the [handling of running task work](phases/construction/README.md#unit-wide-upstream-revision) during that cascade. Detailed task-state transitions and shutdown coordination remain open.
+A unit-wide upstream revision still applies the full unit-stage cascade. Construction defines the [handling of running task work](phases/construction/README.md#unit-wide-upstream-revision) during that cascade. Detailed task-state transitions, dependency invalidation, and shutdown coordination remain release implementation work under DF15 through DF17, not new requester-approval decisions.
 
 ### Artifacts and evidence
 

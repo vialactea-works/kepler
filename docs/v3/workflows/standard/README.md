@@ -6,7 +6,7 @@
 
 Standard composes the stages below into the complete Construction MVP workflow. Phases own stage contracts; this workflow owns their selected order and routing.
 
-The stage sequence and shared execution rules are agreed. Detailed proposals in linked contracts remain open unless separately accepted. This workflow does not approve an executing unit or establish implemented behavior.
+The stage sequence and shared execution rules are agreed. The requester accepted all selected Construction stage and Activity contracts under their recorded decision IDs. This workflow does not approve a Unit of Work or establish implemented behavior.
 
 ## Entry
 
@@ -32,7 +32,7 @@ Functional Design -> Quality Requirements -> Implementation Planning
   -> Implementation -> Unit of Work Review -> Deliver
 ```
 
-Advance only after the current stage satisfies its contract for the applicable material and scope. Selecting Standard does not accept unapproved contract proposals or waive required inputs, evidence, or approvals.
+Advance only after the current stage satisfies its contract for the applicable material and scope. Selecting Standard does not approve a specific Unit of Work or waive required inputs, evidence, or approvals.
 
 A stage contract's Standard handoff describes its use in this sequence. The Construction catalog defines ownership, not an order for every possible workflow.
 
@@ -52,7 +52,7 @@ The fixed Activity procedure and existing tracking mechanics suffice for the MVP
 
 ## Revision, Effort, and authority
 
-Use the shared [revision procedure](../../revision.md) with this workflow's stage order and the owning phase's scope rules. Activity returns during active Implementation do not automatically reopen that enclosing stage. Post-completion recovery details remain proposed under the [Implementation contract](../../phases/construction/implementation.md#return-after-completed-implementation).
+Use the shared [revision procedure](../../revision.md) with this workflow's stage order and the owning phase's scope rules. Activity returns during active Implementation do not automatically reopen that enclosing stage. Apply the accepted [post-completion recovery rules](../../phases/construction/implementation.md#return-after-completed-implementation).
 
 Apply [Effort](../../effort.md) without changing required stages, checks, review triggers, or authority. The Standard workflow name is independent of the Standard Effort level.
 

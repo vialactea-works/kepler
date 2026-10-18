@@ -2,7 +2,7 @@
 
 [Shared Activity rules](README.md) | [Implementation](../implementation.md)
 
-**Status:** Draft for discussion. The unit lock, check duties, acceptance boundary, attempts, and return paths remain binding. Detailed assignments and completion evidence remain proposed.
+**Status:** Accepted by the requester under [IE27](../../../authoring_progress.md#completed-implementation-decisions). The unit lock, check duties, acceptance boundary, attempts, and return paths remain binding.
 
 ## Goal and inputs
 
@@ -32,13 +32,13 @@ Report required implementation changes to the orchestrator. After an authorized 
 
 ## Roles and skills
 
-The proposed owner is `kepler-orchestrator`; the proposed entry skill is [kepler-orchestrate](../../../skills.md#kepler-orchestrate). It prepares and checks the candidate, reports evidence, and supports authorized acceptance and return handling.
+`kepler-orchestrator` is the accepted Activity owner; [kepler-orchestrate](../../../skills.md#kepler-orchestrate) is the accepted entry skill. It prepares and checks the candidate, reports evidence, and supports authorized acceptance and return handling.
 
-Workers report facts; authorized orchestrator and CLI operations control acceptance, completion, and revision. Sharing a profile with unit coordination does not combine their attempts. These proposals do not implement profiles or current skills.
+Workers report facts; authorized orchestrator and CLI operations control acceptance, completion, and revision. Sharing a profile with unit coordination does not combine their attempts. These role and skill contracts do not implement or adopt agent profiles or current skills.
 
 ## Review and approval
 
-Apply the [shared review and recovery rules](README.md#review-correction-and-recovery). Self-check actual inputs, check coverage, acceptance, task completion conditions, and retained evidence in the proposed entry skill.
+Apply the [shared review and recovery rules](README.md#review-correction-and-recovery). The entry skill self-checks actual inputs, check coverage, acceptance, task completion conditions, and retained evidence.
 
 Additional review does not replace checks, Code Validation, or whole-unit review. Candidate acceptance grants no requester approval, publication, or deployment permission.
 
@@ -54,7 +54,7 @@ Report answers, evidence, uncertainty, and the proposed boundary to the orchestr
 
 Complete Integration only after authorized acceptance of the checked candidate and satisfaction of the task's other completion conditions.
 
-The draft also requires valid originating Generation and Validation evidence, current-attempt Integration proof, completed self-review, and resolved blocking findings. Complete any requested additional review. Identify accepted material, actual inputs, conditions, results, and task completion in the handoff.
+Require valid originating Generation and Validation evidence, current-attempt Integration proof, completed self-review, and resolved blocking findings. Complete any requested additional review. Identify accepted material, actual inputs, conditions, results, and task completion in the handoff.
 
 The accepted bytes must match the checked candidate. Keep actual Integration inputs separate from the admission baseline. Preserve the checked candidate, accepted checkpoint, logs, provenance, and external evidence under the [shared retention rules](README.md#records-and-supporting-detail).
 

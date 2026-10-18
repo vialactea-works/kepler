@@ -46,4 +46,4 @@ No generic Activity registry, arbitrary graph language, interpreter, or Basic/Wo
 
 ## Related contracts
 
-[Code Generation](phases/construction/activities/code-generation.md), [Code Validation](phases/construction/activities/code-validation.md), and [Code Integration](phases/construction/activities/code-integration.md) define separate Activity contracts. They remain proposals except for their Activity classification and the accepted Construction rules recorded in [authoring progress](authoring_progress.md).
+[Code Generation](phases/construction/activities/code-generation.md), [Code Validation](phases/construction/activities/code-validation.md), and [Code Integration](phases/construction/activities/code-integration.md) define separate accepted Activity contracts under IE24, IE25, and IE27 in [authoring progress](authoring_progress.md). These approvals do not implement agent profiles or adopt existing skill implementations.

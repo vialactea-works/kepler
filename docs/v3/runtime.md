@@ -318,9 +318,9 @@ A conflict can block the affected integration. Unrelated ready tasks and units c
 
 Stage and Activity contracts define their named evidence, covered material, and required results. Shared bindings do not replace those definitions.
 
-The dedicated [Generation](phases/construction/activities/code-generation.md#evidence-coverage), [Validation](phases/construction/activities/code-validation.md#evidence-coverage), and [Integration](phases/construction/activities/code-integration.md#evidence-coverage) Activity contracts define Activity evidence. The [Implementation draft](phases/construction/implementation.md#evidence-coverage) defines stage-level completion evidence. The [Review draft](phases/construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phases/construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
+The accepted [Generation](phases/construction/activities/code-generation.md#evidence-coverage), [Validation](phases/construction/activities/code-validation.md#evidence-coverage), and [Integration](phases/construction/activities/code-integration.md#evidence-coverage) Activity contracts define Activity evidence. The accepted [Implementation contract](phases/construction/implementation.md#evidence-coverage) defines stage-level completion evidence. The accepted [Review contract](phases/construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The accepted [Deliver contract](phases/construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
 
-These detailed Activity and stage definitions remain proposed except where the accepted rules above say otherwise. Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage or Activity completion.
+Each stage and Activity owns its named evidence, covered material, and required results under [SH52](authoring_progress.md#completed-shared-decisions). Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage or Activity completion.
 
 ## CLI responsibilities
 
@@ -371,7 +371,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 - Remaining CLI command contracts, selectors, response schemas, and validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
-- Acceptance of proposed stage and Activity evidence coverage, external reference formats, and exact evidence and approval record formats.
+- External reference formats and exact evidence and approval record formats. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
 - Traceability relationship formats, checkpoint reference names, retention periods, publication, storage locations, and cleanup rules.
 - Workspace and branch layouts, and shared test resource isolation.
 - Which journals, projections, and retained records belong in version control or remain local to a checkout.

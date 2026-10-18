@@ -8,7 +8,7 @@ Construction operates on one Unit of Work. Its stages define responsibilities in
 
 Construction owns its execution state model and projection schemas under the shared [execution-state representation](../../runtime.md#execution-state-representation).
 
-The [Standard workflow](../../workflows/standard/README.md) selects the unit-stage order. Construction owns the stage definitions and agreed Implementation structure. The requester has accepted the Functional Design and Quality Requirements stage specifications. The other four unit-stage contracts have drafts for discussion; their remaining proposals are not accepted. Code Generation, Code Validation, and Code Integration are Activities within Implementation, not additional stages.
+The [Standard workflow](../../workflows/standard/README.md) selects the unit-stage order. Construction owns the stage definitions and Implementation structure. The requester accepted Functional Design and Quality Requirements under FD13 and NF12. Implementation Planning and Implementation are accepted under IP19 and IE21. Unit of Work Review and Deliver are accepted under UR16 and DL18. The requester separately accepted Code Generation under IE24, Code Validation under IE25, and Code Integration under IE27. These are specification approvals, not approval of an executing unit or implementation. Code Generation, Code Validation, and Code Integration are Activities within Implementation, not additional stages.
 
 ## Stage catalog
 
@@ -16,12 +16,12 @@ These stages belong to Construction. The catalog defines ownership, not an order
 
 | Stage | Contract status |
 | --- | --- |
-| [Deliver](deliver.md) | Draft for discussion, including proposed deployment information and operation boundaries. |
+| [Deliver](deliver.md) | Accepted by the requester under [DL18](../../authoring_progress.md#deliver-decisions); deployment policy is recorded under SH77-SH79. |
 | [Functional Design](functional-design.md) | Accepted by the requester. |
-| [Implementation](implementation.md) | Structure and shared execution rules agreed. Detailed stage and Activity contracts remain proposals. |
-| [Implementation Planning](implementation-planning.md) | Draft for discussion. The task graph specification is accepted; remaining stage policies stay proposed. |
+| [Implementation](implementation.md) | Accepted by the requester under [IE21](../../authoring_progress.md#completed-implementation-decisions); its Activities have separate whole-contract approvals. |
+| [Implementation Planning](implementation-planning.md) | Accepted by the requester under [IP19](../../authoring_progress.md#implementation-planning-decisions); the task graph is separately accepted under IP26. |
 | [Quality Requirements](quality-requirements.md) | Accepted by the requester under [NF12](../../authoring_progress.md#quality-requirements-decisions). |
-| [Unit of Work Review](unit-of-work-review.md) | Whole integrated result is the agreed scope. Remaining contract is a draft proposal. |
+| [Unit of Work Review](unit-of-work-review.md) | Accepted by the requester under [UR16](../../authoring_progress.md#unit-of-work-review-decisions). |
 
 ## Agreed boundaries
 
@@ -31,7 +31,7 @@ Functional Design defines domain behavior, the domain model, and functional cont
 
 Quality Requirements defines quality targets and constraints in `.kepler/units-of-work/<unit-id>/quality.md`. This document is required for that stage. Applicable requirements include performance, availability, security, accessibility, compatibility, operability, observability, and maintainability.
 
-Implementation Planning selects the technical solution against the functional design and quality requirements. It then divides the work into implementation tasks. It produces `plan.md` with technical rationale and `tasks-dag.json` with the task graph at the unit root. The [stage draft](implementation-planning.md) defines the agreed artifact split and proposes the remaining contract. Use the [accepted task graph specification](task-graph.md) with UUIDv4 task IDs.
+Implementation Planning selects the technical solution against the functional design and quality requirements. It then divides the work into implementation tasks. It produces `plan.md` with technical rationale and `tasks-dag.json` with the task graph at the unit root. The [accepted stage contract](implementation-planning.md) defines the artifact split. Use the [accepted task graph specification](task-graph.md) with UUIDv4 task IDs.
 
 Code Generation runs typechecking, tests related to its modifications, and author self-review. Code Validation runs typechecking, the project build, and the full application test suite. A non-author reviewer supplies independent feedback without editing the candidate. Code Integration runs the same three checks against the combined candidate under the unit lock.
 
@@ -39,7 +39,7 @@ For each task, Implementation runs Code Generation, Code Validation, then Code I
 
 ## Implementation
 
-The [unit-stage draft](implementation.md) adds proposed details for Implementation. Dedicated [Generation](activities/code-generation.md), [Validation](activities/code-validation.md), and [Integration](activities/code-integration.md) contracts define their Activity responsibilities. Their classification as Activities and the agreed rules below are binding; the remaining contract details stay proposed.
+The [accepted unit-stage contract](implementation.md) defines Implementation. Dedicated [Generation](activities/code-generation.md), [Validation](activities/code-validation.md), and [Integration](activities/code-integration.md) contracts define their accepted Activity responsibilities and procedures.
 
 Implementation is a unit-scoped stage. The orchestrator executes the task graph and coordinates task implementation, integration, and completion.
 
@@ -71,7 +71,7 @@ Internal corrections within an Activity remain in its attempt. An authorized ret
 
 Code Integration is a task-scoped Activity after successful Code Validation. Prepare the combined candidate, check it, then accept it as the unit's integrated state.
 
-The [dedicated Activity contract](activities/code-integration.md) defines Integration's procedures, evidence, completion conditions, and coordination handoff. These details remain proposed.
+The [dedicated Activity contract](activities/code-integration.md) defines Integration's procedures, evidence, completion conditions, and coordination handoff.
 
 Separate worker results do not establish combined correctness. Retain the checked candidate, integrated checkpoint, and supporting evidence under the shared [integration and verification rules](../../runtime.md#integration-and-verification).
 
@@ -127,16 +127,16 @@ Complete Implementation when required task implementations are complete and the 
 
 Tasks are accepted through successful Code Validation and Code Integration, not routine requester approval. Ask the requester only for [hard blockers](implementation.md#requester-intervention) that require requester input. Continue independent ready work while affected work waits.
 
-### Remaining stage contracts
+### Remaining implementation work
 
-Review the proposed [Planning](implementation-planning.md), [Implementation](implementation.md), [Unit of Work Review](unit-of-work-review.md), and [Deliver](deliver.md) contracts. Each draft proposes evidence coverage, completion conditions, role and skill assignments, reopening questions, and handoffs. These details remain proposed. The task graph writer and validator remain implementation work.
+The requester accepted [Planning](implementation-planning.md), [Implementation](implementation.md), [Unit of Work Review](unit-of-work-review.md), and [Deliver](deliver.md). Their contracts define required evidence, completion, role and skill responsibilities, reopening questions, and handoffs. The task graph writer and validator remain implementation work.
 
 Typechecking, the project build, and the full application test suite remain required integration checks. Additional applicable obligations remain binding; general extra-check policy is deferred. Project check configuration remains MVP implementation work. Candidate checks precede acceptance under the agreed integration procedure.
 
 Lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery remain open in the shared CLI infrastructure contract.
 
-Detailed task-state transitions, dependency invalidation, and shutdown coordination require separate decisions. Interrupted work follows the shared [recovery rule](../../runtime.md#interrupted-work-recovery).
+Detailed task-state transitions, dependency invalidation, and shutdown coordination remain release implementation work under DF15-DF17, not new requester approval gates. Interrupted work follows the shared [recovery rule](../../runtime.md#interrupted-work-recovery).
 
-## Draft use
+## Specification use
 
-Read the stage contract before proposing changes to its supporting skills or CLI features. A saved draft does not authorize implementation, delivery, or changes to existing runtime gates.
+Read the accepted contract before deriving its supporting skills or CLI features. Specification approval does not authorize a specific unit's implementation or delivery, or change existing runtime behavior.

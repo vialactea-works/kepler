@@ -2,11 +2,11 @@
 
 [Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
-**Status:** Draft for discussion.
+**Status:** Accepted by the requester under [UR16](../../authoring_progress.md#unit-of-work-review-decisions).
 
-The requester agreed that this stage reviews the complete integrated result after Implementation under [CN17](../../authoring_progress.md#completed-construction-decisions). This draft proposes the remaining review procedure, roles, skills, evidence, approval conditions, and handoff.
+The requester accepted the complete Unit of Work Review contract. It defines the review procedure, roles, skills, evidence, approval conditions, and handoff. [CN17](../../authoring_progress.md#completed-construction-decisions) records the agreed whole-unit review scope.
 
-Saving this draft does not approve its proposals, accept an executing unit, or authorize delivery.
+This approval concerns the specification. It does not approve an executing Unit of Work or authorize delivery.
 
 ## Goal
 
@@ -27,7 +27,7 @@ Treat earlier results as inputs with their original bindings. They do not establ
 
 ## Entry conditions
 
-The draft proposes starting when:
+Start when:
 
 - Implementation is complete under its applicable contract for the current unit.
 - The integrated result, relevant upstream artifacts, and required execution evidence are identified and available.
@@ -57,7 +57,7 @@ The stage can inspect source, retained outputs, interfaces, and available enviro
 
 ## Artifacts and records
 
-The draft proposes no separate required review Markdown document. Record review evidence and findings through CLI-owned operations, with retained supporting output where needed.
+No separate review Markdown document is required. Record review evidence and findings through CLI-owned operations, with retained supporting output where needed.
 
 A readable review report can be a derived view or retained evidence attachment. It must not become an independent authority for completion, approvals, or changing finding dispositions.
 
@@ -80,7 +80,7 @@ Successful task checks are relevant evidence, not automatic proof of every unit 
 
 Assess the final integrated material, not only isolated worker branches or changed files. Use relevant unchanged behavior and configuration when they affect the outcome.
 
-The draft does not require an unconditional repeat of typechecking, the build, and the full suite in this stage. Their required Implementation results must remain applicable.
+This contract does not require an unconditional repeat of typechecking, the build, and the full suite in this stage. Their required Implementation results must remain applicable.
 
 Run additional checks when needed to establish an uncovered review obligation, subject to applicable permissions. Do not claim compliance from an unexecuted check.
 
@@ -106,7 +106,7 @@ The reviewer reports facts and proposed boundaries. The orchestrator decides whe
 
 An upstream revision invalidates current downstream completion immediately. Reexecute the affected stages even when some artifact bytes remain unchanged.
 
-Code Generation, Code Validation, and Code Integration are Activities within Implementation. Apply its proposed [post-completion return rule](implementation.md#return-after-completed-implementation) when that unit stage reopens. Reopened Activities require new attempts and evidence. Unaffected Activity records retain their original bindings after applicability assessment; the new unit attempt still requires its own completion assessment.
+Code Generation, Code Validation, and Code Integration are Activities within Implementation. Apply its accepted [post-completion return rule](implementation.md#return-after-completed-implementation) when that unit stage reopens. Reopened Activities require new attempts and evidence. Unaffected Activity records retain their original bindings after applicability assessment; the new unit attempt still requires its own completion assessment.
 
 ## Effort
 
@@ -122,9 +122,9 @@ Effort does not remove whole-unit coverage, independent assessment, blocking-fin
 
 ## Agent roles
 
-The draft proposes `kepler-reviewer` as the stage owner. It needs functional analysis, code review, quality assessment, and evidence evaluation capabilities.
+`kepler-reviewer` is the accepted stage owner. The role needs functional analysis, code review, quality assessment, and evidence evaluation capabilities.
 
-The proposed reviewer must not be the primary implementation author for the reviewed result. Earlier task review participation does not itself prevent whole-unit review.
+The reviewer must not be the primary implementation author for the reviewed result. Earlier task review participation does not itself prevent whole-unit review.
 
 Review independence does not require a different model, vendor, or human. The reviewer must assess the actual integrated material and relevant contracts independently.
 
@@ -134,7 +134,7 @@ These assignments do not implement agent profiles. [CN22](../../authoring_progre
 
 ## Supporting skills
 
-The draft proposes [kepler-review](../../skills.md#kepler-review) as the entry skill. It performs whole-unit assessment, self-checks its coverage, records evidence, and prepares the handoff.
+[kepler-review](../../skills.md#kepler-review) is the accepted entry skill. It performs whole-unit assessment, self-checks its coverage, records evidence, and prepares the handoff.
 
 Use [kepler-research](../../skills.md#kepler-research) for uncertain facts and [kepler-grilling](../../skills.md#kepler-grilling) for requester-owned questions. These supporting procedures do not authorize revisions.
 
@@ -142,21 +142,21 @@ Apply the [common skill rules](../../skills.md#common-rules). Current skill impl
 
 ## Review and approval
 
-These additional review and approval rules are proposals.
+These additional review and approval rules are accepted.
 
 ### Self-review
 
 Self-review belongs in `kepler-review`. Check that the assessment covers the complete unit, uses applicable evidence, addresses blocking findings, and identifies the correct result.
 
-Self-review checks the review's completeness. It does not replace the proposed independent whole-unit assessment or required task-level feedback.
+Self-review checks the review's completeness. It does not replace the required independent whole-unit assessment or task-level feedback.
 
 ### Additional review
 
-The draft proposes additional external review only when the requester asks for it. The Unit of Work Review stage itself remains required.
+Additional external review occurs only when the requester asks for it. The Unit of Work Review stage remains required.
 
 ### Requester acceptance
 
-Resolve requester-owned consequential choices before completion. The draft proposes separate whole-unit acceptance only when an applicable authority rule or requester instruction requires it.
+Resolve requester-owned consequential choices before completion. Require separate whole-unit acceptance only when an applicable authority rule or requester instruction requires it.
 
 When acceptance is required, present the actual integrated result, assessment, material limitations, and decisions covered. Record explicit acceptance against the current review attempt and reviewed material through CLI-owned operations.
 
@@ -176,7 +176,7 @@ Answers do not authorize reopening or exempt this stage from an upstream cascade
 
 ## Completion conditions
 
-The draft proposes completion when:
+Complete the stage when:
 
 - The current integrated result and relevant upstream contracts are identified and consistent.
 - The complete unit outcome has been reviewed against applicable functional, quality, compatibility, and known deployment obligations.
@@ -184,7 +184,7 @@ The draft proposes completion when:
 - Missing proof has been resolved through appropriate checks or authorized upstream revision, not by waiving required evidence.
 - No blocking finding or unresolved requester-owned consequential choice remains.
 - Nonblocking limitations have explicit scope and rationale consistent with current obligations.
-- The proposed independent assessment, self-review, and any requested additional review are complete.
+- The independent assessment, self-review, and any requested additional review are complete.
 - Any applicable requester acceptance is recorded against the actual reviewed material.
 - The handoff identifies the reviewed checkpoint, obligations, evidence, findings, and delivery constraints.
 

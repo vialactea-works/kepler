@@ -6,7 +6,7 @@
 
 **Status:** Accepted by the requester under [IP26](../../authoring_progress.md#implementation-planning-decisions).
 
-Approval covers this specification's field definitions, dependency rules, prerequisite rules, example, validation rules, and JSON Schema. Task identity lifecycle and broader [Planning policies](implementation-planning.md) remain separate. This approval does not accept the complete Planning stage or an executing Unit of Work. It does not implement a writer or validator.
+Approval covers this specification's field definitions, dependency rules, prerequisite rules, example, validation rules, and JSON Schema. The accepted [Planning contract](implementation-planning.md) separately defines task identity lifecycle and other stage policies. This approval does not accept the complete Planning stage or an executing Unit of Work. It does not implement a writer or validator.
 
 The requester selected a Kepler-specific JSON format and UUIDv4 task IDs. Do not adopt JGF or another graph interchange format.
 
@@ -40,7 +40,7 @@ Each task ID is an independently allocated UUIDv4 string.
 
 Task IDs must be unique within the graph. Do not use the graph artifact's UUID as a task ID. A task title is a readable description, not its identity.
 
-The proposed [identity lifecycle](implementation-planning.md#task-identities-and-definitions) governs continuity when tasks change. UUIDv4 selection does not accept every lifecycle proposal or transfer earlier completion into a new attempt.
+The accepted [identity lifecycle](implementation-planning.md#task-identities-and-definitions) under IP05 governs continuity when tasks change. UUIDv4 selection does not transfer earlier completion into a new attempt.
 
 ## Task object
 
@@ -232,7 +232,7 @@ This example illustrates the format, not a real unit or an approved implementati
 
 ## JSON Schema
 
-This Draft 2020-12 schema defines the current structural format. It does not implement a production validator. The remaining Planning proposals remain open.
+This Draft 2020-12 schema defines the current structural format. It does not implement a production validator. Implementing the writer and validator remains release work under the accepted Planning contract.
 
 Configure the validator to assert the `uuid` format. The standard `uuid` format does not restrict the UUID version. Check version 4 separately and apply shared artifact identity rules to the root ID.
 

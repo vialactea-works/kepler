@@ -6,7 +6,7 @@
 
 These contracts define Code Generation, Code Validation, and Code Integration within Implementation. They are Activities, not workflow stages.
 
-The Activity classification, fixed execution model, check duties, and shared attempt rules are agreed. Detailed role, evidence, completion, and handoff proposals remain open. Shorter contracts do not accept those proposals or authorize an executing unit.
+The requester accepted the complete Activity contracts under IE24, IE25, and IE27. They define roles, evidence, completion, and handoffs within the agreed fixed execution model and check duties. Approval does not authorize an executing unit or implement the assigned roles or skills.
 
 ## Shared execution rules
 
@@ -28,13 +28,13 @@ Read task definitions from the [authored graph](../task-graph.md). Read executio
 
 Each Activity owns its named [evidence](../../../runtime.md#stage-and-activity-evidence). Bind results to scope, attempt, material, relevant inputs, conditions, and supporting output. Retain required checkpoints and external evidence.
 
-The drafts propose no required Activity Markdown document. Optional detail uses `details/code-generation/`, `details/code-validation/`, or `details/code-integration/` within the unit.
+No Activity Markdown document is required. Optional detail uses `details/code-generation/`, `details/code-validation/`, or `details/code-integration/` within the unit.
 
-Optional supporting Markdown uses the [metadata contract](../../../metadata.md) and `supporting-document` type. Proposed entry skills perform self-review; they do not write journals or projections directly.
+Optional supporting Markdown uses the [metadata contract](../../../metadata.md) and `supporting-document` type. Assigned entry skills perform self-review; they do not write journals or projections directly. These contracts do not implement or adopt current skill implementations.
 
 ## Review, correction, and recovery
 
-Required Code Validation and Unit of Work Review are separate from additional review. The drafts propose additional review only when the requester asks for it.
+Required Code Validation and Unit of Work Review are separate from additional review. Additional review occurs only when the requester asks for it.
 
 Apply [requester intervention](../implementation.md#requester-intervention) only for hard blockers beyond agent authority. Ordinary defects, failed checks, and assessment corrections follow agent-led paths. Routine task completion needs no requester approval.
 
@@ -42,7 +42,7 @@ Activity questionnaires support the orchestrator's return decision. Their answer
 
 Local corrections, failed commands, waits, pauses, resumes, and new sessions keep the current unended Activity attempt. Reexecution after an authorized return or reopening starts a new attempt. Integration-only retries keep the current Integration attempt and cannot hide implementation changes.
 
-Preserve interrupted work and confirm earlier workers stopped before resuming. Use the [Implementation recovery rules](../implementation.md#attempts-failures-and-recovery), including unit-wide shutdown and the separately proposed post-completion return policy.
+Preserve interrupted work and confirm earlier workers stopped before resuming. Use the [Implementation recovery rules](../implementation.md#attempts-failures-and-recovery), including unit-wide shutdown and the accepted post-completion return policy.
 
 Activity completion does not complete Implementation or grant publication, deployment, or requester approval.
 

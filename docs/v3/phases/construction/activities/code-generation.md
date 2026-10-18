@@ -2,7 +2,7 @@
 
 [Shared Activity rules](README.md) | [Implementation](../implementation.md)
 
-**Status:** Draft for discussion. Existing check duties and shared execution rules remain binding; detailed assignments and completion evidence remain proposed.
+**Status:** Accepted by the requester under [IE24](../../../authoring_progress.md#completed-implementation-decisions). Existing check duties and shared execution rules remain binding.
 
 ## Goal and inputs
 
@@ -25,9 +25,9 @@ Do not change upstream requirements, task definitions, or selected planning deci
 
 ## Roles and skills
 
-The proposed owner is `kepler-coder`; the proposed entry skill is [kepler-code](../../../skills.md#kepler-code). The entry skill owns implementation, checks, self-review, evidence reporting, and the Validation handoff.
+`kepler-coder` is the accepted Activity owner; [kepler-code](../../../skills.md#kepler-code) is the accepted entry skill. The entry skill owns implementation, checks, self-review, evidence reporting, and the Validation handoff.
 
-Use a context separate from the Validation worker. The orchestrator coordinates handoffs and revision decisions. These proposals do not implement profiles or current skills.
+Use a context separate from the Validation worker. The orchestrator coordinates handoffs and revision decisions. These role and skill contracts do not implement or adopt agent profiles or current skills.
 
 ## Review and approval
 
@@ -45,7 +45,7 @@ Report answers, evidence, uncertainty, and the proposed boundary to the orchestr
 
 Complete Generation when required outputs, typechecking, modification-related tests, and self-review succeed.
 
-The draft also requires current-attempt evidence for actual material, relevant inputs, and conditions. Outputs must satisfy the task without unauthorized upstream changes, and no blocking Generation finding may remain.
+Require current-attempt evidence for actual material, relevant inputs, and conditions. Outputs must satisfy the task without unauthorized upstream changes, and no blocking Generation finding may remain.
 
 Generation completion makes the task eligible for Validation. It does not complete the task, enclosing stage, or Unit of Work.
 

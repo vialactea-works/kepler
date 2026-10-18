@@ -2,13 +2,11 @@
 
 [Construction phase index](README.md) | [Workflow phase index](../../README.md)
 
-**Status:** Draft for discussion.
+**Status:** Accepted by the requester under [DL18](../../authoring_progress.md#deliver-decisions).
 
-Deliver is the final agreed Construction stage. Its detailed outcome, artifacts, operations, roles, skills, evidence, and completion conditions are proposals.
+Deliver is the final agreed Construction stage. The requester accepted this complete contract, including its outcome, artifacts, operations, roles, skills, evidence, and completion conditions. [SH77 through SH79](../../authoring_progress.md#completed-shared-decisions) record the accepted deployment information, its location, and its timing.
 
-This draft proposes deployment content, location, and timing under [SH77 through SH79](../../authoring_progress.md#shared-decisions-still-pending). Those decisions remain open until requester agreement.
-
-Saving this draft does not approve its proposals or authorize a release, publication, deployment, or other delivery operation.
+This approval concerns the specification. It does not authorize a release, publication, deployment, or other delivery operation.
 
 ## Goal
 
@@ -29,7 +27,7 @@ Distinguish reviewed repository material from generated packages, images, extern
 
 ## Entry conditions
 
-The draft proposes starting when:
+Start when:
 
 - Unit of Work Review is complete under its applicable contract for the current material.
 - The reviewed result and relevant evidence are available.
@@ -62,9 +60,9 @@ Do not require a successful deployment or publication before starting the stage 
 
 ### Required delivery instructions
 
-The draft proposes required `delivery.md` at the unit root. Deliver owns this authored document; it describes intended operations and acceptance conditions, not changing execution progress.
+Require `delivery.md` at the unit root. Deliver owns this authored document; it describes intended operations and acceptance conditions, not changing execution progress.
 
-Use the existing unit directory and shared metadata contract. The proposed type is `delivery-plan`, outside the accepted metadata enum until agreement. Optional supporting Markdown keeps `type: supporting-document`.
+Use the existing unit directory and shared metadata contract. Use the accepted `delivery-plan` type. Optional supporting Markdown keeps `type: supporting-document`.
 
 Use `details/deliver/` for useful linked detail. Do not require empty runbooks or separate files merely to fill the stage.
 
@@ -83,7 +81,7 @@ Do not store operation status, completed checkboxes, approval flags, current att
 
 ### Deployment information
 
-The proposed minimum deployment information covers:
+Required deployment information covers:
 
 - The destination, environment, recipient, and intended externally observable outcome.
 - The reviewed source checkpoint and exact deliverable identifiers or the method that will establish them.
@@ -96,19 +94,19 @@ Apply this information to the actual requested outcome. A repository handoff nee
 
 When rollback is unavailable, explain the consequence and feasible recovery before the affected operation. Obtain requester decisions where the consequence exceeds existing authority.
 
-The proposed authoritative delivery instructions live in `delivery.md`, with linked supporting detail when useful. Actual operations, approvals, identities, and results remain in event-derived execution history.
+Authoritative delivery instructions live in `delivery.md`, with linked supporting detail when useful. Actual operations, approvals, identities, and results remain in event-derived execution history.
 
 ### Timing and upstream ownership
 
 Record known deployment constraints in the unit definition, as already required. Planning addresses technical dependencies and implementation work that affect delivery feasibility.
 
-The draft proposes resolving implementation-affecting deployment choices before Planning completes. Whole-unit review assesses the resulting preparation and known constraints; it need not require completed delivery operations.
+Resolve implementation-affecting deployment choices before Planning completes. Whole-unit review assesses the resulting preparation and known constraints; it need not require completed delivery operations.
 
 Complete `delivery.md`, required prerequisites, and applicable permissions before their affected delivery operations. Final instruction completion belongs to Deliver, not an extra earlier stage.
 
 If instructions expose a required implementation, planning, quality, or functional change, report it for upstream revision. Do not repair reviewed implementation through the delivery document.
 
-These timing proposals do not add completed Initialization or Inception as prerequisites. They do not require future external availability before Planning can complete.
+These timing rules do not add completed Initialization or Inception as prerequisites. They do not require future external availability before Planning can complete.
 
 ## Delivery procedure
 
@@ -159,7 +157,7 @@ Effort does not remove required instructions, permissions, checks, retention, or
 
 ## Agent roles
 
-The draft proposes `kepler-orchestrator` as the stage owner. It needs operation planning, material tracking, execution coordination, verification, and handoff capabilities.
+`kepler-orchestrator` is the accepted stage owner. The role needs operation planning, material tracking, execution coordination, verification, and handoff capabilities.
 
 Scoped workers can perform authorized operations and report actual results. The stage owner remains responsible for readiness, result assessment, evidence, and completion.
 
@@ -169,7 +167,7 @@ This role assignment does not implement an agent profile or decide inline work, 
 
 ## Supporting skills
 
-The draft proposes [kepler-finish-work](../../skills.md#kepler-finish-work) as the entry skill. It prepares instructions, checks readiness, coordinates authorized delivery, verifies results, and supplies the final handoff.
+[kepler-finish-work](../../skills.md#kepler-finish-work) is the accepted entry skill. It prepares instructions, checks readiness, coordinates authorized delivery, verifies results, and supplies the final handoff.
 
 Use [kepler-grilling](../../skills.md#kepler-grilling) for requester-owned choices and [kepler-research](../../skills.md#kepler-research) for uncertain operational facts. Follow the [common skill rules](../../skills.md#common-rules).
 
@@ -177,7 +175,7 @@ Self-review belongs in the entry skill. Its version 3 responsibilities do not ad
 
 ## Review and approval
 
-These stage-specific rules are proposals. They do not grant operation authority.
+These stage-specific rules are accepted. They do not grant operation authority.
 
 ### Self-review
 
@@ -187,7 +185,7 @@ Self-check the actual results and supporting evidence before reporting completio
 
 ### Additional review
 
-The draft proposes additional external review only when the requester asks for it. Existing project-required operation approvals and reviews remain applicable.
+Additional external review occurs only when the requester asks for it. Existing project-required operation approvals and reviews remain applicable.
 
 ### Operation authority and requester approval
 
@@ -195,7 +193,7 @@ Identify the permission required for each operation and its scope. Earlier desig
 
 Use explicit requester instructions or applicable project authority. Resolve missing authority before the affected operation; do not infer permission from silence, artifact presence, or a passing check.
 
-The draft proposes no automatic additional final requester approval gate. Obtain final approval only when an applicable authority rule or requester instruction requires it.
+No automatic final requester approval gate applies. Obtain final approval only when an applicable authority rule or requester instruction requires it.
 
 Record any required requester authorization or acceptance through CLI-owned operations with the relevant attempt and covered material. Retain applicable project authorization references without treating the CLI as the approval authority.
 
@@ -214,10 +212,10 @@ Local instruction or operation corrections can remain within the active Deliver 
 
 ## Completion conditions
 
-The draft proposes completion when:
+Complete the stage when:
 
 - The requested delivery outcome, destination, material, and acceptance conditions are explicit.
-- `delivery.md` satisfies its proposed content and metadata contract, with relevant linked supporting files.
+- `delivery.md` satisfies its accepted content and metadata contract, with relevant linked supporting files.
 - Required readiness checks, self-review, and any requested additional review are complete.
 - Every required operation has applicable authority and an identified actual result.
 - Delivered material has retained provenance to the reviewed result and relevant configuration.

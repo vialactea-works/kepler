@@ -2,7 +2,7 @@
 
 [Shared Activity rules](README.md) | [Implementation](../implementation.md)
 
-**Status:** Draft for discussion. Independent non-author feedback and check duties remain binding; detailed assignments and completion evidence remain proposed.
+**Status:** Accepted by the requester under [IE25](../../../authoring_progress.md#completed-implementation-decisions). Independent non-author feedback and check duties remain binding.
 
 ## Goal and inputs
 
@@ -30,9 +30,9 @@ The orchestrator authorizes implementation returns to Generation and required fo
 
 ## Roles and skills
 
-The proposed owner is `kepler-reviewer`; the proposed entry skill is [kepler-code-feedback](../../../skills.md#kepler-code-feedback). It supplies checks, independent feedback, assessment self-review, evidence reporting, and the Integration handoff.
+`kepler-reviewer` is the accepted Activity owner; [kepler-code-feedback](../../../skills.md#kepler-code-feedback) is the accepted entry skill. It supplies checks, independent feedback, assessment self-review, evidence reporting, and the Integration handoff.
 
-Independence does not require another model, vendor, or human. These proposals do not implement profiles or current skills.
+Independence does not require another model, vendor, or human. These role and skill contracts do not implement or adopt agent profiles or current skills.
 
 ## Review and approval
 
@@ -50,7 +50,7 @@ Report answers, evidence, uncertainty, and the proposed boundary to the orchestr
 
 Complete Validation only when required checks succeed, independent feedback is complete, and no blocking findings remain. Missing or interrupted checks are not successful results.
 
-The draft also requires self-checked assessment coverage and current-attempt evidence for actual material, conditions, and relevant inputs. Coverage includes the task contract, upstream obligations, and fixed baseline.
+Require self-checked assessment coverage and current-attempt evidence for actual material, conditions, and relevant inputs. Coverage includes the task contract, upstream obligations, and fixed baseline.
 
 Validation completion permits Integration. It does not accept the combined candidate, complete the task or stage, or authorize delivery.
 

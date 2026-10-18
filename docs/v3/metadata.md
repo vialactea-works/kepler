@@ -54,10 +54,12 @@ Task UUIDs identify tasks, not their containing artifact or execution attempt. T
 | `non-functional-requirements` | Quality Requirements in `quality.md`. |
 | `project-reference` | Shared Project reference documents. |
 | `supporting-document` | Optional supporting Markdown documents, such as research notes or domain-model detail. |
+| `implementation-plan` | The Implementation Planning artifact `plan.md`, accepted under [IP02](authoring_progress.md#implementation-planning-decisions). |
+| `delivery-plan` | The Deliver artifact `delivery.md`, accepted under [DL03](authoring_progress.md#deliver-decisions). |
 
 Use the generic `supporting-document` type under [DF06](authoring_progress.md#completed-shared-decisions). Describe each document's purpose in its content and in the link from its owning stage. Keep the existing required-document and Project reference types unchanged. Define additional values when their artifact contracts are agreed.
 
-The [Implementation Planning draft](phases/construction/implementation-planning.md#artifact-metadata) proposes `implementation-plan` for `plan.md`. The [Deliver draft](phases/construction/deliver.md#required-delivery-instructions) proposes `delivery-plan` for `delivery.md`. Both values remain proposed and are outside the accepted type table. No new common fields are proposed.
+The accepted [Implementation Planning contract](phases/construction/implementation-planning.md#artifact-metadata) assigns `implementation-plan` to `plan.md`. The accepted [Deliver contract](phases/construction/deliver.md#required-delivery-instructions) assigns `delivery-plan` to `delivery.md`. These are artifact types, not new common fields.
 
 #### Unit ownership
 
