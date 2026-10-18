@@ -33,7 +33,7 @@ For each missing stage, define essential inputs, outputs, responsibilities, comp
 | 1 | Functional Design | The stage specification is accepted under FD13. Use the agreed `supporting-document` type under DF06. |
 | 2 | [Quality Requirements](phase_construction/quality-requirements.md) | The stage specification, including evidence and skill responsibilities, is accepted under NF12. |
 | 3 | [Implementation Planning](phase_construction/implementation-planning.md) | Review the remaining Planning proposals. The task graph specification is accepted under IP26, including task content, dependencies, and prerequisites. |
-| 4 | [Implementation Execution](phase_construction/implementation-execution.md) | Review the detailed unit and task-stage proposals. Preserve agreed task loops, checks, concurrency, returns, and integration rules. |
+| 4 | [Implementation Execution](phase_construction/implementation-execution.md) | Review the unit contract and dedicated Generation and Validation drafts. Preserve agreed independence, checks, concurrency, and blocker-only requester intervention. |
 | 5 | [Unit of Work Review](phase_construction/unit-of-work-review.md) | Review whole-unit assessment, findings, evidence, completion, applicable acceptance, and handoff proposals. |
 | 6 | [Deliver](phase_construction/deliver.md) | Review outcome, instructions, authorization, verification, recovery, and deployment information proposals. |
 | 7 | Shared runtime | Resolve SH74 record portability. Implement journals, guarded transitions, safe recovery, material retention, and isolated concurrent work. |
@@ -89,32 +89,32 @@ No pending Functional Design or Quality Requirements decisions remain in this qu
 
 ### Implementation Execution proposals
 
-The [Execution draft](phase_construction/implementation-execution.md) preserves accepted structure and check duties. These additional proposals remain open.
+The [Execution draft](phase_construction/implementation-execution.md) preserves accepted structure and check duties. Dedicated [Generation](phase_construction/code-generation.md) and [Validation](phase_construction/code-validation.md) contracts own those task stages. Scoped [Execution decisions](#completed-execution-decisions) are accepted; the additional proposals below remain open.
 
 | ID | Decision | Proposal to review |
 | --- | --- | --- |
 | IE01 | Execution entry conditions | Are the proposed [entry conditions](phase_construction/implementation-execution.md#entry-conditions) sufficient, including greenfield checkpoint establishment and scoped prerequisite timing? |
 | IE02 | Execution outputs and ownership | Should Execution produce implementation material and CLI-owned records without a separate required [execution Markdown document](phase_construction/implementation-execution.md#artifacts-and-records)? |
 | IE03 | Execution stage owner | Should `kepler-orchestrator` own the proposed [unit execution responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
-| IE04 | Generation stage owner | Should `kepler-coder` own the proposed [Code Generation responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
-| IE05 | Validation stage owner | Should `kepler-reviewer` own the proposed [Code Validation responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
+| IE04 | Generation stage owner | Should `kepler-coder` own the proposed [Code Generation responsibilities](phase_construction/code-generation.md#agent-roles)? |
+| IE05 | Validation stage owner | Should `kepler-reviewer` own the proposed [Code Validation responsibilities](phase_construction/code-validation.md#agent-roles)? |
 | IE06 | Integration stage owner | Should `kepler-orchestrator` own the proposed [Task Integration responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
 | IE07 | Execution entry skill | Should [kepler-orchestrate](skills.md#kepler-orchestrate) supply the proposed separate unit execution and task integration procedures? |
 | IE08 | Generation entry skill | Should [kepler-code](skills.md#kepler-code) supply the proposed Generation procedure? |
 | IE09 | Validation entry skill | Should [kepler-code-feedback](skills.md#kepler-code-feedback) supply the proposed Validation procedure? |
-| IE10 | Validation reviewer independence | Should the [independent reviewer](phase_construction/implementation-execution.md#code-validation) assess actual candidate material without authoring or editing that implementation? |
 | IE11 | Execution self-review rule | Should self-review belong in each applicable [entry procedure](phase_construction/implementation-execution.md#self-review), without separate stages or attempt identities? |
 | IE12 | Additional execution review trigger | Should [additional external review](phase_construction/implementation-execution.md#additional-review) be requester-triggered, while required Validation feedback and Unit of Work Review remain mandatory? |
-| IE13 | Execution approval trigger | Should [additional execution approval](phase_construction/implementation-execution.md#requester-decisions-and-approval) apply only under existing authority rules or requester instructions? |
 | IE14 | Execution reopening questionnaires | Do the proposed [unit and task-stage questions](phase_construction/implementation-execution.md#reopening-questionnaires) identify relevant findings without changing revision authority? |
-| IE15 | Generation completion evidence | Are the named [Generation results](phase_construction/implementation-execution.md#evidence-coverage), covered material, and required results sufficient for its proposed completion details? |
-| IE16 | Validation completion evidence | Are the named [Validation results](phase_construction/implementation-execution.md#evidence-coverage), covered material, and required results sufficient for its proposed completion details? |
+| IE15 | Generation completion evidence | Are the named [Generation results](phase_construction/code-generation.md#evidence-coverage), covered material, and required results sufficient for its proposed completion details? |
+| IE16 | Validation completion evidence | Are the named [Validation results](phase_construction/code-validation.md#evidence-coverage), covered material, and required results sufficient for its proposed completion details? |
 | IE17 | Integration completion evidence | Are the named [Integration results](phase_construction/implementation-execution.md#evidence-coverage), covered material, and required results sufficient without replacing accepted lock and check rules? |
 | IE18 | Execution completion evidence | Is the proposed [unit completion assessment](phase_construction/implementation-execution.md#evidence-coverage) sufficient while preserving originating task-stage evidence bindings? |
 | IE19 | Execution completion details | Are the proposed [completion details](phase_construction/implementation-execution.md#completion-conditions) sufficient for the already agreed unit completion boundary? |
 | IE20 | Execution handoff | Does the proposed [review handoff](phase_construction/implementation-execution.md#handoff) identify sufficient integrated material, provenance, evidence, and remaining concerns? |
-| IE21 | Execution whole-draft acceptance | Does the requester accept the complete [Implementation Execution specification](phase_construction/implementation-execution.md), including nested task-stage contracts and skill responsibilities? |
+| IE21 | Execution whole-draft acceptance | Does the requester accept the complete [unit-scoped Execution specification](phase_construction/implementation-execution.md), including its Integration and skill responsibilities? |
 | IE22 | Post-completion execution return | Should the [scoped-return rule](phase_construction/implementation-execution.md#return-after-completed-execution) reopen affected task stages, reassess retained scopes, and require new unit completion and downstream execution? |
+| IE24 | Generation contract acceptance | Does the requester accept the complete dedicated [Code Generation contract](phase_construction/code-generation.md), including its proposed role, evidence, and handoff details? |
+| IE25 | Validation contract acceptance | Does the requester accept the complete dedicated [Code Validation contract](phase_construction/code-validation.md), including its proposed role, evidence, and handoff details? |
 
 ### Unit of Work Review proposals
 
@@ -168,7 +168,7 @@ The [Deliver draft](phase_construction/deliver.md) proposes the following polici
 
 The MVP decision queue contains 79 items: 7 earlier decisions, 16 Planning proposals, and 56 later-stage proposals. CN20 and whole-stage Planning acceptance remain open. Another 33 required MVP implementation choices remain. Defer 13 questions beyond the MVP; 1 speculative approval gate is removed.
 
-The MVP review preserved the 87 previously completed decisions. Later requester decisions bring the completed total to 115. Reclassification must not fabricate approval or claim implementation is complete.
+The MVP review preserved the 87 previously completed decisions. Later requester decisions bring the completed total to 118. Reclassification must not fabricate approval or claim implementation is complete.
 
 ## Register rules
 
@@ -317,6 +317,16 @@ These decisions apply to Construction. Do not generalize its nested execution st
 | CN17 | Unit review scope | [Stage outline](phase_construction/README.md#stage-outline): Unit of Work Review examines the complete integrated result. |
 | CN18 | Construction attempt scopes | [Attempts](phase_construction/README.md#attempts-and-completion): Implementation Execution has a unit-scoped attempt. Nested task stages have task-scoped attempts within it. |
 | CN19 | Independent code feedback ownership | [Stage boundaries](phase_construction/README.md#agreed-boundaries): Code Validation owns independent code feedback. |
+
+## Completed Execution decisions
+
+These scoped decisions are accepted. The remaining Execution, Generation, and Validation proposals are not accepted by this record.
+
+| ID | Decision | Status | Record |
+| --- | --- | --- | --- |
+| IE10 | Validation reviewer independence | Complete | Retain [independent non-author feedback](phase_construction/code-validation.md#agent-roles) on actual task material without authoring or editing the implementation. A different model, vendor, or human is not required. |
+| IE13 | Execution approval trigger | Complete | Requester [intervention](phase_construction/implementation-execution.md#requester-intervention) occurs only for hard blockers that agents cannot resolve within their authority. Routine task acceptance follows successful Validation and Integration, not requester approval. |
+| IE23 | Dedicated task-stage contracts | Complete | Code Generation and Code Validation are distinct stages with dedicated [Generation](phase_construction/code-generation.md) and [Validation](phase_construction/code-validation.md) contracts. Each owns its procedure, evidence, completion conditions, reopening questions, and handoff. |
 
 ## Functional Design decisions
 

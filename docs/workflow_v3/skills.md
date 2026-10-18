@@ -113,7 +113,8 @@ For unit-scoped Implementation Execution, the draft proposes this skill to:
 - Coordinate ready-task admissions with fixed baselines and complete scoped worker handoffs.
 - Preserve concurrent ready-task work without global Git gates or batch barriers.
 - Consume worker facts and apply authorized control decisions through CLI-owned operations.
-- Report unresolved consequential questions and apply authorized revision boundaries.
+- Resolve routine issues within existing authority and request requester decisions only for [hard blockers](phase_construction/implementation-execution.md#requester-intervention).
+- Record blocker decisions and apply authorized revision boundaries.
 - Assess task coverage, final integrated evidence, and unit completion.
 - Apply the proposed post-completion return rule, preserving valid original task bindings and executing reopened stages under new attempts.
 - Perform self-review and prepare the Unit of Work Review handoff.
@@ -124,7 +125,7 @@ These are separate stage procedures with distinct applicable attempt scopes. The
 
 ## kepler-code
 
-**Status:** Proposed under the [Code Generation contract](phase_construction/implementation-execution.md#code-generation).
+**Status:** Proposed under the dedicated [Code Generation contract](phase_construction/code-generation.md#supporting-skills).
 
 The draft proposes this entry skill to:
 
@@ -139,7 +140,7 @@ This procedure does not approve upstream changes, bypass Validation, or complete
 
 ## kepler-code-feedback
 
-**Status:** Proposed under the [Code Validation contract](phase_construction/implementation-execution.md#code-validation).
+**Status:** Proposed under the dedicated [Code Validation contract](phase_construction/code-validation.md#supporting-skills).
 
 The draft proposes this entry skill to:
 

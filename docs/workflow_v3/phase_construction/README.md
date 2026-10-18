@@ -39,7 +39,7 @@ Code Generation and Code Validation form the Task coding loop inside each task i
 
 ## Implementation Execution
 
-The [stage draft](implementation-execution.md) adds proposed detailed contracts for unit execution, Code Generation, Code Validation, and Task Integration. The agreed rules below remain binding.
+The [unit-stage draft](implementation-execution.md) adds proposed details for Execution and Task Integration. Dedicated [Generation](code-generation.md) and [Validation](code-validation.md) contracts define their task-stage responsibilities. The agreed rules below remain binding.
 
 Implementation Execution is a unit-scoped stage. The orchestrator executes the task graph and coordinates task implementation, integration, and completion.
 
@@ -125,7 +125,7 @@ Use each stage attempt's identity as its [run floor](../runtime.md#run-floor). T
 
 Complete Implementation Execution when required task implementations are complete and the integrated unit result satisfies its required checks. The result is then ready for Unit of Work Review, not automatically approved for delivery.
 
-This structure does not introduce an additional requester approval gate. Define approval conditions in the applicable stage contracts.
+Tasks are accepted through successful Code Validation and Task Integration, not routine requester approval. Ask the requester only for [hard blockers](implementation-execution.md#requester-intervention) that require requester input. Continue independent ready work while affected work waits.
 
 ### Remaining stage contracts
 

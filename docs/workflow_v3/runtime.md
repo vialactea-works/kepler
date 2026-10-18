@@ -307,7 +307,7 @@ A conflict can block the affected integration. Unrelated ready tasks and units c
 
 Stage contracts define required evidence, covered material, and required results. Shared bindings do not replace those definitions.
 
-The [Execution draft](phase_construction/implementation-execution.md#evidence-coverage) distinguishes task-stage evidence from the unit completion assessment. The [Review draft](phase_construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phase_construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
+The dedicated [Generation](phase_construction/code-generation.md#evidence-coverage) and [Validation](phase_construction/code-validation.md#evidence-coverage) contracts define their task-stage evidence. The [Execution draft](phase_construction/implementation-execution.md#evidence-coverage) defines Integration evidence and the unit completion assessment. The [Review draft](phase_construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phase_construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
 
 These new definitions remain proposed. Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage completion.
 

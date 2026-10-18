@@ -24,7 +24,7 @@ Each phase is a bounded context and owns its execution state model and projectio
 
 Project preparation belongs to Initialization, not Construction. A clear request can enter Construction without Inception.
 
-Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains parallel task implementation contexts. Each context contains the Task coding loop and Task Integration. These execution relationships are specific to Construction.
+Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains parallel task implementation contexts. Each context contains the Task coding loop and Task Integration. These execution relationships are specific to Construction. The task coding loop has dedicated [Code Generation](phase_construction/code-generation.md) and [Code Validation](phase_construction/code-validation.md) stage contracts.
 
 [Task Integration](phase_construction/README.md#integration-order-and-locking) prepares, checks, then accepts each candidate under a unit-scoped lock. Typechecking, the project build, and the full application test suite must succeed against the candidate before acceptance. This serializes integrations within that unit while preserving permitted coding, validation, and cross-unit parallelism.
 

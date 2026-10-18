@@ -4,7 +4,9 @@
 
 **Status:** Draft for discussion.
 
-The [phase contract](README.md#implementation-execution) defines the agreed execution structure, concurrency, attempts, check duties, integration procedure, and return paths. This draft proposes additional inputs, responsibilities, role assignments, skills, evidence, and completion details. New proposals do not replace agreed rules.
+The [phase contract](README.md#implementation-execution) defines the agreed execution structure, concurrency, attempts, check duties, integration procedure, and return paths. Requester intervention is limited to hard blockers under the rule below. This draft proposes additional inputs, responsibilities, role assignments, skills, evidence, and completion details. New proposals do not replace agreed rules.
+
+[Code Generation](code-generation.md) and [Code Validation](code-validation.md) have dedicated task-stage contracts. Those contracts own their procedures, evidence, completion conditions, reopening questions, and handoffs.
 
 Saving this draft does not approve its proposals, accept Planning, or authorize an executing Unit of Work.
 
@@ -91,41 +93,13 @@ Workers report facts and findings within their scope. The orchestrator and autho
 
 ### Code Generation
 
-Code Generation is a task-scoped stage within Task coding. Use the admitted task baseline and current task contract. Preserve valid retained work during corrections; the baseline is not a command to discard it.
-
-Implement the bounded task outcome using the selected solution and suitable project patterns. Add or update tests for changed public behavior, including relevant failures and boundaries.
-
-Use the lowest test level that proves the behavior. Test real collaborations where isolated tests cannot establish correctness. Cover critical complete workflows where their wiring matters.
-
-Run typechecking and tests related to the modifications. Establish planned missing infrastructure rather than inventing successful results or waiving required checks.
-
-Perform self-review of the implementation, tests, scope, and task acceptance conditions. Correct local defects within the current Generation attempt.
-
-Prepare the task output checkpoint under the shared [checkpoint procedure](../runtime.md#repository-checkpoint-procedure). Final evidence must cover that material, not an earlier working copy.
-
-Complete Generation when it supplies the required outputs and its typechecking, related tests, and self-review succeed. Pass the output checkpoint, relevant inputs, changed scope, and evidence to Code Validation.
-
-Generation completion does not establish successful Code Validation or task completion.
+Execute the [Code Generation contract](code-generation.md) for the admitted task. That stage owns implementation, typechecking, modification-related tests, self-review, and its Validation handoff.
 
 ### Code Validation
 
-Code Validation is a task-scoped stage after Code Generation. Inspect the generated output against the task contract, upstream obligations, and admitted baseline.
+Execute the [Code Validation contract](code-validation.md) against the generated task output. That stage owns typechecking, the build, the full suite, independent feedback, and its Integration handoff.
 
-Run typechecking, the project build, and the full application test suite. Identify commands and actual coverage; a build proves typechecking only when it performs that check.
-
-Obtain independent code feedback. The draft proposes a reviewer who did not author the candidate and receives its actual material and relevant contracts.
-
-The reviewer reports findings and uncertainty without editing the implementation. Independence does not require a different model, vendor, or human reviewer.
-
-Assess correctness, applicable quality obligations, failure behavior, test adequacy, and unintended effects. Required project checks remain applicable; do not replace them with review opinion.
-
-A blocking finding identifies a violated obligation, failed required check, or missing proof needed for task completion. A preference alone does not redefine the task.
-
-Self-check the validation scope, findings, and evidence before reporting completion. Report disputed requirements or upstream problems to the orchestrator.
-
-Complete Validation only when required checks succeed, independent feedback is complete, and no blocking findings remain. A missing or interrupted check is not a successful result.
-
-Successful Validation makes the task ready for Task Integration. Validation does not accept the unit's combined candidate.
+The orchestrator coordinates stage handoffs. Successful Validation makes the task eligible for Integration; it does not complete task implementation.
 
 ### Task Integration
 
@@ -194,9 +168,9 @@ These assignments are proposals, not implemented agent profiles.
 | Role | Proposed agent | Responsibility |
 | --- | --- | --- |
 | Implementation Execution owner | `kepler-orchestrator` | Coordinate admissions, workers, findings, execution records, completion, and the review handoff. |
-| Code Generation owner | `kepler-coder` | Implement the task, tests, and required documentation; run Generation checks and self-review. |
-| Code Validation owner | `kepler-reviewer` | Perform required checks, independent feedback, evidence assessment, and validation reporting without editing the implementation. |
 | Task Integration owner | `kepler-orchestrator` | Ensure locked candidate preparation, checks, acceptance, evidence, and integration return handling. |
+
+The dedicated [Generation](code-generation.md#agent-roles) and [Validation](code-validation.md#agent-roles) contracts define their proposed role assignments.
 
 Role ownership does not require one worker to perform every operation. Scoped workers report results; the owner remains responsible for the stage contract.
 
@@ -209,13 +183,13 @@ The draft proposes these entry procedures:
 | Stage | Entry skill | Responsibility |
 | --- | --- | --- |
 | Implementation Execution | [kepler-orchestrate](../skills.md#kepler-orchestrate) | Coordinate the unit graph, scoped handoffs, completion evidence, and review handoff. |
-| Code Generation | [kepler-code](../skills.md#kepler-code) | Implement and self-review one task, then supply checked output to Validation. |
-| Code Validation | [kepler-code-feedback](../skills.md#kepler-code-feedback) | Validate one task and supply independent findings and required check evidence. |
 | Task Integration | [kepler-orchestrate](../skills.md#kepler-orchestrate) | Apply the task-scoped integration procedure separately from unit scheduling. |
+
+The dedicated [Generation](code-generation.md#supporting-skills) and [Validation](code-validation.md#supporting-skills) contracts define their proposed entry skills.
 
 Self-review belongs in each applicable entry procedure. These names do not adopt current skill implementations or legacy execution records.
 
-Use [kepler-research](../skills.md#kepler-research) for uncertain facts and [kepler-grilling](../skills.md#kepler-grilling) for requester-owned questions. Supporting work cannot authorize revisions or edit journals directly.
+Use [kepler-research](../skills.md#kepler-research) for uncertain facts. Use [kepler-grilling](../skills.md#kepler-grilling) for a requester decision needed to resolve a hard blocker. Supporting work cannot authorize revisions or edit journals directly.
 
 ## Review and approval
 
@@ -223,7 +197,7 @@ New review details are proposals. Required independent Code Validation feedback 
 
 ### Self-review
 
-Generation checks its implementation and tests. Validation checks its assessment and evidence. Integration checks candidate bindings and acceptance. The unit owner checks coverage, integrated completion, and handoff completeness.
+Generation and Validation own self-review under their dedicated contracts. Integration checks candidate bindings and acceptance. The unit owner checks coverage, integrated completion, and handoff completeness.
 
 These checks belong in the entry skills. They do not create separate self-review stages or attempt identities.
 
@@ -231,29 +205,25 @@ These checks belong in the entry skills. They do not create separate self-review
 
 The draft proposes additional external review only when the requester asks for it. This does not make Code Validation's independent feedback or Unit of Work Review optional.
 
-### Requester decisions and approval
+### Requester intervention
 
-Resolve consequential choices through their existing authority rules. The draft proposes no automatic additional whole-execution requester approval gate.
+Ask the requester for a decision only when a hard blocker prevents further authorized Execution work. First investigate the issue and use existing contracts, available information, and the orchestrator's authority to resolve it.
 
-Obtain any approval required by an applicable authority rule or requester instruction. Record it against its covered material and attempt through CLI-owned operations.
+A hard blocker requires information, permission, or a consequential choice that agents cannot obtain or resolve within their authority. Agents handle ordinary implementation choices, code defects, failed checks, and review findings when agent-led correction paths can resolve them.
 
-Implementation authority does not authorize publication or deployment. Integration acceptance is an internal state change, not requester acceptance of the unit.
+Report the blocked work, the established cause, attempted alternatives, and the exact requester input needed. Preserve affected work. Continue independent ready work while its inputs and contracts remain valid. A blocked task does not require the whole unit to stop.
+
+Record the requester's decision and affected scope through CLI-owned operations. Resume affected work only after the blocker is resolved and any required revision or permission is established.
+
+Tasks are accepted through Code Validation and Task Integration under their contracts, including required checks and evidence. The orchestrator records task completion through authorized CLI operations. Do not require routine requester task approval or a separate whole-Execution approval.
+
+A requester decision does not turn failed checks into successful results or waive unresolved stage obligations. Upstream stages retain their own approval rules. Implementation authority does not authorize publication or deployment.
 
 ### Reopening questionnaires
 
 Evaluate these stage-specific questions and report the proposed boundary to the orchestrator.
 
-#### Code Generation
-
-1. Does the task implementation, its tests, or required documentation need correction?
-2. Does a finding invalidate the generated outputs or their required check coverage?
-3. Does a suspected upstream problem exceed the current task contract or authorized implementation choices?
-
-#### Code Validation
-
-1. Does a finding invalidate required check results, independent feedback, or the validation assessment?
-2. Does reviewed material or a relevant input differ from the material covered by validation evidence?
-3. Does resolving the finding require Generation changes or an earlier upstream revision?
+Use the dedicated [Generation](code-generation.md#reopening-questionnaire) and [Validation](code-validation.md#reopening-questionnaire) questionnaires for those stages.
 
 #### Task Integration
 
@@ -284,26 +254,26 @@ The draft proposes these details for the agreed execution completion rule:
 - No unresolved blocking finding or unauthorized consequential choice remains.
 - No worker remains authorized to change the completed execution result under an unfinished task in this execution.
 - Unit self-review and any requested additional review are complete, with blocking findings resolved.
-- Required decisions and any applicable requester approval are recorded.
+- Any requester decisions needed to resolve hard blockers are recorded and their blocking effects are resolved.
 - The handoff identifies the complete integrated result, upstream contracts, task provenance, and evidence for Unit of Work Review.
 
 This does not require unrelated workspaces to be clean or independent units to stop. Whole-unit review and delivery remain separate stages.
 
 ### Evidence coverage
 
-Each row names evidence for its owning stage. Refer to originating task-stage records without rebinding their results as unit-attempt results.
+The dedicated [Generation](code-generation.md#evidence-coverage) and [Validation](code-validation.md#evidence-coverage) contracts own their named evidence and required results.
+
+The rows below cover Integration and the enclosing Execution stage. Refer to originating task-stage records without rebinding their results as unit-attempt results.
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
-| Generation check result | Task output checkpoint, changed behavior, related tests, task contract, and relevant inputs. | Typechecking and modification-related tests succeed against the identified material. |
-| Generation self-review result | Task implementation, tests, required documentation, and acceptance conditions. | Required outputs are supplied; no blocking Generation findings remain. |
-| Validation check result | Task output checkpoint, project check configuration, and relevant execution conditions. | Typechecking, the project build, and the full application test suite succeed. |
-| Independent code feedback result | Actual task output against its baseline, task contract, functional design, and applicable quality requirements. | Independent feedback is complete. No blocking findings remain, and the validation assessment is self-checked. |
 | Integration check result | Combined candidate, current unit checkpoint, task output, and relevant conditions. | Typechecking, the project build, and the full application test suite succeed against the candidate under the unit lock. |
 | Integration acceptance result | Checked candidate, accepted unit checkpoint, integration inputs, and required check records. | The accepted material matches the successful candidate. Integration self-review confirms bindings and task completion conditions. |
 | Execution completion assessment | Final unit checkpoint, current task graph, upstream obligations, current or retained task-stage evidence, and integration provenance. | Required tasks and integrated checks are complete. Reopened task stages have current-attempt evidence; retained scopes have valid original bindings. Unit self-review confirms coverage and handoff accuracy. |
 | Requested additional review result | Material and scope identified by the request, when additional review is requested. | The requested review is complete and its blocking findings are resolved. |
-| Applicable requester approval record | Material and decisions covered by a required approval. | Explicit requester approval binds the relevant attempt and reviewed material. |
+| Requester blocker decision | Blocking issue, affected work, relevant contracts, and required requester input. | Record the requester's actual decision and its scope. Resume affected work only when the blocker is resolved. |
+
+The requester-decision row applies only when a hard blocker needs requester intervention. It is not a routine task-approval record.
 
 Apply the shared [evidence bindings](../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Preserve each check's task or unit scope, attempt, checkpoint, relevant inputs, conditions, result, and supporting output.
 
