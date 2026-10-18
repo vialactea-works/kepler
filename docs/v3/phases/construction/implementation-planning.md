@@ -225,7 +225,7 @@ The owner needs architecture analysis, source investigation, task decomposition,
 
 The requester retains authority over scope, product obligations, consequential trade-offs, and required approvals. The [orchestrator](../../revision.md#authority-and-escalation) controls revision authorization.
 
-This role assignment does not select a worker model for Planning. [CN20](../../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Planning or other phases. The orchestrator schedules execution under the Implementation Execution contract.
+This role assignment does not select a worker model for Planning. [CN22](../../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Planning or other phases. The orchestrator schedules execution under the Implementation Execution contract.
 
 ## Supporting skills
 

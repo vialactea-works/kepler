@@ -48,7 +48,7 @@ The [authored task DAG](../../phases/construction/task-graph.md) defines depende
 
 Code Integration holds the unit lock through reading current state, preparation, typechecking, build, full-suite checks, and acceptance. Accept only the checked candidate. Other permitted task work and independent units continue.
 
-The fixed Activity procedure and existing tracking mechanics suffice for the MVP. Do not add a protocol registry, arbitrary graph language, general graph interpreter, team engine, or selectable protocol presets.
+The fixed Activity procedure and existing tracking mechanics suffice for the MVP. [CN20](../../authoring_progress.md#deferred-decisions) defers coordination protocol definitions beyond this MVP. Do not add a protocol registry, arbitrary graph language, general graph interpreter, team engine, or selectable protocol presets.
 
 ## Revision, Effort, and authority
 

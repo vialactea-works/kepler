@@ -130,7 +130,7 @@ Review independence does not require a different model, vendor, or human. The re
 
 The orchestrator owns revision decisions and coordination. The requester retains authority over the intended outcome, scope, consequential trade-offs, and applicable acceptance.
 
-These assignments do not implement agent profiles. [CN20](../../authoring_progress.md#completed-construction-decisions) selects an orchestrator-controlled subagent model for Implementation Execution only. It does not select a worker model for Unit of Work Review.
+These assignments do not implement agent profiles. [CN22](../../authoring_progress.md#completed-construction-decisions) selects an orchestrator-controlled subagent model for Implementation Execution only. It does not select a worker model for Unit of Work Review.
 
 ## Supporting skills
 

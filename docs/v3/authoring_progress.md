@@ -68,7 +68,7 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 ### Construction decisions still pending
 
-No Construction working-discipline decision remains pending. [CN20](#completed-construction-decisions) records the accepted model for Implementation Execution only.
+No coordination-protocol definition is required for this MVP. [CN20](#deferred-decisions) tracks later protocol definitions. [CN22](#completed-construction-decisions) preserves the agreed MVP execution model.
 
 ### Stage contract decisions
 
@@ -174,7 +174,7 @@ The [Deliver draft](phases/construction/deliver.md) proposes the following polic
 
 ## Review result
 
-The register contains 255 unique IDs, including 128 completed decisions and 80 pending MVP decisions. It also has 33 MVP implementation choices, 13 deferred questions, and one retired question. Whole-stage Planning acceptance (IP19) remains open. CN20 records the accepted Implementation Execution working model. Activity decisions do not accept detailed contract bodies or claim implementation is complete.
+The register contains 256 unique IDs, including 128 completed decisions and 80 pending MVP decisions. It also has 33 MVP implementation choices, 14 deferred questions, and one retired question. Whole-stage Planning acceptance (IP19) remains open. CN22 preserves the accepted Implementation Execution model; CN20 tracks deferred protocol definitions. Activity decisions do not accept detailed contract bodies or claim implementation is complete.
 
 ## Register rules
 
@@ -185,7 +185,7 @@ The register contains 255 unique IDs, including 128 completed decisions and 80 p
 - Preserve IDs when decisions move between sections. Give new questions new IDs.
 - Classification does not approve unchosen policy or change decision ownership.
 
-Original decision titles retain their historical wording, including the former Depth label. Contract text and references use current concept names.
+Original decision titles retain their historical wording, including the former Depth label. Contract text and references use current concept names. The requester replaced CN20 with deferred coordination protocol definitions. CN22 preserves the previously accepted MVP execution model.
 
 A requester decision is needed when the answer changes required behavior, authority, evidence obligations, or material scope. Technical formats, command names, and mechanisms belong to implementation within the agreed contracts.
 
@@ -330,8 +330,8 @@ These decisions apply to Construction. Do not generalize its nested execution st
 | CN17 | Unit review scope | [Review scope](phases/construction/unit-of-work-review.md#goal): Unit of Work Review examines the complete integrated result. |
 | CN18 | Construction attempt scopes | [Attempts](phases/construction/README.md#attempts-and-completion): Implementation Execution has a unit-scoped attempt. Each Activity occurrence has a distinct attempt and run floor linked to it. SH96 supersedes only the historical task-stage attempt classification. The task graph and its dependencies remain unchanged. |
 | CN19 | Independent code feedback ownership | [Stage boundaries](phases/construction/README.md#agreed-boundaries): Code Validation owns independent non-author code feedback. |
-| CN20 | MVP working discipline | [Implementation Execution](phases/construction/implementation-execution.md#agent-roles): use one orchestrator-controlled subagent model for MVP Implementation Execution. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they need not spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. The decision selects no role profiles, skill implementations, or per-task topology. It does not constrain other phases. |
 | CN21 | MVP coordination boundary | [Construction MVP boundary](#construction-mvp-boundary): keep the authored plan separate from runtime state. Keep explicit attempts and evidence under phase-owned rules. Keep the fixed per-task Activity procedure separate from the accepted dependency-ready DAG. Feedback routes do not add dependency edges. Keep dispatch separate from readiness, acceptance, and revision policy. Do not add a generic protocol registry, arbitrary graph language or interpreter, or Basic, Workshop, or Factory presets. Do not add a team engine, swarm, extra protocol state store, or universal domain graph. Defer a general graph engine, but keep required feedback routes. Future variants alone do not justify new machinery. Add only behavior needed for an agreed MVP scenario. |
+| CN22 | MVP execution model | Retain the accepted model previously recorded under CN20. [Implementation Execution](phases/construction/implementation-execution.md#agent-roles): use one orchestrator-controlled subagent model for MVP Implementation Execution. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they need not spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. The decision selects no role profiles, skill implementations, or per-task topology. It does not constrain other phases. |
 
 ## Completed Execution decisions
 
@@ -417,6 +417,7 @@ Supporting-document types are agreed under [DF06](#completed-shared-decisions). 
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
+| CN20 | Coordination protocol definitions | After the MVP, define protocols that combine execution organization with worker communication. Consider serial/parallel scheduling, dependency DAGs, and general execution graphs. Evaluate inline, subagent, and team interaction separately. Examples: Basic uses serial/subagents; Workshop uses DAG/subagents; Factory uses graph/team. These combinations are illustrative, not accepted protocols. Define scope, feedback, context sharing, and compatibility with Activity contracts. Preserve required checks, authority, attempts, evidence, and integration guarantees. The fixed MVP model remains under [CN22](#completed-construction-decisions). Deferral selects no protocol, registry, or execution engine. |
 | DF01 | Project reference authority | Defer formal [reference authority](README.md#document-scopes). Investigate actual conflicts; do not choose an implicit precedence rule. |
 | DF02 | Inception terminology | What terms organize Inception intents? See [phase organization](README.md#phase-organization). |
 | DF03 | Project preparation requirements | What project standards and workspace preparation does Initialization require? See [phase organization](README.md#phase-organization). |

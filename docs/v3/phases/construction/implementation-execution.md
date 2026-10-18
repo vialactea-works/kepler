@@ -60,7 +60,7 @@ Do not require every future task prerequisite to be available before starting in
 - Publishing, merging into an external target, releasing, or deploying merely because Code Integration succeeds.
 - Selecting a worker topology other than the agreed orchestrator-controlled subagent model, or allowing workers to select their own topology.
 
-[CN20](../../authoring_progress.md#completed-construction-decisions) records the MVP working discipline for Implementation Execution. It does not constrain other phases or remove ready-task parallelism.
+[CN22](../../authoring_progress.md#completed-construction-decisions) preserves the MVP execution model. It does not constrain other phases or remove ready-task parallelism. [CN20](../../authoring_progress.md#deferred-decisions) tracks coordination protocol definitions beyond the MVP.
 
 ## Artifacts and records
 
@@ -163,7 +163,7 @@ These assignments are proposals, not implemented agent profiles.
 
 The dedicated [Generation](activities/code-generation.md#roles-and-skills), [Validation](activities/code-validation.md#roles-and-skills), and [Integration](activities/code-integration.md#roles-and-skills) Activity contracts define proposed role assignments.
 
-The MVP uses one orchestrator-controlled subagent model for Implementation Execution. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they do not need to spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. This model does not select role profiles or add a per-task topology selector. The working-discipline decision does not constrain Design, Quality Requirements, Planning, or other phases.
+The MVP uses one orchestrator-controlled subagent model for Implementation Execution. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they do not need to spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. This model does not select role profiles or add a per-task topology selector. The MVP execution model does not constrain Design, Quality Requirements, Planning, or other phases.
 
 The requester retains product and consequential trade-off authority. The orchestrator's revision authority remains governed by the shared safeguards.
 
