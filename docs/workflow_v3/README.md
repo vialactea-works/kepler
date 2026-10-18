@@ -8,7 +8,9 @@ The specification is under development. A draft contract records a proposal for 
 
 [Authoring progress](authoring_progress.md) tracks the next decisions, shared open questions, and deferred work.
 
-The [version 2 reference](../workflow_v2/README.md) remains a separate document set. Its contracts do not automatically apply to version 3.
+[Skills](skills.md) defines version 3 skill names and responsibilities.
+
+The version 2 reference remains a separate document set. Its contracts do not automatically apply to version 3.
 
 ## Phase organization
 
@@ -51,7 +53,7 @@ Paths are relative to the project repository root. `<unit-id>` uses `YYYY-MM-DD-
 
 Required Unit of Work documents live directly under `.kepler/units-of-work/<unit-id>/`. Additional detail lives in linked files under `details/`. Stage-specific detail uses a stage subdirectory, such as `details/functional-design/`.
 
-The [Functional Design artifact draft](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md` at the Unit of Work root. The draft defines the required sections of both documents for Functional Design. Non-functional Requirements uses a separate required `quality.md` at the same root. Other artifact contracts for later stages remain undecided.
+The accepted [Functional Design artifact contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md` at the Unit of Work root. The contract defines the required sections of both documents for Functional Design. Non-functional Requirements uses a separate required `quality.md` at the same root. Other artifact contracts for later stages remain undecided.
 
 These paths do not migrate existing artifacts or change current CLI path rules.
 
@@ -91,4 +93,6 @@ Stages apply this shared definition to their work. Depth does not prescribe a fi
 
 Use ASD-STE100 Simplified Technical English for text added or changed in this reference. Keep commands, paths, schema fields, and stored values in their exact spelling.
 
-The [ASD-STE100 site](https://www.asd-ste100.org/) provides the standard. This reference does not claim certified language validation.
+Keep links in this specification within `workflow_v3/`. Use the local skill reference instead of links to current skill implementations.
+
+The ASD-STE100 site provides the standard: `https://www.asd-ste100.org/`. This reference does not claim certified language validation.

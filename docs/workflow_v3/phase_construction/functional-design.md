@@ -2,7 +2,7 @@
 
 [Construction phase index](README.md) | [Workflow phase index](../README.md)
 
-**Status:** Draft for discussion.
+**Status:** Accepted by the requester under [FD13](../authoring_progress.md#functional-design-decisions).
 
 ## Goal
 
@@ -169,33 +169,23 @@ The shared [orchestrator role](../revision.md#authority-and-escalation) controls
 
 ### Entry skill
 
-`kepler-design` is the entry skill for Functional Design. It must:
-
-- Investigate relevant context and resolve functional questions with the requester.
-- Maintain `unit-of-work.md`, `design.md`, and relevant linked supporting files.
-- Apply the shared depth definition.
-- Perform the self-review defined within this skill against the required content and completion conditions.
-- Request explicit approval and record it through the `kepler` CLI.
-- Use the reopening questionnaire to report findings and a proposed revision boundary to the orchestrator.
-- Hand off known quality concerns and questions to Non-functional Requirements.
+[kepler-design](../skills.md#kepler-design) is the entry skill for Functional Design. The skill reference defines its procedure responsibilities.
 
 Technical solution selection remains in Implementation Planning. Skill names and packaging do not define stage boundaries.
 
 ### Supporting responsibilities and inspiration
 
-| Responsibility | Existing inspiration | Adaptation |
+| Responsibility | Version 3 skill | Adaptation |
 | --- | --- | --- |
-| Structured questioning | [kepler-grilling](../../../skills/kepler-grilling/SKILL.md) | Keep the focused requester discussion, recommendations, and content-and-exit-condition invocation. Record confirmed answers where the caller's artifact contract requires them. |
-| Domain modeling | [kepler-wayfinder-domain-modeling](../../../skills/kepler-wayfinder-domain-modeling/SKILL.md) | Develop domain language, rules, invariants, and boundaries. Use the caller's document paths and distinguish existing application facts from proposed changes. |
-| Research | [kepler-wayfinder-research](../../../skills/kepler-wayfinder-research/SKILL.md) | Investigate uncertain facts through source code and primary references. Return findings with sources at the caller's supporting-file path. |
+| Structured questioning | [kepler-grilling](../skills.md#kepler-grilling) | Keep focused requester discussion, recommendations, and caller-supplied context and exit conditions. Record confirmed answers where the calling artifact contract requires them. |
+| Domain modeling | [kepler-domain-modelling](../skills.md#kepler-domain-modelling) | Develop domain language, rules, invariants, and boundaries. Use caller-supplied paths and distinguish existing application facts from proposed changes. |
+| Research | [kepler-research](../skills.md#kepler-research) | Investigate uncertain facts through source code and primary references. Return findings with sources at the caller's supporting-file path. |
 
-These skills supply behavior to adapt, not artifact contracts to preserve. Structured questioning is expected to need fewer changes than the other two skills.
+The [skill reference](../skills.md) defines these responsibilities and records the version 3 name changes. These skills supply behavior to adapt, not old artifact contracts to preserve.
 
 For this stage, required content belongs in the root Unit of Work documents. Supporting detail belongs under `details/functional-design/` and must be linked from the relevant required section. Use caller-supplied paths when a supporting skill serves another stage.
 
-Do not require old map directories, tickets, routes, glossary paths, or their validation commands. Follow the version 3 stage and artifact contracts. Authority and update rules for Project references remain separate decisions.
-
-Supporting skills do not introduce additional agent roles. This specification defines their responsibilities; it does not modify their current implementations.
+Apply the [common skill rules](../skills.md#common-rules). Supporting skills do not introduce additional agent roles. This specification does not modify their current implementations.
 
 ## Review and approval
 

@@ -103,4 +103,6 @@ The [authoring progress record](authoring_progress.md#mvp-decisions) tracks thes
 
 ## Inspiration
 
-The [AWS AI-DLC Units Generation reference](https://github.com/awslabs/aidlc-workflows/blob/main/docs/reference/04-stages/inception.md#stage-27-units-generation) informs the coverage, dependency, and verification discussion. Its artifact set, deployment conventions, and approval gates do not automatically apply to Kepler.
+The AWS AI-DLC Units Generation reference informs the coverage, dependency, and verification discussion. Its artifact set, deployment conventions, and approval gates do not automatically apply to Kepler.
+
+Source: `https://github.com/awslabs/aidlc-workflows/blob/main/docs/reference/04-stages/inception.md#stage-27-units-generation`.

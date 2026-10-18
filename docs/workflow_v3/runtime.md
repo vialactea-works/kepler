@@ -357,6 +357,10 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 ## Inspiration
 
-The [AWS AI-DLC audit model](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/docs/guide/10-state-and-audit.md) provides inspiration for command-owned events and retained history. AWS also retains `aidlc-state.md`. Kepler derives phase-owned execution state from JSON event journals instead of adopting that state-plus-audit representation.
+The AWS AI-DLC audit model provides inspiration for command-owned events and retained history. AWS also retains `aidlc-state.md`. Kepler derives phase-owned execution state from JSON event journals instead of adopting that state-plus-audit representation.
 
-The [AWS run floor implementation](https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/core/tools/aidlc-lib.ts#L36642-L36839) supplied research for this decision. Kepler uses attempt identity instead of adopting its floor format or boundary rules.
+Source: `https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/docs/guide/10-state-and-audit.md`.
+
+The AWS run floor implementation supplied research for this decision. Kepler uses attempt identity instead of adopting its floor format or boundary rules.
+
+Source: `https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/core/tools/aidlc-lib.ts#L36642-L36839`.

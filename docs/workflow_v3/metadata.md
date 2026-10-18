@@ -68,16 +68,21 @@ Do not use labels to record execution state, including progress, approval, or co
 
 #### Label syntax and validation
 
-Apply the [Kubernetes label-key syntax](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) to each string. Keep the list representation; this does not introduce Kubernetes key/value pairs.
+Apply the Kubernetes label-key syntax to each string. Keep the list representation; this does not introduce Kubernetes key/value pairs.
 
 - Each label has a required name and an optional prefix, in `prefix/name` form.
 - The name must contain 1 to 63 ASCII characters. It must start and end with a letter or digit. Internal characters can be letters, digits, hyphens (`-`), underscores (`_`), or dots (`.`). Uppercase and lowercase letters are permitted.
-- An optional prefix must be a [DNS subdomain](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names) of at most 253 characters, followed by one slash (`/`). Its domain segments use lowercase letters, digits, and hyphens, separated by dots.
+- An optional prefix must be a DNS subdomain of at most 253 characters, followed by one slash (`/`). Its domain segments use lowercase letters, digits, and hyphens, separated by dots.
 - Whitespace is not permitted, including leading, trailing, or internal spaces.
 - Label matching is case-sensitive. Duplicate strings are invalid.
 - Canonical labels use their documented spelling. Requester-defined labels must follow the same syntax, but do not need a canonical entry.
 
 These are naming rules. Kubernetes resource and controller behavior is not part of this contract.
+
+Syntax sources:
+
+- Label keys: `https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/`.
+- DNS subdomains: `https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names`.
 
 ##### Example
 

@@ -1,6 +1,6 @@
 # Workflow version 3: authoring progress
 
-[Workflow phase index](README.md) | [Functional Design draft](phase_construction/functional-design.md)
+[Workflow phase index](README.md) | [Functional Design specification](phase_construction/functional-design.md)
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Plan the decisions needed to ship a minimum viable product (MVP) for Constructio
 
 Track specification decisions, not Unit of Work execution state. Each row records one decision with one unique ID. Required implementation work is not a separate requester approval gate.
 
-The Functional Design contract remains a draft. Agreement on individual decisions does not approve the whole draft.
+The requester has accepted the complete Functional Design stage specification under FD13. This does not approve a particular Unit of Work or establish completed implementation.
 
 ## Construction MVP boundary
 
@@ -30,7 +30,7 @@ For each missing stage, define essential inputs, outputs, responsibilities, comp
 
 | Order | Work package | Minimum work |
 | --- | --- | --- |
-| 1 | Functional Design | Review and accept the complete draft under FD13. Resolve DF06 before producing supporting documents. |
+| 1 | Functional Design | The stage specification is accepted under FD13. Resolve DF06 before producing supporting documents. |
 | 2 | Non-functional Requirements | Define essential `quality.md` content, measurable evidence, responsibility, completion conditions, and handoff. Define approval only when applicable. |
 | 3 | Implementation Planning | Define the technical solution and task-plan contract. Keep the dependency graph; let implementation choose its concrete representation. |
 | 4 | Implementation Execution | Define responsibilities, evidence, completion conditions, and any applicable approval. Reuse agreed task loops, returns, concurrency, and integration rules. |
@@ -60,18 +60,17 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 ### Stage contract decisions
 
-FD13 concerns acceptance of this stage specification, not approval of a particular Unit of Work. Supporting files remain part of the Functional Design contract; no supporting-document type default is approved.
+Supporting files remain part of the accepted Functional Design contract. Their type remains unresolved; no supporting-document type default is approved.
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| FD13 | Whole-draft acceptance | Review and accept the complete [Functional Design draft](phase_construction/functional-design.md). Saving or committing it does not establish acceptance. |
 | DF06 | Supporting document types | Choose generic or purpose-specific types before emitting supporting documents. Metadata requires `type`; [neither alternative is approved](metadata.md#classification-and-ownership). |
 
 ## Review result
 
-Of the 57 previously open or deferred rows, 8 remain MVP authoring decisions. Another 35 are required MVP implementation choices. Defer 13 beyond the MVP and remove 1 speculative approval gate.
+Of the 57 previously open or deferred rows, 7 remain MVP authoring decisions. Another 35 are required MVP implementation choices. Defer 13 beyond the MVP and remove 1 speculative approval gate. FD13 is now complete after requester acceptance.
 
-Keep all 87 completed decisions unchanged. The source review found no additional open row with a complete prior answer. Reclassification must not fabricate approval or claim implementation is complete.
+The MVP review preserved the 87 previously completed decisions. Acceptance of FD13 brings the completed total to 88. Reclassification must not fabricate approval or claim implementation is complete.
 
 ## Register rules
 
@@ -224,7 +223,7 @@ These decisions apply to Construction. Do not generalize its nested execution st
 
 ## Functional Design decisions
 
-The decisions below are complete. FD13 remains open in the [MVP stage contract queue](#stage-contract-decisions). These choices do not establish approval of the complete stage contract.
+The decisions below are complete. FD13 records requester acceptance of the complete stage specification, including its [skill reference](skills.md). Approval of a particular Unit of Work remains separate.
 
 | ID | Decision | Status | Record |
 | --- | --- | --- | --- |
@@ -239,7 +238,8 @@ The decisions below are complete. FD13 remains open in the [MVP stage contract q
 | FD09 | Self-review | Complete | [Self-review](phase_construction/functional-design.md#self-review): `kepler-architect` reviews through `kepler-design`; do not create a separate supporting skill. |
 | FD10 | External review trigger | Complete | [External review](phase_construction/functional-design.md#external-review): external review occurs only when the requester asks for it. |
 | FD11 | Completion conditions | Complete | [Completion](phase_construction/functional-design.md#completion-conditions): valid artifacts, observable criteria, consistent contracts, resolved material functional questions, explicit handoffs, self-review, and requester approval. Completion permits Non-functional Requirements, not implementation. |
-| FD12 | Supporting skill responsibilities | Complete | [Supporting skills](phase_construction/functional-design.md#supporting-skills): adapt `kepler-grilling`, `kepler-wayfinder-domain-modeling`, and `kepler-wayfinder-research` for version 3. |
+| FD12 | Supporting skill responsibilities | Complete | [Supporting skills](skills.md): adapt `kepler-grilling`, `kepler-domain-modelling`, and `kepler-research` for version 3. The skill reference records the name changes. |
+| FD13 | Whole-draft acceptance | Complete | [Functional Design](phase_construction/functional-design.md): the requester accepted the complete stage specification, including the skill reference. This does not approve a Unit of Work or establish completed implementation. |
 | FD14 | Blocking functional questions | Complete | [Blocking rule](phase_construction/functional-design.md#blocking-rule): unresolved questions block completion when answers could change scope, behavior, invariants, or functional contracts. |
 
 ## Deferred decisions
@@ -274,7 +274,7 @@ Delete this speculative comparison from the approval queue. Keep its ID only as 
 
 ## Contract coverage
 
-The MVP needs all six Construction stages and their task-scoped stages. Five unit-stage contracts still need work; Functional Design still needs whole-draft acceptance.
+The MVP needs all six Construction stages and their task-scoped stages. The Functional Design specification is accepted; five other unit-stage contracts still need work. Supporting-document types remain unresolved under DF06.
 
 The MVP path above defines bounded authoring work, not omnibus decision IDs. Add a question only when a material choice remains unanswered. Do not create separate approval gates for implementation-owned field types, event catalogs, or command syntax.
 

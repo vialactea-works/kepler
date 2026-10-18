@@ -8,7 +8,7 @@ Construction operates on one Unit of Work. Its stages define responsibilities in
 
 Construction owns its execution state model and projection schemas under the shared [execution-state representation](../runtime.md#execution-state-representation).
 
-The stage order and execution structure are agreed. Detailed stage contracts remain under development. The Functional Design contract remains a draft until the requester accepts it as a whole.
+The stage order and execution structure are agreed. The requester has accepted the Functional Design stage specification. Other detailed stage contracts remain under development.
 
 ## Stage outline
 
@@ -16,7 +16,7 @@ This table gives the unit-scoped stage order. Task-scoped stages execute inside 
 
 | Order | Stage | Contract status |
 | --- | --- | --- |
-| 1 | [Functional Design](functional-design.md) | Draft for discussion. |
+| 1 | [Functional Design](functional-design.md) | Accepted by the requester. |
 | 2 | Non-functional Requirements | Name agreed. Contract not yet defined. |
 | 3 | Implementation Planning | Name agreed. Contract not yet defined. |
 | 4 | [Implementation Execution](#implementation-execution) | Structure agreed. Detailed contract not yet defined. |
