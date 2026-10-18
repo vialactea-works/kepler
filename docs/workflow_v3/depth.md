@@ -69,6 +69,6 @@ A supporting file is optional to create. Its location does not make an approved 
 
 ## Decisions still required
 
-Stage contracts select required documents. The [Functional Design contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md`. That contract defines the required sections of both documents for Functional Design. Other artifact contracts for later stages will be defined separately.
+Stage contracts select required documents. The [Functional Design contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md`. That contract defines the required sections of both documents for Functional Design. The [Quality Requirements draft](phase_construction/quality-requirements.md#required-sections) proposes the required sections of `quality.md`. Other artifact contracts for later stages will be defined separately.
 
 The shared [execution-state representation](runtime.md#execution-state-representation) derives current selections from journal events. Event payloads, projection fields, and CLI operations for the unit default and stage overrides remain undecided. These are changing execution settings, not artifact identity metadata. This definition does not implement persistence or CLI options.

@@ -82,7 +82,7 @@ This stage requires `unit-of-work.md` and `design.md` directly under the Unit of
 
 Create the Unit of Work definition when needed. Preserve and refine an existing definition when Inception or earlier work supplies it. Do not create a second definition for the same Unit of Work.
 
-Functional Design establishes the functional behavior, models, and contracts in `design.md`. Non-functional Requirements records quality targets and constraints in `quality.md` at the Unit of Work root. Implementation Planning selects the technical solution against both documents.
+Functional Design establishes the functional behavior, models, and contracts in `design.md`. Quality Requirements records quality targets and constraints in `quality.md` at the Unit of Work root. Implementation Planning selects the technical solution against both documents.
 
 Each required document will have a defined set of required sections. Each section must contain the essential information needed to understand and use its contract.
 
@@ -125,7 +125,7 @@ Describe entities, value objects, aggregates, domain services, and domain events
 
 Keep essential information in these sections. Put substantial supporting detail in linked files under `details/functional-design/`. Reference the purpose and scope in `unit-of-work.md` instead of repeating them.
 
-These sections define the Functional Design contribution. Non-functional Requirements uses `quality.md`. Implementation Planning selects the technical solution before it divides the work into tasks. The location of its technical design record requires a separate decision.
+These sections define the Functional Design contribution. Quality Requirements uses `quality.md`. Implementation Planning selects the technical solution before it divides the work into tasks. The location of its technical design record requires a separate decision.
 
 ### Content boundaries
 
@@ -206,7 +206,7 @@ The requester must explicitly approve the current functional design. Approval co
 - The domain model and functional contracts.
 - Material decisions, assumptions, and questions passed to later stages.
 
-Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval permits progression to Non-functional Requirements. It does not authorize implementation or delivery.
+Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval permits progression to Quality Requirements. It does not authorize implementation or delivery.
 
 Record approval through CLI-owned JSON journal events, not artifact frontmatter. Derive current approval views from those events. Do not require a separate human-authored approval document. Apply the shared [evidence and approval bindings](../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact projection fields, event formats, and material reference formats remain undecided.
 
@@ -253,13 +253,13 @@ These examples are not mandatory questions or additional completion conditions. 
 | --- | --- |
 | Who can cancel an order? | Resolve in Functional Design. |
 | What happens when cancellation is refused? | Resolve in Functional Design. |
-| What response-time target applies? | Pass to Non-functional Requirements if functional behavior is already defined. |
+| What response-time target applies? | Pass to Quality Requirements if functional behavior is already defined. |
 | Which storage technology should we use? | Pass to Implementation Planning if the functional contract remains unchanged. |
 
 ## Handoff
 
-**Next stage:** Non-functional Requirements.
+**Next stage:** Quality Requirements.
 
 The handoff identifies the Unit of Work directory, `unit-of-work.md`, `design.md`, and any linked supporting files. It includes relevant Project references, their paths, known constraints, and questions for the next stage.
 
-The next stage records quality targets and constraints in `quality.md` at the Unit of Work root. Include observability among the applicable concerns passed to that stage. Implementation Planning then selects the technical solution against the functional design and non-functional requirements.
+The next stage records quality targets and constraints in `quality.md` at the Unit of Work root. Include observability among the applicable concerns passed to that stage. Implementation Planning then selects the technical solution against the functional design and quality requirements.

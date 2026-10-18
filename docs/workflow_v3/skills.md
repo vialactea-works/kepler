@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Define version 3 skill names and responsibilities. This reference contains the responsibilities currently specified for Functional Design. Other stages define their skills with their stage contracts.
+Define version 3 skill names and responsibilities. Functional Design responsibilities are accepted. Quality Requirements responsibilities remain proposed under its stage draft. Other stages define their skills with their stage contracts.
 
 Stage contracts define required artifacts, completion conditions, and authority. Skills supply procedures under those contracts. Skill names and packaging do not define stage boundaries.
 
@@ -15,6 +15,7 @@ These specifications do not rename skill files or change current implementations
 | Skill | Responsibility |
 | --- | --- |
 | [kepler-design](#kepler-design) | Perform Functional Design. |
+| [kepler-quality](#kepler-quality) | Proposed entry skill for Quality Requirements; not yet approved. |
 | [kepler-grilling](#kepler-grilling) | Support focused requester discussion. |
 | [kepler-domain-modelling](#kepler-domain-modelling) | Develop domain language, models, and rules. |
 | [kepler-research](#kepler-research) | Investigate uncertain facts and record sourced findings. |
@@ -48,11 +49,31 @@ Entry skill for [Functional Design](phase_construction/functional-design.md). It
 - Perform self-review against required content and [completion conditions](phase_construction/functional-design.md#completion-conditions).
 - Request explicit approval and record it through the `kepler` CLI.
 - Use the [reopening questionnaire](phase_construction/functional-design.md#reopening-questionnaire) to report findings and a proposed revision boundary to the orchestrator.
-- Hand off known quality concerns and questions to Non-functional Requirements.
+- Hand off known quality concerns and questions to Quality Requirements.
 
 Self-review belongs in this skill, not a separate supporting skill. It checks required content, acceptance criteria, consistency, blocking questions, and concerns passed to later stages.
 
 Technical solution selection remains in Implementation Planning. External review occurs only when the requester asks for it.
+
+## kepler-quality
+
+**Status:** Proposed under the [Quality Requirements draft](phase_construction/quality-requirements.md#supporting-skills).
+
+The draft proposes this entry skill to:
+
+- Investigate relevant context and assess the quality categories in the stage draft.
+- Resolve applicable targets, conditions, constraints, and material trade-offs with the requester.
+- Maintain `quality.md` and relevant linked supporting files.
+- Apply the shared depth definition.
+- Perform self-review against required content and the proposed stage completion conditions.
+- Record the stage's required validation and review evidence through CLI-owned operations.
+- Request the proposed quality approval and record it through the `kepler` CLI.
+- Report upstream findings and proposed revision boundaries to the orchestrator.
+- Hand off current quality requirements and relevant questions to Implementation Planning.
+
+Self-review belongs in this skill. It checks applicability, scope, acceptance conditions, consistency, blocking questions, and handoff completeness.
+
+This proposal does not extend `kepler-design`, select a technical solution, or decide inline versus subagent execution.
 
 ## kepler-grilling
 
@@ -70,4 +91,6 @@ Use relevant domain concepts. Do not invent model elements to fill a section. Fo
 
 Investigate uncertain facts through source code and primary references. Return findings with sources at the caller's supporting-file path.
 
-For Functional Design, supporting detail belongs under `details/functional-design/`. Link it from the relevant required section in the root Unit of Work documents.
+Use the caller's stage-specific supporting-file path. Functional Design uses `details/functional-design/`. The Quality Requirements draft proposes `details/quality-requirements/`.
+
+Link supporting detail from the relevant required section in the root Unit of Work documents.

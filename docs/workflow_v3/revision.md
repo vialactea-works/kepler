@@ -84,7 +84,7 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 | Change | Revision boundary | Required cascade |
 | --- | --- | --- |
 | Required domain behavior changes. | Functional Design. | Every subsequent stage through Deliver. |
-| A quality requirement changes while functional behavior remains valid. | Non-functional Requirements. | Implementation Planning and every subsequent stage through Deliver. |
+| A quality requirement changes while functional behavior remains valid. | Quality Requirements. | Implementation Planning and every subsequent stage through Deliver. |
 | The implementation approach changes while functional and quality requirements remain valid. | Implementation Planning. | Implementation Execution, Unit of Work Review, and Deliver. |
 | During active Implementation Execution, Code Validation finds a task-local code defect. | The task's Code Generation stage. | That task's Code Validation and Task Integration stages. The enclosing execution attempt remains active. |
 | Task Integration requires changes to the task implementation during active Implementation Execution. | The task's Code Generation stage. | That task's Code Validation and Task Integration stages. Independent work continues while its contracts and inputs remain valid. |

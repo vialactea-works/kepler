@@ -53,7 +53,7 @@ Paths are relative to the project repository root. `<unit-id>` uses `YYYY-MM-DD-
 
 Required Unit of Work documents live directly under `.kepler/units-of-work/<unit-id>/`. Additional detail lives in linked files under `details/`. Stage-specific detail uses a stage subdirectory, such as `details/functional-design/`.
 
-The accepted [Functional Design artifact contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md` at the Unit of Work root. The contract defines the required sections of both documents for Functional Design. Non-functional Requirements uses a separate required `quality.md` at the same root. Other artifact contracts for later stages remain undecided.
+The accepted [Functional Design artifact contract](phase_construction/functional-design.md#artifacts) requires `unit-of-work.md` and `design.md` at the Unit of Work root. The contract defines the required sections of both documents for Functional Design. Quality Requirements uses a separate required `quality.md` at the same root. Its [stage draft](phase_construction/quality-requirements.md) proposes the detailed artifact and stage contract. Other artifact contracts for later stages remain undecided.
 
 These paths do not migrate existing artifacts or change current CLI path rules.
 

@@ -17,7 +17,7 @@ This table gives the unit-scoped stage order. Task-scoped stages execute inside 
 | Order | Stage | Contract status |
 | --- | --- | --- |
 | 1 | [Functional Design](functional-design.md) | Accepted by the requester. |
-| 2 | Non-functional Requirements | Name agreed. Contract not yet defined. |
+| 2 | [Quality Requirements](quality-requirements.md) | Draft for discussion. Stage name, required document, and original seven quality categories are agreed. |
 | 3 | Implementation Planning | Name agreed. Contract not yet defined. |
 | 4 | [Implementation Execution](#implementation-execution) | Structure agreed. Detailed contract not yet defined. |
 | 5 | Unit of Work Review | Contract not yet defined. |
@@ -29,9 +29,9 @@ Project preparation belongs to the Initialization phase.
 
 Functional Design defines domain behavior, the domain model, and functional contracts in `design.md`.
 
-Non-functional Requirements defines quality targets and constraints in `.kepler/units-of-work/<unit-id>/quality.md`. This document is required for that stage. Applicable requirements include performance, availability, security, accessibility, compatibility, operability, and observability.
+Quality Requirements defines quality targets and constraints in `.kepler/units-of-work/<unit-id>/quality.md`. This document is required for that stage. Applicable requirements include performance, availability, security, accessibility, compatibility, operability, and observability.
 
-Implementation Planning selects the technical solution against the functional design and non-functional requirements. It then divides the work into implementation tasks. It produces a task plan that represents tasks and their dependencies as a graph. The graph format and location of the technical design record require separate decisions.
+Implementation Planning selects the technical solution against the functional design and quality requirements. It then divides the work into implementation tasks. It produces a task plan that represents tasks and their dependencies as a graph. The graph format and location of the technical design record require separate decisions.
 
 Code Generation runs tests related to its modifications. Code Validation runs the complete application test suite and owns independent code feedback.
 

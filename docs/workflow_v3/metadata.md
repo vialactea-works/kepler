@@ -49,7 +49,7 @@ Keep document purpose in `type`; do not encode it in the ID.
 | --- | --- |
 | `unit-of-work` | The Unit of Work definition in `unit-of-work.md`. |
 | `functional-design` | Functional Design in `design.md`. |
-| `non-functional-requirements` | Non-functional Requirements in `quality.md`. |
+| `non-functional-requirements` | Quality Requirements in `quality.md`. |
 | `project-reference` | Shared Project reference documents. |
 | `supporting-document` | Optional supporting Markdown documents, such as research notes or domain-model detail. |
 

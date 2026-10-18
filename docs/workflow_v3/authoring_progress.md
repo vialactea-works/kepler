@@ -31,7 +31,7 @@ For each missing stage, define essential inputs, outputs, responsibilities, comp
 | Order | Work package | Minimum work |
 | --- | --- | --- |
 | 1 | Functional Design | The stage specification is accepted under FD13. Use the agreed `supporting-document` type under DF06. |
-| 2 | Non-functional Requirements | Define essential `quality.md` content, measurable evidence, responsibility, completion conditions, and handoff. Define approval only when applicable. |
+| 2 | [Quality Requirements](phase_construction/quality-requirements.md) | Review the stage draft, including its named evidence requirements. Its proposed policies remain open. |
 | 3 | Implementation Planning | Define the technical solution and task-plan contract. Keep the dependency graph; let implementation choose its concrete representation. |
 | 4 | Implementation Execution | Define responsibilities, evidence, completion conditions, and any applicable approval. Reuse agreed task loops, returns, concurrency, and integration rules. |
 | 5 | Unit of Work Review | Define whole-unit findings, evidence, correction routes, completion conditions, and any applicable approval. Integration success is not review or delivery approval. |
@@ -51,7 +51,7 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| SH52 | Required evidence coverage | What evidence must each remaining Construction stage produce, and what material must it cover? Existing [test duties](phase_construction/README.md#agreed-boundaries) remain binding. |
+| SH52 | Required evidence coverage | Each stage contract must name its required evidence and covered material. Review the remaining definitions within their contracts. Existing [test duties](phase_construction/README.md#agreed-boundaries) remain binding. |
 | SH61 | Missing author identity | What must happen when effective Git name or email is missing? Resolve before creating an affected artifact. Do not invent [author identity](metadata.md#author-identity). |
 | SH74 | Record version-control policy | Which authoritative records travel with the repository, and which remain local? Define how workers and later sessions retain [required history](runtime.md#execution-state-representation). |
 | SH77 | Deployment record content | What deployment information must the MVP record for an acceptable unit? Keep known [deployment constraints](unit-of-work.md#deployment) visible to Planning. |
@@ -66,11 +66,28 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 ### Stage contract decisions
 
-No pending Functional Design decisions remain in this queue. Five other unit-stage contracts still need authoring.
+No pending Functional Design decisions remain in this queue. The [Quality Requirements draft](phase_construction/quality-requirements.md) proposes the following policies. None is accepted by saving the draft. These rows do not add separate execution approval steps.
+
+| ID | Decision | Proposal to review |
+| --- | --- | --- |
+| NF01 | Quality document sections | Are the three proposed [required sections](phase_construction/quality-requirements.md#required-sections) sufficient for `quality.md`? |
+| NF02 | Quality requirement content | Does the proposed [requirement content](phase_construction/quality-requirements.md#requirement-content) define adequate scope, conditions, and acceptance criteria? |
+| NF03 | Category applicability procedure | Should the stage assess its categories and briefly explain inapplicable categories under the proposed [category procedure](phase_construction/quality-requirements.md#quality-categories)? |
+| NF04 | Entry conditions | Are the proposed [entry conditions](phase_construction/quality-requirements.md#entry-conditions) sufficient to start after Functional Design? |
+| NF05 | Stage owner | Should `kepler-architect` own this stage under the proposed [agent role](phase_construction/quality-requirements.md#agent-roles)? |
+| NF06 | Entry skill | Should [kepler-quality](skills.md#kepler-quality) be the stage's entry skill with the proposed responsibilities? |
+| NF07 | Self-review | Should the entry skill perform the proposed [self-review](phase_construction/quality-requirements.md#self-review)? |
+| NF08 | External review trigger | Should [external review](phase_construction/quality-requirements.md#external-review) occur only on requester request? |
+| NF09 | Requester approval | Should completion require the proposed [explicit quality approval](phase_construction/quality-requirements.md#requester-approval)? |
+| NF10 | Reopening questionnaire | Do the proposed [reopening questions](phase_construction/quality-requirements.md#reopening-questionnaire) identify this stage's revision triggers? |
+| NF11 | Completion conditions | Are the proposed [completion conditions](phase_construction/quality-requirements.md#completion-conditions) sufficient for handoff to Implementation Planning? |
+| NF12 | Whole-draft acceptance | Does the requester accept the complete [Quality Requirements specification](phase_construction/quality-requirements.md)? |
+| NF13 | Design quality category | Should [Maintainability](phase_construction/quality-requirements.md#maintainability-proposal) cover extensibility, modularity, decoupling, and replaceable technology dependencies? |
+| NF14 | Stage evidence coverage | Are the named [evidence requirements](phase_construction/quality-requirements.md#evidence-coverage), covered material, and required results sufficient for this stage? |
 
 ## Review result
 
-The queue now contains 7 MVP authoring decisions, including CN20 on working discipline. Another 35 are required MVP implementation choices. Defer 13 beyond the MVP and remove 1 speculative approval gate. FD13 and DF06 are complete after requester acceptance.
+The queue contains 7 earlier MVP authoring decisions and 14 proposed Quality Requirements decisions, for 21 in total. CN20 on working discipline remains open. Another 35 are required MVP implementation choices. Defer 13 beyond the MVP and remove 1 speculative approval gate. FD13 and DF06 are complete after requester acceptance.
 
 The MVP review preserved the 87 previously completed decisions. Acceptance of FD13 and DF06 brings the completed total to 89. Reclassification must not fabricate approval or claim implementation is complete.
 
@@ -85,7 +102,7 @@ The MVP review preserved the 87 previously completed decisions. Acceptance of FD
 
 A requester decision is needed when the answer changes required behavior, authority, evidence obligations, or material scope. Technical formats, command names, and mechanisms belong to implementation within the agreed contracts.
 
-SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. DF preserves the existing deferred-decision series. An ID does not determine its status.
+SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. NF identifies Quality Requirements decisions. Keep existing NF identifiers after the stage rename. DF preserves the existing deferred-decision series. An ID does not determine its status.
 
 ## Completed shared decisions
 
@@ -204,8 +221,8 @@ These decisions apply to Construction. Do not generalize its nested execution st
 
 | ID | Decision | Record |
 | --- | --- | --- |
-| CN01 | Unit-stage order | [Stage outline](phase_construction/README.md#stage-outline): Functional Design, Non-functional Requirements, Implementation Planning, Implementation Execution, Unit of Work Review, then Deliver. |
-| CN02 | Non-functional Requirements document | [Stage boundaries](phase_construction/README.md#agreed-boundaries): use required `quality.md`, separate from functional `design.md`. Cover applicable performance, availability, security, accessibility, compatibility, operability, and observability. |
+| CN01 | Unit-stage order | [Stage outline](phase_construction/README.md#stage-outline): Functional Design, Quality Requirements, Implementation Planning, Implementation Execution, Unit of Work Review, then Deliver. |
+| CN02 | Quality Requirements document | [Stage boundaries](phase_construction/README.md#agreed-boundaries): use required `quality.md`, separate from functional `design.md`. Cover applicable performance, availability, security, accessibility, compatibility, operability, and observability. |
 | CN03 | Technical solution selection | [Stage boundaries](phase_construction/README.md#agreed-boundaries): Implementation Planning selects the technical solution before dividing work into tasks. |
 | CN04 | Plan dependency model | [Stage boundaries](phase_construction/README.md#agreed-boundaries): the plan represents tasks and dependencies as a graph. |
 | CN05 | Implementation scheduling | [Implementation Execution](phase_construction/README.md#implementation-execution): the orchestrator schedules independent dependency-ready task implementations concurrently within the unit-scoped stage. |
@@ -240,7 +257,7 @@ The decisions below are complete. FD13 records requester acceptance of the compl
 | FD08 | Functional design sections | Complete | [Functional design](phase_construction/functional-design.md#functional-design): require Domain behavior, Domain model, Boundaries and interactions, and Design decisions and open questions. Keep acceptance criteria with requirements. Use domain language and applicable DDD concepts. |
 | FD09 | Self-review | Complete | [Self-review](phase_construction/functional-design.md#self-review): `kepler-architect` reviews through `kepler-design`; do not create a separate supporting skill. |
 | FD10 | External review trigger | Complete | [External review](phase_construction/functional-design.md#external-review): external review occurs only when the requester asks for it. |
-| FD11 | Completion conditions | Complete | [Completion](phase_construction/functional-design.md#completion-conditions): valid artifacts, observable criteria, consistent contracts, resolved material functional questions, explicit handoffs, self-review, and requester approval. Completion permits Non-functional Requirements, not implementation. |
+| FD11 | Completion conditions | Complete | [Completion](phase_construction/functional-design.md#completion-conditions): valid artifacts, observable criteria, consistent contracts, resolved material functional questions, explicit handoffs, self-review, and requester approval. Completion permits Quality Requirements, not implementation. |
 | FD12 | Supporting skill responsibilities | Complete | [Supporting skills](skills.md): adapt `kepler-grilling`, `kepler-domain-modelling`, and `kepler-research` for version 3. The skill reference records the name changes. |
 | FD13 | Whole-draft acceptance | Complete | [Functional Design](phase_construction/functional-design.md): the requester accepted the complete stage specification, including the skill reference. This does not approve a Unit of Work or establish completed implementation. |
 | FD14 | Blocking functional questions | Complete | [Blocking rule](phase_construction/functional-design.md#blocking-rule): unresolved questions block completion when answers could change scope, behavior, invariants, or functional contracts. |
@@ -277,7 +294,7 @@ Delete this speculative comparison from the approval queue. Keep its ID only as 
 
 ## Contract coverage
 
-The MVP needs all six Construction stages and their task-scoped stages. The Functional Design specification is accepted; five other unit-stage contracts still need work. Supporting-document types are agreed under DF06.
+The MVP needs all six Construction stages and their task-scoped stages. The Functional Design specification is accepted. Quality Requirements has a draft for review. Four later unit-stage contracts still need authoring. Supporting-document types are agreed under DF06.
 
 The MVP path above defines bounded authoring work, not omnibus decision IDs. Add a question only when a material choice remains unanswered. Do not create separate approval gates for implementation-owned field types, event catalogs, or command syntax.
 
@@ -285,7 +302,7 @@ Do not require Initialization, Inception, managed reference features, or migrati
 
 ## Filename convention
 
-Use short filenames with full words, without abbreviations. The agreed `quality.md` replaces the proposed `requirements.md` name. Non-functional Requirements does not share `design.md` with Functional Design.
+Use short filenames with full words, without abbreviations. The agreed `quality.md` replaces the proposed `requirements.md` name. Quality Requirements does not share `design.md` with Functional Design.
 
 ## Record maintenance
 
