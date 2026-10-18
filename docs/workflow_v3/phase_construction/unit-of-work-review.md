@@ -18,7 +18,7 @@ Assess the unit as a whole, including interactions between task outputs. A colle
 
 - Current `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, `tasks-dag.json`, and relevant supporting files.
 - The completed Implementation Execution handoff and final integrated checkpoint.
-- Required task-stage results, independent feedback, integration provenance, and completion evidence.
+- Required Activity results, independent feedback, integration provenance, and completion evidence.
 - Relevant project constraints, verification conditions, requester decisions, and applicable approvals.
 - Known deployment constraints and planned delivery dependencies.
 - Earlier review findings and retained evidence when revising the result.
@@ -48,7 +48,7 @@ Do not require delivery, publication, deployment, or requester acceptance before
 
 ### Excluded
 
-- Replacing required Generation, Validation, or Integration work with a review opinion.
+- Replacing required Code Generation, Code Validation, or Code Integration work with a review opinion.
 - Editing implementation or upstream contracts to make the reviewed result appear compliant.
 - Waiving requirements or accepting consequential trade-offs without the requester's authority.
 - Publishing, releasing, deploying, or creating an external review request as an automatic review effect.
@@ -68,7 +68,7 @@ The integrated implementation and upstream artifacts retain their existing owner
 ## Review procedure
 
 1. **Identify the result.** Establish the integrated checkpoint, relevant upstream versions, unit obligations, and originating execution records.
-2. **Assess evidence.** Check required task-stage coverage, combined-result checks, relevant conditions, applicability, and retention.
+2. **Assess evidence.** Check required Activity coverage, combined-result checks, relevant conditions, applicability, and retention.
 3. **Review the outcome.** Examine the complete behavior, interactions, failure cases, quality obligations, and deployment preparation against current contracts.
 4. **Report findings.** State each material problem, its evidence, affected obligation, uncertainty, and proposed correction boundary.
 5. **Resolve blocking findings.** Obtain the orchestrator's decision and execute any authorized revision cascade before claiming review completion.
@@ -106,7 +106,7 @@ The reviewer reports facts and proposed boundaries. The orchestrator decides whe
 
 An upstream revision invalidates current downstream completion immediately. Reexecute the affected stages even when some artifact bytes remain unchanged.
 
-The draft does not introduce task-stage attempts outside Implementation Execution. Apply its proposed [post-completion return rule](implementation-execution.md#return-after-completed-execution) when that unit stage reopens. Reopened task stages require new attempts and evidence. Unaffected task-stage records retain their original bindings after applicability assessment; the new unit attempt still requires its own completion assessment.
+Code Generation, Code Validation, and Code Integration are Activities within Implementation Execution. Apply its proposed [post-completion return rule](implementation-execution.md#return-after-completed-execution) when that unit stage reopens. Reopened Activities require new attempts and evidence. Unaffected Activity records retain their original bindings after applicability assessment; the new unit attempt still requires its own completion assessment.
 
 ## Depth
 
@@ -130,7 +130,7 @@ Review independence does not require a different model, vendor, or human. The re
 
 The orchestrator owns revision decisions and coordination. The requester retains authority over the intended outcome, scope, consequential trade-offs, and applicable acceptance.
 
-These assignments do not implement agent profiles or settle [CN20](../authoring_progress.md#construction-decisions-still-pending).
+These assignments do not implement agent profiles. [CN20](../authoring_progress.md#completed-construction-decisions) selects an orchestrator-controlled subagent model for Implementation Execution only. It does not select a worker model for Unit of Work Review.
 
 ## Supporting skills
 
@@ -194,7 +194,7 @@ Publication, release, deployment, and completed delivery operations are not revi
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
-| Execution evidence assessment | Final integrated material, upstream contracts, required task-stage records, conditions, and integration provenance. | Required earlier evidence is present, applicable, and retained. Claimed coverage and any gaps are explicit. |
+| Execution evidence assessment | Final integrated material, upstream contracts, required Activity records, conditions, and integration provenance. | Required earlier evidence is present, applicable, and retained. Claimed coverage and any gaps are explicit. |
 | Whole-unit review result | Complete integrated outcome against unit scope, functional design, quality requirements, plan, and known delivery constraints. | Independent assessment establishes the required outcome. Blocking findings are resolved; self-review confirms coverage and handoff accuracy. |
 | Additional check result | Material, obligation, and conditions that require additional verification during review. | The identified check succeeds and supplies the missing review proof without replacing mandatory upstream records. |
 | Requested additional review result | Material and scope identified in an additional review request. | The requested review is complete and its blocking findings are resolved. |

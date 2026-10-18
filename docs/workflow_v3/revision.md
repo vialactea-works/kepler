@@ -16,7 +16,7 @@ Apply execution-state changes through the `kepler` CLI. Record reopening, attemp
 
 The orchestrator agent decides whether to start a revision cascade. It selects the starting stage and execution scope under the phase contract.
 
-A stage agent reports the finding, supporting evidence, uncertainty, and proposed revision boundary. It must not authorize reopening or start a cascade on its own.
+A stage or Activity worker reports the finding, supporting evidence, uncertainty, and proposed boundary. It must not authorize reopening or start a cascade on its own.
 
 The orchestrator can clarify an existing decision, request investigation, or authorize reopening. Record its decision and reason through the shared [CLI infrastructure](runtime.md#revision-decisions).
 
@@ -41,7 +41,7 @@ An agent may correct editorial errors in prose without reopening stages or reque
 
 Upstream stages occur before the revision boundary. Downstream stages occur after it within the applicable scope. Depth does not change the revision boundary or remove the required cascade.
 
-Construction's task-local [return paths](phase_construction/README.md#return-paths) apply within an active Implementation Execution attempt. They do not automatically restart that enclosing attempt. Independent task loops continue while their inputs and contracts remain valid.
+Construction's task-local [Activity return paths](phase_construction/README.md#return-paths) apply within an active Implementation Execution attempt. The orchestrator authorizes returns. They do not automatically restart that enclosing attempt. Independent task work continues while its inputs and contracts remain valid.
 
 A unit-wide upstream revision still applies the full unit-stage cascade. Construction defines the [handling of running task work](phase_construction/README.md#unit-wide-upstream-revision) during that cascade. Detailed task-state transitions and shutdown coordination remain open.
 
@@ -65,6 +65,8 @@ Stage agents can supply proposed answers and supporting evidence. The orchestrat
 
 A questionnaire supports the orchestrator's boundary decision. It does not authorize reopening or replace stage completion, review, or approval conditions.
 
+Activity questions support the orchestrator's return decision within the owning stage. They do not add workflow stages or change the stage revision cascade. Suspected upstream problems still follow the stage revision procedure.
+
 ## Revision procedure
 
 1. **Report the finding.** The stage agent reports the evidence, uncertainty, and proposed revision boundary. Use the relevant reopening questionnaire to support the report.
@@ -86,8 +88,9 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 | Required domain behavior changes. | Functional Design. | Every subsequent stage through Deliver. |
 | A quality requirement changes while functional behavior remains valid. | Quality Requirements. | Implementation Planning and every subsequent stage through Deliver. |
 | The implementation approach changes while functional and quality requirements remain valid. | Implementation Planning. | Implementation Execution, Unit of Work Review, and Deliver. |
-| During active Implementation Execution, Code Validation finds a task-local code defect. | The task's Code Generation stage. | That task's Code Validation and Task Integration stages. The enclosing execution attempt remains active. |
-| Task Integration requires changes to the task implementation during active Implementation Execution. | The task's Code Generation stage. | That task's Code Validation and Task Integration stages. Independent work continues while its contracts and inputs remain valid. |
+| During active Implementation Execution, Code Validation finds a task-local code defect. | Code Generation Activity for that task. | Code Validation and Code Integration for that task, as required. The enclosing Execution attempt remains active. |
+| Code Integration requires changes to the task implementation during active Implementation Execution. | Code Generation Activity for that task. | Code Validation and Code Integration for that task, as required. Independent work continues while its contracts and inputs remain valid. |
+| Code Integration needs an integration-only retry. | The current Code Integration Activity attempt. | Retry within that attempt. A failed command alone does not create another attempt. |
 
 ## Decisions still required
 

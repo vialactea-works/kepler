@@ -4,9 +4,9 @@
 
 ## Purpose
 
-Define version 3 skill names and responsibilities. Functional Design and Quality Requirements responsibilities are accepted. Planning, Execution, Review, and Deliver responsibilities remain proposed under their stage drafts.
+Define version 3 skill names and responsibilities. Functional Design and Quality Requirements responsibilities are accepted. Planning, Execution, Review, and Deliver responsibilities remain proposed under their stage drafts. Code Generation, Code Validation, and Code Integration are Activities within Implementation Execution; their detailed skill responsibilities remain proposed.
 
-Stage contracts define required artifacts, completion conditions, and authority. Skills supply procedures under those contracts. Skill names and packaging do not define stage boundaries.
+Stage and Activity contracts define their own scopes, completion conditions, and authority. Skills supply procedures under those contracts. Skill names and packaging do not define stage or Activity boundaries.
 
 These specifications do not rename skill files or change current implementations.
 
@@ -17,7 +17,7 @@ These specifications do not rename skill files or change current implementations
 | [kepler-design](#kepler-design) | Perform Functional Design. |
 | [kepler-quality](#kepler-quality) | Perform Quality Requirements. |
 | [kepler-plan](#kepler-plan) | Proposed entry skill for Implementation Planning; not yet approved. |
-| [kepler-orchestrate](#kepler-orchestrate) | Proposed procedures for Implementation Execution and task-scoped integration. |
+| [kepler-orchestrate](#kepler-orchestrate) | Proposed procedures for Implementation Execution and the Code Integration Activity. |
 | [kepler-code](#kepler-code) | Proposed entry skill for Code Generation. |
 | [kepler-code-feedback](#kepler-code-feedback) | Proposed entry skill for Code Validation, including independent feedback. |
 | [kepler-review](#kepler-review) | Proposed entry skill for Unit of Work Review. |
@@ -37,7 +37,7 @@ The previous names identify the source skills. They do not preserve old artifact
 
 ## Common rules
 
-Follow the calling stage's artifact contracts, completion conditions, and authority. Use caller-supplied document paths when a skill supports another stage.
+Follow the calling stage's or Activity's contracts, completion conditions, and authority. Use caller-supplied document paths when a skill supports another scope.
 
 Distinguish existing facts, proposed behavior, and assumptions. Record confirmed answers where the calling artifact contract requires them.
 
@@ -105,27 +105,28 @@ These responsibilities do not approve the current skill implementation or decide
 
 ## kepler-orchestrate
 
-**Status:** Proposed under the [Execution](phase_construction/implementation-execution.md#supporting-skills) and [Task Integration](phase_construction/task-integration.md#supporting-skills) drafts.
+**Status:** Proposed under the [Implementation Execution](phase_construction/implementation-execution.md#supporting-skills) and [Code Integration Activity](phase_construction/code-integration.md#supporting-skills) drafts.
 
 For unit-scoped Implementation Execution, the draft proposes this skill to:
 
 - Read the current graph, upstream contracts, prerequisites, and execution records.
 - Coordinate ready-task admissions with fixed baselines and complete scoped worker handoffs.
+- Dispatch scoped subagents and coordinate each Code Generation, Code Validation, and Code Integration handoff.
 - Preserve concurrent ready-task work without global Git gates or batch barriers.
-- Consume worker facts and apply authorized control decisions through CLI-owned operations.
+- Consume worker facts and apply authorized progress, revision, and acceptance decisions through CLI-owned operations.
 - Resolve routine issues within existing authority and request requester decisions only for [hard blockers](phase_construction/implementation-execution.md#requester-intervention).
 - Record blocker decisions and apply authorized revision boundaries.
 - Assess task coverage, final integrated evidence, and unit completion.
-- Apply the proposed post-completion return rule, preserving valid original task bindings and executing reopened stages under new attempts.
+- Apply the proposed post-completion return rule, preserving valid original Activity bindings and executing reopened Activities under new attempts.
 - Perform self-review and prepare the Unit of Work Review handoff.
 
-For [Task Integration](phase_construction/task-integration.md#supporting-skills), the skill prepares the combined candidate and runs required checks under the unit lock. It accepts the candidate only after every required check passes. It records integration inputs separately from admission baselines, self-checks acceptance evidence, and releases the lock before coding returns.
+For the [Code Integration Activity](phase_construction/code-integration.md#supporting-skills), the skill reads the current unit checkpoint after acquiring the lock. It prepares the combined candidate and runs required checks under the lock. It presents only checked bytes for authorized acceptance. It records actual Integration inputs separately from admission baselines. It self-checks evidence and releases the lock before a return to Code Generation.
 
-These are separate stage procedures with distinct applicable attempt scopes. The skill does not create Task coding attempts, decide worker topology, or grant publication authority.
+These are separate stage and Activity scopes with distinct attempts. The skill does not create a task-coding attempt, expose a worker-topology selector, or grant publication authority.
 
 ## kepler-code
 
-**Status:** Proposed under the dedicated [Code Generation contract](phase_construction/code-generation.md#supporting-skills).
+**Status:** Proposed under the dedicated [Code Generation Activity contract](phase_construction/code-generation.md#supporting-skills).
 
 The draft proposes this entry skill to:
 
@@ -140,7 +141,7 @@ This procedure does not approve upstream changes, bypass Validation, or complete
 
 ## kepler-code-feedback
 
-**Status:** Proposed under the dedicated [Code Validation contract](phase_construction/code-validation.md#supporting-skills).
+**Status:** Proposed under the dedicated [Code Validation Activity contract](phase_construction/code-validation.md#supporting-skills).
 
 The draft proposes this entry skill to:
 
@@ -149,7 +150,7 @@ The draft proposes this entry skill to:
 - Provide independent code feedback without authoring the reviewed implementation.
 - Identify blocking findings, missing proof, uncertainty, and proposed correction boundaries.
 - Self-check the assessment and record validation evidence through CLI-owned operations.
-- Hand off successful validation to Task Integration without treating it as combined-result acceptance.
+- Hand off successful Validation to Code Integration without treating it as combined-result acceptance.
 
 Independent feedback remains required. The proposed procedure does not import legacy review artifacts or grant authority to reopen stages.
 
@@ -161,7 +162,7 @@ The draft proposes this entry skill to:
 
 - Assess the complete integrated outcome against current unit, functional, quality, and planning obligations.
 - Review interactions, failure behavior, known delivery constraints, and evidence applicability.
-- Perform an independent assessment without editing the implementation or replacing mandatory task-stage work.
+- Perform an independent assessment without editing the implementation or replacing mandatory Activity work.
 - Report concrete findings and proposed revision boundaries to the orchestrator.
 - Self-check review coverage and report blocking findings to the orchestrator. Record review evidence through CLI-owned operations.
 - Obtain any applicable requester acceptance and hand off the reviewed result to Deliver.

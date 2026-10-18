@@ -55,43 +55,53 @@ Markdown views can present execution state, but they remain derived views, not a
 
 ### Stage attempts
 
-A stage attempt is one execution of one stage within the scope defined by its phase contract. It includes the stage's internal correction loops.
+A stage attempt is one execution of a stage within the scope defined by its phase contract. It includes the stage's internal correction loops.
 
-Construction uses unit-scoped attempts and task-scoped attempts where its stage contract requires them. Other phases define their own execution scopes.
+Construction uses unit-scoped stage attempts. Implementation Execution coordinates its Activity attempts under one unit-scoped attempt. Other phases define their own execution scopes.
 
-- Create an attempt when the stage starts for the first time.
-- Self-review and repeated edits after failed tests keep the same attempt while corrections remain within that stage.
+- Create a stage attempt when the stage starts for the first time.
+- Self-review and repeated edits after failed checks keep the same attempt while corrections remain within that stage.
 - A stage report or revision recommendation does not create a new attempt.
 - Create a new attempt when a stage executes again after reopening authorized by the orchestrator.
 - Apply this rule to every stage in the authorized revision cascade when each stage executes again.
 - Pauses, resumes, and new agent sessions keep the same attempt.
 - A failed command alone does not create a new attempt.
-- Link required completion evidence and approvals to the attempt.
+- Link the stage's named evidence and any required approvals to the stage attempt.
 - Keep previous attempts as history. Their completion does not establish completion of the current attempt.
 
-Suspected upstream problems follow the shared [revision authority and escalation rules](revision.md#authority-and-escalation). Stage agents report findings and proposed boundaries. The orchestrator decides whether to authorize reopening and where to start.
+Suspected upstream problems follow the shared [revision authority and escalation rules](revision.md#authority-and-escalation). Stage and Activity workers report findings and proposed boundaries. The orchestrator decides whether to authorize reopening and where to start.
 
 #### Attempt identity and active scope
 
 Give each attempt a distinct identity. A new attempt must not reuse a previous attempt's identity. Git checkpoint reuse does not change this rule.
 
-The following unit/task scope limits apply to Construction. Other phases define their own execution scopes.
-
-For a fixed unit, task, and stage, allow zero or one active attempt. Attempts in that scope are serial. Different task or unit scopes can progress concurrently when dependencies and stage order permit it.
-
-For unit-wide work without a task, apply the same limit to the unit/stage scope. Do not combine different task scopes into one admission gate.
+For Construction, allow zero or one active attempt for each fixed unit/stage scope. Apply the separate one-active-attempt limit to each fixed Activity occurrence under [Activity attempts](#activity-attempts). Different task and unit scopes can progress concurrently when the accepted dependency graph and stage order permit it.
 
 For this limit, active means started and not ended. Paused attempts and attempts waiting for review or approval still occupy their scope. Resuming work keeps the existing attempt identity.
 
-Preserve the limit under concurrent start or resume requests. Two requests for the same scope must not create two active attempts. Coordination must not become a global Git gate for unrelated scopes.
+Preserve each limit under concurrent start or resume requests. Two requests for the same scope must not create two active attempts. Coordination must not become a global Git gate for unrelated scopes.
 
-This constraint does not require every task to execute every stage. Phase and stage contracts define the applicable scopes.
+This constraint does not require every task to execute every Activity. Phase and stage contracts define the applicable scopes.
 
-Construction defines its [Implementation Execution structure](phase_construction/README.md#implementation-execution). Record the relationship between its unit-scoped attempt and task-scoped Code Generation, Code Validation, and Task Integration attempts through journal events. Derive relationship views from those events.
+Construction defines its [Implementation Execution structure](phase_construction/README.md#implementation-execution). Record the relationship between its unit-scoped stage attempt and each Activity attempt through the shared journal mechanics. Derive relationship views from those events.
 
-Task implementation and Task coding are execution contexts, not additional stage attempts. Do not infer the same nested structure for other phases or stages.
+Task implementation and Task coding are execution contexts, not additional attempt identities. Do not infer Construction's Activity structure for other phases.
 
 Attempt ID formats, status values, and exact coordination and binding record formats require further decisions.
+
+### Activity attempts
+
+An Activity attempt is one execution of an Activity occurrence within an enclosing stage attempt. Bind it to that occurrence and the enclosing attempt. The stage attempt supplies coordination context; it does not replace the Activity attempt.
+
+Each Activity attempt has a distinct identity and its own run floor. Allow at most one active attempt for a fixed Activity occurrence. An authorized return creates a new attempt when the Activity executes again.
+
+Failed commands, local corrections within the current Activity, waits, pauses, resumes, and new sessions do not create another attempt. An Integration-only retry stays within its current Code Integration attempt.
+
+Keep Activity evidence under the Activity's own contract and attempt. Keep enclosing stage evidence under the stage contract and attempt. Shared scope and material bindings do not replace either contract.
+
+When an upstream revision ends the enclosing stage attempt, end its affected Activity attempts. Do not move historical Activity evidence to a new stage attempt. Ended Activity results cannot complete or cancel newer work, even if candidate bytes and the enclosing stage attempt remain unchanged.
+
+Use shared CLI-owned journals and operations for Activity attempts and evidence. Do not add a second lifecycle engine or a task-coding or protocol-run attempt identity. Activity event payloads, ID formats, commands, and projections remain implementation choices under the unchanged [event envelope](#event-envelope-choices).
 
 ### Run floor
 
@@ -101,7 +111,7 @@ Earlier-attempt evidence and approvals cannot establish completion of the curren
 
 Pauses, resumes, and internal correction loops retain the same run floor. Progress in other scopes does not change it. This contract does not define an additional verification-round boundary within an attempt.
 
-Attempt binding and [evidence applicability](#evidence-applicability) are separate checks. A matching attempt identity does not establish that evidence covers the required material and relevant inputs. Stage completion conditions and revision authority still apply.
+Attempt binding and [evidence applicability](#evidence-applicability) are separate checks. A matching attempt identity does not establish that evidence covers the required material and relevant inputs. Stage and Activity completion conditions and revision authority still apply.
 
 ### Interrupted-work recovery
 
@@ -117,7 +127,7 @@ Follow the shared [Revision procedure](revision.md#revision-procedure). A stage'
 
 Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Retain those facts in the phase's append-only event journals. Derive current execution state from the recorded decision. CLI-owned operations record the events; agents must not write them separately.
 
-Follow Construction's [unit-wide upstream revision rules](phase_construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and task-stage attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stages execute again.
+Follow Construction's [unit-wide upstream revision rules](phase_construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation Execution and Activity attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stage or Activity executes again.
 
 Phase-owned projection fields and revision command names remain undecided. The implementation defines revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
 
@@ -191,7 +201,8 @@ The protocols for safe appends, retries, interrupted writes, and collection rema
 
 | Concept | Meaning |
 | --- | --- |
-| Attempt | One execution of a stage, including its internal correction loops. |
+| Stage attempt | One execution of a stage, including its internal correction loops. |
+| Activity attempt | One execution of an Activity occurrence within an enclosing stage attempt. |
 | Git checkpoint | A commit that identifies a multi-file repository snapshot. |
 | Evidence | A recorded check or review result concerning specified material and relevant conditions. |
 | Approval | The requester's explicit acceptance of specified material. |
@@ -220,7 +231,7 @@ A mutable URL or tag alone may not identify what was examined. Where necessary, 
 
 Each evidence record identifies:
 
-- Its owning phase and applicable stage/attempt scope. In Construction, include the unit and task when applicable.
+- Its owning phase and applicable stage, Activity, and attempt scope. In Construction, include the unit and task when applicable.
 - The material checked and relevant inputs.
 - The repository and checkpoint commit for repository material, with appropriate references for other material.
 - The check or review performed, its result, and supporting output.
@@ -239,10 +250,10 @@ Record bindings through CLI-owned JSON journal events, not artifact frontmatter.
 Use this procedure when evidence covers repository material.
 
 1. **Record the starting checkpoint.** Reuse an existing commit when it represents the required starting state. Task baselines follow the admission rules below.
-2. **Perform the work.** Edit and perform trial checks within the stage's responsibilities. Internal correction loops do not require a commit for each action.
+2. **Perform the work.** Edit and perform trial checks within the owning stage's or Activity's responsibilities. Internal correction loops do not require a commit for each action.
 3. **Prepare the output checkpoint.** Create a checkpoint in the work's own workspace when ready. Include the repository material that the required checks will cover.
 4. **Check the checkpoint.** Run required final checks against that snapshot and record their results. Apply the shared attempt and revision rules when corrections are needed.
-5. **Obtain required approval.** Bind approval to the reviewed material and checkpoint. Complete the stage only after its completion conditions are satisfied.
+5. **Obtain required approval.** Bind approval to the reviewed material and checkpoint. Complete the stage or Activity only after its completion conditions are satisfied.
 
 The checked material must match the checkpoint. Relevant uncommitted or untracked inputs cannot be silently treated as committed content.
 
@@ -254,13 +265,13 @@ A different commit identifier does not automatically make evidence stale. An aud
 
 Within the applicable attempt, earlier evidence can remain usable after verifying that its covered material and relevant inputs remain unchanged. Retain the record's original checkpoint and context references. If those inputs changed, obtain evidence covering the changed material.
 
-After an authorized revision, identical content does not transfer previous completion into the new attempt. Execute the stage and satisfy its conditions again.
+After an authorized revision, identical content does not transfer previous completion into the new attempt. Execute the reopened stage or Activity and satisfy its conditions again.
 
 A material mismatch does not authorize a revision cascade. Report suspected upstream problems under the shared [revision authority rules](revision.md#authority-and-escalation).
 
 ## Parallel execution
 
-In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages retain their phase order. Apply the [task-stage order](phase_construction/README.md#implementation-execution) within each task implementation, not across different tasks. Other phases define their own execution relationships.
+In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages retain their phase order. Apply the fixed [Activity order](phase_construction/README.md#implementation-execution) within each task, not across different tasks. Activity feedback routes do not add or change task dependency edges. Other phases define their own execution relationships.
 
 Starting tasks and recording progress must not depend on shared admission commits or a global coordinator `HEAD`. Independent work must not require unrelated workspaces to become clean or stop progressing.
 
@@ -268,7 +279,7 @@ Each task records its actual starting inputs. Running tasks do not need to match
 
 Workflow event writes and derived views must support concurrent work. Keep event-update coordination short. Test resources need isolation where concurrent runs could interfere.
 
-Construction's [integration lock](phase_construction/README.md#integration-order-and-locking) serializes Task Integration within each unit. Hold that lock through candidate preparation, checks, and acceptance. This integration lock can cover long-running checks; it is not a global agent, task admission, or test gate.
+Construction's [integration lock](phase_construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current checkpoint, candidate preparation, checks, and acceptance. This lock can cover long-running checks; it is not a global agent, task admission, or test gate.
 
 Separate unit integration workspaces and isolated workspaces for concurrent writers are one possible arrangement. Exact workspace and branch layouts remain undecided.
 
@@ -297,23 +308,23 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 Task outputs can have separate checkpoints. Results for those checkpoints do not establish that their combined result works.
 
-Construction's [Task Integration stage](phase_construction/task-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Check the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against the candidate while holding the unit lock. All three must complete successfully before acceptance. Task completion requires successful acceptance and the applicable completion conditions.
+Construction's [Code Integration Activity](phase_construction/code-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Read the current checkpoint after acquiring the lock. Check the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against that candidate while holding the lock. All three must succeed before authorized acceptance. Record actual Integration inputs separately from the fixed admission baseline. Task completion requires successful acceptance and the applicable completion conditions.
 
-Code Validation runs typechecking, the project build, and the full application test suite, and owns independent code feedback. The [stage boundaries](phase_construction/README.md#agreed-boundaries) define these duties. Integration checks do not replace them. A build result establishes typechecking only when the command also performs the required typechecking. Any additional integration checks and project-specific check configuration require separate decisions.
+Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phase_construction/README.md#agreed-boundaries) defines these duties. Integration checks do not replace them. A build result establishes typechecking only when the command also performs the required typechecking. Any additional integration checks and project-specific check configuration require separate decisions.
 
-A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; integration does not authorize a cascade.
+A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; Integration does not authorize a cascade.
 
-## Stage-owned evidence
+## Stage and Activity evidence
 
-Stage contracts define required evidence, covered material, and required results. Shared bindings do not replace those definitions.
+Stage and Activity contracts define their named evidence, covered material, and required results. Shared bindings do not replace those definitions.
 
-The dedicated [Generation](phase_construction/code-generation.md#evidence-coverage), [Validation](phase_construction/code-validation.md#evidence-coverage), and [Integration](phase_construction/task-integration.md#evidence-coverage) contracts define their task-stage evidence. The [Execution draft](phase_construction/implementation-execution.md#evidence-coverage) defines the unit completion assessment. The [Review draft](phase_construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phase_construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
+The dedicated [Generation](phase_construction/code-generation.md#evidence-coverage), [Validation](phase_construction/code-validation.md#evidence-coverage), and [Integration](phase_construction/code-integration.md#evidence-coverage) Activity contracts define Activity evidence. The [Execution draft](phase_construction/implementation-execution.md#evidence-coverage) defines stage-level completion evidence. The [Review draft](phase_construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The [Deliver draft](phase_construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
 
-These new definitions remain proposed. Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage completion.
+These detailed Activity and stage definitions remain proposed except where the accepted rules above say otherwise. Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage or Activity completion.
 
 ## CLI responsibilities
 
-Expose operations for reading progress, changing execution state, recording interactions and approvals, managing pause and resume checkpoints, and applying the shared [Revision procedure](revision.md#revision-procedure).
+Expose operations to read progress, change execution state, and record interactions and approvals. Also expose operations to manage pause and resume checkpoints and apply the shared [Revision procedure](revision.md#revision-procedure).
 
 Keep phase transition rules and event recording in their owning application operations. The CLI invokes those operations; JSON journals retain the resulting facts. Current state and query views are derived. Skills must not implement separate event or state writers.
 
@@ -358,7 +369,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 - CLI commands and their validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
-- Acceptance of proposed evidence coverage in the remaining stage drafts, external reference formats, and exact evidence and approval record formats.
+- Acceptance of proposed stage and Activity evidence coverage, external reference formats, and exact evidence and approval record formats.
 - Traceability relationship formats, checkpoint reference names, retention periods, publication, storage locations, and cleanup rules.
 - Workspace and branch layouts, and shared test resource isolation.
 - Which journals, projections, and retained records belong in version control or remain local to a checkout.

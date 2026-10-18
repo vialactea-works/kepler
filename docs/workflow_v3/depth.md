@@ -6,7 +6,7 @@
 
 Depth controls the detail of analysis and documentation across stages. It does not remove required information or weaken verification.
 
-Each stage uses this shared definition. A stage can explain how to apply each depth level to its work.
+Each stage uses this shared definition and can explain how to apply each depth level. Activities inherit the depth of their owning stage; they have no separate depth settings.
 
 ## Levels
 
@@ -24,7 +24,7 @@ Depth does not determine which stages execute. It does not change required infor
 
 | Subject | Rule |
 | --- | --- |
-| Scope | Set one default depth for the Unit of Work. Stages inherit it unless an explicit stage override exists. Do not set a separate depth for each document. |
+| Scope | Set one default depth for the Unit of Work. Stages inherit it unless an explicit stage override exists. Activities inherit their owning stage's depth. Do not set an Activity override or a separate depth for each document. |
 | Default | Use Standard when the requester has not selected another level. |
 | Authority | The agent recommends adjustments with a short rationale. The requester decides whether to accept them. |
 | Selection criteria | Consider uncertainty, domain complexity, interactions, consequences of incorrect decisions, and available references. Code size alone is insufficient. |

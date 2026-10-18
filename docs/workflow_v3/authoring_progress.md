@@ -14,11 +14,19 @@ The requester has accepted the complete Functional Design and Quality Requiremen
 
 Use the agreed [direct Construction entry](README.md#phase-organization) with a clear Unit of Work request. Greenfield work remains in scope; pre-existing application code and tests are not required. Supply relevant context without requiring completed Initialization or Inception contracts.
 
-Ship the complete [Construction stage sequence](phase_construction/README.md#stage-outline), from Functional Design through Deliver. This includes the task coding loop, independent validation, integration, and whole-unit review.
+Ship the complete [Construction stage sequence](phase_construction/README.md#stage-outline), from Functional Design through Deliver. Within Implementation Execution, run the fixed Code Generation, Code Validation, and Code Integration Activity sequence, then complete whole-unit review.
 
-Preserve ready-task parallelism, fixed admission baselines, attempt identity, requester authority, and evidence bindings. Hold each unit's integration lock through candidate preparation, required checks, and acceptance.
+Preserve complex multi-task units and ready-task parallelism. Keep admission baselines fixed. Use explicit attempts and evidence. Recover from interruptions. Preserve requester authority and the actual agreed delivery outcome. Hold each unit's integration lock through reading the current checkpoint, candidate preparation, required checks, and acceptance.
 
-The CLI, templates, agents, and skills must support that sequence before the MVP ships. Their implementation and verification are release work, not completed specification decisions.
+For each task in Implementation Execution, use the fixed Activity sequence Code Generation, Code Validation, then Code Integration. Authorized returns route code changes to Generation, then repeat Validation and Integration as required. Integration-only retries stay within the current Integration attempt. The accepted task graph defines dependencies and prerequisite conditions. The orchestrator assesses readiness from those requirements and current execution facts. Do not duplicate its dependencies in the Activity procedure. Serial or parallel scheduling is separate from dependency topology, and feedback routes do not create dependency edges.
+
+Use one orchestrator-controlled subagent model for MVP Implementation Execution. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they do not need to spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. Authorized orchestrator and CLI operations control progress, revision, and acceptance. Logical roles, profile implementations, and skill implementations remain proposed unless separately accepted. Do not add a per-task worker-topology selector.
+
+Separate the authored plan from runtime state. Keep explicit attempts, evidence, and phase-owned rules. Separate executor dispatch from readiness, acceptance, and revision policy. Do not add a generic protocol registry, arbitrary graph language, interpreter, or Basic/Workshop/Factory preset. Do not add a team engine, swarm, extra protocol state store, or universal domain graph. Defer a general graph engine; keep required feedback routes. Add only behavior needed by an agreed MVP scenario for correctness and completion. Future variants alone do not justify new machinery.
+
+This change keeps the existing Construction stage placement. It does not decide the proposed Operation placement for Deliver. Functional Design, Quality Requirements, and Implementation Planning remain in Construction. These release boundaries do not establish implemented behavior.
+
+The CLI, templates, agents, and skills must support the complete Construction sequence before the MVP ships. Their implementation and verification are release work, not completed specification decisions.
 
 Standalone Initialization and Inception are outside this MVP. Removing a question from the approval queue does not remove its required behavior or implementation.
 
@@ -26,14 +34,14 @@ Standalone Initialization and Inception are outside this MVP. Removing a questio
 
 These rows are work packages, not new decision IDs. Define only the behavior needed by this release.
 
-For each missing stage, define essential inputs, outputs, responsibilities, completion conditions, failure/reopening, and handoff. Define requester approval only when applicable; do not add a gate by convention.
+For each incomplete stage and Activity contract, define essential inputs, outputs, responsibilities, completion conditions, failure or correction paths, and handoffs. Define requester approval only when applicable; do not add a gate by convention.
 
 | Order | Work package | Minimum work |
 | --- | --- | --- |
 | 1 | Functional Design | The stage specification is accepted under FD13. Use the agreed `supporting-document` type under DF06. |
 | 2 | [Quality Requirements](phase_construction/quality-requirements.md) | The stage specification, including evidence and skill responsibilities, is accepted under NF12. |
 | 3 | [Implementation Planning](phase_construction/implementation-planning.md) | Review the remaining Planning proposals. The task graph specification is accepted under IP26, including task content, dependencies, and prerequisites. |
-| 4 | [Implementation Execution](phase_construction/implementation-execution.md) | Review the unit contract and dedicated task-stage drafts. Preserve agreed independence, checks, concurrency, and blocker-only requester intervention. |
+| 4 | [Implementation Execution](phase_construction/implementation-execution.md) | Review the unit contract and dedicated Activity contracts. Preserve accepted independence, checks, concurrency, recovery, and blocker-only requester intervention. |
 | 5 | [Unit of Work Review](phase_construction/unit-of-work-review.md) | Review whole-unit assessment, findings, evidence, completion, applicable acceptance, and handoff proposals. |
 | 6 | [Deliver](phase_construction/deliver.md) | Review outcome, instructions, authorization, verification, recovery, and deployment information proposals. |
 | 7 | Shared runtime | Resolve SH74 record portability. Implement journals, guarded transitions, safe recovery, material retention, and isolated concurrent work. |
@@ -41,7 +49,7 @@ For each missing stage, define essential inputs, outputs, responsibilities, comp
 
 Start implementation from agreed contracts without waiting for unrelated v3 decisions. Resolve unchosen stage behavior before deriving that stage's skills or runtime transitions.
 
-The release must preserve separate Code Validation and candidate integration checks. A reduced approval queue does not make the MVP implemented or ready to ship.
+The release must preserve separate non-author Code Validation and combined-candidate Code Integration checks. A reduced approval queue does not make the MVP implemented or ready to ship.
 
 ## MVP decisions
 
@@ -51,7 +59,7 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| SH52 | Required evidence coverage | Each stage contract owns evidence, covered material, and required results. Review proposed coverage in Planning and the three later drafts. Existing [test duties](phase_construction/README.md#agreed-boundaries) remain binding. |
+| SH52 | Required evidence coverage | Each stage and Activity contract owns its evidence, covered material, and required results. Review proposed coverage in Planning and the remaining stage and Activity drafts. Existing [test duties](phase_construction/README.md#agreed-boundaries) remain binding. |
 | SH61 | Missing author identity | What must happen when effective Git name or email is missing? Resolve before creating an affected artifact. Do not invent [author identity](metadata.md#author-identity). |
 | SH74 | Record version-control policy | Which authoritative records travel with the repository, and which remain local? Define how workers and later sessions retain [required history](runtime.md#execution-state-representation). |
 | SH77 | Deployment record content | Is the [proposed deployment information](phase_construction/deliver.md#deployment-information) sufficient for the actual delivery outcome? Known constraints remain visible to Planning. |
@@ -60,9 +68,7 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 
 ### Construction decisions still pending
 
-| ID | Decision | Question to resolve |
-| --- | --- | --- |
-| CN20 | MVP working discipline | When should Construction work run inline or through subagents, including coordinated swarms? Preserve agreed ready-task parallelism. |
+No Construction working-discipline decision remains pending. [CN20](#completed-construction-decisions) records the accepted model for Implementation Execution only.
 
 ### Stage contract decisions
 
@@ -89,34 +95,34 @@ No pending Functional Design or Quality Requirements decisions remain in this qu
 
 ### Implementation Execution proposals
 
-The [Execution draft](phase_construction/implementation-execution.md) preserves accepted structure and check duties. Dedicated [Generation](phase_construction/code-generation.md), [Validation](phase_construction/code-validation.md), and [Integration](phase_construction/task-integration.md) contracts own those task stages. Scoped [Execution decisions](#completed-execution-decisions) are accepted; the additional proposals below remain open.
+The [Execution draft](phase_construction/implementation-execution.md) preserves the accepted structure and check duties. Dedicated [Generation](phase_construction/code-generation.md), [Validation](phase_construction/code-validation.md), and [Integration](phase_construction/code-integration.md) contracts define those Activities. Their Activity classification is accepted; detailed bodies and skill responsibilities remain proposed. Scoped [Execution decisions](#completed-execution-decisions) are accepted; the additional proposals below remain open.
 
 | ID | Decision | Proposal to review |
 | --- | --- | --- |
 | IE01 | Execution entry conditions | Are the proposed [entry conditions](phase_construction/implementation-execution.md#entry-conditions) sufficient, including greenfield checkpoint establishment and scoped prerequisite timing? |
 | IE02 | Execution outputs and ownership | Should Execution produce implementation material and CLI-owned records without a separate required [execution Markdown document](phase_construction/implementation-execution.md#artifacts-and-records)? |
 | IE03 | Execution stage owner | Should `kepler-orchestrator` own the proposed [unit execution responsibilities](phase_construction/implementation-execution.md#agent-roles)? |
-| IE04 | Generation stage owner | Should `kepler-coder` own the proposed [Code Generation responsibilities](phase_construction/code-generation.md#agent-roles)? |
-| IE05 | Validation stage owner | Should `kepler-reviewer` own the proposed [Code Validation responsibilities](phase_construction/code-validation.md#agent-roles)? |
-| IE06 | Integration stage owner | Should `kepler-orchestrator` own the proposed [Task Integration responsibilities](phase_construction/task-integration.md#agent-roles)? |
+| IE04 | Generation stage owner | Should `kepler-coder` own the proposed [Code Generation Activity responsibilities](phase_construction/code-generation.md#agent-roles)? |
+| IE05 | Validation stage owner | Should `kepler-reviewer` own the proposed [Code Validation Activity responsibilities](phase_construction/code-validation.md#agent-roles)? |
+| IE06 | Integration stage owner | Should `kepler-orchestrator` own the proposed [Code Integration Activity responsibilities](phase_construction/code-integration.md#agent-roles)? |
 | IE07 | Execution entry skill | Should [kepler-orchestrate](skills.md#kepler-orchestrate) supply the proposed [unit execution procedure](phase_construction/implementation-execution.md#supporting-skills)? |
 | IE08 | Generation entry skill | Should [kepler-code](skills.md#kepler-code) supply the proposed Generation procedure? |
 | IE09 | Validation entry skill | Should [kepler-code-feedback](skills.md#kepler-code-feedback) supply the proposed Validation procedure? |
 | IE11 | Execution self-review rule | Should self-review belong in each applicable [entry procedure](phase_construction/implementation-execution.md#self-review), without separate stages or attempt identities? |
 | IE12 | Additional execution review trigger | Should [additional external review](phase_construction/implementation-execution.md#additional-review) be requester-triggered, while required Validation feedback and Unit of Work Review remain mandatory? |
-| IE14 | Execution reopening questionnaires | Do the proposed [unit and task-stage questions](phase_construction/implementation-execution.md#reopening-questionnaires) identify relevant findings without changing revision authority? |
+| IE14 | Execution reopening questionnaires | Do the proposed [unit and Activity questions](phase_construction/implementation-execution.md#reopening-questionnaires) identify relevant findings without changing revision authority? |
 | IE15 | Generation completion evidence | Are the named [Generation results](phase_construction/code-generation.md#evidence-coverage), covered material, and required results sufficient for its proposed completion details? |
 | IE16 | Validation completion evidence | Are the named [Validation results](phase_construction/code-validation.md#evidence-coverage), covered material, and required results sufficient for its proposed completion details? |
-| IE17 | Integration completion evidence | Are the named [Integration results](phase_construction/task-integration.md#evidence-coverage), covered material, and required results sufficient without replacing accepted lock and check rules? |
-| IE18 | Execution completion evidence | Is the proposed [unit completion assessment](phase_construction/implementation-execution.md#evidence-coverage) sufficient while preserving originating task-stage evidence bindings? |
+| IE17 | Integration completion evidence | Do the named [Code Integration results](phase_construction/code-integration.md#evidence-coverage) and covered material suffice under the accepted lock and check rules? |
+| IE18 | Execution completion evidence | Is the proposed [unit completion assessment](phase_construction/implementation-execution.md#evidence-coverage) sufficient while preserving originating Activity evidence bindings? |
 | IE19 | Execution completion details | Are the proposed [completion details](phase_construction/implementation-execution.md#completion-conditions) sufficient for the already agreed unit completion boundary? |
 | IE20 | Execution handoff | Does the proposed [review handoff](phase_construction/implementation-execution.md#handoff) identify sufficient integrated material, provenance, evidence, and remaining concerns? |
 | IE21 | Execution whole-draft acceptance | Does the requester accept the complete [unit-scoped Execution specification](phase_construction/implementation-execution.md), including its skill responsibilities? |
-| IE22 | Post-completion execution return | Should the [scoped-return rule](phase_construction/implementation-execution.md#return-after-completed-execution) reopen affected task stages, reassess retained scopes, and require new unit completion and downstream execution? |
+| IE22 | Post-completion execution return | Should the proposed [scoped-return rule](phase_construction/implementation-execution.md#return-after-completed-execution) reopen affected Activities and reassess retained scopes? Should it require new unit completion and downstream execution? Details remain open. |
 | IE24 | Generation contract acceptance | Does the requester accept the complete dedicated [Code Generation contract](phase_construction/code-generation.md), including its proposed role, evidence, and handoff details? |
 | IE25 | Validation contract acceptance | Does the requester accept the complete dedicated [Code Validation contract](phase_construction/code-validation.md), including its proposed role, evidence, and handoff details? |
-| IE27 | Integration contract acceptance | Does the requester accept the complete dedicated [Task Integration contract](phase_construction/task-integration.md), including its proposed role, evidence, and handoff details? |
-| IE28 | Integration entry skill | Should [kepler-orchestrate](skills.md#kepler-orchestrate) supply the proposed [Task Integration procedure](phase_construction/task-integration.md#supporting-skills)? |
+| IE27 | Integration contract acceptance | Does the requester accept the complete dedicated [Code Integration Activity contract](phase_construction/code-integration.md), including its proposed role, evidence, and handoff details? |
+| IE28 | Integration entry skill | Should [kepler-orchestrate](skills.md#kepler-orchestrate) supply the proposed [Code Integration procedure](phase_construction/code-integration.md#supporting-skills)? |
 
 ### Unit of Work Review proposals
 
@@ -168,9 +174,7 @@ The [Deliver draft](phase_construction/deliver.md) proposes the following polici
 
 ## Review result
 
-The MVP decision queue contains 81 items: 7 earlier decisions, 16 Planning proposals, and 58 later-stage proposals. CN20 and whole-stage Planning acceptance remain open. Another 33 required MVP implementation choices remain. Defer 13 questions beyond the MVP; 1 speculative approval gate is removed.
-
-The MVP review preserved the 87 previously completed decisions. Later requester decisions bring the completed total to 119. Reclassification must not fabricate approval or claim implementation is complete.
+The register contains 251 unique IDs, including 124 completed decisions and 80 pending MVP decisions. It also has 33 MVP implementation choices, 13 deferred questions, and one retired question. Whole-stage Planning acceptance (IP19) remains open. CN20 records the accepted Implementation Execution working model. Activity decisions do not accept detailed contract bodies or claim implementation is complete.
 
 ## Register rules
 
@@ -183,7 +187,7 @@ The MVP review preserved the 87 previously completed decisions. Later requester 
 
 A requester decision is needed when the answer changes required behavior, authority, evidence obligations, or material scope. Technical formats, command names, and mechanisms belong to implementation within the agreed contracts.
 
-SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. NF identifies Quality Requirements decisions. Keep existing NF identifiers after the stage rename. IP identifies Implementation Planning decisions. IE identifies Implementation Execution decisions, including its nested task stages. UR identifies Unit of Work Review decisions. DL identifies Deliver decisions. DF preserves the existing deferred-decision series. An ID does not determine its status.
+SH identifies shared decisions. CN identifies Construction decisions. FD identifies Functional Design decisions. NF identifies Quality Requirements decisions. Keep existing NF identifiers after the stage rename. IP identifies Implementation Planning decisions. IE identifies Implementation Execution decisions, including its Activities. UR identifies Unit of Work Review decisions. DL identifies Deliver decisions. DF preserves the existing deferred-decision series. An ID does not determine its status.
 
 ## Completed shared decisions
 
@@ -215,13 +219,13 @@ Every decision in this section is complete. The linked specification contains it
 | SH22 | Depth inheritance | [Selection rules](depth.md#selection-rules): one unit default, explicit stage overrides, and Standard as fallback. There is no document-level depth. |
 | SH23 | Depth selection authority | [Selection procedure](depth.md#selection-procedure): the agent recommends and the requester decides. Apply revision rules when a change affects completed work. |
 | SH24 | Stage attempt lifecycle | [Stage attempts](runtime.md#stage-attempts): each stage execution has a distinct attempt. Internal corrections, pauses, sessions, and failed commands alone do not replace it. Authorized reopening creates another attempt when the stage executes again. |
-| SH25 | Active attempt limit | [Active scope](runtime.md#attempt-identity-and-active-scope): at most one active attempt per unit/task/stage scope. Paused and waiting attempts retain their scope. Concurrent operations must preserve the limit without blocking unrelated scopes. |
+| SH25 | Active attempt limit | [Active scope](runtime.md#attempt-identity-and-active-scope): allow at most one active attempt per unit/stage scope. SH96 defines the separate Activity-occurrence limit. Paused and waiting attempts retain their scope. Concurrent operations preserve both limits without blocking unrelated scopes. |
 | SH26 | Run floor | [Run floor](runtime.md#run-floor): use the applicable attempt identity without a separate verification round. Late results retain their original attempt; they cannot complete a newer attempt. |
 | SH27 | Repository checkpoint meaning | [Checkpoint concepts](runtime.md#concepts): a commit identifies content, not checks or approval. Attempts and commits have separate identities. One attempt can use several checkpoints; different attempts can share a checkpoint. Do not create commits solely for attempt identity. |
 | SH28 | Evidence material types | [Material references](runtime.md#material-references): evidence can cover repository or external material. Use immutable references or retain relevant content when mutable references are insufficient. |
 | SH29 | Evidence bindings | [Evidence bindings](runtime.md#evidence-and-approval-bindings): identify scope, attempt, checked material, inputs, results, supporting output, and relevant conditions. Record bindings through CLI-owned JSON journal events, not frontmatter. |
 | SH30 | Approval bindings | [Approval bindings](runtime.md#evidence-and-approval-bindings): identify the requester, attempt, and reviewed material. Repository output commits must exist before approval is recorded. Recording approval does not grant approval authority to the CLI. |
-| SH31 | Evidence reuse | [Applicability](runtime.md#evidence-applicability): within an attempt, verify unchanged covered material and relevant inputs before reuse. Retain original references. A different commit alone does not invalidate evidence; reopening still requires stage execution again. |
+| SH31 | Evidence reuse | [Applicability](runtime.md#evidence-applicability): within an attempt, verify unchanged covered material and relevant inputs before reuse. Retain original references. A different commit alone does not invalidate evidence. Reopening still requires the reopened stage or Activity to execute again. |
 | SH32 | Checkpoint preservation | [Retention principles](runtime.md#checkpoint-retention): keep required Git objects reachable through retained references. JSON identifiers, audit events, and fingerprints do not preserve content. External material needs its own retention. |
 | SH33 | Task admission baseline | [Task admission](runtime.md#task-admission-and-baselines): capture the current unit integration commit containing required predecessor outputs. Keep the admitted baseline fixed. Establish inclusion through ancestry or provenance, not timestamps. |
 | SH34 | Parallel coordination boundary | [Parallel execution](runtime.md#parallel-execution): independent units and ready tasks progress without global coordinator `HEAD` gates. Do not require shared admission commits or unrelated workspaces to be clean. Keep event-update coordination short. Construction's unit integration lock is the explicit exception. |
@@ -246,6 +250,8 @@ Every decision in this section is complete. The linked specification contains it
 | SH92 | Event producer identity | [Producer identity](runtime.md#producer-identity): record the original CLI name and actual version in `producer`. Preserve those values on import. Actor identity and approval authority remain separate. |
 | SH93 | Causal event references | [Causal references](runtime.md#causal-references): require `caused_by` as a list of direct causal event IDs. Use `[]` when no recorded causes exist. Causal links do not replace attempt or material bindings. |
 | SH94 | Journal order representation | [Journal order](runtime.md#journal-identity-and-order): keep `journal_id` and preserve stored local order during collection. Use stable event IDs for duplicate detection. Do not persist numeric positions or allocate separate sequence counters. |
+| SH95 | Activity concept | [Activity](activity.md): An Activity is a bounded responsibility within a stage. It is not a stage, agent, skill, task, or lifecycle milestone. The owning phase or stage defines its contract. Activity completion cannot complete the stage or grant authority. |
+| SH96 | Activity attempt lifecycle | [Activity attempts](runtime.md#activity-attempts): bind each attempt and run floor to its occurrence and enclosing stage attempt. Allow one active attempt per occurrence. Keep Activity and stage evidence in their own contracts. Do not reparent old records. Use shared CLI journals, not another lifecycle engine. |
 | DF06 | Supporting document types | [Accepted types](metadata.md#accepted-type-values): use `supporting-document` for optional supporting Markdown documents. Explain purpose in content and the owning-stage link. Existing required-document and Project reference types remain unchanged. |
 
 ## MVP implementation choices
@@ -260,7 +266,7 @@ The implementation must provide typechecking, project build, and full-suite comm
 | --- | --- | --- |
 | SH45 | Runtime storage paths | Where do authoritative journals and derived projections live? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH46 | Event-write consistency | How do event appends and journal reconciliation preserve valid workflow histories? See [runtime decisions](runtime.md#decisions-still-required). |
-| SH47 | Attempt ID format | What format identifies a stage attempt? See [attempts](runtime.md#stage-attempts). |
+| SH47 | Attempt ID format | What formats identify [stage attempts](runtime.md#stage-attempts) and [Activity attempts](runtime.md#activity-attempts)? |
 | SH48 | Revision ID format | What format identifies an authorized revision? See [revision decisions](runtime.md#revision-decisions). |
 | SH49 | Evidence record format | What JSON structure stores evidence bindings and results? See [evidence bindings](runtime.md#evidence-and-approval-bindings). |
 | SH50 | Approval record format | What JSON structure stores requester approval and its bindings? See [approval bindings](runtime.md#evidence-and-approval-bindings). |
@@ -287,7 +293,7 @@ The implementation must provide typechecking, project build, and full-suite comm
 | SH85 | Checkpoint reference names | How are retained Git references named? See [runtime decisions](runtime.md#decisions-still-required). |
 | SH86 | Retained evidence storage | Where is retained evidence content stored? See [retention](runtime.md#checkpoint-retention). |
 | SH87 | Interrupted event-write recovery | How does an interrupted append or journal import recover without losing or duplicating events? See [runtime decisions](runtime.md#decisions-still-required). |
-| DF14 | Integration check configuration | How are project-specific integration checks configured? See [Task Integration](phase_construction/README.md#task-integration). |
+| DF14 | Integration check configuration | How are project-specific integration checks configured? See [Code Integration](phase_construction/README.md#code-integration). |
 | DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
 | DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining stage contracts](phase_construction/README.md#remaining-stage-contracts). |
 | DF17 | Revision shutdown coordination | How is active implementation stopped during an authorized unit-wide revision? See [upstream revision](phase_construction/README.md#unit-wide-upstream-revision). |
@@ -305,20 +311,22 @@ These decisions apply to Construction. Do not generalize its nested execution st
 | CN03 | Technical solution selection | [Stage boundaries](phase_construction/README.md#agreed-boundaries): Implementation Planning selects the technical solution before dividing work into tasks. |
 | CN04 | Plan dependency model | [Stage boundaries](phase_construction/README.md#agreed-boundaries): the plan represents tasks and dependencies as a graph. |
 | CN05 | Implementation scheduling | [Implementation Execution](phase_construction/README.md#implementation-execution): the orchestrator schedules independent dependency-ready task implementations concurrently within the unit-scoped stage. |
-| CN06 | Task execution structure | [Task coding](phase_construction/README.md#task-coding): Task implementation contains Task coding, then Task Integration. Task coding contains Code Generation and Code Validation. The contexts add no stages, attempts, run floors, or requester approval gates. |
+| CN06 | Task execution structure | [Task coding](phase_construction/README.md#task-coding): IE29 supersedes this row's task-stage classification only. Each task uses Code Generation, Code Validation, and Code Integration Activities. Task dependencies remain in the accepted graph. Task coding adds no attempt identity, run floor, or requester approval gate. |
 | CN07 | Code Generation testing | [Stage boundaries](phase_construction/README.md#agreed-boundaries): run typechecking and tests related to the modifications. |
 | CN08 | Code Validation test scope | [Stage boundaries](phase_construction/README.md#agreed-boundaries): run typechecking, the project build, and the full application test suite. |
 | CN09 | Task coding completion | [Task coding](phase_construction/README.md#task-coding): required validation succeeds and no blocking findings remain. Coding completion means ready for integration, not completed task implementation. |
 | CN10 | Integration serialization | [Integration order and locking](phase_construction/README.md#integration-order-and-locking): prepare, check, then accept under one lock per unit. Hold it through checks and acceptance. Release before returning to coding. All integrated-state changes respect this lock; unrelated scopes continue. |
-| CN11 | Required integration checks | [Task Integration](phase_construction/README.md#task-integration): run typechecking, the project build, and the full suite against the combined candidate under the unit lock. All three must succeed before acceptance. These checks do not replace Code Validation. |
-| CN12 | Task implementation completion | [Task Integration](phase_construction/README.md#task-integration): successful candidate acceptance and the task's other completion conditions establish task completion. Acceptance changes integrated state; it is not requester approval. |
+| CN11 | Required integration checks | [Code Integration](phase_construction/README.md#code-integration): run typechecking, the build, and the full suite against the candidate under the unit lock. All three must succeed before authorized acceptance. These checks do not replace Code Validation. |
+| CN12 | Task implementation completion | [Code Integration](phase_construction/README.md#code-integration): successful candidate acceptance and the task's other conditions establish task completion. Acceptance changes unit state; it is not requester approval. |
 | CN13 | Implementation Execution completion | [Attempts and completion](phase_construction/README.md#attempts-and-completion): complete required tasks and required integrated-result checks. The unit becomes ready for Unit of Work Review, not delivery approval. |
-| CN14 | Task-local correction return | [Return paths](phase_construction/README.md#return-paths): the orchestrator authorizes a return to coding when task output must change. Execute Code Generation, Code Validation, and Task Integration again. The enclosing execution attempt remains active. |
-| CN15 | Integration-only retry | [Return paths](phase_construction/README.md#return-paths): integration-only retries remain within the current Task Integration attempt. Failed commands alone do not create attempts. |
+| CN14 | Task-local correction return | [Return paths](phase_construction/README.md#return-paths): the orchestrator authorizes a return to Code Generation when output needs changes. Then run Code Generation, Code Validation, and Code Integration as required. Keep the enclosing Execution attempt active. |
+| CN15 | Integration-only retry | [Return paths](phase_construction/README.md#return-paths): Integration-only retries remain within the current Code Integration Activity attempt. Failed commands alone do not create attempts. |
 | CN16 | Unit-wide upstream revision | [Upstream revision](phase_construction/README.md#unit-wide-upstream-revision): stop unit admissions and active implementation, including integration. End affected attempts; retain history. Execute revised upstream stages before replacement attempts. Independent valid units continue. |
 | CN17 | Unit review scope | [Stage outline](phase_construction/README.md#stage-outline): Unit of Work Review examines the complete integrated result. |
-| CN18 | Construction attempt scopes | [Attempts](phase_construction/README.md#attempts-and-completion): Implementation Execution has a unit-scoped attempt. Nested task stages have task-scoped attempts within it. |
-| CN19 | Independent code feedback ownership | [Stage boundaries](phase_construction/README.md#agreed-boundaries): Code Validation owns independent code feedback. |
+| CN18 | Construction attempt scopes | [Attempts](phase_construction/README.md#attempts-and-completion): Implementation Execution has a unit-scoped attempt. Each Activity occurrence has a distinct attempt and run floor linked to it. SH96 supersedes only the historical task-stage attempt classification. The task graph and its dependencies remain unchanged. |
+| CN19 | Independent code feedback ownership | [Stage boundaries](phase_construction/README.md#agreed-boundaries): Code Validation owns independent non-author code feedback. |
+| CN20 | MVP working discipline | [Implementation Execution](phase_construction/implementation-execution.md#agent-roles): use one orchestrator-controlled subagent model for MVP Implementation Execution. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they need not spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. The decision selects no role profiles, skill implementations, or per-task topology. It does not constrain other phases. |
+| CN21 | MVP coordination boundary | [Construction MVP boundary](#construction-mvp-boundary): keep the authored plan separate from runtime state. Keep explicit attempts and evidence under phase-owned rules. Keep the fixed per-task Activity procedure separate from the accepted dependency-ready DAG. Feedback routes do not add dependency edges. Keep dispatch separate from readiness, acceptance, and revision policy. Do not add a generic protocol registry, arbitrary graph language or interpreter, or Basic, Workshop, or Factory presets. Do not add a team engine, swarm, extra protocol state store, or universal domain graph. Defer a general graph engine, but keep required feedback routes. Future variants alone do not justify new machinery. Add only behavior needed for an agreed MVP scenario. |
 
 ## Completed Execution decisions
 
@@ -328,8 +336,9 @@ These scoped decisions are accepted. The remaining Execution, Generation, Valida
 | --- | --- | --- | --- |
 | IE10 | Validation reviewer independence | Complete | Retain [independent non-author feedback](phase_construction/code-validation.md#agent-roles) on actual task material without authoring or editing the implementation. A different model, vendor, or human is not required. |
 | IE13 | Execution approval trigger | Complete | Requester [intervention](phase_construction/implementation-execution.md#requester-intervention) occurs only for hard blockers that agents cannot resolve within their authority. Routine task acceptance follows successful Validation and Integration, not requester approval. |
-| IE23 | Dedicated task-stage contracts | Complete | Code Generation and Code Validation are distinct stages with dedicated [Generation](phase_construction/code-generation.md) and [Validation](phase_construction/code-validation.md) contracts. Each owns its procedure, evidence, completion conditions, reopening questions, and handoff. |
-| IE26 | Dedicated Integration contract | Complete | Task Integration is a distinct stage with a dedicated [contract](phase_construction/task-integration.md). It owns its procedure, evidence, completion conditions, reopening questions, and coordination handoff. |
+| IE23 | Dedicated task-stage contracts | Complete | This historical decision required dedicated Generation and Validation contracts. [IE29](#completed-execution-decisions) replaces only their stage classification. They now define Activities. Their detailed contract proposals remain open under IE24 and IE25. The fixed Activity order and check duties remain agreed. |
+| IE26 | Dedicated Integration contract | Complete | This historical decision required a dedicated Integration contract. [IE29](#completed-execution-decisions) replaces its stage classification and names its Activity Code Integration. IE27 keeps its procedure, evidence, role, and handoff details open. |
+| IE29 | Implementation Activity classification | Complete | [Activity](activity.md) defines the shared concept. Code Generation, Code Validation, and Code Integration are Activities within Implementation Execution, not stages. Their detailed contracts remain proposals. This classification approves no executing unit or skill implementation. It does not accept an unapproved contract body. |
 
 ## Functional Design decisions
 
@@ -410,7 +419,7 @@ Supporting-document types are agreed under [DF06](#completed-shared-decisions). 
 | DF08 | Project reference updates | How are Project references maintained? See [document scopes](README.md#document-scopes). |
 | DF09 | Intent document format | What documents represent Inception intents? See [phase organization](README.md#phase-organization). |
 | DF10 | Inception unit-definition procedure | How does Inception produce one or more Units of Work? See [phase organization](README.md#phase-organization). |
-| DF13 | Additional integration checks | Defer general extra-check policy. Honor unit/project obligations and the existing [typechecking/build/full-suite minimum](phase_construction/README.md#task-integration). |
+| DF13 | Additional integration checks | Defer general extra-check policy. Honor unit/project obligations and the existing [typechecking/build/full-suite minimum](phase_construction/README.md#code-integration). |
 | SH71 | Evidence retention period | No retention period is selected. Required checkpoints and external evidence must remain available under the [retention contract](runtime.md#checkpoint-retention). |
 | SH73 | Retention cleanup | Defer destructive cleanup policy. This does not authorize expiry, checkpoint deletion, or loss of [required evidence](runtime.md#checkpoint-retention). |
 | SH75 | Additional unit scope guidance | Defer additional [scope and size guidance](unit-of-work.md#decisions-still-required). Existing cohesion, coverage, dependency, and verification rules still apply. No additional criteria are approved. |
@@ -426,7 +435,7 @@ Delete this speculative comparison from the approval queue. Keep its ID only as 
 
 ## Contract coverage
 
-The MVP needs all six Construction stages and their task-scoped stages. Functional Design and Quality Requirements are accepted. Planning, Execution, Unit of Work Review, and Deliver now have drafts for discussion. The Execution draft includes detailed Generation, Validation, and Integration contracts. All new proposals remain open. Writing these drafts does not accept Planning or close SH52. Supporting-document types are agreed under DF06.
+The MVP needs all six Construction stages and the three Implementation Execution Activities. Functional Design and Quality Requirements are accepted. Planning, Execution, Unit of Work Review, and Deliver have drafts for discussion. The Execution draft includes dedicated Generation, Validation, and Integration Activity contracts. Their classification is accepted; their detailed bodies and other new proposals remain open. Writing these drafts does not accept Planning or close SH52. Supporting-document types are agreed under DF06.
 
 The MVP path above defines bounded authoring work, not omnibus decision IDs. Add a question only when a material choice remains unanswered. Do not create separate approval gates for implementation-owned field types, event catalogs, or command syntax.
 

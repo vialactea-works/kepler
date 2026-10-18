@@ -24,9 +24,9 @@ Each phase is a bounded context and owns its execution state model and projectio
 
 Project preparation belongs to Initialization, not Construction. A clear request can enter Construction without Inception.
 
-Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains parallel task implementation contexts. Each context contains the Task coding loop and Task Integration. These execution relationships are specific to Construction. Dedicated task-stage contracts cover [Code Generation](phase_construction/code-generation.md), [Code Validation](phase_construction/code-validation.md), and [Task Integration](phase_construction/task-integration.md).
+Construction executes task graphs through [Implementation Execution](phase_construction/README.md#implementation-execution), between Implementation Planning and Unit of Work Review. This unit-scoped stage contains task scopes that can run in parallel when dependencies permit. Each task follows the fixed [Activity](activity.md) sequence: Code Generation, Code Validation, then Code Integration. Dedicated [Code Generation](phase_construction/code-generation.md), [Code Validation](phase_construction/code-validation.md), and [Code Integration](phase_construction/code-integration.md) contracts define those Activities. These execution relationships apply only to Construction.
 
-[Task Integration](phase_construction/task-integration.md#integration-procedure) prepares, checks, then accepts each candidate under a unit-scoped lock. Typechecking, the project build, and the full application test suite must succeed against the candidate before acceptance. This serializes integrations within that unit while preserving permitted coding, validation, and cross-unit parallelism.
+[Code Integration](phase_construction/code-integration.md#integration-procedure) prepares and checks each combined candidate under the unit lock. Authorized operations accept only the checked material. Typechecking, the project build, and the full application test suite must succeed before acceptance. This serializes integrations within that unit while preserving permitted work on other tasks and units.
 
 During Construction's [unit-wide upstream revision](phase_construction/README.md#unit-wide-upstream-revision), the orchestrator stops new task admissions and active implementation work for that unit. Independent units continue while their inputs and contracts remain valid.
 
@@ -37,6 +37,8 @@ Intent documents belong to Inception. Their structure and the terms for their or
 A **Unit of Work** replaces the previous **change** concept. Construction operates on one Unit of Work. A Unit of Work can contain several implementation tasks. The shared [Unit of Work draft](unit-of-work.md) defines the acceptance boundary, decomposition procedure, and walking skeleton kind.
 
 A **stage** defines a workflow responsibility. Its phase contract defines its execution scope. A skill supplies a procedure that can support that responsibility. Stage boundaries do not depend on skill names or packaging.
+
+An [Activity](activity.md) is a bounded execution responsibility within a stage. Its owning phase or stage defines its scope, outcomes, procedure, checks, evidence, completion, correction paths, and handoffs. Activities are not stages, agents, skills, planned tasks, or independent lifecycle milestones.
 
 An **orchestrator agent** decides whether to start a revision and where it starts. Stage agents report findings and propose revision boundaries. See [Authority and escalation](revision.md#authority-and-escalation) for its revision authority and safeguards.
 
@@ -77,7 +79,7 @@ No independently authoritative state files are required. Materialized views are 
 
 Agents and skills use CLI-owned operations; they do not edit journals or projections directly. This decision does not change authored artifact content or implement new CLI commands.
 
-The [evidence and checkpoint model](runtime.md#evidence-and-content-checkpoints) separates attempt identity from commit identity. Each attempt has a distinct identity. Construction limits each unit/task/stage scope to zero or one active attempt under the [attempt scope rules](runtime.md#attempt-identity-and-active-scope). Other phases define their own execution scopes. Material types are open-ended. Git checkpoints cover repository content; other material uses appropriate references. Records bind checks and approvals to the material covered and its relevant inputs.
+The [evidence and checkpoint model](runtime.md#evidence-and-content-checkpoints) separates attempt identity from commit identity. Each attempt has a distinct identity. Construction limits each unit/stage and fixed Activity occurrence to zero or one active attempt under the [attempt scope rules](runtime.md#attempt-identity-and-active-scope). Activity attempts link to their occurrence and enclosing stage attempt. Other phases define their own execution scopes. Material types are open-ended. Git checkpoints cover repository content; other material uses appropriate references. Records bind checks and approvals to the material covered and its relevant inputs.
 
 The [run floor](runtime.md#run-floor) uses the applicable attempt identity, without a separate boundary inside the attempt.
 
@@ -89,7 +91,7 @@ The [parallel execution rules](runtime.md#parallel-execution) permit dependency-
 
 Each Unit of Work has one default depth. Use Standard when the requester has not selected another level. Stages inherit the unit default unless an explicit stage override exists. The agent recommends adjustments; the requester decides whether to accept them.
 
-Stages apply this shared definition to their work. Depth does not prescribe a file count or page length. Record depth selections as journal events through the CLI. Derive current settings from those events. Exact payloads, projection fields, and CLI operations remain part of the shared CLI infrastructure contract.
+Stages apply this shared definition to their work. Activities inherit their owning stage's depth and do not have separate overrides. Depth does not prescribe a file count or page length. Record depth selections as journal events through the CLI. Derive current settings from those events. Exact payloads, projection fields, and CLI operations remain part of the shared CLI infrastructure contract.
 
 ## Writing convention
 

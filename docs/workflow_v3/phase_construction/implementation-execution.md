@@ -6,7 +6,7 @@
 
 The [phase contract](README.md#implementation-execution) defines the agreed execution structure, concurrency, attempts, check duties, integration procedure, and return paths. Requester intervention is limited to hard blockers under the rule below. This draft proposes additional inputs, responsibilities, role assignments, skills, evidence, and completion details. New proposals do not replace agreed rules.
 
-[Code Generation](code-generation.md), [Code Validation](code-validation.md), and [Task Integration](task-integration.md) have dedicated task-stage contracts. Those contracts own their procedures, evidence, completion conditions, reopening questions, and handoffs.
+[Code Generation](code-generation.md), [Code Validation](code-validation.md), and [Code Integration](code-integration.md) have dedicated Activity contracts. Those contracts define their procedures, evidence, completion conditions, reopening questions, and handoffs. Their Activity classification, fixed execution model, and existing check duties are agreed. Their remaining detailed proposals stay open.
 
 Saving this draft does not approve its proposals, accept Planning, or authorize an executing Unit of Work.
 
@@ -14,7 +14,7 @@ Saving this draft does not approve its proposals, accept Planning, or authorize 
 
 Implement the current task graph and produce a verified, integrated unit result. Preserve the functional design, quality requirements, selected technical solution, and requester authority.
 
-Complete the required tasks through Code Generation, Code Validation, and Task Integration. Implementation Execution prepares the result for Unit of Work Review; it does not approve delivery.
+Complete the required tasks through Code Generation, Code Validation, and Code Integration Activities. Implementation Execution prepares the result for Unit of Work Review; it does not approve delivery.
 
 ## Inputs
 
@@ -57,10 +57,10 @@ Do not require every future task prerequisite to be available before starting in
 
 - Changing upstream requirements, task definitions, dependencies, or selected planning decisions without applicable revision authority.
 - Treating positive task reviews as whole-unit acceptance.
-- Publishing, merging into an external target, releasing, or deploying merely because task integration succeeds.
-- Selecting inline work, subagents, or swarms through this contract.
+- Publishing, merging into an external target, releasing, or deploying merely because Code Integration succeeds.
+- Selecting a worker topology other than the agreed orchestrator-controlled subagent model, or allowing workers to select their own topology.
 
-[CN20](../authoring_progress.md#construction-decisions-still-pending) retains the working-discipline question. It must not remove agreed ready-task parallelism.
+[CN20](../authoring_progress.md#completed-construction-decisions) records the MVP working discipline for Implementation Execution. It does not constrain other phases or remove ready-task parallelism.
 
 ## Artifacts and records
 
@@ -68,7 +68,7 @@ Do not require every future task prerequisite to be available before starting in
 | --- | --- |
 | Task implementation material | Supply the task's implementation, tests, configuration, and required documentation at an identified checkpoint. |
 | Integrated unit material | Supply accepted combined outputs and the unit checkpoint containing them. |
-| Stage evidence and execution records | Bind checks, reviews, admissions, integration inputs, acceptance, and completion through CLI-owned operations. |
+| Stage and Activity evidence | Bind unit and Activity checks, reviews, admissions, integration inputs, acceptance, and completion through CLI-owned operations. |
 | Optional supporting detail | Explain useful implementation findings under `details/implementation-execution/`, referenced from the relevant owning artifact or evidence record. |
 
 No separate required execution Markdown document is proposed. Do not duplicate task definitions or store changing completion information in authored documents.
@@ -89,33 +89,35 @@ Start independent ready task implementations concurrently. Shared-file or resour
 
 Do not require global coordinator `HEAD` agreement, shared admission commits, unrelated clean workspaces, or completed task batches. Later unit integration commits alone do not invalidate running tasks.
 
-Workers report facts and findings within their scope. The orchestrator and authorized CLI operations own admissions, revision decisions, integration acceptance, and completion decisions.
+Workers report facts and findings within their scope. The orchestrator and authorized CLI operations control admissions, progress, revision decisions, candidate acceptance, and completion decisions.
+
+For each admitted task, use this fixed Activity order:
 
 ### Code Generation
 
-Execute the [Code Generation contract](code-generation.md) for the admitted task. That stage owns implementation, typechecking, modification-related tests, self-review, and its Validation handoff.
+Execute the [Code Generation Activity contract](code-generation.md) for the admitted task. It owns implementation, typechecking, modification-related tests, self-review, and its Validation handoff.
 
 ### Code Validation
 
-Execute the [Code Validation contract](code-validation.md) against the generated task output. That stage owns typechecking, the build, the full suite, independent feedback, and its Integration handoff.
+Execute the [Code Validation Activity contract](code-validation.md) against the generated task output. It owns typechecking, the build, the full suite, independent non-author feedback, and its Integration handoff.
 
-The orchestrator coordinates stage handoffs. Successful Validation makes the task eligible for Integration; it does not complete task implementation.
+Use a worker context separate from Code Generation for independent Validation. Workers report facts; they do not need to spawn reviewers or call one another. The orchestrator dispatches scoped workers and coordinates each Activity handoff. Successful Validation makes the task eligible for Integration; it does not complete the task.
 
-### Task Integration
+### Code Integration
 
-Execute the [Task Integration contract](task-integration.md) after successful Task coding. It owns locked candidate preparation, combined checks, acceptance, task completion, and its coordination handoff.
+Execute the [Code Integration Activity contract](code-integration.md) after successful Validation. It owns locked candidate preparation and combined checks. Authorized orchestrator and CLI operations control acceptance and record task completion.
 
-Successful Integration returns the completed task and accepted checkpoint to unit coordination. The enclosing Execution stage still requires its own completion assessment.
+Successful Integration returns the accepted checkpoint and evidence to unit coordination. Release dependent tasks only after successful predecessor Integration. Independent ready tasks and units continue. Activity handoffs do not add dependencies to the authored task graph. The enclosing Execution stage still requires its own completion assessment.
 
 ## Attempts, failures, and recovery
 
-Follow the agreed [attempt scopes](README.md#attempts-and-completion) and [return paths](README.md#return-paths). Task coding and task implementation add no attempt identities or run floors.
+Follow the agreed [attempt scopes](README.md#attempts-and-completion) and [return paths](README.md#return-paths). Task implementation and the Activity sequence add no task-coding or protocol-run attempt identity.
 
 | Situation | Required treatment |
 | --- | --- |
-| Local corrections within the current stage | Continue its current attempt and obtain evidence for the corrected material. |
-| An authorized task-local return to coding | Execute Generation, Validation, and Integration again. The enclosing Implementation Execution attempt remains active. |
-| An integration-only retry | Continue the current Integration attempt; failed commands alone do not create another attempt. |
+| Local corrections within the current Activity | Continue its current Activity attempt and obtain evidence for the corrected material. |
+| An authorized task-local return for code changes | Execute Code Generation, Code Validation, and Code Integration again as required. The enclosing Implementation Execution attempt remains active. |
+| An Integration-only retry | Continue the current Code Integration attempt; failed commands alone do not create another attempt. |
 | Missing permission, prerequisite, or environment | Preserve work and identify the affected scope. Do not claim successful required checks. Independent ready work continues. |
 | Authorized unit-wide revision from Planning or earlier | Apply the agreed shutdown procedure. End affected execution attempts, retain history, and restart only after revised upstream completion. |
 | Interrupted work | Compare actual work and evidence with CLI progress. Confirm previous workers stopped before resuming the same unended attempt. |
@@ -127,21 +129,21 @@ The [unit-wide revision rule](README.md#unit-wide-upstream-revision) prevents en
 This proposed rule applies when the orchestrator selects Implementation Execution as the unit-stage revision boundary after its completion. Earlier upstream boundaries retain their own cascade rules.
 
 1. **Reopen the unit stages.** Reopen Implementation Execution, Unit of Work Review, and Deliver. Start a new unit Execution attempt when execution resumes.
-2. **Select affected task scopes.** Identify each task's earliest invalid stage and reopen it and every following task stage. Include dependent tasks when changed outputs invalidate their work or evidence. Start new attempts when those reopened task stages execute.
-3. **Reassess retained task scopes.** Check each retained task definition, integrated output, relevant input, and evidence binding. Unaffected task-stage scopes remain complete under their original attempts. Their records remain linked to the original Execution attempt; do not reassign or relabel them. Record why their results remain applicable as inputs to the new unit assessment.
-4. **Reestablish unit completion.** Execute every reopened task stage and obtain its required current-attempt evidence. Perform a new unit completion assessment, then execute Unit of Work Review and Deliver again under their applicable contracts.
+2. **Select affected task scopes.** Identify each task's earliest invalid Activity and reopen it and every following Activity. Include dependent tasks when changed outputs invalidate their work or evidence. Start new Activity attempts when those Activities execute.
+3. **Reassess retained task scopes.** Check each retained task definition, integrated output, relevant input, and evidence binding. Unaffected Activity scopes remain complete under their original attempts. Their records remain linked to the original Execution attempt; do not reassign or relabel them. Record why their results remain applicable as inputs to the new unit assessment.
+4. **Reestablish unit completion.** Execute every reopened Activity and obtain its required current-attempt evidence. Perform a new unit completion assessment, then execute Unit of Work Review and Deliver again under their applicable contracts.
 
-Implementation corrections start at Generation. Invalid Validation proof starts at Validation. Integration-only invalidity starts at Integration. These are assessment examples; the orchestrator selects the earliest affected boundary from the actual finding.
+Implementation corrections start at Code Generation. Invalid Validation proof starts at Code Validation. Integration-only invalidity starts at Code Integration. These are assessment examples; the orchestrator selects the earliest affected boundary from the actual finding.
 
 Keep recorded admission baselines fixed. Identify current task material and changed relevant inputs separately. Apply the normal integration lock and candidate checks when accepting corrected task output.
 
-Reassessment does not replace execution of a reopened stage or transfer old evidence into its new attempt. An old unit completion assessment cannot complete the new unit attempt, even when its checkpoint is unchanged.
+Reassessment does not replace execution of a reopened Activity or transfer old evidence into its new attempt. Do not reparent historical Activity evidence to a new Implementation Execution attempt. An old unit completion assessment cannot complete the new unit attempt, even when its checkpoint is unchanged.
 
 This proposal does not reopen unrelated task scopes automatically. It does not permit retaining completion whose material, inputs, or evidence are invalid.
 
 ## Depth
 
-Apply the shared [depth definition](../depth.md), including the unit default and explicit stage overrides.
+Apply the shared [depth definition](../depth.md), including the unit default and any explicit Implementation Execution override. Its Activities inherit that depth and have no separate overrides.
 
 | Depth | Implementation Execution guidance |
 | --- | --- |
@@ -159,9 +161,9 @@ These assignments are proposals, not implemented agent profiles.
 | --- | --- | --- |
 | Implementation Execution owner | `kepler-orchestrator` | Coordinate admissions, workers, findings, execution records, completion, and the review handoff. |
 
-The dedicated [Generation](code-generation.md#agent-roles), [Validation](code-validation.md#agent-roles), and [Integration](task-integration.md#agent-roles) contracts define their proposed role assignments.
+The dedicated [Generation](code-generation.md#agent-roles), [Validation](code-validation.md#agent-roles), and [Integration](code-integration.md#agent-roles) Activity contracts define proposed role assignments.
 
-Role ownership does not require one worker to perform every operation. Scoped workers report results; the owner remains responsible for the stage contract.
+The MVP uses one orchestrator-controlled subagent model for Implementation Execution. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts; they do not need to spawn reviewers or call one another. Generation and independent non-author Validation use separate worker contexts. This model does not select role profiles or add a per-task topology selector. The working-discipline decision does not constrain Design, Quality Requirements, Planning, or other phases.
 
 The requester retains product and consequential trade-off authority. The orchestrator's revision authority remains governed by the shared safeguards.
 
@@ -173,7 +175,7 @@ The draft proposes these entry procedures:
 | --- | --- | --- |
 | Implementation Execution | [kepler-orchestrate](../skills.md#kepler-orchestrate) | Coordinate the unit graph, scoped handoffs, completion evidence, and review handoff. |
 
-The dedicated [Generation](code-generation.md#supporting-skills), [Validation](code-validation.md#supporting-skills), and [Integration](task-integration.md#supporting-skills) contracts define their proposed entry skills.
+The dedicated [Generation](code-generation.md#supporting-skills), [Validation](code-validation.md#supporting-skills), and [Integration](code-integration.md#supporting-skills) Activity contracts define their proposed entry skills.
 
 Self-review belongs in each applicable entry procedure. These names do not adopt current skill implementations or legacy execution records.
 
@@ -185,7 +187,7 @@ New review details are proposals. Required independent Code Validation feedback 
 
 ### Self-review
 
-Each task-stage contract owns its self-review. The unit owner checks coverage, integrated completion, and handoff completeness.
+Each Activity contract owns its self-review. The unit owner checks coverage, integrated completion, and handoff completeness.
 
 These checks belong in the entry skills. They do not create separate self-review stages or attempt identities.
 
@@ -203,7 +205,7 @@ Report the blocked work, the established cause, attempted alternatives, and the 
 
 Record the requester's decision and affected scope through CLI-owned operations. Resume affected work only after the blocker is resolved and any required revision or permission is established.
 
-Tasks are accepted through Code Validation and Task Integration under their contracts, including required checks and evidence. The orchestrator records task completion through authorized CLI operations. Do not require routine requester task approval or a separate whole-Execution approval.
+Task acceptance follows successful Code Validation and Code Integration under their contracts, including required checks and evidence. The orchestrator records task completion through authorized CLI operations. Do not require routine requester task approval or a separate whole-Execution approval.
 
 A requester decision does not turn failed checks into successful results or waive unresolved stage obligations. Upstream stages retain their own approval rules. Implementation authority does not authorize publication or deployment.
 
@@ -211,7 +213,7 @@ A requester decision does not turn failed checks into successful results or waiv
 
 Evaluate these stage-specific questions and report the proposed boundary to the orchestrator.
 
-Use the dedicated [Generation](code-generation.md#reopening-questionnaire), [Validation](code-validation.md#reopening-questionnaire), and [Integration](task-integration.md#reopening-questionnaire) questionnaires for those stages.
+Use the dedicated [Generation](code-generation.md#reopening-questionnaire), [Validation](code-validation.md#reopening-questionnaire), and [Integration](code-integration.md#reopening-questionnaire) questionnaires for those Activities.
 
 #### Implementation Execution
 
@@ -228,8 +230,8 @@ A task-local return during active execution follows the agreed return paths. Fin
 
 The draft proposes these details for the agreed execution completion rule:
 
-- Every task required by the current graph has satisfied its task contract and completed successful integration.
-- Generation, Validation, and Integration have their required checks, reviews, and applicable completion evidence.
+- Every task required by the current graph has satisfied its task contract and completed successful Code Integration.
+- Code Generation, Code Validation, and Code Integration have their required checks, reviews, and applicable completion evidence.
 - Each accepted candidate passed required combined-result checks under the unit lock.
 - The final integrated checkpoint contains the required outputs, with their inclusion established through history or integration provenance.
 - Required combined-result evidence applies to the final integrated material and relevant inputs.
@@ -243,13 +245,13 @@ This does not require unrelated workspaces to be clean or independent units to s
 
 ### Evidence coverage
 
-The dedicated [Generation](code-generation.md#evidence-coverage), [Validation](code-validation.md#evidence-coverage), and [Integration](task-integration.md#evidence-coverage) contracts own their named evidence and required results.
+The dedicated [Generation](code-generation.md#evidence-coverage), [Validation](code-validation.md#evidence-coverage), and [Integration](code-integration.md#evidence-coverage) Activity contracts own their named evidence and required results.
 
-The rows below cover the enclosing Execution stage. Refer to originating task-stage records without rebinding their results as unit-attempt results.
+The rows below cover the enclosing Execution stage. Refer to originating Activity records without rebinding their results as unit-attempt results.
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
-| Execution completion assessment | Final unit checkpoint, current task graph, upstream obligations, current or retained task-stage evidence, and integration provenance. | Required tasks and integrated checks are complete. Reopened task stages have current-attempt evidence; retained scopes have valid original bindings. Unit self-review confirms coverage and handoff accuracy. |
+| Execution completion assessment | Final unit checkpoint, current task graph, upstream obligations, current or retained Activity evidence, and integration provenance. | Required tasks and integrated checks are complete. Reopened Activities have current-attempt evidence; retained scopes have valid original bindings. Unit self-review confirms coverage and handoff accuracy. |
 | Requested additional review result | Material and scope identified by the request, when additional review is requested. | The requested review is complete and its blocking findings are resolved. |
 | Requester blocker decision | Blocking issue, affected work, relevant contracts, and required requester input. | Record the requester's actual decision and its scope. Resume affected work only when the blocker is resolved. |
 
@@ -257,7 +259,7 @@ The requester-decision row applies only when a hard blocker needs requester inte
 
 Apply the shared [evidence bindings](../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Preserve each check's task or unit scope, attempt, checkpoint, relevant inputs, conditions, result, and supporting output.
 
-The completion assessment is new unit-scoped work. It consumes task evidence without transferring earlier attempts' completion or replacing mandatory task-stage checks.
+The completion assessment is new unit-scoped work. It consumes Activity evidence without transferring earlier attempts' completion or replacing mandatory Activity checks.
 
 Retain the final integrated checkpoint and necessary task checkpoints, candidate material, logs, and external evidence. A commit identifier or mutable external link alone does not retain them.
 

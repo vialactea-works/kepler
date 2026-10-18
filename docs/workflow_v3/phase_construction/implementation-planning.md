@@ -187,11 +187,11 @@ Include relevant failures and boundary conditions. Define expected results and r
 
 Identify available project commands and their scope. For missing infrastructure, plan the work that establishes usable checks before dependent verification needs them. Do not invent successful results or waive required checks because infrastructure is absent.
 
-Preserve the agreed [test and integration duties](README.md#agreed-boundaries):
+Preserve the agreed [Activity check duties](README.md#agreed-boundaries):
 
-- Code Generation runs typechecking and tests related to its modifications.
-- Code Validation runs typechecking, the project build, and the full application test suite. It also owns independent code feedback.
-- Task Integration runs typechecking, the project build, and the full application test suite against the combined candidate before acceptance.
+- Code Generation runs typechecking, tests related to its modifications, and author self-review.
+- Code Validation runs typechecking, the project build, and the full application test suite. A non-author reviewer gives independent feedback without editing the candidate.
+- Code Integration runs typechecking, the project build, and the full application test suite against the combined candidate before acceptance.
 
 Integration holds the unit lock through preparation, checks, and acceptance. These checks do not replace Code Validation. Other permitted work continues under the [integration rules](README.md#integration-order-and-locking).
 
@@ -225,7 +225,7 @@ The owner needs architecture analysis, source investigation, task decomposition,
 
 The requester retains authority over scope, product obligations, consequential trade-offs, and required approvals. The [orchestrator](../revision.md#authority-and-escalation) controls revision authorization.
 
-The role assignment does not select inline work, subagents, or swarms. [CN20](../authoring_progress.md#construction-decisions-still-pending) remains open. Execution scheduling belongs to the orchestrator under the Implementation Execution contract.
+This role assignment does not select a worker model for Planning. [CN20](../authoring_progress.md#completed-construction-decisions) selects the orchestrator-controlled subagent model only for Implementation Execution. It does not select role profiles or skill implementations for Planning or other phases. The orchestrator schedules execution under the Implementation Execution contract.
 
 ## Supporting skills
 
