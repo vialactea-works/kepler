@@ -65,7 +65,7 @@ The shared [Artifact metadata contract](metadata.md) defines `id`, `type`, `sche
 
 Optional [labels](metadata.md#labels) can classify any artifact. Canonical labels do not form a closed set; the requester can add labels. Omit the field when empty. Labels must not record execution state.
 
-The metadata contract defines field and value validation, metadata changes, and schema-version rules. Supporting document types remain unresolved under [DF06](authoring_progress.md#stage-contract-decisions) and are required for the Construction MVP. Define any stage-specific fields with their artifact contracts.
+The metadata contract defines field and value validation, metadata changes, and schema-version rules. Optional supporting Markdown documents use the generic [`supporting-document` type](metadata.md#accepted-type-values). Define any stage-specific fields with their artifact contracts.
 
 ## CLI infrastructure and persistence
 

@@ -6,7 +6,7 @@
 
 Define the common frontmatter fields for Kepler Markdown artifacts. These fields apply to required documents, supporting documents, and Project references.
 
-The common fields, validation rules, metadata change rules, and schema-version rules are agreed. Supporting document types remain unresolved and are required for the Construction MVP. Define any stage-specific fields with their artifact contracts. This document does not implement schemas or change existing artifacts.
+The common fields, validation rules, metadata change rules, and schema-version rules are agreed. Supporting Markdown documents use `supporting-document`. Define any stage-specific fields with their artifact contracts. This document does not implement schemas or change existing artifacts.
 
 ## Common fields
 
@@ -51,8 +51,9 @@ Keep document purpose in `type`; do not encode it in the ID.
 | `functional-design` | Functional Design in `design.md`. |
 | `non-functional-requirements` | Non-functional Requirements in `quality.md`. |
 | `project-reference` | Shared Project reference documents. |
+| `supporting-document` | Optional supporting Markdown documents, such as research notes or domain-model detail. |
 
-Types for supporting documents remain unresolved under [DF06](authoring_progress.md#stage-contract-decisions). Resolve this MVP decision before emitting supporting documents. No generic or purpose-specific type is approved. Define additional values when their artifact contracts are agreed.
+Use the generic `supporting-document` type under [DF06](authoring_progress.md#completed-shared-decisions). Describe each document's purpose in its content and in the link from its owning stage. Keep the existing required-document and Project reference types unchanged. Define additional values when their artifact contracts are agreed.
 
 #### Unit ownership
 
@@ -159,6 +160,6 @@ Keep execution state out of frontmatter. Record progress, approvals, depth selec
 
 ## Remaining decisions
 
-Supporting document types are required for the MVP under [DF06](authoring_progress.md#stage-contract-decisions). Neither alternative is approved. Define stage-specific fields with their artifact contracts. The migration procedure remains outside the MVP under [DF05](authoring_progress.md#deferred-decisions).
+Define stage-specific fields with their artifact contracts. The migration procedure remains outside the MVP under [DF05](authoring_progress.md#deferred-decisions).
 
 The [authoring progress record](authoring_progress.md#completed-shared-decisions) lists the completed metadata decisions separately.

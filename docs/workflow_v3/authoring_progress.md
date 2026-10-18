@@ -30,7 +30,7 @@ For each missing stage, define essential inputs, outputs, responsibilities, comp
 
 | Order | Work package | Minimum work |
 | --- | --- | --- |
-| 1 | Functional Design | The stage specification is accepted under FD13. Resolve DF06 before producing supporting documents. |
+| 1 | Functional Design | The stage specification is accepted under FD13. Use the agreed `supporting-document` type under DF06. |
 | 2 | Non-functional Requirements | Define essential `quality.md` content, measurable evidence, responsibility, completion conditions, and handoff. Define approval only when applicable. |
 | 3 | Implementation Planning | Define the technical solution and task-plan contract. Keep the dependency graph; let implementation choose its concrete representation. |
 | 4 | Implementation Execution | Define responsibilities, evidence, completion conditions, and any applicable approval. Reuse agreed task loops, returns, concurrency, and integration rules. |
@@ -58,19 +58,21 @@ Resolve these questions within the work packages above. SH61 is conditional on m
 | SH78 | Deployment record location | Where is the authoritative deployment information recorded? Resolve with Planning and Deliver under the [unit document layout](README.md#document-scopes). |
 | SH79 | Deployment record timing | When must deployment information be complete for Planning, review, and Deliver? Known constraints already belong in the [unit definition](unit-of-work.md#deployment). |
 
-### Stage contract decisions
-
-Supporting files remain part of the accepted Functional Design contract. Their type remains unresolved; no supporting-document type default is approved.
+### Construction decisions still pending
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
-| DF06 | Supporting document types | Choose generic or purpose-specific types before emitting supporting documents. Metadata requires `type`; [neither alternative is approved](metadata.md#classification-and-ownership). |
+| CN20 | MVP working discipline | When should Construction work run inline or through subagents, including coordinated swarms? Preserve agreed ready-task parallelism. |
+
+### Stage contract decisions
+
+No pending Functional Design decisions remain in this queue. Five other unit-stage contracts still need authoring.
 
 ## Review result
 
-Of the 57 previously open or deferred rows, 7 remain MVP authoring decisions. Another 35 are required MVP implementation choices. Defer 13 beyond the MVP and remove 1 speculative approval gate. FD13 is now complete after requester acceptance.
+The queue now contains 7 MVP authoring decisions, including CN20 on working discipline. Another 35 are required MVP implementation choices. Defer 13 beyond the MVP and remove 1 speculative approval gate. FD13 and DF06 are complete after requester acceptance.
 
-The MVP review preserved the 87 previously completed decisions. Acceptance of FD13 brings the completed total to 88. Reclassification must not fabricate approval or claim implementation is complete.
+The MVP review preserved the 87 previously completed decisions. Acceptance of FD13 and DF06 brings the completed total to 89. Reclassification must not fabricate approval or claim implementation is complete.
 
 ## Register rules
 
@@ -146,6 +148,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH92 | Event producer identity | [Producer identity](runtime.md#producer-identity): record the original CLI name and actual version in `producer`. Preserve those values on import. Actor identity and approval authority remain separate. |
 | SH93 | Causal event references | [Causal references](runtime.md#causal-references): require `caused_by` as a list of direct causal event IDs. Use `[]` when no recorded causes exist. Causal links do not replace attempt or material bindings. |
 | SH94 | Journal order representation | [Journal order](runtime.md#journal-identity-and-order): keep `journal_id` and preserve stored local order during collection. Use stable event IDs for duplicate detection. Do not persist numeric positions or allocate separate sequence counters. |
+| DF06 | Supporting document types | [Accepted types](metadata.md#accepted-type-values): use `supporting-document` for optional supporting Markdown documents. Explain purpose in content and the owning-stage link. Existing required-document and Project reference types remain unchanged. |
 
 ## MVP implementation choices
 
@@ -246,7 +249,7 @@ The decisions below are complete. FD13 records requester acceptance of the compl
 
 These questions are deferred beyond the Construction MVP. Deferral selects no fallback, precedence rule, expiry period, or destructive operation.
 
-Supporting-document types remain an [MVP decision](#stage-contract-decisions), not a post-MVP deferral. Read supplied project context and resolve material conflicts during Construction. Deferring reference governance does not permit ignoring relevant facts or inventing current behavior.
+Supporting-document types are agreed under [DF06](#completed-shared-decisions). Read supplied project context and resolve material conflicts during Construction. Deferring reference governance does not permit ignoring relevant facts or inventing current behavior.
 
 | ID | Decision | Question to resolve |
 | --- | --- | --- |
@@ -274,7 +277,7 @@ Delete this speculative comparison from the approval queue. Keep its ID only as 
 
 ## Contract coverage
 
-The MVP needs all six Construction stages and their task-scoped stages. The Functional Design specification is accepted; five other unit-stage contracts still need work. Supporting-document types remain unresolved under DF06.
+The MVP needs all six Construction stages and their task-scoped stages. The Functional Design specification is accepted; five other unit-stage contracts still need work. Supporting-document types are agreed under DF06.
 
 The MVP path above defines bounded authoring work, not omnibus decision IDs. Add a question only when a material choice remains unanswered. Do not create separate approval gates for implementation-owned field types, event catalogs, or command syntax.
 
