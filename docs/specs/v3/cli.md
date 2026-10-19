@@ -34,6 +34,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Apply the shared [project selection rules](#project-selection) to every project-scoped command, including unit creation.
 - Use the shared [scope selectors](#scope-and-selectors) for unit, stage, task, Activity, and attempt identities.
 - Use the shared [result envelope](#machine-readable-output) with required `status` and `data` fields.
+- Use the shared [failure result fields](#failure-and-recovery-rules) when `status` is `failed`.
 
 Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP order. Stage-specific policies stay proposals where their owning contracts say so.
 
@@ -106,9 +107,9 @@ Return `success` only when the requested operation meets its success conditions.
 
 These values describe the command operation. A query can succeed and report an incomplete stage. A completion claim must identify its task, stage, unit, or workflow scope. Its completion conditions must hold.
 
-Use `{}` when the command has no result fields. Put collection results inside `data`. Proposed response schemas below concern the fields inside `data`.
+Use `{}` when the command has no result fields. Put collection results inside `data`. Success fields, error-code values, and `details` schemas stay command-specific.
 
-Failure fields inside `data` stay under SH105. Exit codes, stdout/stderr placement, and optional human rendering stay under SH106-SH108. A failed operation still returns a nonzero exit status.
+Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Exit codes, stdout/stderr placement, and optional human rendering stay under SH106-SH108. A failed operation still returns a nonzero exit status.
 
 The following example shows proposed unit-creation fields inside `data`. These fields are not an accepted command-specific schema.
 
@@ -173,7 +174,7 @@ Do not replace an artifact's original author during later edits.
 
 Callers must make sure that both identity values are present before writing an artifact with an `author` field. Do not write incomplete author metadata or record successful creation or completion after this failure. The calling agent explains the problem and retries after the appropriate identity is configured. Keep existing authors and continue unaffected work. Apply the [shared identity policy](metadata.md#missing-identity) and existing metadata validation rules.
 
-Exact error codes and response fields stay implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices). This accepted failure policy does not accept the other command proposal.
+Command-specific error codes and success fields stay implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices). This accepted failure policy does not accept the other command proposal.
 
 ### `kepler git diff-package`
 
@@ -372,6 +373,37 @@ This policy does not accept proposed CLI syntax or set publication and synchroni
 
 ## Failure and recovery rules
 
+**Accepted under [SH105](authoring_progress.md#completed-shared-decisions).** When `status` is `failed`, use the following four required fields inside `data`:
+
+| Field | Type | Contract |
+| --- | --- | --- |
+| `code` | String | Stable error identifier, separate from the numeric exit code. |
+| `message` | String | Short explanation of the failure. |
+| `details` | Object | Error-specific facts, relevant IDs, paths, or validation findings. Use `{}` when empty. |
+| `recovery` | String | Guidance for the next safe action, without granting authority. |
+
+Do not add separate `scope` or `effects` fields to failed `data`. Do not add an effects classifier inside `details`.
+
+An operation can report known partial changes in `details` when those facts are available. A failed response does not prove that nothing changed. Apply the existing recovery rules before retrying.
+
+Recovery guidance does not authorize configuration changes, retries, or discarding work. Individual error-code values and `details` schemas stay command-specific.
+
+This example shows the failure structure, not agreed error-code values or `details` fields:
+
+```json
+{
+  "status": "failed",
+  "data": {
+    "code": "missing_git_identity",
+    "message": "Git user.email is missing.",
+    "details": {
+      "missing_keys": ["user.email"]
+    },
+    "recovery": "Configure the missing Git identity before retrying."
+  }
+}
+```
+
 These rules apply to the proposed command contracts. They do not select a storage or lock implementation.
 
 - Validate inputs and authorization before changing state.
@@ -386,11 +418,10 @@ The event write protocol, projection rebuild behavior, lock ownership and recove
 
 ## Open decisions
 
-Accepted command placements, structured-output default, typed lifecycle writes, [project selection](#project-selection), [scope selectors](#scope-and-selectors), and the [result envelope](#machine-readable-output) stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, typed lifecycle writes, [project selection](#project-selection), [scope selectors](#scope-and-selectors), the [result envelope](#machine-readable-output), and [failure result fields](#failure-and-recovery-rules) stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH105 | Typed error fields for causes, partial effects, uncertainty, and recovery. Never report false success. | Keep accepted failure behavior. SH61 sets a nonzero result for failure and identifies missing Git author keys. |
 | SH106 | Exit codes for success, failure, usage, unsupported input, and uncertain outcomes. | Keep the accepted nonzero-on-failure rule and SH61's nonzero missing-identity result. |
 | SH107 | Separation of stdout and stderr and one machine-readable result without mixed prose. | Keep structured machine-readable output by default. Do not add progress prose to it. |
 | SH108 | Whether to offer optional human rendering and how to select it. | Structured machine-readable output stays the default. This row does not add a human-output feature. |

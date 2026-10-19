@@ -384,7 +384,7 @@ The [CLI command reference](cli.md) records accepted command decisions and propo
 
 For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection.
 
-CLI results use the accepted [result envelope](cli.md#machine-readable-output). Command-specific fields and failure details stay under their own interface decisions.
+CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
 
 ### Current author
 
@@ -398,7 +398,7 @@ Apply the accepted [missing-identity policy](metadata.md#missing-identity) under
 
 Do not prompt inside the CLI, change Git configuration automatically, or invent a fallback identity. The calling agent explains the problem and retries after the appropriate identity is configured. Keep existing authors and continue unaffected work.
 
-The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git author`. Structured output is the default. The command name, exact response fields, and error codes stay implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices).
+The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git author`. Structured output is the default. The command name, success fields, and command-specific error codes stay implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices).
 
 ### Unit creation
 

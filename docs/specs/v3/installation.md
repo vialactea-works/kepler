@@ -82,7 +82,7 @@ A successful setup result identifies each resource and its generation based on c
 
 On failure, keep the prior usable generation and report actual partial effects. Remove only temporary or partial resources that the failed operation can identify as its own. Do not delete uncertain data or perform automatic repair or migration.
 
-CLI results use the accepted [result envelope](cli.md#machine-readable-output). CLI-owned failures return structured errors and nonzero status. Other output details stay under SH105-SH107. Host-native installers keep their own failure reporting. This document adds no new Kepler command.
+CLI results use the accepted [result envelope](cli.md#machine-readable-output). CLI-owned failures use the shared [failure result fields](cli.md#failure-and-recovery-rules) and return nonzero status. Other output details stay under SH106-SH107. Host-native installers keep their own failure reporting. This document adds no new Kepler command.
 
 ## Host capability contract
 
