@@ -14,7 +14,9 @@ The specification is under development. A draft contract records a proposal for 
 
 [Git diff packages](diff-package.md) sets rules for generated inspection material in three existing Construction scopes. It is a Git capability, not a new workflow milestone.
 
-The [Construction runtime draft](phases/construction/runtime.md) gives proposed Construction state and event details. It is not a new stage. The [installation contract draft](installation.md) gives proposed release compatibility and host-readiness rules. Both documents stay drafts. They neither approve v3 behavior nor say that v3 is implemented.
+The [Construction runtime draft](phases/construction/runtime.md) gives proposed Construction state and event details. It is not a new stage.
+
+The [installation contract](installation.md) contains accepted setup, intended-target, and resource-ownership rules under SH114, SH116, and SH117. Its installation-generation schema stays a proposal. Neither document shows implemented or released v3 behavior.
 
 The version 2 reference stays in a separate document set. Its contracts do not automatically apply to version 3.
 

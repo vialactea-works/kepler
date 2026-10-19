@@ -10,7 +10,7 @@ This document gives a human-readable draft of the Kepler v3 command line interfa
 
 The command placements marked **Accepted** follow the requester's decisions. The command names, arguments, output fields, and detailed operation rules marked **Proposed** are open for review. The [runtime contract](runtime.md) sets the agreed event and execution rules. This document does not replace those rules.
 
-The current CLI does not have this v3 command tree. Its root has `setup` and `workbench` commands. The proposed v3 `setup` command keeps the installation role. It is not the Initialization phase. This reference does not remove or migrate existing commands.
+The current CLI does not have this v3 command tree. Its root has `setup` and `workbench` commands. The v3 `setup` contract keeps the installation role. It is not the Initialization phase. This reference does not remove or migrate existing commands.
 
 ## Accepted policy
 
@@ -19,7 +19,10 @@ The following decisions are accepted. They do not accept every command detail in
 - Use `kepler workflow <phase>` for phase-owned workflow operations. Construction commands belong under `kepler workflow construction`.
 - Use descriptive root capabilities, such as `git`, `lint`, and `audit`. Do not add generic `util` or `commons` groups.
 - Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted. It does not accept other proposals in this draft.
-- Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Keep Construction task-graph checks under `kepler workflow construction lint`.
+- Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Use the accepted [Construction lint interface](#kepler-workflow-construction-lint) for task-graph checks.
+- Use the accepted [setup interface](#kepler-setup) for Kepler's bundled resources and default settings. Native hosts or skill managers own [agent resource installation](installation.md#agent-resource-ownership).
+- Use the accepted [UUID interface](#kepler-uuid) to generate one UUIDv4 without creating an artifact or task.
+- Apply the accepted [Standard workflow binding](#workflow-binding) to each Construction unit.
 - Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence recording interface](#kepler-audit-record-evidence) and [audit queries](#kepler-audit-list) are accepted. Approval and interaction interfaces stay proposed. Do not add separate Construction evidence, approval, or interaction namespaces.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
 - Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Do not add effort commands. Keep the requester's effort authority and the agreed adjustment rules.
@@ -43,7 +46,7 @@ Construction owns its transition rules. A workflow selects stage order. The [Sta
 
 ## Proposed interface rules
 
-The command inventory below lists proposed interfaces and accepted command interfaces. Accepted interfaces include three `kepler git diff-package` commands, evidence recording, audit queries, and shared lint. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
+The command inventory below lists proposed interfaces and accepted command interfaces. Accepted interfaces include three `kepler git diff-package` commands, evidence recording, audit queries, and shared lint. Setup, UUID generation, Construction lint, and the Standard workflow binding are also accepted. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
 
 ### Scope and selectors
 
@@ -159,8 +162,8 @@ Any later human result mode must be opt-in.
 
 | Command | Placement | Purpose |
 | --- | --- | --- |
-| `kepler setup` | Proposed retention of an existing command | Bootstrap the Kepler installation. |
-| `kepler uuid` | Proposed root command | Return one UUIDv4. |
+| `kepler setup` | Accepted root interface | Install compatible bundled resources and missing default settings. |
+| `kepler uuid` | Accepted root interface | Return one UUIDv4 in `data.uuid`. |
 | `kepler git author` | Proposed command under accepted `git` namespace | Return the effective Git author identity. |
 | `kepler git diff-package validation` | Accepted under `git` | Package a task's generated output for Code Validation. |
 | `kepler git diff-package integration` | Accepted under `git` | Package a prepared combined candidate for Code Integration inspection. |
@@ -173,7 +176,7 @@ Any later human result mode must be opt-in.
 | `kepler workflow construction unit create` | Accepted placement | Create one Construction Unit of Work. |
 | `kepler workflow construction unit list` | Accepted placement | List Units of Work. |
 | `kepler workflow construction unit show` | Accepted placement | Read one Unit of Work and its state. |
-| `kepler workflow construction lint` | Accepted placement | Report Construction task-graph findings. |
+| `kepler workflow construction lint` | Accepted phase interface | Validate the selected unit's canonical task graph without changing it. |
 | `kepler workflow construction stage <operation>` | Proposed group under accepted phase namespace | Control or read one unit-scoped stage attempt. |
 | `kepler workflow construction task <operation>` | Proposed group under accepted phase namespace | Read task readiness, admit a task, and integrate its result. |
 | `kepler workflow construction activity <operation>` | Proposed group under accepted phase namespace | Control or read one task-scoped Activity attempt. |
@@ -187,15 +190,46 @@ The entries name the requested operations. Apply the accepted [scope selectors](
 
 ### `kepler setup`
 
-**Proposed retention.** Keep this command as the installation bootstrap. It installs Kepler's bundled templates and guideline manifests and writes default settings when they do not exist. It does not create a Unit of Work or run the Initialization phase.
+**Accepted under [SH114](authoring_progress.md#completed-shared-decisions).** Use the following interface:
 
-The v3 result must follow the accepted machine-readable output policy. The output fields, compatibility with existing setup options, and exact behavior when a copy or write fails stay open.
+```text
+kepler setup
+```
+
+Use no command-specific options. Remove `--force` from the v3 interface. This global command does not use `--project`.
+
+Select the bundle locally in this order:
+
+- If `KEPLER_BUNDLE_DIR` is set, use that explicit override. Fail if it is missing or incompatible. Do not silently select another bundle.
+- Otherwise, check the sidecar `bundle/` next to the installation's `bin/` directory. Resolve executable symlinks before this lookup.
+- If no sidecar exists, check the source checkout's `bundle/` relative to the CLI module.
+- If no bundle exists, fail. Validate the selected bundle's declared compatibility and digest before copying its resources.
+
+The release installer selects the CLI release and supplies its compatible bundle. Setup does not download or select a latest release. Keep development overrides subject to the same compatibility rules.
+
+Copy compatible templates and guideline manifests into Kepler's existing global home. Create default settings only when they do not exist. Keep existing settings and unknown or modified resources. Update only verified, unmodified installer-managed resources. Report necessary-path conflicts without overwriting or merging them. Apply the [installation preservation rules](installation.md#setup-contract).
+
+On success, identify the installed generation and resource-check results inside `data`. Setup success does not show agent behavior or unchecked host readiness. Exact receipt fields and installation-record encoding are implementation details within these accepted rules.
+
+On failure, keep the prior usable generation. Report available partial-write facts in `data.details` under the existing [failure and recovery rules](#failure-and-recovery-rules). Remove only temporary or partial resources that the operation can identify as its own. Keep uncertain or unrelated material.
+
+Setup does not create units, prepare project markers, run Initialization, dispatch agents, or change workflow state. It does not install native agent definitions or skills. Apply the accepted [resource ownership](installation.md#agent-resource-ownership).
 
 ### `kepler uuid`
 
-**Proposed operation.** Return one lowercase, hyphenated UUIDv4. Use it for artifact or task fields whose contracts specify that format. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions) and [task identity rules](phases/construction/task-graph.md#task-identity). Generating a value does not create an artifact or task record.
+**Accepted under [SH113](authoring_progress.md#completed-shared-decisions).** Use the following interface:
 
-Do not use a UUID as the readable unit ID. Attempt and event IDs follow their own contracts. This draft does not add a global allocation or duplicate-lookup service. The command's exact arguments and response shape stay open.
+```text
+kepler uuid
+```
+
+Return one lowercase, hyphenated UUIDv4 in the required string field `data.uuid`. Use `success` and exit `0` when generation succeeds. Use the shared [failure and recovery rules](#failure-and-recovery-rules) if generation fails.
+
+Use no generation or batch options. This global command does not use `--project`. Do not add a global allocation registry or duplicate-lookup service.
+
+Use the value for artifact or task fields whose contracts specify UUIDv4. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions) and [task identity rules](phases/construction/task-graph.md#task-identity). Generation does not create an artifact, task, unit, or journal record.
+
+Do not use a UUID as the readable unit ID. Attempt and event IDs follow their own contracts.
 
 ### `kepler git author`
 
@@ -359,6 +393,16 @@ A missing event returns failure under the existing [failure and recovery rules](
 
 Construction uses the [accepted Unit of Work identity rules](unit-of-work.md#identity-and-directory), the [effort rules](effort.md), the [accepted task graph format](phases/construction/task-graph.md), and its [Implementation contract](phases/construction/implementation.md). The Standard workflow selects the stage order. These references keep their own approval status.
 
+### Workflow binding
+
+**Accepted under [SH115](authoring_progress.md#completed-shared-decisions).** Bind `standard` when creating each Construction unit. Record the binding with its creation facts through the CLI-owned journal. Keep it out of artifact frontmatter and the authored task graph.
+
+Later operations and resume read that recorded binding. Expose it through `unit show`. Reject unsupported bindings instead of silently selecting another workflow.
+
+The MVP has no per-command workflow selector, workflow switching, or generic workflow registry. Binding Standard does not start a stage, grant execution authority, or approve a Unit of Work.
+
+Exact event payload and response-field encoding remain implementation details under the existing runtime and query decisions. This choice does not accept the complete unit-creation interface.
+
 ### `kepler workflow construction unit create`
 
 **Proposed syntax:**
@@ -367,7 +411,7 @@ Construction uses the [accepted Unit of Work identity rules](unit-of-work.md#ide
 kepler workflow construction unit create <slug> [--effort minimal|standard|comprehensive] [--project <path>]
 ```
 
-This signature is a draft, not an accepted complete contract. Its project selector follows the accepted [project selection rules](#project-selection), including the existing `.kepler/` directory. Other creation inputs and mechanics stay proposed.
+This signature is a draft, not an accepted complete contract. Its project selector follows the accepted [project selection rules](#project-selection), including the existing `.kepler/` directory. Apply the accepted [workflow binding](#workflow-binding) at creation. Other creation inputs and mechanics stay proposed.
 
 The command creates one Unit of Work directory under `.kepler/units-of-work/<unit-id>/`. Use the ID format `YYYY-MM-DD-<slug>`, the machine-local date at creation, and the exact ID as the directory name. The complete ID must be unique in the selected project. Do not change it during revision or resume.
 
@@ -399,23 +443,35 @@ Apply the accepted [project selection rules](#project-selection). Filters, order
 
 Activities inherit their stage's effort. They do not have their own override. Do not add effort commands. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). The CLI inputs and operation placement for those decisions stay open.
 
-Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Response fields stay open. This query must not select a unit for later commands.
+Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Expose the accepted [workflow binding](#workflow-binding). Exact response fields stay open under the existing query decisions. This query must not select a unit for later commands.
 
 ### `kepler workflow construction lint`
 
 **Accepted scope.** Run Construction-specific task-graph validation here, not in root `kepler lint`.
 
-**Proposed operation.** Read the selected unit's authored graph and the inputs required by the [task graph contract](phases/construction/task-graph.md#validation-rules). Report structural errors, invalid dependency references or cycles, unsupported fields, and relevant local-reference or unit-identity mismatches. Do not infer graph edges from task order, titles, or free-form prose.
+**Accepted under [SH112](authoring_progress.md#completed-shared-decisions).** Use the following interface:
 
-Readiness facts do not show that free-form acceptance criteria are satisfied. The command cannot show that an external service or resource is available without current evidence. Lint is read-only: keep invalid files and do not repair them.
+```text
+kepler workflow construction lint --unit <unit-id> [--project <path>]
+```
 
-Apply the accepted [project selection rules](#project-selection) and [scope selectors](#scope-and-selectors). Use `--unit <unit-id>` to select the unit. Full check coverage and the finding schema stay open.
+Apply the accepted [project selection rules](#project-selection) and [scope selectors](#scope-and-selectors). Read `.kepler/units-of-work/<unit-id>/tasks-dag.json` for the explicit unit. The MVP has no alternate-graph path or per-task lint mode.
+
+Apply the [task graph validation rules](phases/construction/task-graph.md#validation-rules) that software can check. Check strict JSON, schema, UUIDs, unit identity, dependencies, duplicate edges, cycles, and relevant local paths and fragments. Use the selected unit, `plan.md`, and relevant upstream documents as context. Do not infer graph edges from task order, titles, or free-form prose.
+
+Keep Planning's assessment of the graph against `plan.md` and upstream requirements. Lint success does not prove free-form coverage, technical correctness, or external availability. It does not replace Planning's validation and evidence obligations.
+
+Reuse the [shared lint finding fields and result placement](#kepler-lint). Each finding has `path`, `field`, `code`, and `message`. Use JSON Pointers for graph fields and `null` for file-level problems. Do not include complete file contents.
+
+On successful validation, return `success`, exit `0`, and `data.findings: []`. On validation failure, return `failed`, exit `1`, and findings in `data.details.findings` under the shared error envelope. Other failures follow the [failure and recovery rules](#failure-and-recovery-rules).
+
+Keep lint read-only. Do not repair, migrate, generate identifiers, write events, or change workflow state. Keep invalid files and unsupported versions for correction.
 
 ## Stage operations
 
-The commands below apply to one explicit Unit of Work and one Construction stage. They use the Standard workflow order where that workflow is selected. Construction owns transitions. Standard selects the sequence.
+The commands below apply to one explicit Unit of Work and one Construction stage. They use the recorded [Standard workflow binding](#workflow-binding). Construction owns transitions. Standard selects the sequence.
 
-Use `--unit <unit-id>` and `--stage <stage>` under the accepted [scope selectors](#scope-and-selectors). Mutations of an existing stage attempt also use `--attempt <attempt-id>`. Active-workflow selection stays open.
+Use `--unit <unit-id>` and `--stage <stage>` under the accepted [scope selectors](#scope-and-selectors). Mutations of an existing stage attempt also use `--attempt <attempt-id>`.
 
 | Operation | Proposed contract |
 | --- | --- |
@@ -560,17 +616,9 @@ Forced termination can produce other exit codes or prevent a JSON response. A mi
 
 ## Open decisions
 
-Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence), [audit queries](#kepler-audit-list), and [shared lint interface](#kepler-lint) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence), [audit queries](#kepler-audit-list), and [shared lint interface](#kepler-lint) also stay in force. The accepted [Construction lint](#kepler-workflow-construction-lint), [UUID](#kepler-uuid), [setup](#kepler-setup), and [workflow binding](#workflow-binding) interfaces also stay in force.
 
-| ID | Open interface detail | Existing contract boundary |
-| --- | --- | --- |
-| SH112 | Construction lint selectors, necessary context, validation coverage, and finding format. | Keep the accepted `kepler workflow construction lint` placement and task graph contract under IP26. Do not change the graph schema. |
-| SH113 | Arguments and result fields for the proposed root UUID operation. | Keep the accepted artifact UUID rules in SH13 and task UUID rules in IP22. Do not add a global allocation registry. |
-| SH114 | Setup inputs, compatible bundle selection, existing `--force` handling, result fields, and partial-write effects. | See the [installation contract draft](installation.md). Do not add force authority, automatic migration, or overwrite permission. |
-| SH115 | How current phase operations identify and select the Standard workflow binding. | Keep accepted workflow composition under SH98 and the [Standard stage order](workflows/standard/README.md#stages). Do not add a generic workflow registry. |
-| SH117 | Which skill and profile installation writes belong to setup and which belong to a native host or skill manager. | See the [installation contract draft](installation.md) and [skill responsibilities](skills.md). Do not change accepted role contracts. |
-
-[SH116](authoring_progress.md#mvp-decisions) is an open first-MVP host and platform release-scope decision, not a CLI syntax choice. The [installation contract draft](installation.md) records it without selecting a host.
+Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
 Other shared runtime and Construction implementation choices stay under SH45-SH51, SH62-SH70, SH72, SH84-SH87, DF14-DF17, and existing SH53-SH60. These include journal writes, projections, attempts, locks, workspaces, effort changes, task and Activity guards, and recovery. Exact actor and authorization fields stay open under SH55-SH56. Do not invent approval proof or interaction protocols.
 

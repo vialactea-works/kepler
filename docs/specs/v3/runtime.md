@@ -392,6 +392,8 @@ CLI results use the accepted [result envelope](cli.md#machine-readable-output). 
 
 Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Use the accepted [audit queries](cli.md#kepler-audit-list) for read-only history inspection. Use the accepted [shared lint interface](cli.md#kepler-lint) for shared metadata checks. Approval and interaction interfaces stay under SH55-SH56.
 
+Use the accepted [Construction lint interface](cli.md#kepler-workflow-construction-lint) for task graphs and [UUID interface](cli.md#kepler-uuid) for identifier generation. Apply the accepted [setup interface](cli.md#kepler-setup) and [native resource ownership](installation.md#agent-resource-ownership) without adding agent certification.
+
 ### Current author
 
 Give a CLI command that returns the current author as Git `user.name` and Git `user.email`. Resolve both values from the effective Git configuration for the current project. Repository-specific identity settings must apply.
@@ -413,6 +415,8 @@ Create unit IDs in the format `YYYY-MM-DD-<slug>` under the shared [unit identit
 Use the exact unit ID as the directory name. The CLI must detect duplicate IDs within the project and must not overwrite an existing unit. Do not regenerate an existing ID during revision or resume.
 
 The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement and proposes inputs, effects, output, and failure behavior. Its detailed contract stays a draft.
+
+Apply the accepted [Standard workflow binding](cli.md#workflow-binding). Record `standard` with unit creation facts in the CLI-owned journal. Later operations and resume use that binding, and `unit show` exposes it. Do not add workflow fields to frontmatter or the authored task graph.
 
 ## Traceability and revision outputs
 

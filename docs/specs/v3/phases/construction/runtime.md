@@ -27,6 +27,8 @@ Keep authored identities separate from execution identities. Store execution fac
 
 Attempt ID formats stay under SH47. Admission captures a fixed baseline without creating a task attempt.
 
+Apply the accepted [workflow binding](../../cli.md#workflow-binding). Unit creation records `standard`, and later operations and resume use that binding. This accepted fact does not accept the proposed event names or payload keys below.
+
 ## Proposed derived states
 
 The following vocabulary is a proposal for derived views. Journals are authoritative. Projections are disposable.
@@ -102,7 +104,7 @@ Stage facts bind their stage and attempt. Task facts bind their task and Impleme
 
 | Proposed event `type` | Required data and binding |
 | --- | --- |
-| `construction.unit-created` | Unit identity, directory, and creation inputs. Record initial Effort through its linked selection fact. |
+| `construction.unit-created` | Unit identity, directory, creation inputs, and the accepted Standard workflow binding. Record initial Effort through its linked selection fact. |
 | `construction.unit-baseline-selected` | Unit, integration target, initial checkpoint, and capture before first admission. Keep this original unit baseline across returns. |
 | `construction.unit-effort-selected` | Unit, selected level, prior value when changed, and requester decision reference. |
 | `construction.stage-effort-selected` | Unit, stage, selected override, and requester decision reference. Activities inherit the stage's Effort. |
@@ -228,4 +230,6 @@ The proposed pause request fences new affected work before stopping completes. A
 
 Accepted shared runtime, Construction, and Standard contracts are authoritative. This draft proposes state, event, pause, and path details. It does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
 
-Apply the accepted [project selection rules](../../cli.md#project-selection), [scope selectors](../../cli.md#scope-and-selectors), [result envelope](../../cli.md#machine-readable-output), [failure result fields](../../cli.md#failure-and-recovery-rules), [exit-code contract](../../cli.md#exit-codes), and [output stream contract](../../cli.md#output-streams). Apply [MVP result formatting](../../cli.md#human-output). Apply the accepted [evidence recording interface](../../cli.md#kepler-audit-record-evidence), [audit queries](../../cli.md#kepler-audit-list), and [shared lint interface](../../cli.md#kepler-lint). Other CLI details stay tracked under SH112-SH115 and SH117. Certified host and platform support is an open question under [SH116](../../authoring_progress.md#mvp-decisions). No omnibus runtime approval gate or implementation roadmap is introduced.
+Apply the accepted [project selection rules](../../cli.md#project-selection), [scope selectors](../../cli.md#scope-and-selectors), [result envelope](../../cli.md#machine-readable-output), [failure result fields](../../cli.md#failure-and-recovery-rules), [exit-code contract](../../cli.md#exit-codes), and [output stream contract](../../cli.md#output-streams). Apply [MVP result formatting](../../cli.md#human-output). Apply the accepted [evidence recording interface](../../cli.md#kepler-audit-record-evidence), [audit queries](../../cli.md#kepler-audit-list), and [shared lint interface](../../cli.md#kepler-lint).
+
+Apply the accepted [Construction lint](../../cli.md#kepler-workflow-construction-lint), [UUID](../../cli.md#kepler-uuid), [setup](../../cli.md#kepler-setup), and [Standard binding](../../cli.md#workflow-binding) interfaces. Apply [resource ownership](../../installation.md#agent-resource-ownership) and [intended MVP targets](../../installation.md#intended-mvp-targets), without agent certification claims. Other CLI and runtime details remain implementation choices under their owning decisions. No omnibus runtime approval gate or implementation roadmap is introduced.

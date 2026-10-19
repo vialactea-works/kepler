@@ -145,6 +145,8 @@ The orchestrator and workers interpret these instructions. They do not create gr
 
 Validation is read-only. Keep invalid files and unsupported versions for correction. Do not coerce values, allocate missing IDs, or rewrite input.
 
+Use the accepted [Construction lint interface](../../cli.md#kepler-workflow-construction-lint) for checks that software can perform. Its findings use JSON Pointers for graph fields. Passing lint does not replace the comparison with the plan and requirements or Planning's evidence checks.
+
 Use the existing [Planning evidence requirements](implementation-planning.md#evidence-coverage). Both artifacts must pass validation. Keep covered inputs and outputs under the shared bindings. This format adds no requester approval gate.
 
 ## Example

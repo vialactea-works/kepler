@@ -51,21 +51,21 @@ All Construction stage and Activity contracts in this MVP are accepted. Build th
 | 5 | [Unit of Work Review](phases/construction/unit-of-work-review.md) | Build whole-unit assessment, findings, evidence, completion, applicable acceptance, and handoff. |
 | 6 | [Deliver](phases/construction/deliver.md) | Build the accepted behavior for outcome, instructions, authorization, verification, recovery, and deployment information. |
 | 7 | Shared runtime | Set up journals under the accepted portability policy, guarded transitions, safe recovery, material retention, and isolated concurrent work. |
-| 8 | MVP release | Build the CLI, templates, agents, and skills. Test the complete path, recovery, scoped concurrency, and rejection of invalid transitions. |
+| 8 | MVP release | Build the CLI, templates, agents, and skills. Test executable CLI and Core behavior, recovery, scoped concurrency, and rejection of invalid transitions. |
 
-Start implementation from accepted contracts without waiting for unrelated v3 decisions. The Construction policy approval queue stays complete. The separate host and platform release-scope decision SH116 stays open. It does not reopen accepted stage or Activity contracts. Derive skills and runtime transitions from the accepted contracts.
+Start implementation from accepted contracts without waiting for unrelated v3 decisions. The Construction policy approval queue stays complete. SH116 records intended targets and the MVP test scope without agent certification. Derive skills and runtime transitions from the accepted contracts.
+
+Apply the accepted [MVP test scope](installation.md#intended-mvp-targets). Do not add real-agent tests or tests that assert skill Markdown wording or structure.
 
 The release must keep separate non-author Code Validation and combined-candidate Code Integration checks. A reduced approval queue does not make the MVP implemented or ready to ship.
 
 ## MVP decisions
 
-The accepted Construction policy decisions stay complete. One release-scope decision, SH116, stays open: the certified host and platform combinations for the first Construction MVP. It does not reopen an accepted stage or Activity contract. The 38 implementation choices and 14 deferred questions stay separate from requester policy approval.
+The accepted Construction policy decisions stay complete. No MVP release-scope decision remains open in this register. The 33 implementation choices and 14 deferred questions stay separate from requester policy approval.
 
-### Open MVP release-scope decision
+### MVP release scope
 
-| ID | Decision | Status | Question | Record |
-| --- | --- | --- | --- | --- |
-| SH116 | MVP installation targets | Open | Which agent-host and platform combinations are certified for the first Construction MVP, and which capabilities does each have? | [Installation contract draft](installation.md#host-capability-contract). This selects release-support scope, not another execution topology. |
+[SH116](#completed-shared-decisions) selects Linux and macOS on `x86_64` and `arm64` as intended targets. These are 64-bit targets, without tested or certified agent-support claims. The decision does not reopen an accepted stage or Activity contract.
 
 ### Coordination boundary
 
@@ -77,11 +77,13 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 ## Review result
 
-The register contains 278 unique IDs. These include 224 completed decisions, 1 pending MVP release-scope decision, and 38 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision.
+The register contains 278 unique IDs. These include 230 completed decisions, no pending MVP release-scope decisions, and 33 MVP implementation choices. It also contains 14 deferred questions and 1 retired question.
 
 The requester accepted 78 decisions for the Construction contracts: 16 for Planning, 24 for Implementation and Activity, 16 for Review, and 18 for Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately.
 
 SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. SH102-SH109 separately record accepted CLI project selection, scope selectors, the result envelope, failure fields, exit codes, output streams, MVP result formatting, and evidence recording. SH110 and SH111 record accepted audit queries and shared lint.
+
+SH112-SH117 record Construction lint, UUID generation, setup, Standard binding, intended targets, and native resource ownership. These decisions do not claim implemented or certified agent behavior.
 
 The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
 
@@ -189,6 +191,12 @@ Every decision in this section is complete. The linked specification contains it
 | SH109 | CLI evidence recording interface | Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) with accepted scope selectors and one typed JSON request on stdin. Use `inputs` entries with `reference` and `purpose` for checked material and relevant inputs, without a separate `material` field. Return the recorded event's `id` and `journal_id` in `data`. Keep phase validation, evidence bindings, recovery, and no-completion rules. Detailed schemas stay under SH49 and SH51. Approval and interaction interfaces stay under SH55-SH56. |
 | SH110 | CLI audit query interface | Use [audit queries](cli.md#kepler-audit-list) with explicit unit scope and exact selectors. Default to compact projections with optional fields and mandatory `id` and `journal_id`. Use pages of 20 records by default, with a maximum of 1000. Bind cursors to the original view and filters, without silent restarts. Keep journal-local order and return full records through `show`. Keep queries read-only, empty matches successful, and missing records or invalid cursors as failures. |
 | SH111 | CLI shared lint interface | Use [kepler lint](cli.md#kepler-lint) with explicit Markdown paths, resolving relative paths from the selected project root. Validate shared metadata only, without implicit scans, repair, migration, or workflow changes. Findings contain `path`, nullable `field`, `code`, and `message`, not complete file contents. Valid files return `success`, exit `0`, and `data.findings: []`. Validation failures return `failed`, exit `1`, and `data.details.findings` under the existing error envelope. Keep Construction task-graph validation separate. |
+| SH112 | CLI Construction lint interface | Use [Construction lint](cli.md#kepler-workflow-construction-lint) with an explicit unit and its canonical `tasks-dag.json`. Check strict JSON, schema, identities, dependencies, cycles, and relevant local references. Reuse shared lint findings and error placement, with JSON Pointers for graph fields. Keep lint read-only and keep Planning's plan and requirements assessment. Do not claim external readiness. |
+| SH113 | CLI UUID generation interface | Use [kepler uuid](cli.md#kepler-uuid) to return one lowercase, hyphenated UUIDv4 in `data.uuid`. Use no generation, batch, or project options. Do not create artifacts or records, or add an allocation registry. |
+| SH114 | CLI setup interface | Use [kepler setup](cli.md#kepler-setup) without command-specific options or `--force`. Select a local compatible bundle and validate its digest. An invalid explicit override fails without fallback. Keep settings and unknown or modified resources, and update only verified, unmodified managed resources. Report installed generation and resource-check results. Keep the prior usable generation on failure and report available partial-write facts in error `details`. |
+| SH115 | CLI workflow selection interface | Bind `standard` at Construction unit creation and record it with creation facts. Later operations and resume use the recorded [workflow binding](cli.md#workflow-binding). Expose it through `unit show` and reject unsupported bindings. Add no per-command workflow selector, switching, or registry. Keep the rest of unit creation under its own interface decision. |
+| SH116 | MVP installation targets | Use the [intended MVP targets](installation.md#intended-mvp-targets): Linux and macOS, each on `x86_64` and `arm64` only. Do not claim tested or certified agent support. Real-agent tests and tests that assert skill Markdown wording or structure are outside the MVP. Keep appropriate executable CLI and Core behavior tests and actual workflow duties. |
+| SH117 | Agent resource installation ownership | Kepler supplies versioned skills and native agent definitions. The native host or skill manager owns installation and upgrades in its own locations. Setup owns Kepler's bundle and default settings. Each installer reports its own results and failures without unchecked readiness claims. Apply [resource ownership](installation.md#agent-resource-ownership), without a new host-verification framework or agent test system. |
 
 ## MVP implementation choices
 
@@ -233,11 +241,6 @@ The implementation must include typechecking, project-build, and full-suite comm
 | DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF17 | Revision shutdown coordination | How is active implementation stopped during an authorized unit-wide revision? See [upstream revision](phases/construction/README.md#unit-wide-upstream-revision). |
-| SH112 | CLI Construction lint interface | Set unit and graph selectors, necessary context, and finding format. Keep the accepted task-graph scope. See [CLI Construction lint](cli.md#kepler-workflow-construction-lint). |
-| SH113 | CLI UUID generation interface | Set arguments and results for the proposed root UUID command. Do not add a global allocation registry. See [CLI `kepler uuid`](cli.md#kepler-uuid). |
-| SH114 | CLI setup interface | Set which setup inputs the installation record keeps, compatibility, existing force-option handling, results, and partial-write effects. Do not add force authority. See the [installation contract draft](installation.md). |
-| SH115 | CLI workflow selection interface | Set how current phase operations identify and select the Standard binding. Do not add a generic workflow registry or future phase engine. See [CLI Construction commands](cli.md#construction-commands). |
-| SH117 | Agent resource installation ownership | Set ownership of skill and profile installation. State the targets, failure handling, and compatibility for setup, native hosts, or skill managers. Do not decide this in the draft. See the [installation contract draft](installation.md#open-decisions). |
 
 Complete DF15 through DF17 under the agreed attempt, evidence-applicability, and revision rules. Do not invalidate tasks merely because unrelated commits arrive. Ended attempts cannot complete tasks or accept candidates. Make sure that previous workers stopped before resuming affected work.
 

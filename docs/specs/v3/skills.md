@@ -43,7 +43,9 @@ Distinguish existing facts, proposed behavior, and assumptions. Record the calle
 
 Do not use old map directories, tickets, routes, glossary paths, or their validation commands. Obey the version 3 stage and artifact contracts. Authority and update rules for Project references stay separate decisions.
 
-Supporting skills do not introduce additional agent roles. Use CLI-owned operations for execution records. Do not edit journals or projections directly. The [installation contract draft](installation.md) sets ownership of skills and host resources. It does not change these responsibilities. Host resource installation stays open under [SH117](authoring_progress.md#mvp-implementation-choices).
+Supporting skills do not introduce additional agent roles. Use CLI-owned operations for execution records. Do not edit journals or projections directly.
+
+The accepted [resource ownership](installation.md#agent-resource-ownership) assigns skill and native agent installation to the host or skill manager. Setup owns Kepler's bundle resources and default settings. Apply the accepted [MVP test scope](installation.md#intended-mvp-targets) without changing these skill responsibilities.
 
 ## kepler-design
 

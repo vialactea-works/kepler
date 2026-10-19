@@ -14,6 +14,8 @@ Start with a clear Unit of Work request and relevant available context. Function
 
 Existing application code, tests, and completed Initialization or Inception contracts are not prerequisites. Greenfield work remains in scope. This workflow adds no additional Initialization or Inception stages.
 
+Apply the accepted [workflow binding](../../cli.md#workflow-binding). Construction unit creation records `standard`. Later operations and resume use that binding. The `unit show` query exposes it. The MVP adds no per-command workflow selector, switching, or registry.
+
 ## Stages
 
 All selected stages belong to Construction. Their contracts state inputs, outputs, checks, authority, evidence, and completion conditions.
