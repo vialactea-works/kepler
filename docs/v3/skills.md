@@ -43,7 +43,7 @@ Distinguish existing facts, proposed behavior, and assumptions. Record confirmed
 
 Do not require old map directories, tickets, routes, glossary paths, or their validation commands. Follow the version 3 stage and artifact contracts. Authority and update rules for Project references remain separate decisions.
 
-Supporting skills do not introduce additional agent roles. Use CLI-owned operations for execution records; do not edit journals or projections directly.
+Supporting skills do not introduce additional agent roles. Use CLI-owned operations for execution records; do not edit journals or projections directly. The [installation contract draft](installation.md) covers skill and host-resource ownership; it does not change these responsibilities. Host resource installation remains open under [SH117](authoring_progress.md#mvp-implementation-choices).
 
 ## kepler-design
 

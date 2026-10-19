@@ -47,13 +47,19 @@ All Construction stage and Activity contracts in this MVP are accepted. Implemen
 | 7 | Shared runtime | Implement journals under the accepted portability policy, guarded transitions, safe recovery, material retention, and isolated concurrent work. |
 | 8 | MVP release | Implement the CLI, templates, agents, and skills. Verify the complete path, recovery, scoped concurrency, and rejection of invalid transitions. |
 
-Start implementation from accepted contracts without waiting for unrelated v3 decisions. The MVP policy approval queue is complete. Derive skills and runtime transitions from the accepted contracts.
+Start implementation from accepted contracts without waiting for unrelated v3 decisions. The Construction policy approval queue remains complete. The separate host and platform release-scope decision SH116 remains open; it does not reopen accepted stage or Activity contracts. Derive skills and runtime transitions from the accepted contracts.
 
 The release must preserve separate non-author Code Validation and combined-candidate Code Integration checks. A reduced approval queue does not make the MVP implemented or ready to ship.
 
 ## MVP decisions
 
-No MVP policy decisions remain pending. The completed shared and stage contracts provide the basis for implementation. The 33 implementation choices and 14 deferred questions retain their current status.
+The accepted Construction policy decisions remain complete. One release-scope decision, SH116, remains open: the certified host and platform combinations for the first Construction MVP. It does not reopen an accepted stage or Activity contract. The 48 implementation choices and 14 deferred questions remain separate from requester policy approval.
+
+### Open MVP release-scope decision
+
+| ID | Decision | Status | Question | Record |
+| --- | --- | --- | --- | --- |
+| SH116 | MVP installation targets | Open | Which agent-host and platform combinations are certified for the first Construction MVP, and what capability boundary does each support? | [Installation contract draft](installation.md#host-capability-contract). This selects release-support scope, not another execution topology. |
 
 ### Coordination boundary
 
@@ -65,7 +71,7 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 ## Review result
 
-The register contains 262 unique IDs, including 214 completed decisions and no pending MVP policy decisions. It also contains 33 MVP implementation choices, 14 deferred questions, and 1 retired question. The requester accepted 78 decisions with the Construction contracts: 16 Planning, 24 Implementation and Activity, 16 Review, and 18 Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately. SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. The seven whole-contract acceptance rows remain distinct. CN22 preserves the accepted Implementation model; CN20 tracks deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or establish implementation.
+The register contains 278 unique IDs. These include 214 completed decisions, 1 pending MVP release-scope decision, and 48 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision. The requester accepted 78 decisions with the Construction contracts: 16 Planning, 24 Implementation and Activity, 16 Review, and 18 Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately. SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. The seven whole-contract acceptance rows remain distinct. CN22 preserves the accepted Implementation model; CN20 tracks deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or establish implementation.
 
 ## Register rules
 
@@ -201,6 +207,21 @@ The implementation must provide typechecking, project build, and full-suite comm
 | DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF17 | Revision shutdown coordination | How is active implementation stopped during an authorized unit-wide revision? See [upstream revision](phases/construction/README.md#unit-wide-upstream-revision). |
+| SH102 | CLI project selection interface | Define the common project and worktree selector, absent-selector behavior, path resolution, and unresolved or ambiguous project failure. Keep the three diff-package commands under their accepted SH101 rules. See [CLI](cli.md#scope-and-selectors). |
+| SH103 | CLI scope selector grammar | Define shared spelling and encoding for unit, stage, task, Activity, parent, and attempt scopes, including ownership mismatch handling. Do not select an implicit active or latest scope. See [CLI](cli.md#scope-and-selectors). |
+| SH104 | CLI success result envelope | Define common result fields and distinguish operation success from workflow completion. See [CLI](cli.md#machine-readable-output). |
+| SH105 | CLI error result envelope | Define typed error fields for scoped causes, partial effects, and recovery information. Never report false success. See [CLI](cli.md#failure-and-recovery-rules). |
+| SH106 | CLI exit-code contract | Define success, failure, usage, unsupported-input, and uncertain-outcome codes. Preserve the accepted nonzero-on-failure rule. See [CLI](cli.md#failure-and-recovery-rules). |
+| SH107 | CLI output stream contract | Define stdout and stderr separation and one machine-readable result without mixed prose. See [CLI](cli.md#machine-readable-output). |
+| SH108 | CLI human output interface | Decide whether the MVP offers optional human rendering or a flag. Keep structured output as the default; do not require a new human feature. See [CLI](cli.md#machine-readable-output). |
+| SH109 | CLI evidence recording interface | Define typed evidence inputs and bindings through audit. Do not add raw append. Approval and interaction interfaces remain under SH55 and SH56. See [CLI audit operations](cli.md#audit-operations). |
+| SH110 | CLI audit query interface | Define scoped record selectors, filters, pagination, and causal or local-sequence presentation. Do not infer global timestamp order. See [CLI audit operations](cli.md#audit-operations). |
+| SH111 | CLI shared lint interface | Define selected shared-artifact paths and the full read-only validation report. Keep the accepted root lint scope. See [CLI `kepler lint`](cli.md#kepler-lint). |
+| SH112 | CLI Construction lint interface | Define unit and graph selectors, required context, and finding format. Keep the accepted task-graph scope. See [CLI Construction lint](cli.md#kepler-workflow-construction-lint). |
+| SH113 | CLI UUID generation interface | Define arguments and results for the proposed root UUID command. Do not add a global allocation registry. See [CLI `kepler uuid`](cli.md#kepler-uuid). |
+| SH114 | CLI setup interface | Define retained setup inputs, compatibility, existing force-option handling, results, and partial-write effects. Do not add force authority. See the [installation contract draft](installation.md). |
+| SH115 | CLI workflow selection interface | Define how current phase operations identify and select the Standard binding. Do not add a generic workflow registry or future phase engine. See [CLI Construction commands](cli.md#construction-commands). |
+| SH117 | Agent resource installation ownership | Define ownership of skill and profile installation. Specify targets, failures, and compatibility for setup, native hosts, or skill managers. Do not decide this in the draft. See the [installation contract draft](installation.md#open-decisions). |
 
 Implement DF15 through DF17 under the agreed attempt, evidence-applicability, and revision rules. Do not invalidate tasks merely because unrelated commits arrive. Ended attempts cannot complete tasks or accept candidates. Verify that previous workers stopped before resuming affected work.
 

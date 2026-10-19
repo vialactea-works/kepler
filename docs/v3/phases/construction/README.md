@@ -6,7 +6,7 @@
 
 Construction operates on one Unit of Work. Its stages define responsibilities independently of the skills and agents that support them.
 
-Construction owns its execution state model and projection schemas under the shared [execution-state representation](../../runtime.md#execution-state-representation).
+Construction owns its execution state model and projection schemas under the shared [execution-state representation](../../runtime.md#execution-state-representation). The [Construction runtime draft](runtime.md) proposes its derived states, lifecycle guards, event facts, and storage examples. It remains a draft and adds no stage or accepted contract.
 
 The [Standard workflow](../../workflows/standard/README.md) selects the unit-stage order. Construction owns the stage definitions and Implementation structure. The requester accepted Functional Design and Quality Requirements under FD13 and NF12. Implementation Planning and Implementation are accepted under IP19 and IE21. Unit of Work Review and Deliver are accepted under UR16 and DL18. The requester separately accepted Code Generation under IE24, Code Validation under IE25, and Code Integration under IE27. These are specification approvals, not approval of an executing unit or implementation. Code Generation, Code Validation, and Code Integration are Activities within Implementation, not additional stages.
 

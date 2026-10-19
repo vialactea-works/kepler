@@ -8,6 +8,8 @@ Record decisions about the Kepler CLI, structured persistence, and audit system.
 
 The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. Phase-owned projections, paths, commands, and write protocols remain under design. This document does not implement CLI behavior or migrate existing data.
 
+The [Construction runtime draft](phases/construction/runtime.md) proposes Construction-specific state names, lifecycle guards, event payloads, and storage examples. It is not a stage and does not replace this shared contract. Its proposals remain unapproved implementation choices.
+
 ## Data responsibilities
 
 | Data | Representation | Responsibility |

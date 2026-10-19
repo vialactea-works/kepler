@@ -14,6 +14,8 @@ The specification is under development. A draft contract records a proposal for 
 
 [Git diff packages](diff-package.md) defines generated inspection material for three existing Construction scopes. It is a Git capability, not a new workflow milestone.
 
+The [Construction runtime draft](phases/construction/runtime.md) proposes Construction state and event details. It is not a new stage. The [installation contract draft](installation.md) proposes release compatibility and host-readiness rules. Both documents remain drafts; neither approves or implements v3 behavior.
+
 The version 2 reference remains a separate document set. Its contracts do not automatically apply to version 3.
 
 ## Phase organization

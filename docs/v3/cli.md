@@ -321,19 +321,28 @@ The event write protocol, projection rebuild behavior, lock ownership and recove
 
 ## Open decisions
 
-The following details remain open. This draft does not resolve them:
+The accepted command placements, structured-output default, typed lifecycle writes, and exact three [diff-package signatures](#kepler-git-diff-package) remain in force. The following interface details remain open implementation choices. Their technical answers do not create requester approval gates.
 
-- Exact arguments, selectors, path handling, and project-root resolution for commands outside the defined `kepler git diff-package` family. That family fixes these rules and its logical output requirements in [diff-package](diff-package.md). Response schemas remain implementation choices.
-- The common result and error envelopes, exit-code map, output stream placement, and any explicit human-output flag. The diff-package family has logical result requirements but does not define a new common envelope.
-- The full acceptance of the Unit of Work create contract, including strict slug characters, project selection, directory creation, persistence, concurrency, retries, and interrupted-write reconciliation.
-- The UUID command's arguments and response shape, and the current-author command's exact response fields and error codes. Validation details for other invalid identity values must follow the existing metadata contract. Missing or blank identity behavior is accepted under [SH61](authoring_progress.md#completed-shared-decisions).
-- Event payload schemas, operation identifiers, append and collection protocols, projections, and recovery after partial writes. Portability policy is accepted under [SH74](runtime.md#record-portability); exact storage and transfer mechanics remain implementation work.
-- Lock storage, ownership, coordination across workspaces, and interrupted-lock recovery.
-- Stage selector grammar, active workflow selection, and all proposed stage completion guards.
-- CLI syntax, operation placement, payloads, and persistence mechanics for stage-effort overrides and later adjustments. Requester authority and the existing adjustment rules remain accepted. The proposed `--stage-effort` option is not accepted.
-- Exact task and Activity selectors, evidence DTOs, check execution boundaries, and lifecycle guards.
-- Exact audit actor and authorization fields. Do not invent approval proof or interaction protocols.
-- Compatibility with existing setup options. This draft does not define new force behavior.
-- Migration commands and future Initialization or Inception commands. They are outside this inventory.
+| ID | Open interface detail | Existing contract boundary |
+| --- | --- | --- |
+| SH102 | Project selection, path resolution, absent-selector behavior, and unresolved or ambiguous project errors. | Progress, transition, unit-create, and author interfaces remain under SH53, SH54, SH59, and SH60. The accepted diff-package project selector remains fixed under SH101. |
+| SH103 | Shared unit, stage, task, Activity, parent, and attempt selector grammar, including ownership-mismatch errors. Do not select an implicit active or latest scope. | Existing query and transition choices remain under SH53, SH54, and SH57-SH60. Preserve the exact source selectors under SH101. |
+| SH104 | Common success-result fields and the distinction between operation success and workflow completion. | Keep the accepted structured-output default. Preserve SH101's logical result requirements. |
+| SH105 | Typed error fields for causes, partial effects, uncertainty, and recovery. Never report false success. | Keep accepted failure behavior. SH61 still requires nonzero failure and missing-key identification for absent Git author values. |
+| SH106 | Exit codes for success, failure, usage, unsupported input, and uncertain outcomes. | Preserve the accepted nonzero-on-failure rule and SH61's nonzero missing-identity result. |
+| SH107 | Separation of stdout and stderr and one machine-readable result without mixed prose. | Preserve structured machine-readable output by default. Do not add progress prose to it. |
+| SH108 | Whether to offer optional human rendering and how to select it. | Structured machine-readable output remains the default. This row does not require a new human-output feature. |
+| SH109 | Typed evidence inputs and bindings for audit recording. | Reuse SH49-SH51 record and material choices, accepted SH52 evidence coverage, and SH55-SH56 approval and interaction interfaces. Do not add raw append. |
+| SH110 | Audit query selectors, filters, pagination, and local or causal ordering presentation. | Preserve SH44's envelope, SH53's query interface, SH92-SH94 producer and causal-order rules, and no timestamp-derived global order. |
+| SH111 | Shared `kepler lint` input paths and complete read-only finding format. | Keep its accepted shared-metadata scope and the metadata validation rules in SH18, SH19, and SH21. Do not move task-graph checks to root lint. |
+| SH112 | Construction lint selectors, required context, validation coverage, and finding format. | Keep the accepted `kepler workflow construction lint` placement and task graph contract under IP26. Do not change the graph schema. |
+| SH113 | Arguments and result fields for the proposed root UUID operation. | Preserve the accepted artifact UUID rules in SH13 and task UUID rules in IP22. Do not add a global allocation registry. |
+| SH114 | Setup inputs, compatible bundle selection, existing `--force` handling, result fields, and partial-write effects. | See the [installation contract draft](installation.md). Do not add force authority, automatic migration, or overwrite permission. |
+| SH115 | How current phase operations identify and select the Standard workflow binding. | Preserve accepted workflow composition under SH98 and the [Standard stage order](workflows/standard/README.md#stages). Do not add a generic workflow registry. |
+| SH117 | Which skill and profile installation writes belong to setup and which belong to a native host or skill manager. | See the [installation contract draft](installation.md) and [skill responsibilities](skills.md). Do not change accepted role contracts. |
 
-The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) remain in force. This CLI draft does not accept the remaining proposals in those contracts.
+[SH116](authoring_progress.md#mvp-decisions) is an open first-MVP host and platform release-scope decision, not a CLI syntax choice. The [installation contract draft](installation.md) records it without selecting a host.
+
+Other shared runtime and Construction implementation choices remain under SH45-SH51, SH62-SH70, SH72, SH84-SH87, DF14-DF17, and existing SH53-SH60. These include journal writes, projections, attempts, locks, workspaces, effort changes, task and Activity guards, and recovery. Exact actor and authorization fields remain open under SH55-SH56. Do not invent approval proof or interaction protocols.
+
+Migration commands and future Initialization or Inception commands remain outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) remain in force. This CLI draft does not accept remaining proposals in those contracts.
