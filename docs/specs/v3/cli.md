@@ -32,6 +32,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Return structured machine-readable output by default, for both results and errors. Do not make `--json` necessary or mix progress text and prose into machine-readable output.
 - Build help and argument parsing from the same CLI-framework definitions. Do not keep a separate command grammar for help.
 - Apply the shared [project selection rules](#project-selection) to every project-scoped command, including unit creation.
+- Use the shared [scope selectors](#scope-and-selectors) for unit, stage, task, Activity, and attempt identities.
 
 Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP order. Stage-specific policies stay proposals where their owning contracts say so.
 
@@ -41,9 +42,32 @@ The command inventory below lists the proposed commands in this draft and the th
 
 ### Scope and selectors
 
-Every command that reads or changes unit state must identify its scope. A task operation must identify its Unit of Work and task. An Activity operation must also identify the Activity occurrence and enclosing stage attempt. A mutation of an existing attempt must identify that attempt. Do not attach an earlier result to whichever attempt is current. Do not select an implicit active or most-recent unit.
+**Accepted under [SH103](authoring_progress.md#completed-shared-decisions).** Use explicit long flags for scope selectors.
 
-The placeholders `<unit-id>`, `<task-id>`, `<stage>`, and `<activity>` show the necessary scope. They do not set final argument syntax. Other scope-selector syntax, input-path rules, defaults, and quoting stay open. The [diff-package family](#kepler-git-diff-package) gives its exact source selectors and signatures below.
+Every command that reads or changes unit state must identify its scope. An operation on one task must identify its Unit of Work and task. An Activity operation must identify its occurrence and enclosing Implementation attempt. A mutation of an existing attempt must identify that attempt. Do not attach an earlier result to whichever attempt is current. Do not select an implicit active or latest scope.
+
+| Selector | Meaning |
+| --- | --- |
+| `--unit <unit-id>` | Full Unit of Work ID. |
+| `--stage <stage>` | Named Construction stage. |
+| `--task <task-id>` | Full task UUIDv4 from `tasks-dag.json`. |
+| `--activity <activity>` | Named Construction Activity. |
+| `--attempt <attempt-id>` | Existing attempt targeted by the operation. |
+| `--implementation-attempt <attempt-id>` | Enclosing Implementation attempt for task-scoped work. |
+
+Each selector takes one value. Reject duplicate selectors. Use complete, exact IDs, without prefixes, aliases, or titles.
+
+Use these Construction stage values for `--stage`: `functional-design`, `quality-requirements`, `implementation-planning`, `implementation`, `unit-of-work-review`, and `deliver`.
+
+Use these Construction Activity values for `--activity`: `code-generation`, `code-validation`, and `code-integration`.
+
+Activity operations use `--unit`, `--task`, `--activity`, and `--implementation-attempt`. Mutations of an existing Activity attempt also use `--attempt`. Do not add a task-attempt identity.
+
+Validate all selected scope and ownership relationships. Return a structured error and a nonzero exit status for a mismatch. Do not select another scope.
+
+Keep the accepted [diff-package source selectors and signatures](#kepler-git-diff-package) unchanged. Their `--generation-attempt` and `--integration-attempt` selectors identify source attempts, not consumer attempts.
+
+Attempt ID formats stay under SH47. Other query and operation interfaces stay under SH53, SH54, and SH57-SH60. Error fields and exact exit codes stay under SH105 and SH106. Other operation-specific arguments, input-path rules, and quoting stay open.
 
 ### Project selection
 
@@ -100,7 +124,7 @@ The exact human-output flag is unchosen. Help must use the same command definiti
 
 Here, `<kind>` is `approval`, `evidence`, or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
 
-The entries name the requested operations. They do not decide final argument grammar or response schemas.
+The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors). Other arguments and response schemas stay open.
 
 ## Root capabilities
 
@@ -190,7 +214,7 @@ Construction uses the [accepted Unit of Work identity rules](unit-of-work.md#ide
 kepler workflow construction unit create <slug> [--effort minimal|standard|comprehensive] [--project <path>]
 ```
 
-This signature is a draft, not an accepted complete contract. Its project selector follows the accepted [project selection rules](#project-selection), including the existing `.kepler/` directory. Other selectors and creation mechanics stay proposed.
+This signature is a draft, not an accepted complete contract. Its project selector follows the accepted [project selection rules](#project-selection), including the existing `.kepler/` directory. Other creation inputs and mechanics stay proposed.
 
 The command creates one Unit of Work directory under `.kepler/units-of-work/<unit-id>/`. Use the ID format `YYYY-MM-DD-<slug>`, the machine-local date at creation, and the exact ID as the directory name. The complete ID must be unique in the selected project. Do not change it during revision or resume.
 
@@ -222,7 +246,7 @@ Apply the accepted [project selection rules](#project-selection). Filters, order
 
 Activities inherit their stage's effort. They do not have their own override. Do not add effort commands. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). The CLI inputs and operation placement for those decisions stay open.
 
-The unit selector and response fields stay open. This query must not select a unit for later commands.
+Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Response fields stay open. This query must not select a unit for later commands.
 
 ### `kepler workflow construction lint`
 
@@ -232,11 +256,13 @@ The unit selector and response fields stay open. This query must not select a un
 
 Readiness facts do not show that free-form acceptance criteria are satisfied. The command cannot show that an external service or resource is available without current evidence. Lint is read-only: keep invalid files and do not repair them.
 
-Apply the accepted [project selection rules](#project-selection). The unit selector, full check coverage, and finding schema stay open.
+Apply the accepted [project selection rules](#project-selection) and [scope selectors](#scope-and-selectors). Use `--unit <unit-id>` to select the unit. Full check coverage and the finding schema stay open.
 
 ## Stage operations
 
-The commands below apply to one explicit Unit of Work and one Construction stage. They use the Standard workflow order where that workflow is selected. Construction owns transitions. Standard selects the sequence. Exact stage selectors and active-workflow selection stay open.
+The commands below apply to one explicit Unit of Work and one Construction stage. They use the Standard workflow order where that workflow is selected. Construction owns transitions. Standard selects the sequence.
+
+Use `--unit <unit-id>` and `--stage <stage>` under the accepted [scope selectors](#scope-and-selectors). Mutations of an existing stage attempt also use `--attempt <attempt-id>`. Active-workflow selection stays open.
 
 | Operation | Proposed contract |
 | --- | --- |
@@ -252,7 +278,7 @@ The detailed guards, status vocabulary, event payloads, and recovery of interrup
 
 ## Task operations
 
-Task operations identify a Unit of Work. An operation on one task also identifies its UUIDv4 task ID from `tasks-dag.json`. Task IDs identify authored tasks. They do not identify attempts. Use the [task graph contract](phases/construction/task-graph.md#task-identity) and [admission rules](runtime.md#task-admission-and-baselines).
+Task operations use `--unit <unit-id>`. An operation on one task also uses `--task <task-id>` from `tasks-dag.json`. Apply the accepted [scope selectors](#scope-and-selectors). Task IDs identify authored tasks, not attempts. Use the [task graph contract](phases/construction/task-graph.md#task-identity) and [admission rules](runtime.md#task-admission-and-baselines).
 
 | Operation | Proposed contract |
 | --- | --- |
@@ -268,11 +294,13 @@ Do not integrate a task until Code Validation succeeds and its independent non-a
 
 Successful acceptance is distinct from requester approval, whole-unit completion, review, or delivery. Do not add unrestricted `task complete`. Generic `activity complete` must not bypass Integration acceptance. The [Code Integration contract](phases/construction/activities/code-integration.md#integration-procedure) owns the check and acceptance rules.
 
-The task selectors, evidence inputs, lock implementation, and result schema stay open. The task's Activity attempts and evidence stay bound to their occurrences and enclosing Implementation attempt. A task does not have a separate attempt identity.
+Evidence inputs, lock implementation, and the result schema stay open. The task's Activity attempts and evidence stay bound to their occurrences and enclosing Implementation attempt. A task does not have a separate attempt identity.
 
 ## Activity operations
 
 Activities are fixed, task-scoped parts of the unit's Implementation stage: Code Generation, Code Validation, then Code Integration. They are not stages. Follow the [Construction Activity rules](phases/construction/activities/README.md#shared-execution-rules) and [attempt rules](runtime.md#activity-attempts).
+
+Use `--unit <unit-id>`, `--task <task-id>`, `--activity <activity>`, and `--implementation-attempt <attempt-id>` under the accepted [scope selectors](#scope-and-selectors). Mutations of an existing Activity attempt also use `--attempt <attempt-id>`.
 
 | Operation | Proposed contract |
 | --- | --- |
@@ -286,7 +314,7 @@ Code Generation owns implementation, typechecking, related tests, and self-revie
 
 A local correction, failed command, pause, resume, or new session keeps the current unended attempt. An authorized return creates a new Activity attempt when that Activity executes again. An Integration-only retry stays within its current Code Integration attempt. Do not add task-coding or protocol-run attempt identities.
 
-Exact Activity selectors, event payloads, completion guards, and evidence schemas stay open. An Activity completion does not complete the enclosing Implementation stage or Unit of Work.
+Event payloads, completion guards, and evidence schemas stay open. An Activity completion does not complete the enclosing Implementation stage or Unit of Work.
 
 ## Revision operation
 
@@ -333,11 +361,10 @@ The event write protocol, projection rebuild behavior, lock ownership and recove
 
 ## Open decisions
 
-Accepted command placements, structured-output default, typed lifecycle writes, and [project selection](#project-selection) stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, typed lifecycle writes, [project selection](#project-selection), and [scope selectors](#scope-and-selectors) stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH103 | Shared unit, stage, task, Activity, parent, and attempt selector grammar, including ownership-mismatch errors. Do not select an implicit active or latest scope. | Existing query and transition choices stay under SH53, SH54, and SH57-SH60. Keep the exact source selectors under SH101. |
 | SH104 | Common success-result fields and the distinction between operation success and workflow completion. | Keep the accepted structured-output default. Keep SH101's logical result requirements. |
 | SH105 | Typed error fields for causes, partial effects, uncertainty, and recovery. Never report false success. | Keep accepted failure behavior. SH61 sets a nonzero result for failure and identifies missing Git author keys. |
 | SH106 | Exit codes for success, failure, usage, unsupported input, and uncertain outcomes. | Keep the accepted nonzero-on-failure rule and SH61's nonzero missing-identity result. |

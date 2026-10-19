@@ -42,7 +42,7 @@ Include cumulative unit changes and relevant task contributions kept from earlie
 
 Each command must have its listed unit and source-attempt selectors. Task-scoped commands must also have the task ID and their Generation or Integration attempt selector. `--implementation-attempt` identifies the source Implementation context, not a consumer context. Each task ID is a UUIDv4 string. Use the existing implementation choice for attempt ID format.
 
-Validate unit, task, and source-attempt ownership. Do not infer a unit, task, attempt, or candidate. Do not accept an arbitrary range override. A Validation or Review attempt selector is not necessary merely to make its input package.
+Apply the accepted [scope selector rules](cli.md#scope-and-selectors) without replacing these source-specific selectors. Validate unit, task, and source-attempt ownership. Do not infer a unit, task, attempt, or candidate. Do not accept an arbitrary range override. A Validation or Review attempt selector is not necessary merely to make its input package.
 
 Apply the accepted [project selection rules](cli.md#project-selection) for `--project <path>` and its default. Necessary scope records must be available. Do not create a Unit of Work. Different worktree roots can refer to the same repository only when the recorded material and phase context agree.
 

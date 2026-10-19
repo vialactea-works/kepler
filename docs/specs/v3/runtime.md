@@ -382,7 +382,7 @@ Keep phase transition rules and event recording in their owning application oper
 
 The [CLI command reference](cli.md) records accepted command decisions and proposed operation contracts. It owns command organization and interface details. This infrastructure contract owns persistence and shared execution rules. Neither document sets CLI behavior.
 
-For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation.
+For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection.
 
 ### Current author
 
