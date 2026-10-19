@@ -20,7 +20,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Use descriptive root capabilities, such as `git`, `lint`, and `audit`. Do not add generic `util` or `commons` groups.
 - Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted. It does not accept other proposals in this draft.
 - Keep shared artifact checks under root `kepler lint`. Keep Construction task-graph checks under `kepler workflow construction lint`.
-- Record approvals, evidence, and interactions, and query history under `kepler audit`. The `record`, `list`, and `show` verb names stay proposed. Do not add separate Construction evidence, approval, or interaction namespaces.
+- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence recording interface](#kepler-audit-record-evidence) is accepted. Approval and interaction interfaces and the `list` and `show` verbs stay proposed. Do not add separate Construction evidence, approval, or interaction namespaces.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
 - Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Do not add effort commands. Keep the requester's effort authority and the agreed adjustment rules.
 - Use a direct `kepler workflow construction revise` operation. Do not add a revision namespace.
@@ -43,7 +43,7 @@ Construction owns its transition rules. A workflow selects stage order. The [Sta
 
 ## Proposed interface rules
 
-The command inventory below lists the proposed commands in this draft and the three `kepler git diff-package` commands. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
+The command inventory below lists proposed interfaces, the three `kepler git diff-package` commands, and `kepler audit record evidence`. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
 
 ### Scope and selectors
 
@@ -166,7 +166,8 @@ Any later human result mode must be opt-in.
 | `kepler git diff-package integration` | Accepted under `git` | Package a prepared combined candidate for Code Integration inspection. |
 | `kepler git diff-package unit-review` | Accepted under `git` | Package the complete unit's integrated changes for Review. |
 | `kepler lint` | Accepted root placement | Report shared artifact rule findings. |
-| `kepler audit record <kind>` | Proposed verb under accepted `audit` namespace | Record a typed audit fact. |
+| `kepler audit record evidence` | Accepted under `audit` | Record evidence from one typed JSON request on stdin. |
+| `kepler audit record <kind>` | Proposed approval and interaction interfaces | Record an approval or interaction fact. |
 | `kepler audit list` | Proposed verb under accepted `audit` namespace | Query audit history. |
 | `kepler audit show` | Proposed verb under accepted `audit` namespace | Read one audit record. |
 | `kepler workflow construction unit create` | Accepted placement | Create one Construction Unit of Work. |
@@ -178,9 +179,9 @@ Any later human result mode must be opt-in.
 | `kepler workflow construction activity <operation>` | Proposed group under accepted phase namespace | Control or read one task-scoped Activity attempt. |
 | `kepler workflow construction revise` | Accepted placement. Detailed operation proposed. | Apply an authorized unit-stage cascade or task-local Activity return. |
 
-Here, `<kind>` is `approval`, `evidence`, or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
+Here, `<kind>` is `approval` or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
 
-The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors). Other arguments and command-specific result fields stay open.
+The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors). The accepted [evidence interface](#kepler-audit-record-evidence) fixes its stdin request and success identity fields. Other operation arguments and result fields stay open where their contracts say so.
 
 ## Root capabilities
 
@@ -246,7 +247,45 @@ A record must name the affected phase and scope, and bind evidence or approval t
 
 Use this operation for facts that do not belong to another lifecycle transition. A command that starts, completes, pauses, resumes, admits, accepts, or revises work records its own lifecycle event. Do not issue a second audit write for that action.
 
-The authorization proof, actor fields, evidence DTOs, material selectors, and record schemas stay open. Do not invent an approval protocol or claim that a record alone completes a stage.
+Authorization proof and actor fields stay open under SH55-SH56. Detailed evidence request and record schemas stay under SH49. Reference encodings stay under SH51.
+
+The [evidence interface](#kepler-audit-record-evidence) is accepted under SH109. Approval and interaction interfaces stay under SH55-SH56. Do not invent an approval protocol or claim that a record alone completes a stage.
+
+### `kepler audit record evidence`
+
+**Accepted under [SH109](authoring_progress.md#completed-shared-decisions).** Use `kepler audit record evidence` with the accepted [scope selectors](#scope-and-selectors). Apply the accepted [project selection rules](#project-selection) to project-scoped records. Keep the applicable unit, task, stage or Activity, and attempt bindings.
+
+Read one typed JSON request object from stdin. Validate it against the owning phase and selected scope. Do not accept raw journal events.
+
+Use one `inputs` array for the checked material and other relevant inputs. Do not add a separate `material` field to this request. Each entry has `reference` and `purpose`. The reference identifies the input. The purpose explains how the check or review used it.
+
+For repository material, the references must identify the repository and exact checked commit. Keep the existing [evidence bindings](runtime.md#evidence-and-approval-bindings). The request structure does not select the stored evidence schema.
+
+This fragment shows only the accepted `inputs` structure, not a complete evidence request:
+
+```json
+{
+  "inputs": [
+    {
+      "reference": "<Code Generation result reference>",
+      "purpose": "Generated task material checked by the suite."
+    }
+  ]
+}
+```
+
+The operation records an existing check or review result. It does not run checks, grant approval, or complete workflow work. Keep the actual executor and supporting evidence under the existing binding rules.
+
+On successful recording, return `success` and exit `0`. Include the following required fields inside `data`:
+
+| Field | Successful recording result |
+| --- | --- |
+| `id` | The recorded event's ID. |
+| `journal_id` | The recorded event's originating journal ID. |
+
+Successfully recording a failed check does not make the check pass. Apply the existing [failure and recovery rules](#failure-and-recovery-rules).
+
+Other evidence request and record fields stay under SH49. Reference encodings stay under SH51. This decision does not accept the approval or interaction interfaces under SH55-SH56.
 
 ### `kepler audit list`
 
@@ -465,11 +504,10 @@ Forced termination can produce other exit codes or prevent a JSON response. A mi
 
 ## Open decisions
 
-Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence) also stays in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH109 | Typed evidence inputs and bindings for audit recording. | Reuse SH49-SH51 record and material choices, accepted SH52 evidence coverage, and SH55-SH56 approval and interaction interfaces. Do not add raw append. |
 | SH110 | Audit query selectors, filters, pagination, and local or causal ordering presentation. | Keep SH44's envelope, SH53's query interface, SH92-SH94 producer and causal-order rules, and no timestamp-derived global order. |
 | SH111 | Shared `kepler lint` input paths and complete read-only finding format. | Keep its accepted shared-metadata scope and the metadata validation rules in SH18, SH19, and SH21. Do not move task-graph checks to root lint. |
 | SH112 | Construction lint selectors, necessary context, validation coverage, and finding format. | Keep the accepted `kepler workflow construction lint` placement and task graph contract under IP26. Do not change the graph schema. |

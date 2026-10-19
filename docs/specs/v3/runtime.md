@@ -287,6 +287,8 @@ Each evidence record identifies:
 - The check or review performed, its result, and supporting output.
 - Relevant external conditions, such as the database version.
 
+The [evidence recording interface](cli.md#kepler-audit-record-evidence) uses one request `inputs` array for checked material and relevant inputs. Each entry has `reference` and `purpose`. This request structure does not select the stored evidence schema or change these binding requirements.
+
 An approval identifies the requester, applicable attempt, and material approved. Include the checkpoint and other material references that identify what the requester reviewed.
 
 The applicable contracts set the scope. The material covered is not limited to files changed by one worker.
@@ -376,7 +378,7 @@ Each stage and Activity owns its named evidence, covered material, and necessary
 
 ## CLI responsibilities
 
-Expose operations to read progress, change execution state, and record interactions and approvals. Also expose operations to manage pause and resume checkpoints and apply the shared [Revision procedure](revision.md#revision-procedure).
+Expose operations to read progress, change execution state, and record evidence, interactions, and approvals. Also expose operations to manage pause and resume checkpoints and apply the shared [Revision procedure](revision.md#revision-procedure).
 
 Keep phase transition rules and event recording in their owning application operations. The CLI invokes those operations. JSON journals keep the resulting facts. Get current state and query views from the journals. Skills must not add separate event or state writers.
 
@@ -385,6 +387,8 @@ The [CLI command reference](cli.md) records accepted command decisions and propo
 For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection.
 
 CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes), [output stream contract](cli.md#output-streams), and [MVP result formatting](cli.md#human-output). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
+
+Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Approval and interaction interfaces stay under SH55-SH56.
 
 ### Current author
 
