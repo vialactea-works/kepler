@@ -19,7 +19,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Use `kepler workflow <phase>` for phase-owned workflow operations. Construction commands belong under `kepler workflow construction`.
 - Use descriptive root capabilities, such as `git`, `lint`, and `audit`. Do not add generic `util` or `commons` groups.
 - Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted. It does not accept other proposals in this draft.
-- Keep shared artifact checks under root `kepler lint`. Keep Construction task-graph checks under `kepler workflow construction lint`.
+- Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Keep Construction task-graph checks under `kepler workflow construction lint`.
 - Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence recording interface](#kepler-audit-record-evidence) and [audit queries](#kepler-audit-list) are accepted. Approval and interaction interfaces stay proposed. Do not add separate Construction evidence, approval, or interaction namespaces.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
 - Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Do not add effort commands. Keep the requester's effort authority and the agreed adjustment rules.
@@ -43,7 +43,7 @@ Construction owns its transition rules. A workflow selects stage order. The [Sta
 
 ## Proposed interface rules
 
-The command inventory below lists proposed interfaces and accepted command interfaces. Accepted interfaces include three `kepler git diff-package` commands, evidence recording, and audit queries. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
+The command inventory below lists proposed interfaces and accepted command interfaces. Accepted interfaces include three `kepler git diff-package` commands, evidence recording, audit queries, and shared lint. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
 
 ### Scope and selectors
 
@@ -165,7 +165,7 @@ Any later human result mode must be opt-in.
 | `kepler git diff-package validation` | Accepted under `git` | Package a task's generated output for Code Validation. |
 | `kepler git diff-package integration` | Accepted under `git` | Package a prepared combined candidate for Code Integration inspection. |
 | `kepler git diff-package unit-review` | Accepted under `git` | Package the complete unit's integrated changes for Review. |
-| `kepler lint` | Accepted root placement | Report shared artifact rule findings. |
+| `kepler lint` | Accepted root interface | Validate shared Markdown metadata for explicit file paths. |
 | `kepler audit record evidence` | Accepted under `audit` | Record evidence from one typed JSON request on stdin. |
 | `kepler audit record <kind>` | Proposed approval and interaction interfaces | Record an approval or interaction fact. |
 | `kepler audit list` | Accepted under `audit` | Query compact audit-event projections with explicit field selection and pagination. |
@@ -233,7 +233,30 @@ On failure, return a structured error and nonzero status without a package-succe
 
 **Accepted scope.** Validate shared artifact rules only. Use the [metadata contract](metadata.md#field-validation) for common Markdown metadata. Do not run Construction task-graph validation here.
 
-**Proposed operation.** Read the selected shared artifacts and report findings. Do not repair content, add fields, generate identifiers, or change workflow state. The accepted scope does not set the path selector, non-Markdown artifact support, or the result schema.
+**Accepted under [SH111](authoring_progress.md#completed-shared-decisions).** Use the following interface:
+
+```text
+kepler lint <path>... [--project <path>]
+```
+
+For the MVP, require one or more explicit Markdown file paths. Resolve relative paths from the selected project root under the accepted [project selection rules](#project-selection).
+
+Do not scan directories implicitly or migrate data. Do not repair content, add fields, generate identifiers, or change workflow state. Do not write events or audit records.
+
+Report findings from the selected files. Each finding has the following required fields:
+
+| Field | Type | Finding contract |
+| --- | --- | --- |
+| `path` | String | Identifies the selected artifact file. |
+| `field` | String or `null` | Metadata field concerned. Use `null` for a file-level problem. |
+| `code` | String | Stable validation error identifier. |
+| `message` | String | Explanation of the problem. |
+
+Return diagnostics, not complete file contents. Specific finding codes and message text are implementation choices.
+
+When the selected files satisfy the shared metadata rules, return `success` and exit `0`. Set `data.findings` to `[]`.
+
+On metadata validation failure, return `failed` and exit `1`. Put findings in `data.details.findings` under the accepted [failure result fields](#failure-and-recovery-rules). Keep the required `code`, `message`, `details`, and `recovery` fields. Other input and operation failures follow the existing [failure and recovery rules](#failure-and-recovery-rules).
 
 ## Audit operations
 
@@ -537,11 +560,10 @@ Forced termination can produce other exit codes or prevent a JSON response. A mi
 
 ## Open decisions
 
-Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence) and [audit queries](#kepler-audit-list) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence), [audit queries](#kepler-audit-list), and [shared lint interface](#kepler-lint) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH111 | Shared `kepler lint` input paths and complete read-only finding format. | Keep its accepted shared-metadata scope and the metadata validation rules in SH18, SH19, and SH21. Do not move task-graph checks to root lint. |
 | SH112 | Construction lint selectors, necessary context, validation coverage, and finding format. | Keep the accepted `kepler workflow construction lint` placement and task graph contract under IP26. Do not change the graph schema. |
 | SH113 | Arguments and result fields for the proposed root UUID operation. | Keep the accepted artifact UUID rules in SH13 and task UUID rules in IP22. Do not add a global allocation registry. |
 | SH114 | Setup inputs, compatible bundle selection, existing `--force` handling, result fields, and partial-write effects. | See the [installation contract draft](installation.md). Do not add force authority, automatic migration, or overwrite permission. |

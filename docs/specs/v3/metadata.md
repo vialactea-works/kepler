@@ -172,6 +172,8 @@ This restriction applies to field names. The shared [labels contract](#labels) a
 
 Validation is read-only. Report errors. Do not convert value types, generate missing IDs, or fill missing attribution. Keep invalid content for correction. Creation operations can populate fields explicitly. Validation must not fix them automatically.
 
+The [shared lint interface](cli.md#kepler-lint) sets explicit file inputs and diagnostic results. It does not change these validation rules.
+
 ### Extensions
 
 Stage-specific contracts can add fields. They must not redefine the common fields. Add these fields to the relevant artifact contracts later.
