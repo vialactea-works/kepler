@@ -172,7 +172,7 @@ Validate the records and causal material required by the receiving scope before 
 
 Incomplete, unsupported, or conflicting imports cannot show authoritative current state for scopes they may affect. Block affected state-dependent work until reconciliation shows that the required history is complete. If isolation is unproven, block the larger affected scope. Previously validated history does not prove that missing new control facts cannot change that scope.
 
-Collection and interrupted-import mechanics are still under SH46 and SH87. This rule adds no import command, storage transaction, or live synchronization protocol.
+Collection and interrupted-import mechanics remain implementation work under the accepted [coordination contract](../../runtime.md#short-scoped-coordination) and SH87. This rule adds no import command, storage transaction, or live synchronization protocol.
 
 ## Revision and retained-scope rules
 
@@ -218,7 +218,9 @@ Supported concurrent workspaces must share effective live coordination for the s
 
 ## Writes, partial effects, and safe resumption
 
-Validate scope, authority, current attempts, inputs, and revision state before effects. Retrying the same journal write keeps its existing domain IDs, event ID, and original bindings. For revisions, retain the authorizing event ID and `revision_id`. This does not define general idempotency or change how callers classify retries. Exact mechanisms are still SH46, SH64-SH67, and SH87 choices. Do not promise general exactly-once execution.
+Validate scope, authority, current attempts, inputs, and revision state before effects. Retrying the same journal write keeps its existing domain IDs, event ID, and original bindings. For revisions, retain the authorizing event ID and `revision_id`. This does not define general idempotency or change how callers classify retries.
+
+The shared [short scoped coordination contract](../../runtime.md#short-scoped-coordination) is accepted under SH46. Exact mechanisms remain under SH64-SH67 and SH87. Do not promise general exactly-once execution.
 
 Keep event-update coordination short and separate from the long unit Integration lock. Coordinate the final attempt guard with candidate acceptance and its recorded result. A concurrent revision must not let an ended worker accept a candidate. Do not hold project-wide coordination through checks.
 

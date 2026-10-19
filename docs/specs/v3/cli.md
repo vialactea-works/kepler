@@ -29,6 +29,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Do not add effort commands. Keep the requester's effort authority and the agreed adjustment rules.
 - Use a direct `kepler workflow construction revise` operation. Do not add a revision namespace.
 - Use typed, phase-validated operations to record events. Do not expose raw journal append.
+- Use one dedicated component for [short scoped coordination](runtime.md#short-scoped-coordination). Keep its coordination rules and diagnostics together.
 - Let each lifecycle operation record its own event. Do not ask a caller to issue a second audit write for that transition.
 - Distinguish command-operation success from workflow completion. A failed operation returns a nonzero status. A successful command does not imply that the whole workflow is complete.
 - On recovery, compare actual effects with the recorded state, keep attempt history, and avoid duplicate acceptance. Do not claim success for an interrupted or uncertain operation.
@@ -624,6 +625,6 @@ Accepted command placements, structured-output default, and typed lifecycle writ
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-Other shared runtime and Construction implementation choices stay under SH46, SH51, SH62-SH67, SH69-SH70, SH72, SH84-SH85, SH87, DF14-DF17, and existing SH53-SH60. The [Mission contract](mission.md) settles SH45 storage paths, SH68 workspace policy, and SH86 retained-evidence locations. Remaining choices include journal writes, projections, attempts, locks, workspace allocation, effort changes, task and Activity guards, and recovery. Exact actor and authorization fields stay open under SH55-SH56. Do not invent approval proof or interaction protocols.
+Other shared runtime and Construction implementation choices stay under SH51, SH62-SH67, SH69-SH70, SH72, SH84-SH85, SH87, DF14-DF17, and existing SH53-SH60. The [Mission contract](mission.md) settles SH45 storage paths, SH68 workspace policy, and SH86 retained-evidence locations. Remaining choices include journal writes, projections, attempts, locks, workspace allocation, effort changes, task and Activity guards, and recovery. Exact actor and authorization fields stay open under SH55-SH56. Do not invent approval proof or interaction protocols.
 
 Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. This CLI draft does not accept other proposals in those contracts.

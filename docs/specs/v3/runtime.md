@@ -343,6 +343,18 @@ Construction's [integration lock](phases/construction/README.md#integration-orde
 
 Use the [Mission contract](mission.md#workspace-selection-and-preparation) for startup workspace choices and isolation requirements. Detailed allocation mechanisms, branch layouts, and shared test-resource isolation stay implementation choices under SH66, SH69, and SH70.
 
+### Short scoped coordination
+
+Keep each journal single-writer. Independent writers append to separate journals without a shared append lock.
+
+Use short, scoped coordination when control operations can conflict. This includes concurrent starts for one scope, revision racing with acceptance, and overlapping ownership during recovery or handoff. Unrelated scopes continue.
+
+The CLI must have one dedicated application component for this coordination. Keep its coordination rules, diagnostics, and error reporting together. CLI-owned operations use this component instead of duplicating coordination logic. Phase-owned operations keep their transition, attempt, evidence, and approval rules.
+
+Scope coordination to the affected work. Do not add a global lock around every append or hold short coordination during long checks. Keep the existing unit Integration lock separate. Report coordination errors through existing CLI failure and diagnostic contracts.
+
+This settles coordination scope and component ownership, not the implementation mechanisms. Append and collection protocols remain implementation work. SH64-SH67 and SH87 still own lock, ownership, and recovery mechanisms.
+
 ### Task admission and baselines
 
 Admission is the start boundary for selecting a task's baseline.

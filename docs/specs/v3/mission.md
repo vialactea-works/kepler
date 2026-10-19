@@ -199,7 +199,7 @@ All supported concurrent participants must share effective coordination for reso
 
 A mission workspace does not force workers into one checkout. Isolate concurrent writers and interfering check resources. Keep Generation and independent Validation contexts separate.
 
-Keep event-write coordination short. Keep the existing long unit Integration lock through candidate preparation, required checks, and acceptance. Do not make either lock a global mission, project, or repository test gate.
+Use the shared [short scoped coordination contract](runtime.md#short-scoped-coordination). Keep the existing long unit Integration lock through candidate preparation, required checks, and acceptance. Do not make either lock a global mission, project, or repository test gate.
 
 Distinct units or missions that contend for an actual checkout or integration target must isolate or coordinate that resource. Unrelated scopes continue.
 

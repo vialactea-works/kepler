@@ -61,7 +61,7 @@ The release must keep separate non-author Code Validation and combined-candidate
 
 ## MVP decisions
 
-The accepted Construction policy decisions stay complete. No MVP release-scope decision remains open in this register. The 26 implementation choices and 14 deferred questions stay separate from requester policy approval.
+The accepted Construction policy decisions stay complete. No MVP release-scope decision remains open in this register. The 25 implementation choices and 14 deferred questions stay separate from requester policy approval.
 
 ### MVP release scope
 
@@ -77,7 +77,7 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 ## Review result
 
-The register contains 282 unique IDs. These include 241 completed decisions, no pending MVP release-scope decisions, and 26 MVP implementation choices. It also contains 14 deferred questions and 1 retired question.
+The register contains 282 unique IDs. These include 242 completed decisions, no pending MVP release-scope decisions, and 25 MVP implementation choices. It also contains 14 deferred questions and 1 retired question.
 
 The requester accepted 78 decisions for the Construction contracts: 16 for Planning, 24 for Implementation and Activity, 16 for Review, and 18 for Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately. This settlement keeps that historical 78-decision group unchanged.
 
@@ -156,6 +156,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH42 | Interrupted-work recovery | [Recovery](runtime.md#interrupted-work-recovery): resume from recorded progress after making sure it matches actual work. Keep unfinished work. Continue the same attempt only if it has not ended. |
 | SH43 | Execution-state representation | [Representation](runtime.md#execution-state-representation): derive execution state from phase-owned event journals without independently authoritative state files. Each phase owns its state model and projection schemas. Materialized views remain disposable. The [Mission contract](mission.md#durable-layout) selects no persisted views directory. |
 | SH44 | Audit event schema | [Event envelope](runtime.md#event-envelope-choices): all ten approved fields must be present. Use `[]` for no causal predecessors. Record RFC3339 UTC timestamps with `Z`. Exact types and the event catalog belong to implementation. |
+| SH46 | Event-write consistency | [Short scoped coordination](runtime.md#short-scoped-coordination): keep each journal single-writer and independent appends free of a shared append lock. A dedicated CLI application component owns short coordination rules and diagnostics for competing same-scope control operations and ownership changes. Keep phase rules and the long unit Integration lock separate. Append, collection, lock, and recovery mechanisms remain implementation work. |
 | SH47 | Attempt ID format | [Attempt identity](runtime.md#attempt-identity-and-active-scope): give each stage and Activity attempt a fresh full lowercase hyphenated UUIDv4 when execution starts. Mint each ID independently. Do not use counters or timestamp IDs, or add task-attempt or separate run-floor identities or an ID registry. Keep the existing pause, resume, correction, reexecution, one-active-scope, parent-binding, and run-floor rules. |
 | SH48 | Revision ID format | [Revision identity](runtime.md#revision-decisions): give each authorized revision a fresh full lowercase hyphenated UUIDv4 `revision_id`, distinct from event and attempt IDs. Related ending and reopening facts reference it. Keep `caused_by` for event IDs and preserve the authorizing event and revision IDs on transfer and same-write retry. Add no revision registry or second authority. |
 | SH49 | Evidence record format | [Evidence and approval bindings](runtime.md#evidence-and-approval-bindings): record an independent `data.evidence_id` UUIDv4, separate from event `id`. Phase-owned event data binds scope and attempts, one `inputs` array of `{reference,purpose}`, actual executor, check or review, result, retained output references, and relevant conditions. Use `event_version`. Detailed phase payload types remain implementation work. Reference encodings remain under SH51. This minimum requires no separate evidence document or registry. |
@@ -219,7 +220,6 @@ The implementation must include typechecking, project-build, and full-suite comm
 
 | ID | Implementation choice | Work to resolve during implementation |
 | --- | --- | --- |
-| SH46 | Event-write consistency | How do event appends and journal reconciliation keep phase-owned histories valid within the accepted mission storage layout? See [runtime decisions](runtime.md#decisions-still-required) and the [Mission contract](mission.md#journals-and-authority). |
 | SH51 | Material reference format | How do records identify a selected repository and external material while keeping local references within their declared repository roots? See [material references](runtime.md#material-references). |
 | SH53 | Progress query interface | What commands and arguments read mission-aware progress and report known unbound units without hiding them? See [CLI responsibilities](runtime.md#cli-responsibilities). |
 | SH54 | State transition interface | What commands, mission selection syntax, validation, and authority checks govern mission-scoped transitions? See [CLI responsibilities](runtime.md#cli-responsibilities) and the [Mission contract](mission.md#implementation-boundaries). |
