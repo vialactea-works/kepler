@@ -167,7 +167,7 @@ Resume from CLI-recorded progress after making sure that the actual work and evi
 
 Use the existing [revision procedure](revision.md#revision-procedure) when upstream contracts are invalid. Independent work can continue while its inputs and contracts stay valid.
 
-This rule gives no lock recovery rules or repair rules for interrupted state writes.
+This rule does not set lock recovery or repair rules for interrupted state writes.
 
 ### Revision decisions
 
@@ -362,7 +362,7 @@ Construction's [Code Integration Activity](phases/construction/activities/code-i
 
 Record actual Integration inputs separately from the fixed admission baseline. Successful acceptance and the applicable completion conditions are necessary for task completion.
 
-Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phases/construction/README.md#agreed-boundaries) gives these duties. Integration checks do not replace them. A build result counts as typechecking only when the command also does the necessary typechecking. Separate decisions are necessary for additional integration checks and project-specific check configuration.
+Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phases/construction/README.md#agreed-boundaries) gives these duties. Integration checks do not replace them. A build result counts as typechecking only when its command also runs the necessary typechecking. Separate decisions are necessary for additional integration checks and project-specific check configuration.
 
 A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator. Integration does not authorize a cascade.
 

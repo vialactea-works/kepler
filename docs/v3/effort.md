@@ -49,15 +49,15 @@ These are possible selections, not necessary settings for walking skeletons. Sma
 
 ## Required documents and supporting detail
 
-Required Unit of Work documents live directly under `.kepler/units-of-work/<unit-id>/`. Each required document has a set of required sections.
+Required Unit of Work documents live directly under `.kepler/units-of-work/<unit-id>/`. Each required document has required sections.
 
-Each required section contains the essential information necessary to understand and use its contract. A section can link to a supporting file for additional detail. The section must identify what that file explains.
+Each required section contains the information necessary to understand and use its contract. A section can link to a supporting file for additional detail. The section must identify what that file explains.
 
 Supporting files live under `.kepler/units-of-work/<unit-id>/details/`. Use a stage subdirectory for stage-specific detail. Functional Design uses `details/functional-design/`.
 
 Use supporting files instead of optional inline sections. Create a supporting file only when its content is useful. Do not create empty files or links to files that do not exist.
 
-A supporting file is optional to create. Its location does not make an approved requirement optional.
+A supporting file is optional. Its location does not make an approved requirement optional.
 
 ## Content rules
 

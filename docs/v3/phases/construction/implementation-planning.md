@@ -10,7 +10,7 @@ The requester accepted this complete Implementation Planning contract. It states
 
 Select a technical solution that satisfies the unit's functional design and quality requirements. Divide the work into tasks with explicit outcomes, dependencies, and verification obligations.
 
-Give Implementation enough information to do the work for the unit and make sure that its result meets the requirements. State material requirements and technical decisions so workers do not have to guess.
+Give Implementation sufficient information to do the work for the unit and make sure that its result meets the requirements. State material requirements and technical decisions so workers do not have to guess.
 
 ## Inputs
 

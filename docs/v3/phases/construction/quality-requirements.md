@@ -10,7 +10,7 @@ This acceptance does not approve a particular Unit of Work or show that implemen
 
 ## Goal
 
-State the quality targets and constraints that apply to one Unit of Work. Give Implementation Planning enough information to select a technical solution and make sure it meets material quality conditions.
+State the quality targets and constraints that apply to one Unit of Work. Give Implementation Planning sufficient information to select a technical solution and make sure it meets material quality conditions.
 
 Describe required outcomes and conditions. Do not select the technical solution that must satisfy them.
 
@@ -220,7 +220,7 @@ The stage is complete when:
 
 - `quality.md` exists at the unit root and satisfies its required content and the shared metadata contract.
 - Applicable quality requirements have explicit scope, relevant conditions, and objective acceptance conditions.
-- State which categories apply without inventing requirements or ignoring relevant obligations.
+- The document states whether each category applies without inventing requirements or ignoring relevant obligations.
 - Requirements and constraints are consistent with the accepted functional design and relevant context.
 - No unresolved question leaves a material quality target or trade-off to the implementer.
 - Relevant supporting files exist and are linked from their required sections.

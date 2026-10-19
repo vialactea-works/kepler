@@ -79,7 +79,7 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 The register contains 278 unique IDs. These include 214 completed decisions, 1 pending MVP release-scope decision, and 48 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision.
 
-The requester accepted 78 decisions with the Construction contracts: 16 Planning, 24 Implementation and Activity, 16 Review, and 18 Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately.
+The requester accepted 78 decisions for the Construction contracts: 16 for Planning, 24 for Implementation and Activity, 16 for Review, and 18 for Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately.
 
 SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
 

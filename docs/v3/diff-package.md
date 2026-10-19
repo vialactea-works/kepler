@@ -12,7 +12,7 @@ The `kepler git diff-package` command family has three fixed inspection scopes: 
 
 ## Scope and source bindings
 
-Construction reads its phase-owned records to get source bindings. The Git capability renders the resolved checkpoints. It does not own Construction transitions. Do not infer sources from `.base`, Markdown checkboxes, an implicit current unit, a guessed `HEAD`, or authored task-graph fields. Get necessary bindings and commit IDs once. Use those fixed bindings for the manifest, path list, statistics, patch, and fingerprint.
+Construction reads its phase-owned records to get source bindings. The Git capability renders the resolved checkpoints. It does not own Construction transitions. Do not infer sources from `.base`, Markdown checkboxes, an implicit current unit, a guessed `HEAD`, or authored task-graph fields. Resolve necessary bindings and commit IDs once. Use those fixed bindings for the manifest, path list, statistics, patch, and fingerprint.
 
 | Inspection scope | Comparison | Required context |
 | --- | --- | --- |

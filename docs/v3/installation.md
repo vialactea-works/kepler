@@ -78,7 +78,7 @@ Keep settings, project data, unsupported history, and user-modified resources. A
 
 Existing `--force` behavior stays open under SH114. This draft grants no force-based permission to replace user data.
 
-A successful setup result identifies resources and their generation from component checks. It does not claim that unchecked skills or hosts are ready. Component records can report an incomplete installation. Claim that a generation is complete and workflow-ready only when checks report that all necessary components are ready.
+A successful setup result identifies each resource and its generation based on component checks. It does not claim that unchecked skills or hosts are ready. Component records can report an incomplete installation. Claim that a generation is complete and workflow-ready only when checks report that all necessary components are ready.
 
 On failure, keep the prior usable generation and report actual partial effects. Remove only temporary or partial resources that the failed operation can identify as its own. Do not delete uncertain data or perform automatic repair or migration.
 
@@ -113,7 +113,7 @@ Start with a clear unit request. Select or create the unit through its existing 
 
 Setup neither selects the workflow nor launches an agent. Stage start records execution state without automatic dispatch. `kepler-orchestrate` owns Implementation and Code Integration responsibilities. Other entry skills keep their own scopes. Read and write execution facts through CLI-owned operations, never by editing journals or projections.
 
-Resume from the explicit project, unit, current history, material, and safe worker-shutdown facts. Keep an unended attempt's identity when its inputs stay valid. Copying installation records or journals restores no live lock. Apply [Construction recovery](phases/construction/runtime.md#writes-partial-effects-and-safe-resumption).
+Resume from the explicit project, unit, current history, material, and safe worker-shutdown facts. Keep an unended attempt's identity when its inputs stay valid. Copying installation records or journals does not restore a live lock. Apply [Construction recovery](phases/construction/runtime.md#writes-partial-effects-and-safe-resumption).
 
 ## Upgrade and legacy behavior
 

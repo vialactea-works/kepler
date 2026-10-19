@@ -8,7 +8,7 @@
 
 State the purpose, scope, required functional behavior, contracts, and functional model of one Unit of Work. Record the decisions that explain the design.
 
-The result must give later stages enough information to plan and do the work, and make sure that the required behavior meets its conditions.
+The result must give later stages sufficient information to plan and do the work, and make sure that the required behavior meets its conditions.
 
 ## Inputs
 
@@ -27,7 +27,7 @@ Project references supply shared application context. Investigate missing or out
 Start Functional Design when:
 
 - The request identifies an intended outcome that can reasonably fit within one Unit of Work.
-- There is enough initial context to begin investigation and discussion.
+- There is sufficient initial context to begin investigation and discussion.
 - The requester can resolve consequential product and scope questions.
 
 Completed documents, a complete domain model, and an Inception handoff are not required before the stage starts. Functional Design writes or updates its inputs.
@@ -84,7 +84,7 @@ Make the Unit of Work definition when necessary. Keep and update an existing def
 
 Functional Design states the functional behavior, models, and contracts in `design.md`. Quality Requirements records quality targets and constraints in `quality.md` at the Unit of Work root. Implementation Planning selects the technical solution against both documents.
 
-Each required document will have a set of required sections. Each section must contain the essential information needed to understand and use its contract.
+Each required document has required sections. Each section must contain sufficient information to understand and use its contract.
 
 A required section can link to supporting files for additional detail. It must identify what each linked file explains. Use these files instead of optional inline sections.
 
@@ -149,7 +149,7 @@ Apply the shared [Effort definition](../../effort.md). Use the Unit of Work defa
 | Standard | Explain important functional decisions, interactions, and risks. Add focused supporting files when the required documents would become difficult to read. |
 | Comprehensive | Analyze complex models, alternatives, failure conditions, and interactions across boundaries in detail. Link supporting files from the relevant required sections. |
 
-Effort does not prescribe a file count or page length. Add diagrams, tables, or model descriptions only when they explain relevant information. Do not invent complexity to satisfy a effort level.
+Effort does not prescribe a file count or page length. Add diagrams, tables, or model descriptions only when they explain relevant information. Do not invent complexity to satisfy an effort level.
 
 ## Agent roles
 

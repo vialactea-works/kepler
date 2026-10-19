@@ -10,7 +10,7 @@ This approval concerns the specification. It does not authorize a release, publi
 
 ## Goal
 
-Complete the requested delivery outcome for the reviewed unit, using identified material and authorized operations. Do a check that the actual outcome occurred. Keep enough information for the recipient or operator.
+Complete the requested delivery outcome for the reviewed unit, using identified material and authorized operations. Do a check that the actual outcome occurred. Keep sufficient information for the recipient or operator.
 
 Delivery can end with a repository handoff, review request, published release, deployment, or another explicitly agreed outcome. These are examples, not mandatory modes or automatic operations.
 

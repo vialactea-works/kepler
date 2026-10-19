@@ -31,7 +31,7 @@ Start when:
 
 - Implementation is complete under its applicable contract for the current unit.
 - The integrated result, relevant upstream artifacts, and required execution evidence are identified and available.
-- Review scope and unit acceptance conditions are explicit enough for a whole-unit conclusion.
+- Review scope and unit acceptance conditions are explicit. They give sufficient detail for a whole-unit conclusion.
 
 Do not make delivery, publication, deployment, or requester acceptance a precondition for this review.
 

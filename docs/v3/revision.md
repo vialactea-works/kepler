@@ -55,7 +55,7 @@ A unit-wide upstream revision still applies the full unit-stage cascade. Constru
 
 ## Stage reopening questionnaires
 
-Each stage contract must give a reopening questionnaire. Its questions identify possible changes to that stage's contract or outputs, or findings that could invalidate its completion. This questionnaire gives stage-specific rules to the shared revision procedure. Do not write a separate revision procedure for each stage.
+Each stage contract must include a reopening questionnaire. Its questions identify possible changes to that stage's contract or outputs, or findings that could invalidate its completion. This questionnaire supplies stage-specific questions for the shared revision procedure. Do not write a separate revision procedure for each stage.
 
 Stage agents can give proposed answers and supporting evidence. The orchestrator uses the questionnaires in stage order to select the earliest affected stage. It investigates unclear answers or gets requester decisions before it selects the boundary.
 
