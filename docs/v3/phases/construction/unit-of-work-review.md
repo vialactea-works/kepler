@@ -78,7 +78,7 @@ The integrated implementation and upstream artifacts retain their existing owner
 
 Successful task checks are relevant evidence, not automatic proof of every unit acceptance condition. Determine which obligations they cover and identify gaps.
 
-Assess the final integrated material, not only isolated worker branches or changed files. Use relevant unchanged behavior and configuration when they affect the outcome.
+Assess the final integrated material, not only isolated worker branches or changed files. Use relevant unchanged behavior and configuration when they affect the outcome. The [Unit of Work Review package](../../diff-package.md#unit-of-work-review) covers the range from the original unit checkpoint to the assessed final checkpoint. It does not limit review to changed lines. Review the complete outcome, current contracts, relevant unchanged behavior, and applicable evidence.
 
 This contract does not require an unconditional repeat of typechecking, the build, and the full suite in this stage. Their required Implementation results must remain applicable.
 
@@ -202,7 +202,7 @@ Publication, release, deployment, and completed delivery operations are not revi
 
 Additional check and review rows apply only when their stated conditions occur. These conditions do not make required unit coverage optional.
 
-Bind this stage's new assessment to its unit-scoped attempt, material, relevant inputs, result, and supporting output. Preserve originating bindings when referencing earlier evidence.
+Bind this stage's new assessment to its unit-scoped attempt, material, relevant inputs, result, and supporting output. Preserve originating bindings when referencing earlier evidence. The package selects Implementation material without requiring a completed Review. The actual Review result remains bound to this current Review attempt.
 
 Apply the shared [evidence and approval rules](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Create the output checkpoint before recording any required requester acceptance.
 

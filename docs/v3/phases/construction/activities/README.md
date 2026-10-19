@@ -32,6 +32,8 @@ No Activity Markdown document is required. Optional detail uses `details/code-ge
 
 Optional supporting Markdown uses the [metadata contract](../../../metadata.md) and `supporting-document` type. Assigned entry skills perform self-review; they do not write journals or projections directly. These contracts do not implement or adopt current skill implementations.
 
+Use the [Git diff-package reference](../../../diff-package.md) for optional, scope-bound inspection handoffs. Generation supplies its original attempt and output context. Validation can inspect that package without treating it as a check result. Integration uses its already-recorded preparation context. Packages add no Activity, named evidence, completion gate, or independent review step.
+
 ## Review, correction, and recovery
 
 Required Code Validation and Unit of Work Review are separate from additional review. Additional review occurs only when the requester asks for it.

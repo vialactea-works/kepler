@@ -273,4 +273,6 @@ Identify the unit directory, current upstream artifacts, final integrated checkp
 
 Supply coverage information, integration provenance, relevant environments, resolved findings, and any nonblocking limitations. Explain how the result meets task obligations without claiming whole-unit acceptance.
 
+For optional whole-unit inspection, the [Review package](../../diff-package.md#unit-of-work-review) starts at the original initial integration checkpoint. It ends at the final checkpoint identified by this Implementation attempt's completion assessment. Supply this assessment and the retained original checkpoint context in the Review handoff. Package availability does not require a completed Review or create a Review completion condition.
+
 Unit of Work Review evaluates the complete outcome. Successful task completion does not authorize delivery or waive that review.

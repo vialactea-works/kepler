@@ -65,4 +65,4 @@ The additional-review row is conditional on requester instruction. Preserve [evi
 
 Supply unit and task identities, current definition, fixed baseline, Generation attempt, and output checkpoint. Include upstream contracts, changed scope, check results, self-review evidence, execution conditions, and nonblocking limitations.
 
-The orchestrator passes the material and original evidence bindings to the separate Validation worker context.
+The orchestrator passes the material and original evidence bindings to the separate Validation worker context. For optional inspection, use the [Code Validation package](../../../diff-package.md#code-validation) with this Generation attempt, fixed baseline, and output checkpoint. Package generation is not a Generation completion gate and does not require an unstarted Validation attempt.

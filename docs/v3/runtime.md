@@ -271,6 +271,8 @@ A Git checkpoint identifies repository material. An evidence record can referenc
 
 A mutable URL or tag alone may not identify what was examined. Where necessary, retain the relevant content or reference an immutable version.
 
+A [Git diff package](diff-package.md) is a derived inspection input. It does not itself establish check success, approval, or workflow authority. It preserves original producer attempt and material bindings. A consuming check or review binds its result to its own current attempt. The package does not change lifecycle state.
+
 ### Evidence and approval bindings
 
 Each evidence record identifies:

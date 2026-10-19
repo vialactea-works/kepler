@@ -18,6 +18,7 @@ The following decisions are accepted. They do not accept every command detail in
 
 - Use `kepler workflow <phase>` for phase-owned workflow operations. Construction commands belong under `kepler workflow construction`.
 - Use descriptive root capabilities, such as `git`, `lint`, and `audit`. Do not add generic `util` or `commons` groups.
+- Use `kepler git diff-package` for the three source-scoped inspection packages defined in [diff-package](diff-package.md). This capability and its placement under `git` are accepted; it does not accept other proposals in this draft.
 - Keep shared artifact checks under root `kepler lint`. Keep Construction task-graph checks under `kepler workflow construction lint`.
 - Record approvals, evidence, and interactions, and query history under `kepler audit`. The `record`, `list`, and `show` verb names remain proposed. Do not add separate Construction evidence, approval, or interaction namespaces.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
@@ -35,13 +36,13 @@ Construction owns its transition rules. A workflow selects stage order. The [Sta
 
 ## Proposed interface rules
 
-The command inventory below is the complete proposed inventory for this draft. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
+The command inventory below lists the proposed commands in this draft and the separately defined `kepler git diff-package` family. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
 
 ### Scope and selectors
 
 Every command that reads or changes unit state must identify its scope. A task operation must identify its Unit of Work and task. An Activity operation must also identify the Activity occurrence and enclosing stage attempt. A mutation of an existing attempt must identify that attempt. Do not attach an earlier result to whichever attempt is current. Do not select an implicit active or most-recent unit.
 
-The placeholders `<unit-id>`, `<task-id>`, `<stage>`, and `<activity>` show the required scope. They do not define final argument syntax. Exact selectors, path rules, defaults, and quoting remain open.
+The placeholders `<unit-id>`, `<task-id>`, `<stage>`, and `<activity>` show the required scope. They do not define final argument syntax. Exact selectors, path rules, defaults, and quoting remain open for other commands. The [diff-package family](#kepler-git-diff-package) defines its exact selectors, path rules, and signatures below.
 
 The project root used by a command also needs a defined selector. If a command cannot resolve its project, it must fail. It must not run setup or silently create a project.
 
@@ -70,6 +71,9 @@ The exact human-output flag is unchosen. Help must use the same command definiti
 | `kepler setup` | Proposed retention of an existing command | Bootstrap the Kepler installation. |
 | `kepler uuid` | Proposed root command | Return one UUIDv4. |
 | `kepler git author` | Proposed command under accepted `git` namespace | Return the effective Git author identity. |
+| `kepler git diff-package validation` | Accepted under `git` | Package a task's generated output for Code Validation. |
+| `kepler git diff-package integration` | Accepted under `git` | Package a prepared combined candidate for Code Integration inspection. |
+| `kepler git diff-package unit-review` | Accepted under `git` | Package the complete unit's integrated changes for Review. |
 | `kepler lint` | Accepted root placement | Check shared artifact rules. |
 | `kepler audit record <kind>` | Proposed verb under accepted `audit` namespace | Record a typed audit fact. |
 | `kepler audit list` | Proposed verb under accepted `audit` namespace | Query audit history. |
@@ -112,6 +116,22 @@ Do not replace an artifact's original author during later edits.
 Callers must check identity before writing an artifact that requires `author`. Do not write incomplete author metadata or record successful creation or completion after this failure. The calling agent explains the problem and retries after the appropriate identity is configured. Preserve existing authors and continue unaffected work. Apply the [shared identity policy](metadata.md#missing-identity) and existing metadata validation rules.
 
 Exact error codes and response fields remain implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices). This accepted failure policy does not accept the remaining command proposal.
+
+### `kepler git diff-package`
+
+**Accepted capability and signatures.** Use exactly these three commands:
+
+```text
+kepler git diff-package validation --unit <unit-id> --task <task-id> --implementation-attempt <attempt-id> --generation-attempt <attempt-id> [--project <path>] [--out <path>]
+kepler git diff-package integration --unit <unit-id> --task <task-id> --implementation-attempt <attempt-id> --integration-attempt <attempt-id> [--project <path>] [--out <path>]
+kepler git diff-package unit-review --unit <unit-id> --implementation-attempt <attempt-id> [--project <path>] [--out <path>]
+```
+
+`--implementation-attempt` selects the source Implementation context, not a consumer attempt. Validate unit, task, and source-attempt ownership. Each task ID is a UUIDv4 string. Do not infer a unit, task, attempt, or candidate; do not accept arbitrary range overrides. Package generation does not require a new Validation or Review attempt.
+
+`--project` selects the Git project or worktree; otherwise discover it from the current directory. Fail if the root does not resolve to a Git project or worktree. Required records and Git objects must be available. Do not run setup or create units. `--out` selects a new file; resolve a relative path from the selected project root. Refuse to overwrite an existing file. Without `--out`, create a fresh local temporary package.
+
+Return structured output that identifies the scope, resolved source and material bindings, and output location. Include the complete package-content fingerprint and indicate whether the diff is empty. On failure, return a structured error and nonzero status without a package-success claim. Package creation does not modify tracked application content or Git metadata, journals, projections, or lifecycle state. It does not create attempts or commits, dispatch work, run checks, record approval, or accept a candidate. See [diff-package](diff-package.md) for scope, package content, attribution, and retention requirements.
 
 ### `kepler lint`
 
@@ -303,8 +323,8 @@ The event write protocol, projection rebuild behavior, lock ownership and recove
 
 The following details remain open. This draft does not resolve them:
 
-- Exact arguments, selectors, path handling, project-root resolution, and response schemas for every command.
-- The common result and error envelopes, exit-code map, output stream placement, and any explicit human-output flag.
+- Exact arguments, selectors, path handling, and project-root resolution for commands outside the defined `kepler git diff-package` family. That family fixes these rules and its logical output requirements in [diff-package](diff-package.md). Response schemas remain implementation choices.
+- The common result and error envelopes, exit-code map, output stream placement, and any explicit human-output flag. The diff-package family has logical result requirements but does not define a new common envelope.
 - The full acceptance of the Unit of Work create contract, including strict slug characters, project selection, directory creation, persistence, concurrency, retries, and interrupted-write reconciliation.
 - The UUID command's arguments and response shape, and the current-author command's exact response fields and error codes. Validation details for other invalid identity values must follow the existing metadata contract. Missing or blank identity behavior is accepted under [SH61](authoring_progress.md#completed-shared-decisions).
 - Event payload schemas, operation identifiers, append and collection protocols, projections, and recovery after partial writes. Portability policy is accepted under [SH74](runtime.md#record-portability); exact storage and transfer mechanics remain implementation work.

@@ -122,6 +122,8 @@ For unit-scoped Implementation, this skill must:
 
 For the [Code Integration Activity](phases/construction/activities/code-integration.md#roles-and-skills), the skill reads the current unit checkpoint after acquiring the lock. It prepares the combined candidate and runs required checks under the lock. It presents only checked bytes for authorized acceptance. It records actual Integration inputs separately from admission baselines. It self-checks evidence and releases the lock before a return to Code Generation.
 
+The skill can prepare source-bound diff packages for Validation, Integration, and whole-unit inspection from their existing recorded material. It preserves original source bindings. Packages are inspection inputs; they do not establish check success or lifecycle authority. See [Git diff packages](diff-package.md).
+
 These are separate stage and Activity scopes with distinct attempts. The skill does not create a task-coding attempt, expose a worker-topology selector, or grant publication authority.
 
 ## kepler-code
@@ -136,8 +138,9 @@ This entry skill must:
 - Run typechecking and modification-related tests against identified output material.
 - Perform self-review, correct local defects, and record Generation evidence through CLI-owned operations.
 - Report upstream findings and hand off checked task material to Code Validation.
+- Supply the original Generation attempt and output bindings needed for an optional [Code Validation package](diff-package.md#code-validation).
 
-This procedure does not approve upstream changes, bypass Validation, or complete a task before integration.
+This procedure does not approve upstream changes, bypass Validation, or complete a task before integration. Package generation is not an additional Generation completion gate.
 
 ## kepler-code-feedback
 
@@ -151,6 +154,7 @@ This entry skill must:
 - Identify blocking findings, missing proof, uncertainty, and proposed correction boundaries.
 - Self-check the assessment and record validation evidence through CLI-owned operations.
 - Hand off successful Validation to Code Integration without treating it as combined-result acceptance.
+- When using the optional [Code Validation package](diff-package.md#code-validation), inspect its source-bound task material. Bind check and feedback results to the current Validation attempt.
 
 Independent feedback remains required. This responsibility does not import legacy review artifacts or grant authority to reopen stages.
 
@@ -166,6 +170,7 @@ This entry skill must:
 - Report concrete findings and proposed revision boundaries to the orchestrator.
 - Self-check review coverage and report blocking findings to the orchestrator. Record review evidence through CLI-owned operations.
 - Obtain any applicable requester acceptance and hand off the reviewed result to Deliver.
+- When using the [Unit of Work Review package](diff-package.md#unit-of-work-review), inspect its complete integrated range. Also inspect relevant unchanged behavior. Bind the assessment to the current Review attempt.
 
 This procedure does not automatically rerun all application checks, create external review requests, or authorize delivery operations.
 

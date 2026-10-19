@@ -24,6 +24,8 @@ Earlier Activities can establish initial application and verification infrastruc
 
 Hold the lock through reading current state, preparation, checks, and acceptance. All changes to that unit's integrated state must respect this lock. Same-unit Integration checks are serialized; other permitted task Activities and units continue.
 
+For optional inspection, use the [Code Integration package](../../../diff-package.md#code-integration) with the owning operation's recorded checkpoint and prepared candidate. Package rendering consumes those recorded bindings. It does not acquire or manage the lock, prepare or accept a candidate, or add an independent review step.
+
 A build proves typechecking only when it performs that check. Additional project obligations remain binding. Check configuration, physical lock implementation, ownership records, and interrupted-lock recovery remain implementation work.
 
 Keep the admission baseline fixed despite later integrations. Do not add global `HEAD`, shared admission-commit, clean-workspace, or completed-batch gates.

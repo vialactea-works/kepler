@@ -12,6 +12,8 @@ The specification is under development. A draft contract records a proposal for 
 
 [CLI commands and contracts](cli.md) records accepted CLI decisions, proposed command contracts, and open interface details.
 
+[Git diff packages](diff-package.md) defines generated inspection material for three existing Construction scopes. It is a Git capability, not a new workflow milestone.
+
 The version 2 reference remains a separate document set. Its contracts do not automatically apply to version 3.
 
 ## Phase organization
