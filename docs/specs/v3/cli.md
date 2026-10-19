@@ -35,6 +35,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Use the shared [scope selectors](#scope-and-selectors) for unit, stage, task, Activity, and attempt identities.
 - Use the shared [result envelope](#machine-readable-output) with required `status` and `data` fields.
 - Use the shared [failure result fields](#failure-and-recovery-rules) when `status` is `failed`.
+- Use the shared [exit-code contract](#exit-codes) for CLI-controlled results.
 
 Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP order. Stage-specific policies stay proposals where their owning contracts say so.
 
@@ -69,7 +70,7 @@ Validate all selected scope and ownership relationships. Return a structured err
 
 Keep the accepted [diff-package source selectors and signatures](#kepler-git-diff-package) unchanged. Their `--generation-attempt` and `--integration-attempt` selectors identify source attempts, not consumer attempts.
 
-Attempt ID formats stay under SH47. Other query and operation interfaces stay under SH53, SH54, and SH57-SH60. Error fields and exact exit codes stay under SH105 and SH106. Other operation-specific arguments, input-path rules, and quoting stay open.
+Attempt ID formats stay under SH47. Other query and operation interfaces stay under SH53, SH54, and SH57-SH60. Use the accepted [failure result fields](#failure-and-recovery-rules) and [exit-code contract](#exit-codes). Other operation-specific arguments, input-path rules, and quoting stay open.
 
 ### Project selection
 
@@ -79,7 +80,7 @@ Resolve a relative `--project` path from the working directory at command invoca
 
 The selected directory must be a Git working-tree root with an existing local `.kepler/` directory. Use Git to validate the root. Accept linked worktrees whose `.git` entry is a file. Reject bare repositories and paths inside a worktree that are not its root.
 
-If either condition fails, return a structured error and a nonzero exit status. Do not run setup, initialize a Git repository, or create `.kepler/` during project resolution. Error fields and exact exit codes stay under SH105 and SH106.
+If either condition fails, return a structured error and a nonzero exit status. Do not run setup, initialize a Git repository, or create `.kepler/` during project resolution. Use the accepted [failure result fields](#failure-and-recovery-rules) and [exit-code contract](#exit-codes).
 
 These requirements also apply to `unit create`. Prepare `.kepler/` explicitly before creating the first unit. Completed Initialization is not a prerequisite.
 
@@ -109,7 +110,7 @@ These values describe the command operation. A query can succeed and report an i
 
 Use `{}` when the command has no result fields. Put collection results inside `data`. Success fields, error-code values, and `details` schemas stay command-specific.
 
-Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Exit codes, stdout/stderr placement, and optional human rendering stay under SH106-SH108. A failed operation still returns a nonzero exit status.
+Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Apply the accepted [exit-code contract](#exit-codes). Stdout/stderr placement and optional human rendering stay under SH107-SH108. A failed operation still returns a nonzero exit status.
 
 The following example shows proposed unit-creation fields inside `data`. These fields are not an accepted command-specific schema.
 
@@ -416,13 +417,27 @@ These rules apply to the proposed command contracts. They do not select a storag
 
 The event write protocol, projection rebuild behavior, lock ownership and recovery, and physical storage stay implementation decisions under [CLI infrastructure](runtime.md#execution-state-representation).
 
+### Exit codes
+
+**Accepted under [SH106](authoring_progress.md#completed-shared-decisions).** For CLI-controlled results, use the following exit codes:
+
+| Exit code | Result status |
+| --- | --- |
+| `0` | `success` |
+| `1` | `failed` |
+
+Return `1` for invalid arguments, validation failures, unsupported input, operation failures, and uncertain outcomes. Identify the cause in `data.code` and `data.details`.
+
+These codes describe the command operation. A successful query can exit `0` while reporting an incomplete stage.
+
+Forced termination can produce other exit codes or prevent a JSON response. A missing response does not prove success. Apply existing recovery rules.
+
 ## Open decisions
 
-Accepted command placements, structured-output default, typed lifecycle writes, [project selection](#project-selection), [scope selectors](#scope-and-selectors), the [result envelope](#machine-readable-output), and [failure result fields](#failure-and-recovery-rules) stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), and [exit-code contract](#exit-codes) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH106 | Exit codes for success, failure, usage, unsupported input, and uncertain outcomes. | Keep the accepted nonzero-on-failure rule and SH61's nonzero missing-identity result. |
 | SH107 | Separation of stdout and stderr and one machine-readable result without mixed prose. | Keep structured machine-readable output by default. Do not add progress prose to it. |
 | SH108 | Whether to offer optional human rendering and how to select it. | Structured machine-readable output stays the default. This row does not add a human-output feature. |
 | SH109 | Typed evidence inputs and bindings for audit recording. | Reuse SH49-SH51 record and material choices, accepted SH52 evidence coverage, and SH55-SH56 approval and interaction interfaces. Do not add raw append. |
