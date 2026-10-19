@@ -59,7 +59,7 @@ The release must keep separate non-author Code Validation and combined-candidate
 
 ## MVP decisions
 
-The accepted Construction policy decisions stay complete. One release-scope decision, SH116, stays open: the certified host and platform combinations for the first Construction MVP. It does not reopen an accepted stage or Activity contract. The 43 implementation choices and 14 deferred questions stay separate from requester policy approval.
+The accepted Construction policy decisions stay complete. One release-scope decision, SH116, stays open: the certified host and platform combinations for the first Construction MVP. It does not reopen an accepted stage or Activity contract. The 42 implementation choices and 14 deferred questions stay separate from requester policy approval.
 
 ### Open MVP release-scope decision
 
@@ -77,11 +77,11 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 ## Review result
 
-The register contains 278 unique IDs. These include 219 completed decisions, 1 pending MVP release-scope decision, and 43 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision.
+The register contains 278 unique IDs. These include 220 completed decisions, 1 pending MVP release-scope decision, and 42 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision.
 
 The requester accepted 78 decisions for the Construction contracts: 16 for Planning, 24 for Implementation and Activity, 16 for Review, and 18 for Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately.
 
-SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. SH102-SH106 separately record accepted CLI project selection, scope selectors, the result envelope, failure fields, and exit codes. The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
+SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. SH102-SH107 separately record accepted CLI project selection, scope selectors, the result envelope, failure fields, exit codes, and output streams. The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
 
 ## Register rules
 
@@ -182,6 +182,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH104 | CLI success result envelope | Use the [result envelope](cli.md#machine-readable-output) with exactly two required fields: `status` and `data`. Use `success` or `failed` for `status`. Put command-specific fields inside the `data` JSON object. Operation success does not show workflow completion. Keep failure fields under SH105 and exits, streams, and human rendering under SH106-SH108. |
 | SH105 | CLI error result envelope | Use four required fields in failed `data`: `code`, `message`, `details`, and `recovery`. Keep error context and validation facts inside the `details` object. Do not add separate `scope` or `effects` fields or an effects classifier. Recovery guidance grants no authority. Apply existing recovery rules. [Failure result fields](cli.md#failure-and-recovery-rules). |
 | SH106 | CLI exit-code contract | Use [exit codes](cli.md#exit-codes) `0` for `success` and `1` for `failed` in CLI-controlled results. Put the cause in `data.code` and `data.details`. A successful query can report an incomplete stage. Forced termination is outside this mapping. A missing response does not prove success. Apply existing recovery rules. |
+| SH107 | CLI output stream contract | Use [output streams](cli.md#output-streams): one final JSON result and a newline on `stdout` for success and failure. Keep optional diagnostics and progress on `stderr` without another result envelope. Keep banners, logs, and child-process output off `stdout`. Callers use JSON and exit code, not diagnostic text, to identify outcomes. Forced termination can prevent a complete response. Human rendering stays under SH108. |
 
 ## MVP implementation choices
 
@@ -226,7 +227,6 @@ The implementation must include typechecking, project-build, and full-suite comm
 | DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF17 | Revision shutdown coordination | How is active implementation stopped during an authorized unit-wide revision? See [upstream revision](phases/construction/README.md#unit-wide-upstream-revision). |
-| SH107 | CLI output stream contract | Set stdout and stderr separation and one machine-readable result without mixed prose. See [CLI](cli.md#machine-readable-output). |
 | SH108 | CLI human output interface | Decide whether the MVP offers optional human rendering or a flag. Keep structured output as the default. Do not make a new human feature a condition for the MVP. See [CLI](cli.md#machine-readable-output). |
 | SH109 | CLI evidence recording interface | Set typed evidence inputs and bindings through audit. Do not add raw append. Approval and interaction interfaces stay under SH55 and SH56. See [CLI audit operations](cli.md#audit-operations). |
 | SH110 | CLI audit query interface | Set scoped record selectors, filters, pagination, and causal or local-sequence presentation. Do not infer global timestamp order. See [CLI audit operations](cli.md#audit-operations). |

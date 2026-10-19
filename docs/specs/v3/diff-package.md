@@ -68,7 +68,7 @@ Do not reject a valid unchanged checkpoint or empty diff. Do not create a commit
 
 The CLI returns structured output for success and failure. Success identifies the inspection scope, resolved source and material bindings, and output location. It also gives the complete package-content fingerprint and shows whether the diff is empty. These are logical result requirements. Return these values inside `data` under the accepted [CLI result envelope](cli.md#machine-readable-output).
 
-Use the accepted [failure result fields](cli.md#failure-and-recovery-rules) for errors. Apply the accepted [exit-code contract](cli.md#exit-codes). Command-specific success field names, error-code values, and `details` schemas stay implementation choices.
+Use the accepted [failure result fields](cli.md#failure-and-recovery-rules) for errors. Apply the accepted [exit-code contract](cli.md#exit-codes) and [output stream contract](cli.md#output-streams). Command-specific success field names, error-code values, and `details` schemas stay implementation choices.
 
 `--out <path>` selects a new output file. Resolve a relative path against the selected project root. Refuse to overwrite an existing file or modify tracked application content. Without `--out`, create a fresh local temporary package.
 

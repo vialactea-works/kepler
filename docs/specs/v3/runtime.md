@@ -384,7 +384,7 @@ The [CLI command reference](cli.md) records accepted command decisions and propo
 
 For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection.
 
-CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
+CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes) and [output stream contract](cli.md#output-streams). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
 
 ### Current author
 
