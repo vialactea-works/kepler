@@ -4,7 +4,7 @@
 
 This folder is the canonical source for the version 3 Kepler workflow. Use this specification to make skills, CLI features, templates, tests, and user documentation.
 
-The specification is under development. A draft contract records a proposal for discussion. Permission to save a draft does not mean approval of its contents.
+This reference contains accepted contracts and designs in progress. Each document states its status. An accepted contract does not show implementation or release.
 
 [Authoring progress](authoring_progress.md) lists the next decisions, shared open questions, and deferred work.
 
@@ -12,9 +12,11 @@ The specification is under development. A draft contract records a proposal for 
 
 [CLI commands and contracts](cli.md) records accepted CLI decisions, proposed command contracts, and open interface details.
 
+[Mission](mission.md) owns the accepted mission identity, record-home, workspace, storage, checkpoint, recovery, and pre-mission contracts.
+
 [Git diff packages](diff-package.md) sets rules for generated inspection material in three existing Construction scopes. It is a Git capability, not a new workflow milestone.
 
-The [Construction runtime draft](phases/construction/runtime.md) gives proposed Construction state and event details. It is not a new stage.
+The [Construction runtime draft](phases/construction/runtime.md) gives proposed Construction state and event details. The accepted [Mission contract](mission.md) owns mission and storage policy. Neither document adds a stage.
 
 The [installation contract](installation.md) contains accepted setup, intended-target, and resource-ownership rules under SH114, SH116, and SH117. Its installation-generation schema stays a proposal. Neither document shows implemented or released v3 behavior.
 
@@ -30,7 +32,7 @@ The version 2 reference stays in a separate document set. Its contracts do not a
 
 Each phase is a bounded context and owns its execution state model and projection schemas. Shared tracking rules do not impose a universal unit/task hierarchy.
 
-Project preparation belongs to Initialization, not Construction. A clear request can enter Construction without Inception.
+General project preparation belongs to Initialization, not Construction. Mission startup is separate and adds no stage. A clear request can enter Construction without Inception.
 
 The [Standard workflow](workflows/standard/README.md#stages) puts Implementation between Implementation Planning and Unit of Work Review. Construction sets that stage's [task execution rules](phases/construction/README.md#implementation). This unit-scoped stage contains task scopes that can run in parallel when their dependencies are satisfied. Each task follows the fixed [Activity](activity.md) sequence: Code Generation, Code Validation, then Code Integration. Dedicated [Code Generation](phases/construction/activities/code-generation.md), [Code Validation](phases/construction/activities/code-validation.md), and [Code Integration](phases/construction/activities/code-integration.md) contracts set those Activity rules. These execution relationships apply only to Construction.
 
@@ -53,13 +55,13 @@ Intent documents belong to Inception. Their structure and organization terms are
 | Construction Activities | [activities/](phases/construction/activities/README.md) within Construction. | Give compact contracts for Activities inside Implementation. |
 | Workflow composition | [workflows/standard/](workflows/standard/README.md) | Select stages and set their order and routing. |
 
-These locations organize the specification. They do not change generated unit paths or implement a workflow engine.
+These locations organize the specification. The [Mission contract](mission.md#durable-layout) sets mission-owned unit paths. This organization does not implement a workflow engine.
 
 ## Shared concepts
 
 A **workflow** selects a series of phase-owned stages. Its definition sets their order and routing. The selected stages keep their own contracts.
 
-A **Unit of Work** replaces the previous **change** concept. Construction operates on one Unit of Work. A Unit of Work can contain several implementation tasks. The shared [Unit of Work draft](unit-of-work.md) sets the acceptance boundary, decomposition procedure, and walking skeleton kind.
+A **Unit of Work** replaces the previous **change** concept. Standard has one Unit of Work per mission. A Unit of Work can contain several implementation tasks. The shared [Unit of Work draft](unit-of-work.md) sets its acceptance boundary, decomposition procedure, and walking skeleton kind.
 
 A **stage** sets a phase-owned responsibility that workflows can use. Its phase contract sets its execution scope. A skill gives a procedure that can help with that responsibility. Stage boundaries do not depend on skill names or packaging.
 
@@ -71,14 +73,14 @@ A **revision** returns work to the earliest affected stage and every downstream 
 
 ## Document scopes
 
-| Scope | Proposed project path | Responsibility |
+| Scope | Project path | Responsibility |
 | --- | --- | --- |
 | Project references | `.kepler/reference/` | Supply shared application context across Units of Work. This scope has a role similar to the AWS AI-DLC CodeKB. |
-| Unit of Work documents | `.kepler/units-of-work/<unit-id>/` | Describe the purpose, requirements, design, decisions, and evidence for one Unit of Work. |
+| Mission-owned Unit of Work documents | `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/` | Describe the purpose, requirements, design, decisions, and evidence for one Unit of Work. |
 
-Paths are relative to the project repository root. `<unit-id>` uses `YYYY-MM-DD-<slug>`, with the machine-local date when the CLI creates the unit. It is unique within the project and is the exact directory name. Use the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). The complete ID stays stable across stages, revisions, and retries.
+Paths are relative to the selected record-home working-tree root. `<unit-id>` uses `YYYY-MM-DD-<slug>`, with the machine-local date when the CLI creates the unit. It is unique within the record-home project and is the exact directory name. Use the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). The complete ID stays stable across stages, revisions, and retries.
 
-Required Unit of Work documents live directly under `.kepler/units-of-work/<unit-id>/`. Additional detail lives in linked files under `details/`. Stage-specific detail uses a stage subdirectory, such as `details/functional-design/`.
+Required Unit of Work documents live directly under the mission-owned unit root. Additional detail lives in linked files under `details/`. Stage-specific detail uses a stage subdirectory, such as `details/functional-design/`.
 
 For Functional Design, use `unit-of-work.md` and `design.md` at the Unit of Work root. Its [accepted artifact contract](phases/construction/functional-design.md#artifacts) gives the necessary sections. Quality Requirements uses a separate required `quality.md` at the same root. Its [accepted contract](phases/construction/quality-requirements.md) gives the stage and artifact requirements.
 
@@ -86,13 +88,13 @@ The accepted Implementation Planning contract has `plan.md` and `tasks-dag.json`
 
 The accepted [Implementation contract](phases/construction/implementation.md#artifacts-and-records) gives implementation outputs and scoped CLI-owned evidence, without a required execution Markdown document. The accepted [Review contract](phases/construction/unit-of-work-review.md#artifacts-and-records) gives review records without a required review Markdown document. The accepted [Deliver contract](phases/construction/deliver.md#artifacts) includes required unit-root `delivery.md` for authored instructions. Operation results and changing execution state stay separate CLI-owned records. These specifications do not show that version 3 is implemented.
 
-These paths do not migrate existing artifacts or change current CLI path rules.
+These paths do not migrate existing data. Mission creation and complete unit-creation syntax remain open under their interface decisions.
 
 Further decisions are necessary for the authority, internal file structure, and update rules for Project references. Keep the distinction between observed facts and proposed behavior explicit.
 
 ## Artifact metadata
 
-The shared [Artifact metadata contract](metadata.md) lists six common frontmatter fields: `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Author identity uses Git `user.name` and Git `user.email`.
+The shared [Artifact metadata contract](metadata.md) lists six common frontmatter fields: `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. `unit_id` is required for unit-owned artifacts and omitted from project-scoped artifacts. Mission identity stays in phase-owned journal payloads, not frontmatter. Author identity uses Git `user.name` and Git `user.email`.
 
 Optional [labels](metadata.md#labels) can classify each artifact. Canonical labels do not form a closed set. The requester can add labels. Omit the field when empty. Labels must not record execution state.
 
@@ -110,11 +112,11 @@ Agents and skills use CLI-owned operations. They do not edit journals or project
 
 The [evidence and checkpoint model](runtime.md#evidence-and-content-checkpoints) keeps attempt identity separate from commit identity. Each attempt has a distinct identity. Construction limits each unit/stage and fixed Activity occurrence to zero or one active attempt under the [attempt scope rules](runtime.md#attempt-identity-and-active-scope). Activity attempts link to their occurrence and enclosing stage attempt. Other phases set their own execution scopes.
 
-Material types are open-ended. Git checkpoints cover repository content. Other material uses appropriate references. Records bind checks and approvals to the material covered and its relevant inputs.
+Material types are open-ended. Each Git checkpoint is a commit in one repository. Multi-repository operations use repository-qualified checkpoint sets. Records bind checks and approvals to the covered material and relevant inputs. See the [Mission contract](mission.md#multi-repository-checkpoints-and-integration) for distinct checkpoint roles.
 
 The [run floor](runtime.md#run-floor) uses the applicable attempt identity, without a separate boundary inside the attempt.
 
-Under the [parallel execution rules](runtime.md#parallel-execution), dependency-ready tasks and independent units can progress concurrently. Task admission records the current unit integration commit with all required predecessor outputs. The admitted task then keeps its recorded baseline. A moving global coordinator `HEAD` or unrelated commit does not automatically invalidate its work.
+Under the [parallel execution rules](runtime.md#parallel-execution), dependency-ready tasks and independent units can progress concurrently. Task admission records the current repository-qualified unit integration set with all required predecessor outputs. The admitted task keeps that fixed baseline. A moving global coordinator `HEAD` or unrelated commit does not automatically invalidate its work.
 
 ## Effort
 

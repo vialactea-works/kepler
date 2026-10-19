@@ -65,7 +65,7 @@ Plan necessary implementation and verification work without claiming that it has
 
 ### Paths and organization
 
-Use the existing `.kepler/units-of-work/<unit-id>/` directory and shared [unit identity rules](../../unit-of-work.md#identity-and-directory).
+Use the mission-owned `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/` directory and shared [unit identity rules](../../unit-of-work.md#identity-and-directory). Paths are relative to the selected record-home working-tree root.
 
 | Artifact | Location | Responsibility |
 | --- | --- | --- |
@@ -80,13 +80,13 @@ Both planning outputs are required. This stage owns them and consumes upstream a
 
 The accepted task graph specification assigns task definitions, identities, and dependency edges to `tasks-dag.json`. `plan.md` records the technical solution, rationale, and verification strategy. Reference tasks by identity without keeping a second graph in Markdown.
 
-Use the [accepted task graph specification](task-graph.md) under [IP26](../../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. IP19 accepts this complete stage contract. IP26 separately accepts the graph format.
+Use the [accepted task graph specification](task-graph.md) under [IP26](../../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. Repository-local references follow the selected workspace binding and cannot escape their declared repository. IP19 accepts this complete stage contract. IP26 separately accepts the graph format.
 
 Keep one authoritative definition for each task and dependency. A diagram or generated view must not become a second authority. Keep references and explanations consistent across both artifacts. Link `tasks-dag.json` from `plan.md`.
 
 Keep essential information in the required sections. Link useful supporting files from those sections and explain their purpose. Do not create empty files or unexplained links.
 
-The requester selected these filenames under [DF04](../../authoring_progress.md#implementation-planning-decisions) and the planning artifact contract. This specification does not change current CLI paths or migrate artifacts.
+The requester selected these filenames under [DF04](../../authoring_progress.md#implementation-planning-decisions) and the planning artifact contract. The [Mission contract](../../mission.md#durable-layout) sets their mission-owned path. This specification does not migrate artifacts.
 
 ### Artifact metadata
 

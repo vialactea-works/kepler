@@ -86,7 +86,7 @@ The accepted [setup interface](cli.md#kepler-setup) under SH114 keeps its instal
 
 Apply the accepted [agent resource ownership](#agent-resource-ownership). Setup does not install native agent definitions or skills. It does not create units, prepare project markers, edit project files, dispatch workers, or apply workflow transitions.
 
-Use the existing XDG-based global home. Keep project artifacts and [Construction runtime data](phases/construction/runtime.md#journal-projection-and-live-coordination-proposal) under their own contracts.
+Use the existing XDG-based global home. Keep project artifacts and [mission runtime data](mission.md#local-storage-and-concurrency) under their own contracts.
 
 Keep settings, project data, unsupported history, and user-modified resources. An existing file is installer-managed only when a valid installation record identifies it and its recorded digest matches. Keep unknown or modified files. Report conflicts at necessary paths instead of silently overwriting or merging them.
 
@@ -138,15 +138,17 @@ Keep appropriate tests of executable CLI and Core behavior, including workflow o
 
 ## First use and resume
 
-Start affected execution only when compatible resources and necessary host capabilities are available. Use an explicit Git project and unit identity. Apply the accepted [project selection rules](cli.md#project-selection), including the existing local `.kepler/` directory. An empty application is valid. Completed Initialization and Inception are not prerequisites.
+Start affected execution only when compatible resources and necessary host capabilities are available. Use an explicit record-home project and unit identity. Apply the accepted [project selection rules](cli.md#project-selection), including the existing local `.kepler/` directory. An empty application is valid. Completed Initialization and Inception are not prerequisites.
+
+Apply the accepted [mission startup rules](mission.md#workspace-selection-and-preparation) before the first stage. Define the workspace and complete authorized preparation. Resolve the mission through explicit selection or unique recorded unit membership. Do not adopt unbound units implicitly.
 
 Start with a clear unit request. Select or create the unit through its existing CLI contract. Invoke the selected Standard stage's entry skill under its authority and completion rules. Use the [CLI grammar](cli.md). Unchosen selectors are proposals.
 
-Setup neither selects the workflow nor launches an agent. Unit creation records the accepted [Standard workflow binding](cli.md#workflow-binding). Later operations and resume use that binding.
+Setup neither selects the workflow nor launches an agent. Mission creation records the workflow binding. Unit creation records the matching [Standard workflow binding](cli.md#workflow-binding). Later operations and resume use the recorded binding.
 
 Stage start records execution state without automatic dispatch. `kepler-orchestrate` owns Implementation and Code Integration responsibilities. Other entry skills keep their own scopes. Read and write execution facts through CLI-owned operations, never by editing journals or projections.
 
-Resume from the explicit project, unit, current history, material, and safe worker-shutdown facts. Keep an unended attempt's identity when its inputs stay valid. Copying installation records or journals does not restore a live lock. Apply [Construction recovery](phases/construction/runtime.md#writes-partial-effects-and-safe-resumption).
+Resume from the explicit project, unit, current history, material, and safe worker-shutdown facts. Keep an unended attempt's identity when its inputs stay valid. Copying installation records or journals does not restore a live lock. Apply [mission recovery](mission.md#evidence-transfer-and-recovery) and the owning [Construction recovery rules](phases/construction/runtime.md#writes-partial-effects-and-safe-resumption).
 
 ## Upgrade and legacy behavior
 

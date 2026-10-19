@@ -8,7 +8,7 @@
 
 This document gives a human-readable draft of the Kepler v3 command line interface. It separates accepted policy from proposed command details. Saving this draft does not approve its proposals or add CLI behavior.
 
-The command placements marked **Accepted** follow the requester's decisions. The command names, arguments, output fields, and detailed operation rules marked **Proposed** are open for review. The [runtime contract](runtime.md) sets the agreed event and execution rules. This document does not replace those rules.
+The command placements marked **Accepted** follow the requester's decisions. The command names, arguments, output fields, and detailed operation rules marked **Proposed** are open for review. The [runtime contract](runtime.md) sets shared event and execution rules. The accepted [Mission contract](mission.md) sets mission policy, not command syntax. This document does not replace those rules.
 
 The current CLI does not have this v3 command tree. Its root has `setup` and `workbench` commands. The v3 `setup` contract keeps the installation role. It is not the Initialization phase. This reference does not remove or migrate existing commands.
 
@@ -22,7 +22,8 @@ The following decisions are accepted. They do not accept every command detail in
 - Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Use the accepted [Construction lint interface](#kepler-workflow-construction-lint) for task-graph checks.
 - Use the accepted [setup interface](#kepler-setup) for Kepler's bundled resources and default settings. Native hosts or skill managers own [agent resource installation](installation.md#agent-resource-ownership).
 - Use the accepted [UUID interface](#kepler-uuid) to generate one UUIDv4 without creating an artifact or task.
-- Apply the accepted [Standard workflow binding](#workflow-binding) to each Construction unit.
+- Apply the accepted [Standard workflow binding](#workflow-binding) to each Construction unit and its mission.
+- Apply the accepted [Mission contract](mission.md) for mission identity, record-home selection, workspace facts, membership, and pre-mission boundaries. Do not infer mission membership or add command options from that policy.
 - Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence recording interface](#kepler-audit-record-evidence) and [audit queries](#kepler-audit-list) are accepted. Approval and interaction interfaces stay proposed. Do not add separate Construction evidence, approval, or interaction namespaces.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
 - Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Do not add effort commands. Keep the requester's effort authority and the agreed adjustment rules.
@@ -73,6 +74,8 @@ Activity operations use `--unit`, `--task`, `--activity`, and `--implementation-
 
 Validate all selected scope and ownership relationships. Return a structured error and a nonzero exit status for a mismatch. Do not select another scope.
 
+Unit-based operations may resolve mission context only from unique recorded membership. Mission-aware queries must identify unbound units. Creation and selection syntax remains open under SH53, SH54, and SH59. This policy adds no `--mission` or `--repo` selector.
+
 Keep the accepted [diff-package source selectors and signatures](#kepler-git-diff-package) unchanged. Their `--generation-attempt` and `--integration-attempt` selectors identify source attempts, not consumer attempts.
 
 Attempt ID formats stay under SH47. Other query and operation interfaces stay under SH53, SH54, and SH57-SH60. Use the accepted [failure result fields](#failure-and-recovery-rules) and [exit-code contract](#exit-codes). Other operation-specific arguments, input-path rules, and quoting stay open.
@@ -85,9 +88,11 @@ Resolve a relative `--project` path from the working directory at command invoca
 
 The selected directory must be a Git working-tree root with an existing local `.kepler/` directory. Use Git to validate the root. Accept linked worktrees whose `.git` entry is a file. Reject bare repositories and paths inside a worktree that are not its root.
 
+For mission operations, `--project` selects the record-home working copy. Participating code repositories come from explicit workspace bindings. A secondary repository does not replace the record home.
+
 If either condition fails, return a structured error and a nonzero exit status. Do not run setup, initialize a Git repository, or create `.kepler/` during project resolution. Use the accepted [failure result fields](#failure-and-recovery-rules) and [exit-code contract](#exit-codes).
 
-These requirements also apply to `unit create`. Prepare `.kepler/` explicitly before creating the first unit. Completed Initialization is not a prerequisite.
+These requirements also apply to unit creation. Prepare `.kepler/` explicitly before creating the first unit. Completed Initialization is not a prerequisite. Project resolution does not create the marker or infer a mission.
 
 ### Machine-readable output
 
@@ -122,7 +127,7 @@ The following example shows proposed unit-creation fields inside `data`. These f
 ```json
 {
   "unit_id": "2026-10-18-order-cancellation",
-  "path": ".kepler/units-of-work/2026-10-18-order-cancellation/",
+  "path": ".kepler/missions/<mission-id>/construction/units-of-work/2026-10-18-order-cancellation/",
   "effort": "standard"
 }
 ```
@@ -255,6 +260,8 @@ kepler git diff-package unit-review --unit <unit-id> --implementation-attempt <a
 
 `--implementation-attempt` selects the source Implementation context, not a consumer attempt. Validate unit, task, and source-attempt ownership. Each task ID is a UUIDv4 string. Do not infer a unit, task, attempt, or candidate. Do not accept arbitrary range overrides. A new Validation or Review attempt is not necessary for package generation.
 
+Resolve repository-qualified checkpoint sets from the recorded workspace and source facts. Keep these signatures and selectors unchanged. Add no repository, batch, mission, or format option.
+
 Apply the accepted [project selection rules](#project-selection) for `--project` and its default. Necessary records and Git objects must be available. Do not create units.
 
 `--out` selects a new file. Resolve a relative path from the selected project root. Refuse to overwrite an existing file. Without `--out`, make a fresh local temporary package.
@@ -265,7 +272,7 @@ On failure, return a structured error and nonzero status without a package-succe
 
 ### `kepler lint`
 
-**Accepted scope.** Validate shared artifact rules only. Use the [metadata contract](metadata.md#field-validation) for common Markdown metadata. Do not run Construction task-graph validation here.
+**Accepted scope.** Validate shared artifact rules only. Use the [metadata contract](metadata.md#field-validation) for common Markdown metadata. Do not run Construction task-graph validation here. Explicit-file metadata lint does not require mission adoption.
 
 **Accepted under [SH111](authoring_progress.md#completed-shared-decisions).** Use the following interface:
 
@@ -395,7 +402,7 @@ Construction uses the [accepted Unit of Work identity rules](unit-of-work.md#ide
 
 ### Workflow binding
 
-**Accepted under [SH115](authoring_progress.md#completed-shared-decisions).** Bind `standard` when creating each Construction unit. Record the binding with its creation facts through the CLI-owned journal. Keep it out of artifact frontmatter and the authored task graph.
+**Accepted under [SH115](authoring_progress.md#completed-shared-decisions).** Mission creation records its selected workflow. Construction unit creation records the matching `standard` binding through the CLI-owned journal. Keep the binding out of artifact frontmatter and the authored task graph.
 
 Later operations and resume read that recorded binding. Expose it through `unit show`. Reject unsupported bindings instead of silently selecting another workflow.
 
@@ -405,25 +412,19 @@ Exact event payload and response-field encoding remain implementation details un
 
 ### `kepler workflow construction unit create`
 
-**Proposed syntax:**
+**Interface remains open under SH59.** No complete command signature is selected. The earlier proposed form does not establish mission selection and is not a complete contract. Apply the accepted [project selection rules](#project-selection): `--project` selects the record home. Apply the accepted [workflow binding](#workflow-binding) at creation. Do not infer arguments from this policy.
 
-```text
-kepler workflow construction unit create <slug> [--effort minimal|standard|comprehensive] [--project <path>]
-```
-
-This signature is a draft, not an accepted complete contract. Its project selector follows the accepted [project selection rules](#project-selection), including the existing `.kepler/` directory. Apply the accepted [workflow binding](#workflow-binding) at creation. Other creation inputs and mechanics stay proposed.
-
-The command creates one Unit of Work directory under `.kepler/units-of-work/<unit-id>/`. Use the ID format `YYYY-MM-DD-<slug>`, the machine-local date at creation, and the exact ID as the directory name. The complete ID must be unique in the selected project. Do not change it during revision or resume.
+Unit creation records mission identity, the `standard` workflow binding, the unit identity, and the initial effort. Use the ID format `YYYY-MM-DD-<slug>`, the machine-local date at creation, and the exact ID as the directory name. Its path is `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/`, relative to the record-home root. The complete ID must be unique across that project, including known unbound units. Do not change it during revision or resume.
 
 **Proposed input rules:**
 
 - Use lowercase words separated by single hyphens for `<slug>`. Reject invalid input. Do not normalize it silently. The exact valid characters stay open.
-- Use `--effort` to select Minimal, Standard, or Comprehensive. Use Standard if the requester has not selected another level.
+- Select Minimal, Standard, or Comprehensive at creation. Use Standard if the requester has not selected another level. The input syntax remains open.
 - Do not choose an active Unit of Work implicitly. A newly created unit is not automatically selected for later commands.
 
-On success, make the unit directory and record the creation and initial effort facts exactly once. These are necessary effects of this draft. They do not set the storage schema or a general exactly-once replay protocol. Do not write `unit-of-work.md`, placeholders, requirements, plans, or task files. Do not start a stage or attempt, launch agents, approve work, make branches or worktrees, or make commits. Do not run setup or migration.
+On success, make the unit directory and record mission membership, workflow binding, and initial effort facts. These are necessary effects, not a general exactly-once replay protocol. Do not write `unit-of-work.md`, placeholders, requirements, plans, or task files. Do not start a stage or attempt, launch agents, approve work, create branches or worktrees, or make commits. Do not run setup or migration.
 
-A create failure must not report success. Reject invalid input before writing. If the project cannot be resolved, fail without running setup. If the ID is already registered or its destination exists, refuse without overwriting or adopting the existing unit. Under concurrent requests for the same ID, at most one request succeeds.
+A create failure must not report success. Reject invalid input before writing. If the record home cannot be resolved, fail without running setup. If the ID is registered, including to an unbound unit, or its destination exists, refuse without overwriting or adopting it. Under concurrent requests for the same ID, at most one request succeeds.
 
 If a write fails or the process stops partway through, compare actual directory and journal effects with the requested operation. Do this before retrying. Keep uncertain or unrelated material. Do not promise general exactly-once replay. A caller that loses the success response can use `unit list` or `unit show` to read the result. A new request after local midnight can receive a different ID.
 
@@ -433,7 +434,7 @@ A proposed `--stage-effort <stage>=<level>` option is an open question. Do not t
 
 ### `kepler workflow construction unit list`
 
-**Proposed query.** List Units of Work in an explicit project scope. Read directory identity and derived execution state. Do not create a unit, select an active unit, write history, or infer a single global order from event timestamps.
+**Proposed query.** List Units of Work in an explicit record-home scope. Read directory identity and derived execution state. Distinguish mission-owned and known unbound units. Do not create a unit, select an active unit, hide unbound work, or write history. Do not infer a single global order from event timestamps.
 
 Apply the accepted [project selection rules](#project-selection). Filters, ordering, and response fields stay open.
 
@@ -443,7 +444,9 @@ Apply the accepted [project selection rules](#project-selection). Filters, order
 
 Activities inherit their stage's effort. They do not have their own override. Do not add effort commands. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). The CLI inputs and operation placement for those decisions stay open.
 
-Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Expose the accepted [workflow binding](#workflow-binding). Exact response fields stay open under the existing query decisions. This query must not select a unit for later commands.
+Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Resolve mission context from unique recorded membership. For an unbound unit, report the missing binding. Do not adopt it.
+
+Expose the accepted [workflow binding](#workflow-binding). Exact response fields stay open under the existing query decisions. This query must not select a unit for later commands.
 
 ### `kepler workflow construction lint`
 
@@ -455,7 +458,7 @@ Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors
 kepler workflow construction lint --unit <unit-id> [--project <path>]
 ```
 
-Apply the accepted [project selection rules](#project-selection) and [scope selectors](#scope-and-selectors). Read `.kepler/units-of-work/<unit-id>/tasks-dag.json` for the explicit unit. The MVP has no alternate-graph path or per-task lint mode.
+Apply the accepted [project selection rules](#project-selection) and [scope selectors](#scope-and-selectors). Read the explicit unit's `tasks-dag.json` under its mission-owned path from the [Mission contract](mission.md#durable-layout). Resolve membership only from recorded facts. The MVP has no alternate-graph path or per-task lint mode.
 
 Apply the [task graph validation rules](phases/construction/task-graph.md#validation-rules) that software can check. Check strict JSON, schema, UUIDs, unit identity, dependencies, duplicate edges, cycles, and relevant local paths and fragments. Use the selected unit, `plan.md`, and relevant upstream documents as context. Do not infer graph edges from task order, titles, or free-form prose.
 
@@ -494,12 +497,12 @@ Task operations use `--unit <unit-id>`. An operation on one task also uses `--ta
 | `task list` | List authored tasks and their derived execution state for one unit. Do not edit the graph or write history. |
 | `task show` | Show one task definition, current scope, attempt links, evidence, and progress. Do not change state. |
 | `task ready` | Report graph dependencies, predecessor outputs known in the unit's integrated state, and known prerequisite facts. Do not admit or start the task. |
-| `task admit` | Admit one ready task and capture the unit's current integration checkpoint as its fixed baseline. Show predecessor-output inclusion from history or provenance, not timestamps alone. Do not create an extra admission commit or task attempt. |
-| `task integrate` | Acquire the unit integration lock. Read the current checkpoint and prepare the combined candidate. Run typechecking, the project build, and the full application test suite. Accept only the exact candidate that passed all three checks and record the Integration outcome. Release the lock when the operation ends. |
+| `task admit` | Admit one ready task and capture the current repository-qualified unit integration set as its fixed baseline. Show predecessor-output inclusion from history or provenance, not timestamps alone. Do not create an extra admission commit or task attempt. |
+| `task integrate` | Acquire the unit integration lock. Read the current repository-qualified checkpoint set and prepare the combined candidate set. Run typechecking, the project build, and the full application test suite across the required repositories. Accept only the checked candidate set and record each necessary repository result. Release the lock when the operation ends. |
 
 `task ready` cannot interpret free-form acceptance criteria or show external availability without evidence. It reports graph facts and known conditions. The orchestrator compares the criteria and external prerequisites with available facts, then reports whether the task is ready under the task contract.
 
-Do not integrate a task until Code Validation succeeds and its independent non-author feedback is complete. Keep the lock across the current-checkpoint read, candidate preparation, all three checks, and acceptance. A failed check or changed candidate prevents acceptance until a new check of the candidate succeeds. The task's admitted baseline stays fixed. Record actual Integration inputs separately.
+Do not integrate a task until Code Validation succeeds and its independent non-author feedback is complete. Keep the lock across checkpoint-set capture, candidate preparation, required checks, and acceptance. Record the necessary repository results. A failed check or changed candidate prevents acceptance until the candidate passes again. The task's admitted baseline stays fixed. Record actual Integration inputs separately. Repository commits do not form an atomic cross-repository commit.
 
 Successful acceptance is distinct from requester approval, whole-unit completion, review, or delivery. Do not add unrestricted `task complete`. Generic `activity complete` must not bypass Integration acceptance. The [Code Integration contract](phases/construction/activities/code-integration.md#integration-procedure) owns the check and acceptance rules.
 
@@ -620,6 +623,6 @@ Accepted command placements, structured-output default, and typed lifecycle writ
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-Other shared runtime and Construction implementation choices stay under SH45-SH51, SH62-SH70, SH72, SH84-SH87, DF14-DF17, and existing SH53-SH60. These include journal writes, projections, attempts, locks, workspaces, effort changes, task and Activity guards, and recovery. Exact actor and authorization fields stay open under SH55-SH56. Do not invent approval proof or interaction protocols.
+Other shared runtime and Construction implementation choices stay under SH46-SH51, SH62-SH67, SH69-SH70, SH72, SH84-SH85, SH87, DF14-DF17, and existing SH53-SH60. The [Mission contract](mission.md) settles SH45 storage paths, SH68 workspace policy, and SH86 retained-evidence locations. Remaining choices include journal writes, projections, attempts, locks, workspace allocation, effort changes, task and Activity guards, and recovery. Exact actor and authorization fields stay open under SH55-SH56. Do not invent approval proof or interaction protocols.
 
 Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. This CLI draft does not accept other proposals in those contracts.

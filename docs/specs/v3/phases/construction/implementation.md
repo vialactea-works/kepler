@@ -20,7 +20,7 @@ Complete the required tasks through Code Generation, Code Validation, and Code I
 
 - Current `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, and `tasks-dag.json`, including relevant supporting files.
 - Applicable upstream completion records, decisions, constraints, and required approvals.
-- The unit's current integrated checkpoint and retained implementation work, when available.
+- The unit's current repository-qualified integrated checkpoint set and retained implementation work, when available.
 - Project standards, relevant source code, check commands, and available execution environments.
 - Task prerequisites, required predecessor outputs, and coordination constraints.
 - Existing attempt records and evidence when resuming interrupted work.
@@ -36,9 +36,9 @@ Start when:
 - Implementation Planning and earlier unit stages are complete under their applicable contracts for the current material.
 - The current task graph, technical solution, verification obligations, and relevant inputs are available and consistent.
 - Applicable requester instructions and project rules give authority to execute the requested implementation work.
-- The unit's initial integration checkpoint is identified. If it is not, record it from the current repository material before the first task admission.
+- The unit's original Review baseline set is identified before the first task admission. Keep it distinct from the mission starting set. If it is not recorded, capture the current repository-qualified integration set.
 
-Meeting these entry conditions does not approve a particular Unit of Work. An empty application can supply the initial repository checkpoint. Pre-existing implementation and passing application checks are not required.
+Meeting these entry conditions does not approve a particular Unit of Work. A greenfield repository can have no commit. Record that condition without inventing a checkpoint. Pre-existing implementation and passing application checks are not required.
 
 Future task prerequisites do not all have to be available before independent ready work starts. Apply each prerequisite before its affected work or verification.
 
@@ -66,8 +66,8 @@ Future task prerequisites do not all have to be available before independent rea
 
 | Output | Responsibility |
 | --- | --- |
-| Task implementation material | Give the task's code, tests, configuration, and required documentation at an identified checkpoint. |
-| Integrated unit material | Give accepted combined outputs and the unit checkpoint containing them. |
+| Task implementation material | Give the task's code, tests, configuration, and required documentation at identified repository checkpoints. |
+| Integrated unit material | Give accepted combined outputs and the repository-qualified checkpoint set containing them. |
 | Stage and Activity evidence | Bind unit and Activity checks, reviews, admissions, integration inputs, acceptance, and completion through CLI-owned operations. |
 | Optional supporting detail | Explain useful implementation findings under `details/implementation/`, referenced from the relevant owning artifact or evidence record. |
 
@@ -81,7 +81,7 @@ Apply shared metadata to optional supporting Markdown documents, using `supporti
 
 ### Admission and coordination
 
-The orchestrator applies the agreed [admission rules](../../runtime.md#task-admission-and-baselines). Record the current unit integration checkpoint containing required predecessor outputs. Keep that admitted baseline fixed.
+The orchestrator applies the agreed [admission rules](../../runtime.md#task-admission-and-baselines). Record the current repository-qualified unit integration set containing required predecessor outputs. Keep that admitted baseline set fixed.
 
 Supply each worker with its task identity, current definition, relevant contracts, baseline, attempt scope, and verification obligations. Include prerequisite conditions and coordination constraints.
 
@@ -107,7 +107,7 @@ Use a worker context separate from Code Generation for independent Validation. W
 
 Execute the [Code Integration Activity contract](activities/code-integration.md) after successful Validation. It owns locked candidate preparation and combined checks. Authorized orchestrator and CLI operations control acceptance and record task completion.
 
-Successful Integration returns the accepted checkpoint and evidence to unit coordination. Release dependent tasks only after successful predecessor Integration. Independent ready tasks and units continue. Activity handoffs do not add dependencies to the authored task graph. The enclosing Implementation stage must have its own completion assessment.
+Successful Integration returns the accepted repository-qualified checkpoint set and evidence to unit coordination. Release dependent tasks only after successful predecessor Integration. Independent ready tasks and units continue. Activity handoffs do not add dependencies to the authored task graph. The enclosing Implementation stage must have its own completion assessment.
 
 ## Attempts, failures, and recovery
 
@@ -235,7 +235,7 @@ Complete Implementation only when these conditions and its Activity contracts ar
 - Every task required by the current graph has satisfied its task contract and completed successful Code Integration.
 - Code Generation, Code Validation, and Code Integration have their required checks, reviews, and applicable completion evidence.
 - Each accepted candidate passed required combined-result checks under the unit lock.
-- The final integrated checkpoint contains the required outputs, and history or integration provenance shows their inclusion.
+- The final integrated checkpoint set contains the required outputs, and history or integration provenance shows their inclusion in each repository.
 - Required combined-result evidence applies to the final integrated material and relevant inputs.
 - No blocking finding or unauthorized consequential choice is unresolved.
 - No worker is authorized to change the completed execution result under an unfinished task in this execution.
@@ -253,17 +253,17 @@ The rows below cover the enclosing Implementation stage. Refer to originating Ac
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
-| Implementation completion assessment | Final unit checkpoint, current task graph, upstream obligations, current or retained Activity evidence, and integration provenance. | Required tasks and integrated checks are complete. Reopened Activities have current-attempt evidence. Retained scopes have valid original bindings. Unit self-review states that coverage is complete and the handoff is accurate. |
+| Implementation completion assessment | Final repository-qualified unit checkpoint set, current task graph, upstream obligations, current or retained Activity evidence, and integration provenance. | Required tasks and integrated checks are complete. Reopened Activities have current-attempt evidence. Retained scopes have valid original bindings. Unit self-review states that coverage is complete and the handoff is accurate. |
 | Requested additional review result | Material and scope identified by the request, when additional review is requested. | The requested review is complete and its blocking findings are resolved. |
 | Requester blocker decision | Blocking issue, affected work, relevant contracts, and required requester input. | Record the requester's actual decision and its scope. Resume affected work only when the blocker is resolved. |
 
 The requester-decision row applies only when requester intervention is necessary for a hard blocker. It is not a routine task-approval record.
 
-Apply the shared [evidence bindings](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Keep each check's task or unit scope, attempt, checkpoint, relevant inputs, conditions, result, and supporting output.
+Apply the shared [evidence bindings](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Keep each check's task or unit scope, attempt, repository-qualified checkpoint set, relevant inputs, conditions, result, and supporting output.
 
 The completion assessment is new unit-scoped work. It consumes Activity evidence without transferring earlier attempts' completion or replacing mandatory Activity checks.
 
-Keep the final integrated checkpoint and necessary task checkpoints, candidate material, logs, and external evidence. A commit identifier or mutable external link alone does not keep them.
+Keep the final integrated checkpoint set and necessary task checkpoint sets, candidate material, logs, and external evidence. A commit identifier or mutable external link alone does not keep them.
 
 Record results through CLI-owned operations. Exact payloads, commands, status transitions, and lock mechanisms are still implementation work. This specification does not include those operations.
 
@@ -271,10 +271,10 @@ Record results through CLI-owned operations. Exact payloads, commands, status tr
 
 **Standard workflow next stage:** [Unit of Work Review](unit-of-work-review.md).
 
-Identify the unit directory, current upstream artifacts, final integrated checkpoint, complete task set, and originating evidence records.
+Identify the unit directory, current upstream artifacts, final integrated checkpoint set, complete task set, and originating evidence records.
 
 Supply coverage information, integration provenance, relevant environments, resolved findings, and any nonblocking limitations. Explain how the result meets task obligations without claiming whole-unit acceptance.
 
-For optional whole-unit inspection, the [Review package](../../diff-package.md#unit-of-work-review) starts at the original initial integration checkpoint. It ends at the final checkpoint identified by this Implementation attempt's completion assessment. Use this assessment and the original checkpoint context in the Review handoff. A completed Review is not necessary to use the package, and package availability does not add a Review completion condition.
+For optional whole-unit inspection, the [Review package](../../diff-package.md#unit-of-work-review) starts at the original unit Review baseline set captured before first task admission. It ends at the final checkpoint set identified by this Implementation attempt's completion assessment. Keep this baseline distinct from mission startup. Use the assessment and original checkpoint context in the Review handoff. Package availability does not add a Review completion condition.
 
 Unit of Work Review evaluates the complete outcome. Successful task completion does not authorize delivery or waive that review.

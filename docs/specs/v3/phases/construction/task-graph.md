@@ -68,7 +68,9 @@ The task must stay understandable with its referenced inputs, without reconstruc
 | `reference` | Non-empty string. | Precise reference to the relevant input material. |
 | `purpose` | Non-empty string. | Explain what obligation or context this input supplies to the task. |
 
-Local references use repository-relative file paths and optional Markdown fragments. Resolve them within the repository. External references use explicit URIs. Do not store machine-local absolute paths or credentials.
+Local references use repository-relative file paths and optional Markdown fragments. Resolve each path within its declared repository. A reference to another selected repository identifies that repository under SH51. Exact encoding remains open.
+
+External references use explicit URIs. Do not store machine-local absolute paths or credentials. Follow the [Mission contract](../../mission.md#multi-repository-checkpoints-and-integration) for repository boundaries.
 
 A reference does not prove approval or waive the task's acceptance criteria. Evidence must identify and keep the material actually used under the shared [material rules](../../runtime.md#material-references).
 
@@ -166,7 +168,7 @@ This example illustrates the format, not a real unit or an approved implementati
       "goal": "Define an adapter-independent publishing contract and a test double.",
       "inputs": [
         {
-          "reference": ".kepler/units-of-work/2026-10-18-message-publishing/design.md#boundaries-and-interactions",
+          "reference": ".kepler/missions/<mission-id>/construction/units-of-work/2026-10-18-message-publishing/design.md#boundaries-and-interactions",
           "purpose": "Implement the accepted publishing contract."
         }
       ],
@@ -191,7 +193,7 @@ This example illustrates the format, not a real unit or an approved implementati
       "goal": "Connect the publishing boundary to the selected broker without changing application rules.",
       "inputs": [
         {
-          "reference": ".kepler/units-of-work/2026-10-18-message-publishing/plan.md#technical-solution",
+          "reference": ".kepler/missions/<mission-id>/construction/units-of-work/2026-10-18-message-publishing/plan.md#technical-solution",
           "purpose": "Use the selected broker and its documented error mapping."
         }
       ],

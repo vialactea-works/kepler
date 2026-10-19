@@ -63,18 +63,18 @@ Record discovered non-functional concerns for the next stage. Do not ignore thos
 
 ### Paths and organization
 
-All paths are relative to the project repository root. `<unit-id>` is the stable identifier of one Unit of Work.
+All paths are relative to the selected record-home working-tree root. `<unit-id>` is the stable identifier of one Unit of Work.
 
 | Artifact | Location | Responsibility |
 | --- | --- | --- |
 | Project references | `.kepler/reference/` | Supply shared application context. |
-| Unit of Work definition | `.kepler/units-of-work/<unit-id>/unit-of-work.md` | State the purpose, scope, and context shared by all stages. |
-| Functional design | `.kepler/units-of-work/<unit-id>/design.md` | Describe domain behavior, the domain model, functional contracts, and design decisions. |
-| Supporting Functional Design files | `.kepler/units-of-work/<unit-id>/details/functional-design/` | Supply linked detail for this stage. |
+| Unit of Work definition | `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/unit-of-work.md` | State the purpose, scope, and context shared by all stages. |
+| Functional design | `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/design.md` | Describe domain behavior, the domain model, functional contracts, and design decisions. |
+| Supporting Functional Design files | `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/details/functional-design/` | Supply linked detail for this stage. |
 
 The Unit of Work directory stays unchanged across stages, retries, and design revisions. Do not derive its identity from a branch, worktree, skill, or task number. Use the shared [unit identity and directory rules](../../unit-of-work.md#identity-and-directory): `YYYY-MM-DD-<slug>`. Use the machine-local creation date and the exact ID as the directory name.
 
-These paths are part of the version 3 draft. They do not migrate existing files or change current CLI path rules.
+These mission-owned paths follow the accepted [Mission contract](../../mission.md#durable-layout). They do not migrate existing files. Mission creation and complete unit-creation syntax remain open.
 
 ### Required information and supporting detail
 

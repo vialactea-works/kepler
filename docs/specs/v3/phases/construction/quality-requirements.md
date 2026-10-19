@@ -64,14 +64,14 @@ Security-related functional behavior stays in Functional Design. Report a requir
 
 ### Paths and organization
 
-All paths are relative to the project repository root. Use the existing Unit of Work directory and shared [unit identity rules](../../unit-of-work.md#identity-and-directory).
+All paths are relative to the selected record-home working-tree root. Use the mission-owned Unit of Work directory and shared [unit identity rules](../../unit-of-work.md#identity-and-directory).
 
 | Artifact | Location | Responsibility |
 | --- | --- | --- |
-| Unit of Work definition | `.kepler/units-of-work/<unit-id>/unit-of-work.md` | Supply the shared purpose, scope, and context. |
-| Functional design | `.kepler/units-of-work/<unit-id>/design.md` | Supply accepted behavior, models, and functional contracts. |
-| Quality requirements | `.kepler/units-of-work/<unit-id>/quality.md` | State quality requirements, conditions, constraints, and decisions. |
-| Supporting quality files | `.kepler/units-of-work/<unit-id>/details/quality-requirements/` | Supply linked detail for this stage. |
+| Unit of Work definition | `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/unit-of-work.md` | Supply the shared purpose, scope, and context. |
+| Functional design | `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/design.md` | Supply accepted behavior, models, and functional contracts. |
+| Quality requirements | `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/quality.md` | State quality requirements, conditions, constraints, and decisions. |
+| Supporting quality files | `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/details/quality-requirements/` | Supply linked detail for this stage. |
 
 This stage owns `quality.md` and consumes `design.md` without taking ownership of the functional design.
 

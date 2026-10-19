@@ -4,9 +4,9 @@
 
 ## Purpose
 
-Construction operates on one Unit of Work. Each stage has its own responsibilities and assigned skills and agents.
+Construction operates on one Unit of Work. Standard has one unit per mission. The [Mission contract](../../mission.md) sets mission startup and workspace facts. Each stage has its own responsibilities and assigned skills and agents.
 
-Construction owns its execution state model and projection schemas under the shared [execution-state representation](../../runtime.md#execution-state-representation). The [Construction runtime draft](runtime.md) proposes its derived states, lifecycle guards, event facts, and storage examples. It is still a draft and adds no stage or accepted contract.
+Construction owns its execution state model and projection schemas under the shared [execution-state representation](../../runtime.md#execution-state-representation). The [Construction runtime draft](runtime.md) proposes its derived states, lifecycle guards, and event facts. The [Mission contract](../../mission.md) owns accepted mission and storage policy. The runtime draft adds no stage.
 
 The [Standard workflow](../../workflows/standard/README.md) selects the unit-stage order. Construction owns the stage definitions and Implementation structure. The requester accepted Functional Design and Quality Requirements under FD13 and NF12. Implementation Planning and Implementation are accepted under IP19 and IE21. Unit of Work Review and Deliver are accepted under UR16 and DL18. The requester separately accepted Code Generation under IE24, Code Validation under IE25, and Code Integration under IE27.
 
@@ -31,7 +31,7 @@ Project preparation belongs to the Initialization phase.
 
 Functional Design states domain behavior, the domain model, and functional contracts in `design.md`.
 
-Quality Requirements states quality targets and constraints in `.kepler/units-of-work/<unit-id>/quality.md`. This document is required for that stage. Applicable requirements include performance, availability, security, accessibility, compatibility, operability, observability, and maintainability.
+Quality Requirements states quality targets and constraints in `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/quality.md`. This document is required for that stage. Applicable requirements include performance, availability, security, accessibility, compatibility, operability, observability, and maintainability.
 
 Implementation Planning selects the technical solution against the functional design and quality requirements. It then divides the work into implementation tasks. It writes `plan.md` with technical rationale and `tasks-dag.json` with the task graph at the unit root. The [accepted stage contract](implementation-planning.md) states the artifact split. Use the [accepted task graph specification](task-graph.md) with UUIDv4 task IDs.
 
@@ -82,12 +82,12 @@ Separate worker results do not show that the combined result is correct. Keep th
 Use one integration lock per unit. All task integrations targeting that unit's integrated state must use the same lock. Other operations that change its integrated state must also respect that lock.
 
 1. **Acquire the lock.** Wait for the unit's integration lock. Do not read the current integrated checkpoint before acquiring the lock.
-2. **Prepare the candidate.** Read the current unit checkpoint after acquiring the lock. Combine it with the validated task output. Record actual Integration inputs separately from the task's fixed admission baseline.
+2. **Prepare the candidate.** Read the current repository-qualified unit checkpoint set after acquiring the lock. Combine it with validated task outputs. Record actual Integration inputs separately from each task's fixed admission baseline.
 3. **Run the required checks.** Run typechecking, the project build, and the full application test suite against that candidate. All three must complete successfully. Bind the results to the material that passed the checks and actual inputs.
-4. **Accept the candidate.** Use authorized orchestrator and CLI operations to accept only a candidate that passed the checks. If its bytes change, run the required checks against the changed candidate before acceptance.
+4. **Accept the candidate.** Use authorized orchestrator and CLI operations to accept only a candidate set that passed the required checks. Record each necessary repository result. If any bytes change, run the required checks against the changed candidate before acceptance.
 5. **Release the lock.** Release it when the Integration operation ends. Do not keep it during a return to Code Generation.
 
-Hold the lock through preparation, checks, and acceptance. Integration checks for the same unit are therefore serialized. This replaces the earlier restriction to short integration updates.
+Hold the lock through preparation, checks, and acceptance across the selected repositories. Integration checks for the same unit are therefore serialized. Repository commits do not form an atomic cross-repository commit. This replaces the earlier restriction to short integration updates.
 
 Candidate acceptance means updating the unit's integrated state. It is not requester approval.
 

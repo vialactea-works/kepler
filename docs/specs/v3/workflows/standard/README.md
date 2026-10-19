@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Standard composes the stages below into the complete Construction MVP workflow. Phases own stage contracts. This workflow owns their selected order and routing.
+Standard composes the stages below into the complete Construction MVP workflow. It has one Unit of Work per mission. Phases own stage contracts. This workflow owns their selected order and routing.
 
 The stage sequence and shared execution rules are agreed. The requester accepted all selected Construction stage and Activity contracts under their recorded decision IDs. This workflow does not approve a Unit of Work or prove implemented behavior.
 
@@ -12,9 +12,9 @@ The stage sequence and shared execution rules are agreed. The requester accepted
 
 Start with a clear Unit of Work request and relevant available context. Functional Design's [entry conditions](../../phases/construction/functional-design.md#entry-conditions) apply.
 
-Existing application code, tests, and completed Initialization or Inception contracts are not prerequisites. Greenfield work remains in scope. This workflow adds no additional Initialization or Inception stages.
+Existing application code, tests, and completed Initialization or Inception contracts are not prerequisites. Greenfield work remains in scope. Construction, the first selected phase, owns mission creation and initial workspace facts. Prepare the workspace before Functional Design starts. Startup adds no stage. This workflow adds no Initialization or Inception stages.
 
-Apply the accepted [workflow binding](../../cli.md#workflow-binding). Construction unit creation records `standard`. Later operations and resume use that binding. The `unit show` query exposes it. The MVP adds no per-command workflow selector, switching, or registry.
+Apply the accepted [workflow binding](../../cli.md#workflow-binding). Mission creation records the selected workflow. Construction unit creation records the matching `standard` binding. Later operations and resume use that binding. The `unit show` query exposes it. The MVP adds no per-command workflow selector, switching, or registry. See the [Mission contract](../../mission.md) for identity and startup rules.
 
 ## Stages
 

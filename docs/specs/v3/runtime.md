@@ -6,9 +6,9 @@
 
 Record decisions about the Kepler CLI, structured persistence, and audit system.
 
-The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. Phase-owned projections, paths, commands, and write protocols stay under design. This document does not add CLI behavior or migrate existing data.
+The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. The [Mission contract](mission.md) sets accepted record and local-runtime paths. Phase-owned projections, commands, and write protocols stay under design. This document does not add CLI behavior or migrate existing data.
 
-The [Construction runtime draft](phases/construction/runtime.md) proposes Construction-specific state names, lifecycle guards, event payloads, and storage examples. It is not a stage and does not replace this shared contract. Its proposals are not approved implementation choices.
+The [Construction runtime draft](phases/construction/runtime.md) proposes Construction-specific state names, lifecycle guards, and event payloads. It is not a stage and does not replace this shared contract. The accepted [Mission contract](mission.md) owns mission storage policy.
 
 ## Data responsibilities
 
@@ -26,7 +26,7 @@ The [Construction runtime draft](phases/construction/runtime.md) proposes Constr
 | Record | Portability rule |
 | --- | --- |
 | Authored project artifacts | Version with the project under their authored-content and metadata contracts. |
-| Phase-owned append-only JSON journals | Version as portable workflow history. Keep their event identities and original bindings. |
+| Phase-owned append-only JSON journals | Version as portable workflow history under the [Mission contract](mission.md#durable-layout). Keep their event identities and original bindings. |
 | Derived projections and caches | Keep local and disposable. Rebuild them from kept journals. |
 | Live locks and process registries | Keep as unversioned runtime coordination data. Copying history must not restore ownership. |
 | Evidence content | Version suitable files. Keep large or sensitive content externally with durable references and the material. |
@@ -61,7 +61,7 @@ Version-control policy does not authorize publication or other delivery operatio
 
 ### Implementation boundary
 
-Storage paths, journal collection, synchronization, locking, and checkpoint publication mechanics stay implementation choices. Retention periods and cleanup stay [deferred](authoring_progress.md#deferred-decisions). This policy does not set a storage engine, transfer command, or live coordination protocol.
+The [Mission contract](mission.md#durable-layout) sets mission-history and local-runtime paths. SH43 still permits disposable projections, but selects no persisted views directory. Do not add a substitute cache tree. Journal collection, synchronization, locking, and checkpoint publication mechanics stay implementation choices. Retention periods and cleanup stay [deferred](authoring_progress.md#deferred-decisions).
 
 ## Rules
 
@@ -253,9 +253,10 @@ The [audit list interface](cli.md#kepler-audit-list) returns compact query proje
 | --- | --- |
 | Stage attempt | One execution of a stage, including its internal correction loops. |
 | Activity attempt | One execution of an Activity occurrence within an enclosing stage attempt. |
-| Git checkpoint | A commit that identifies a multi-file repository snapshot. |
+| Git checkpoint | A commit that identifies a multi-file snapshot in one repository. |
 | Evidence | A recorded check or review result concerning specified material and relevant conditions. |
 | Approval | The requester's explicit acceptance of specified material. |
+| Checkpoint set | Repository-qualified Git checkpoints that identify one multi-repository operation's material. |
 
 Attempt identity is separate from commit identity. An attempt can reference several checkpoints. Different attempts can reference the same checkpoint.
 
@@ -265,7 +266,7 @@ A commit identifies content. It does not show that checks passed or that the req
 
 Material is anything relevant to a check, review, or approval. Its types are open-ended. The examples below do not restrict the allowed types.
 
-A Git checkpoint identifies repository material. An evidence record can reference other material alongside it.
+Each Git checkpoint identifies material in one repository. A multi-repository operation uses a repository-qualified checkpoint set. An evidence record can reference other material alongside it. See [Mission](mission.md#multi-repository-checkpoints-and-integration) for distinct checkpoint roles.
 
 | Example | Possible reference |
 | --- | --- |
@@ -285,7 +286,7 @@ Each evidence record identifies:
 
 - Its owning phase and applicable stage, Activity, and attempt scope. In Construction, include the unit and task when applicable.
 - The material checked and relevant inputs.
-- The repository and checkpoint commit for repository material, with appropriate references for other material.
+- The repository identity and checkpoint commit for each repository material input, with appropriate references for other material.
 - The check or review performed, its result, and supporting output.
 - Relevant external conditions, such as the database version.
 
@@ -303,11 +304,11 @@ Record bindings through CLI-owned JSON journal events, not artifact frontmatter.
 
 Use this procedure when evidence covers repository material.
 
-1. **Record the starting checkpoint.** Reuse an existing commit when it represents the required starting state. Task baselines follow the admission rules below.
+1. **Record starting checkpoints.** Reuse an existing commit when it represents the required starting state. Use one checkpoint per repository in a multi-repository operation. Task baselines follow the admission rules below.
 2. **Do the work.** Edit and run trial checks within the owning stage's or Activity's responsibilities. Internal correction loops do not make a commit necessary for each action.
-3. **Prepare the output checkpoint.** Create a checkpoint in the work's own workspace when ready. Include the repository material that the necessary checks will cover.
-4. **Run final checks.** Run the necessary checks against that snapshot and record their results. Apply the shared attempt and revision rules when corrections are necessary.
-5. **Get approval when necessary.** Bind approval to the reviewed material and checkpoint. Complete the stage or Activity only after its completion conditions are satisfied.
+3. **Prepare output checkpoints.** Create each checkpoint in its repository's workspace when ready. Include the repository material that the necessary checks will cover.
+4. **Run final checks.** Run the necessary checks against the checkpoint set and record their results. Apply the shared attempt and revision rules when corrections are necessary.
+5. **Get approval when necessary.** Bind approval to the reviewed material and checkpoint set. Complete the stage or Activity only after its completion conditions are satisfied.
 
 The material that passed the checks must match the checkpoint. Relevant uncommitted or untracked inputs cannot be silently treated as committed content.
 
@@ -333,25 +334,25 @@ Each task records its actual starting inputs. Do not compare them with a changin
 
 Workflow event writes and derived views must not prevent concurrent work. Keep event-update coordination short. Isolation is necessary for test resources when concurrent runs could interfere.
 
-Construction's [integration lock](phases/construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current checkpoint, candidate preparation, checks, and acceptance. This lock covers long-running checks. It is not a global agent, task admission, or test gate.
+Construction's [integration lock](phases/construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current repository-qualified checkpoint set, candidate preparation, checks, and acceptance across required repositories. This lock covers long-running checks. It is not a global agent, task admission, or test gate.
 
-Separate unit integration workspaces and isolated workspaces for concurrent writers are one possible arrangement. Exact workspace and branch layouts stay undecided.
+Use the [Mission contract](mission.md#workspace-selection-and-preparation) for startup workspace choices and isolation requirements. Detailed allocation mechanisms, branch layouts, and shared test-resource isolation stay implementation choices under SH66, SH69, and SH70.
 
 ### Task admission and baselines
 
 Admission is the start boundary for selecting a task's baseline.
 
 1. **Readiness.** Make sure that the plan lets execution start. Make sure that all necessary predecessor outputs are in the unit's integrated state.
-2. **Select the baseline.** Capture the current integration commit for that unit at admission. It must include all necessary predecessor outputs. Record that checkpoint as the task's starting baseline.
+2. **Select the baseline.** Capture the current repository-qualified integration set for the unit at admission. It must include all necessary predecessor outputs. Record that set as the task's fixed baseline.
 3. **Keep the recorded baseline.** Once admitted, the task keeps that baseline. Later commits alone do not invalidate it or force it to restart. Compare the evidence with its covered material and relevant inputs, then report whether it still applies.
 
 Use Git history or recorded integration provenance to show that predecessor outputs are included. A later commit timestamp alone does not show inclusion.
 
-Use the unit's integration branch, not a global coordinator `HEAD`. Admission does not make another commit necessary. Do not return to an older predecessor checkpoint when newer integrated unit work exists at admission.
+Use each selected repository's integration target, not a global coordinator `HEAD`. Admission does not make another commit necessary. Do not return to an older predecessor set when newer integrated unit work exists at admission.
 
 #### Example
 
-This example is illustrative. `C1` and `C2` are commit labels, not identifier formats.
+This example is illustrative. `C1` and `C2` label repository-qualified checkpoint sets, not identifier formats.
 
 1. Tasks 1 and 2 run in parallel.
 2. Task 1 finishes and its output is integrated into `C1`.
@@ -362,9 +363,9 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 Task outputs can have separate checkpoints. Results for those checkpoints do not show that their combined result works.
 
-Construction's [Code Integration Activity](phases/construction/activities/code-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Read the current checkpoint after acquiring the lock. Run the necessary checks on the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against that candidate while holding the lock. All three must succeed before authorized acceptance.
+Construction's [Code Integration Activity](phases/construction/activities/code-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Read the current repository-qualified checkpoint set after acquiring the lock. Run the necessary checks on the combined candidate set before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against the candidate set while holding the lock. All three must succeed against the combined candidate set before authorized acceptance. Record each necessary repository result.
 
-Record actual Integration inputs separately from the fixed admission baseline. Successful acceptance and the applicable completion conditions are necessary for task completion.
+Record actual Integration inputs separately from the fixed admission baseline. Successful acceptance of every necessary repository result and the applicable completion conditions are necessary for task completion. Repository commits do not form an atomic cross-repository commit or authorize automatic rollback.
 
 Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phases/construction/README.md#agreed-boundaries) gives these duties. Integration checks do not replace them. A build result counts as typechecking only when its command also runs the necessary typechecking. Separate decisions are necessary for additional integration checks and project-specific check configuration.
 
@@ -386,13 +387,13 @@ Keep phase transition rules and event recording in their owning application oper
 
 The [CLI command reference](cli.md) records accepted command decisions and proposed operation contracts. It owns command organization and interface details. This infrastructure contract owns persistence and shared execution rules. Neither document sets CLI behavior.
 
-For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection.
+For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. For mission operations, `--project` selects the record home. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection. Resolve mission context only from unique recorded membership.
 
 CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes), [output stream contract](cli.md#output-streams), and [MVP result formatting](cli.md#human-output). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
 
 Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Use the accepted [audit queries](cli.md#kepler-audit-list) for read-only history inspection. Use the accepted [shared lint interface](cli.md#kepler-lint) for shared metadata checks. Approval and interaction interfaces stay under SH55-SH56.
 
-Use the accepted [Construction lint interface](cli.md#kepler-workflow-construction-lint) for task graphs and [UUID interface](cli.md#kepler-uuid) for identifier generation. Apply the accepted [setup interface](cli.md#kepler-setup) and [native resource ownership](installation.md#agent-resource-ownership) without adding agent certification.
+Use the accepted [Construction lint interface](cli.md#kepler-workflow-construction-lint) for task graphs and [UUID interface](cli.md#kepler-uuid) for identifier generation. Root metadata lint of explicit files does not require mission adoption. Apply the accepted [setup interface](cli.md#kepler-setup) and [native resource ownership](installation.md#agent-resource-ownership) without adding agent certification.
 
 ### Current author
 
@@ -412,11 +413,11 @@ The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git autho
 
 Create unit IDs in the format `YYYY-MM-DD-<slug>` under the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). Use the machine's local timezone to set the date when the CLI creates the unit.
 
-Use the exact unit ID as the directory name. The CLI must detect duplicate IDs within the project and must not overwrite an existing unit. Do not regenerate an existing ID during revision or resume.
+Use the exact unit ID as the directory name under its mission. Detect duplicate IDs across the record-home project, including known unbound units. Do not overwrite an existing unit or regenerate its ID during revision or resume. See the [Mission layout](mission.md#durable-layout).
 
-The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement and proposes inputs, effects, output, and failure behavior. Its detailed contract stays a draft.
+The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement. Full syntax and mission selection remain open under SH59. Do not infer mission input from an earlier proposal.
 
-Apply the accepted [Standard workflow binding](cli.md#workflow-binding). Record `standard` with unit creation facts in the CLI-owned journal. Later operations and resume use that binding, and `unit show` exposes it. Do not add workflow fields to frontmatter or the authored task graph.
+Mission creation records the selected workflow in its owning phase journal. Construction unit creation records the matching `standard` binding in the Construction journal. Later operations and resume use that binding, and `unit show` exposes it. Do not add workflow or mission fields to frontmatter or the authored task graph.
 
 ## Traceability and revision outputs
 
@@ -426,25 +427,25 @@ Use the shared [evidence and approval bindings](#evidence-and-approval-bindings)
 
 ### Checkpoint retention
 
-Keep necessary checkpoint commits reachable through Git references. A commit identifier stored in JSON alone does not keep the commit.
+Keep each necessary checkpoint commit reachable through a retained reference in its repository. A commit identifier stored in JSON alone does not keep the commit.
 
 Git keeps committed repository material while the necessary objects stay available. External environments, ignored outputs, and separate evidence logs must have their own retention rules.
 
-Audit events and content fingerprints do not keep artifact contents by themselves. Apply the accepted [record-portability policy](#record-portability) to journals, local runtime data, and evidence content. Retention periods and cleanup are deferred. Publication mechanics and storage locations stay implementation choices.
+Audit events and content fingerprints do not keep artifact contents by themselves. Apply the accepted [record-portability policy](#record-portability) to journals, local runtime data, and evidence content. Retention periods and cleanup are deferred. Checkpoint-reference publication and external evidence storage remain implementation choices.
 
 An interrupted attempt may have no output checkpoint. Its record must not claim a completed snapshot. Follow the shared [interrupted-work recovery rule](#interrupted-work-recovery).
 
 ## Decisions still required
 
 - Phase-owned state models, projection schemas, status transitions, and attempt ID formats.
-- Journal and projection storage layout.
+- Journal write, collection, and projection mechanisms within the accepted [Mission contract](mission.md#durable-layout).
 - Other CLI command contracts, selectors, command-specific response schemas, and validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
 - External reference formats and exact evidence and approval record formats. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
-- Traceability relationship formats, checkpoint reference names, retention periods, publication, storage locations, and cleanup rules.
-- Workspace and branch layouts, and shared test resource isolation.
-- Storage and transfer mechanics under the accepted [record-portability policy](#record-portability).
+- Traceability relationship formats, checkpoint reference names and publication, external evidence-store locations, retention periods, and cleanup rules.
+- Detailed workspace allocation, branch layouts, and shared test-resource isolation within the accepted [Mission contract](mission.md).
+- Journal collection, transfer, and publication mechanics under the accepted [record-portability policy](#record-portability) and [Mission contract](mission.md).
 
 ## Inspiration
 

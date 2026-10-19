@@ -63,7 +63,7 @@ The accepted [Implementation Planning contract](phases/construction/implementati
 
 #### Unit ownership
 
-`unit_id` records ownership. Follow the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). The CLI uses the machine-local creation date and a descriptive slug. Unit IDs are unique within a project and stay unchanged across revisions. References to other units do not change ownership.
+`unit_id` records ownership. Follow the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). The CLI uses the machine-local creation date and a descriptive slug. Unit IDs are unique within a record-home project and stay unchanged across revisions. References to other units do not change ownership.
 
 ### Labels
 

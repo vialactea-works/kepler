@@ -17,7 +17,7 @@ Review the unit as a whole, including interactions between task outputs. A colle
 ## Inputs
 
 - Current `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, `tasks-dag.json`, and relevant supporting files.
-- The completed Implementation handoff and final integrated checkpoint.
+- The completed Implementation handoff and final repository-qualified integrated checkpoint set.
 - Required Activity results, independent feedback, integration provenance, and completion evidence.
 - Relevant project constraints, verification conditions, requester decisions, and applicable approvals.
 - Known deployment constraints and planned delivery dependencies.
@@ -67,7 +67,7 @@ Keep the existing ownership of the integrated implementation and upstream artifa
 
 ## Review procedure
 
-1. **Identify the result.** Record the integrated checkpoint, relevant upstream versions, unit obligations, and originating execution records.
+1. **Identify the result.** Record the integrated checkpoint set, relevant upstream versions, unit obligations, and originating execution records.
 2. **Determine evidence coverage.** Determine whether required Activity coverage, combined-result checks, relevant conditions, applicability, and retention satisfy the evidence requirements.
 3. **Review the outcome.** Examine the complete behavior, interactions, failure cases, quality obligations, and deployment preparation against current contracts.
 4. **Report findings.** State each material problem, its evidence, affected obligation, uncertainty, and proposed correction boundary.
@@ -78,7 +78,7 @@ Keep the existing ownership of the integrated implementation and upstream artifa
 
 Successful task checks are relevant evidence, not automatic proof of every unit acceptance condition. Determine which obligations they cover and identify gaps.
 
-Review the final integrated material, not only isolated worker branches or changed files. Use relevant unchanged behavior and configuration when they affect the outcome. The [Unit of Work Review package](../../diff-package.md#unit-of-work-review) covers the range from the original unit checkpoint to the assessed final checkpoint. It does not limit review to changed lines. Review the complete outcome, current contracts, relevant unchanged behavior, and applicable evidence.
+Review the final integrated material, not only isolated worker branches or changed files. Use relevant unchanged behavior and configuration when they affect the outcome. The [Unit of Work Review package](../../diff-package.md#unit-of-work-review) covers the range from the original unit Review baseline set to the assessed final checkpoint set. It does not limit review to changed lines. Review the complete outcome, current contracts, relevant unchanged behavior, and applicable evidence.
 
 This stage does not make an unconditional repeat of typechecking, the build, and the full suite necessary. Use required Implementation results only while they apply to the material and inputs.
 
@@ -204,7 +204,7 @@ Additional check and review rows apply only when their stated conditions occur. 
 
 Bind this stage's new assessment to its unit-scoped attempt, material, relevant inputs, result, and supporting output. Keep originating bindings when referencing earlier evidence. The package selects Implementation material. A completed Review is not necessary to render it. The actual Review result stays bound to this current Review attempt.
 
-Apply the shared [evidence and approval rules](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Create the output checkpoint before recording any required requester acceptance.
+Apply the shared [evidence and approval rules](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Create the required repository checkpoint set before recording any requester acceptance.
 
 Exact event types, record formats, commands, and derived report layouts are still implementation work. No new execution-state authority or mandatory report filename is proposed.
 
@@ -212,7 +212,7 @@ Exact event types, record formats, commands, and derived report layouts are stil
 
 **Standard workflow next stage:** [Deliver](deliver.md).
 
-Supply the reviewed integrated checkpoint, current upstream artifacts, review result, evidence references, and any applicable requester acceptance.
+Supply the reviewed integrated checkpoint set, current upstream artifacts, review result, evidence references, and any applicable requester acceptance.
 
 Include known delivery constraints, remaining nonblocking limitations, planned prerequisites, and operations that are subject to existing permissions or requester decisions.
 

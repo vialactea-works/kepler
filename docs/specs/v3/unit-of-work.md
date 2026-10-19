@@ -6,7 +6,7 @@
 
 ## Definition
 
-A Unit of Work groups work around a coherent intended outcome. The requester can compare the outcome with the acceptance conditions before accepting the Unit of Work as a whole. Acceptance cohesion is its primary boundary.
+A Unit of Work groups work around a coherent intended outcome. The requester can compare the outcome with the acceptance conditions before accepting the Unit of Work as a whole. Acceptance cohesion is its primary boundary. The [Mission contract](mission.md) sets its record home and mission membership.
 
 Construction operates on one Unit of Work. A unit can contain several requirements and implementation tasks. It is not automatically a DDD bounded context or an aggregate.
 
@@ -17,17 +17,17 @@ Construction operates on one Unit of Work. A unit can contain several requiremen
 - The CLI creates the unit ID in the format `YYYY-MM-DD-<slug>`.
 - The date is the date when the CLI creates the unit, in the machine's local timezone. It is not the date when implementation starts.
 - The slug describes the unit with lowercase words separated by hyphens.
-- The complete ID must be unique within the project. Cross-project uniqueness is not necessary.
-- Use the exact ID as the directory name: `.kepler/units-of-work/<unit-id>/`.
+- The complete ID must be unique within the record-home project, including known unbound units. Cross-project uniqueness is not necessary.
+- Use the exact ID as the directory name under its mission: `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/`.
 - Keep the complete ID and directory name unchanged across stages, revisions, retries, branches, and worktrees. Do not update the date or slug when the description or machine timezone changes.
 - Every unit-owned artifact records this ID in `unit_id`. Each artifact keeps its separate UUID in `id`.
 
 #### Example
 
-This path is illustrative:
+This path is illustrative. Paths are relative to the selected record-home working-tree root:
 
 ```text
-.kepler/units-of-work/2026-10-17-order-cancellation/
+.kepler/missions/<mission-id>/construction/units-of-work/2026-10-17-order-cancellation/
 ```
 
 ### Acceptance cohesion

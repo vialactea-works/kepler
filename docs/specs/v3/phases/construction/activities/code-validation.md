@@ -8,7 +8,7 @@
 
 Examine the generated task output and state whether it satisfies its contract and is ready for Code Integration.
 
-Use the [shared assignment](README.md#shared-execution-rules), fixed baseline, actual output checkpoint, and valid Generation completion and evidence. Include project check configuration, relevant execution conditions, and permission or resource constraints. The reviewer can use the [Code Validation package](../../../diff-package.md#code-validation) when reviewing the baseline, task output, and original contribution history. It does not replace review of actual material or become a check result or completion condition.
+Use the [shared assignment](README.md#shared-execution-rules), fixed repository-qualified baseline set, actual output checkpoint set, and valid Generation completion and evidence. Include project check configuration, relevant execution conditions, and permission or resource constraints. The reviewer can use the [Code Validation package](../../../diff-package.md#code-validation) when reviewing the baseline, task output, and original contribution history. It does not replace review of actual material or become a check result or completion condition.
 
 The reviewer must examine actual material and relevant contracts, not only the author's summary. Satisfy applicable prerequisites before checks or review. The reviewer must not have authored the candidate.
 
@@ -58,7 +58,7 @@ Validation completion makes Integration eligible to start. It does not accept th
 
 | Evidence | Material covered | Required result |
 | --- | --- | --- |
-| Validation check result | Task output checkpoint, project check configuration, and relevant execution conditions. | Typechecking, the project build, and the full application test suite succeed. |
+| Validation check result | Task output checkpoint set, project check configuration, and relevant execution conditions. | Typechecking, the project build, and the full application test suite succeed against the identified task output set. |
 | Independent code feedback result | Actual task output against its baseline, task contract, functional design, and applicable quality requirements. | Independent feedback is complete. No blocking findings remain, and the validation assessment has passed a self-check. |
 | Requested additional review result | Task material and scope identified by the request, when additional review is requested. | The requested review is complete and its blocking findings are resolved. |
 
@@ -68,6 +68,6 @@ The additional-review row is conditional on requester instruction. Independent f
 
 **Next Activity:** [Code Integration](code-integration.md).
 
-Supply unit and task identities, current definition, fixed baseline, reviewed output checkpoint, and originating Generation and Validation evidence. Include check commands, conditions, independent findings, resolved blocking concerns, and nonblocking limitations.
+Supply unit and task identities, current definition, fixed baseline set, reviewed output checkpoint set, and originating Generation and Validation evidence. Include check commands, conditions, independent findings, resolved blocking concerns, and nonblocking limitations.
 
 The orchestrator coordinates the handoff with each result's original material and attempt bindings. If the package helped with the review, keep its original source bindings. Keep these separate from the result, which belongs to the current Validation attempt.

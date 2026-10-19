@@ -19,7 +19,7 @@ Existing application code, tests, and passing checks are not entry requirements.
 3. Do tests of real collaborations and critical complete workflows when isolated tests cannot show correctness.
 4. Run typechecking and modification-related tests. Set up planned infrastructure that is missing. Do not invent successful results or waive required checks.
 5. Self-review the implementation, task acceptance conditions, and upstream obligations. Correct local defects within the current Generation attempt.
-6. Prepare the output under the shared [checkpoint procedure](../../../runtime.md#repository-checkpoint-procedure). Final evidence must cover that checkpoint, not an earlier working copy.
+6. Prepare the output under the shared [checkpoint procedure](../../../runtime.md#repository-checkpoint-procedure). Final evidence must cover the repository-qualified output set, not an earlier working copy.
 
 Do not change upstream requirements, task definitions, or selected planning decisions without applicable revision authority. Author self-review does not replace independent Code Validation or complete task integration.
 
@@ -53,7 +53,7 @@ Generation completion makes the task eligible for Validation. It does not comple
 
 | Evidence | Material covered | Required result |
 | --- | --- | --- |
-| Generation check result | Task output checkpoint, changed behavior, related tests, task contract, and relevant inputs. | Typechecking and modification-related tests succeed against the identified material. |
+| Generation check result | Task output checkpoint set, changed behavior, related tests, task contract, and relevant inputs. | Typechecking and modification-related tests succeed against the identified material. |
 | Generation self-review result | Task implementation, tests, required documentation, and acceptance conditions. | Required outputs are supplied. No blocking Generation findings remain. |
 | Requested additional review result | Task material and scope identified by the request, when additional review is requested. | The requested review is complete and its blocking findings are resolved. |
 
@@ -63,6 +63,6 @@ The additional-review row is conditional on requester instruction. Keep [evidenc
 
 **Next Activity:** [Code Validation](code-validation.md).
 
-Supply unit and task identities, current definition, fixed baseline, Generation attempt, and output checkpoint. Include upstream contracts, changed scope, check results, self-review evidence, execution conditions, and nonblocking limitations.
+Supply unit and task identities, current definition, fixed repository-qualified baseline, Generation attempt, and output checkpoint set. Include upstream contracts, changed scope, check results, self-review evidence, execution conditions, and nonblocking limitations.
 
-The orchestrator passes the material and original evidence bindings to the separate Validation worker context. For optional inspection, use the [Code Validation package](../../../diff-package.md#code-validation) with this Generation attempt, fixed baseline, and output checkpoint. Package generation is not a Generation completion gate and does not make an unstarted Validation attempt necessary.
+The orchestrator passes the material and original evidence bindings to the separate Validation worker context. For optional inspection, use the [Code Validation package](../../../diff-package.md#code-validation) with this Generation attempt, fixed baseline set, and output checkpoint set. Package generation is not a Generation completion gate and does not make an unstarted Validation attempt necessary.

@@ -2,7 +2,7 @@
 
 [Construction catalog](README.md) | [Shared runtime contract](../../runtime.md) | [CLI draft](../../cli.md) | [Authoring progress](../../authoring_progress.md)
 
-**Status:** Draft for discussion. This document proposes Construction state and record details. It does not approve those choices or put them into effect.
+**Status:** Draft for discussion. This document proposes Construction state, event, and operation details. The accepted [Mission contract](../../mission.md) owns mission and storage policy. No approval here shows implementation or release.
 
 ## Purpose and authority
 
@@ -10,11 +10,11 @@ Construction owns its state model and event catalog under the shared [execution-
 
 This is not a stage, implementation plan, task graph extension, or separate lifecycle engine. It adds no task attempt, protocol identity, agent role, or public audit kind. The accepted [Implementation](implementation.md), [Activities](activities/README.md), [Standard workflow](../../workflows/standard/README.md), and [task graph](task-graph.md) contracts are still binding.
 
-The proposed names, fields, states, and paths are implementation choices. Writing this draft does not settle those choices or create separate requester approval gates.
+The proposed event names, payload schemas, states, and operation details remain implementation choices. Mission and local-runtime paths are accepted in the [Mission contract](../../mission.md). This draft adds no requester approval gate.
 
 ## Scope and identity
 
-Keep authored identities separate from execution identities. Store execution facts through CLI-owned journals, not frontmatter, authored status sections, or `tasks-dag.json`.
+Keep authored identities separate from execution identities. Store execution facts through CLI-owned journals, not frontmatter, authored status sections, or `tasks-dag.json`. Mission-scoped payloads identify the mission and narrower unit or task scope without changing the ten-field envelope.
 
 | Identity | Scope and meaning |
 | --- | --- |
@@ -27,7 +27,7 @@ Keep authored identities separate from execution identities. Store execution fac
 
 Attempt ID formats stay under SH47. Admission captures a fixed baseline without creating a task attempt.
 
-Apply the accepted [workflow binding](../../cli.md#workflow-binding). Unit creation records `standard`, and later operations and resume use that binding. This accepted fact does not accept the proposed event names or payload keys below.
+Apply the accepted [workflow binding](../../cli.md#workflow-binding). Mission creation records its selected workflow. Construction unit creation records the matching `standard` binding. Later operations and resume use that binding. The event names and payload schemas below remain proposals.
 
 ## Proposed derived states
 
@@ -95,7 +95,7 @@ The following payload keys and version-one event names are proposals. Record onl
 | `activity` | Required for Activity facts. Identify the definition within the task and parent context. |
 | `activity_attempt_id` | Required for an Activity execution fact. Keep its original parent. |
 | `graph_ref`, `task_definition_ref` | Required for admission and task-readiness evidence. Identify the actual authored input versions. |
-| `checkpoint`, `material_refs` | Identify actual covered repository and external material. References alone do not keep that material. |
+| `checkpoint`, `material_refs` | Identify each repository checkpoint in a covered set and relevant external material. References alone do not keep that material. |
 | `reason` | Required for a wait, pause, ending, or authorized revision. |
 
 Use the envelope's `caused_by` for direct recorded causes. Do not place another causal predecessor list in `data`.
@@ -104,23 +104,23 @@ Stage facts bind their stage and attempt. Task facts bind their task and Impleme
 
 | Proposed event `type` | Required data and binding |
 | --- | --- |
-| `construction.unit-created` | Unit identity, directory, creation inputs, and the accepted Standard workflow binding. Record initial Effort through its linked selection fact. |
-| `construction.unit-baseline-selected` | Unit, integration target, initial checkpoint, and capture before first admission. Keep this original unit baseline across returns. |
+| `construction.unit-created` | Mission and unit identities, directory, creation inputs, and matching `standard` workflow binding. Record initial Effort through its linked selection fact. |
+| `construction.unit-baseline-selected` | Original unit Review baseline set, integration targets, and capture before first admission. Keep it across returns. Keep it distinct from the mission starting set. |
 | `construction.unit-effort-selected` | Unit, selected level, prior value when changed, and requester decision reference. |
 | `construction.stage-effort-selected` | Unit, stage, selected override, and requester decision reference. Activities inherit the stage's Effort. |
 | `construction.stage-attempt-started`, `construction.stage-waiting`, `construction.stage-pause-requested`, `construction.stage-paused`, `construction.stage-resumed`, `construction.stage-attempt-completed` | Unit, stage, attempt, actual inputs, applicable reason, and evidence or approvals required by the transition. |
 | `construction.stage-attempt-ended-by-revision`, `construction.stage-reopened` | Authorized revision, affected stage, and original attempt when one exists. Reopening alone creates no attempt. |
-| `construction.task-admitted` | Unit, Implementation attempt, task, definition references, fixed baseline, predecessor provenance, and prerequisite evidence. |
+| `construction.task-admitted` | Unit, Implementation attempt, task, definition references, fixed repository-qualified baseline set, predecessor provenance, and prerequisite evidence. |
 | `construction.task-scope-ended-by-revision`, `construction.task-scope-reopened` | Unit, parent attempt, task, authorized revision, and affected Activity scopes. Keep original admission records. |
 | `construction.task-completed` | Unit, parent attempt, task, accepted Integration record, and task conditions that hold. |
 | `construction.activity-attempt-started`, `construction.activity-waiting`, `construction.activity-pause-requested`, `construction.activity-paused`, `construction.activity-resumed`, `construction.activity-attempt-completed` | Identify the full Activity execution scope. Include transition reasons, source references, and evidence required for completion. |
 | `construction.activity-attempt-ended-by-revision`, `construction.activity-reopened` | Unit, task, Activity occurrence, original parent and attempt, revision, and affected scope. |
 | `construction.evidence-recorded`, `construction.approval-recorded`, `construction.interaction-recorded` | Keep the existing public audit kinds. Bind phase-specific records to their scope, material, inputs, result, and actor or requester. |
-| `construction.integration-prepared` | Identify the Integration scope, lock-captured unit checkpoint, validated task output, other actual inputs, immutable candidate, and source evidence. Record the fixed admission baseline separately. |
-| `construction.integration-accepted` | Prepared candidate, accepted checkpoint, actual inputs, successful check evidence, current Integration attempt, and applicable authority references. |
+| `construction.integration-prepared` | Identify the Integration scope, lock-captured unit checkpoint set, validated task output, other actual inputs, immutable candidate set, and source evidence. Record the fixed admission baseline separately. |
+| `construction.integration-accepted` | Prepared candidate set, accepted repository results, actual inputs, successful check evidence, current Integration attempt, and applicable authority references. |
 | `construction.revision-authorized` | Orchestrator decision, reason, unit-stage or task-Activity boundary, and supporting findings. |
 | `construction.retained-scope-assessed` | Current Implementation attempt and inputs, original scope and attempt references, applicability result, and reason. Keep the original parent and material. |
-| `construction.implementation-completion-assessed` | Current Implementation attempt, final checkpoint, graph, required checks, Integration results, retained-scope assessments, and handoff assessment. |
+| `construction.implementation-completion-assessed` | Current Implementation attempt, final repository-qualified checkpoint set, graph, required checks, Integration results, retained-scope assessments, and handoff assessment. |
 
 These event names do not add public audit kinds. Typed lifecycle operations record their own facts without a second caller write. The CLI's `producer` identifies recording software, not proof that it executed a check. Evidence identifies the actual executor, covered material, relevant inputs, conditions, result, and retained output.
 
@@ -189,14 +189,14 @@ Diff packages consume existing facts. They do not create lifecycle authority. Ke
 | Inspection scope | Material producer and required bindings |
 | --- | --- |
 | Code Validation | Admission and Generation identify the fixed baseline, generated output, task definition, upstream versions, and original Generation attempt. No consuming Validation attempt is required to render the package. |
-| Code Integration | The owning Integration operation records its lock-captured unit checkpoint, validated output, source evidence, and immutable prepared candidate. Neither another lock operation nor completed Integration is necessary for rendering. |
-| Unit of Work Review | Original unit baseline and the selected Implementation completion assessment identify the complete range. The assessment identifies the final checkpoint. A completed Review is not necessary for rendering. |
+| Code Integration | The owning Integration operation records its lock-captured unit checkpoint set, validated output, source evidence, and immutable prepared candidate set. Neither another lock operation nor completed Integration is necessary for rendering. |
+| Unit of Work Review | The original unit Review baseline set and selected Implementation completion assessment identify the complete range. The assessment identifies the final checkpoint set. A completed Review is not necessary for rendering. |
 
 Package selectors name original producer contexts. Consuming Validation and Review record results under their own attempts. Applicability assessment is necessary before current use of historical inputs. Empty diffs stay valid inspection inputs. Neither a package nor its fingerprint keeps source objects by itself.
 
 ## Workspaces and check evidence
 
-Isolate concurrent writers. During Implementation, the orchestrator dispatches workers and keeps Generation and non-author Validation contexts separate. This model does not select execution topology for other stages. Workspace and branch naming are SH68 and SH69 choices.
+Isolate concurrent writers. During Implementation, the orchestrator dispatches workers and keeps Generation and non-author Validation contexts separate. This model does not select execution topology for other stages. The [Mission contract](../../mission.md#workspace-selection-and-preparation) sets startup bindings and isolation policy. Detailed allocation remains under SH66. Branch layout remains under SH69.
 
 Integration reads current unit material only after acquiring its unit lock. Keep that lock through preparation, typechecking, build, full-suite checks, and acceptance. Make sure that the current attempt, revision boundary, authority, actual inputs, and bytes still meet the required conditions before acceptance. Other permitted tasks and units continue.
 
@@ -204,15 +204,9 @@ Task `verification.method` owns planned procedures, setup, fixtures, versions, r
 
 Do not add `verification.environment`, task `coordination`, or dependency-output fields to the graph. A build shows typechecking only when it does that check. Successful process exit alone does not show semantic acceptance or workflow completion.
 
-## Journal, projection, and live coordination proposal
+## Journal, projection, and live coordination boundaries
 
-SH45 owns exact storage paths. This layout is a proposal:
-
-| Data | Proposed location and rule |
-| --- | --- |
-| Versioned history | `.kepler/history/construction/<journal-id>.jsonl`. Keep each origin and local order. Separate writer journals are still permitted. |
-| Disposable projections | `<git-common-directory>/kepler/construction/views/`. Rebuild from history without treating cached state as authority. |
-| Local live coordination | `<git-common-directory>/kepler/construction/coordination/`. Keep process ownership and locks unversioned. |
+The [Mission contract](../../mission.md#durable-layout) sets mission journal and local-runtime paths. SH43 still permits disposable projections. This contract selects no persisted views directory or substitute cache tree.
 
 Supported concurrent workspaces must share effective live coordination for the scopes they can mutate. History transfer alone does not show ongoing synchronization or distributed lock ownership. Apply [record portability](../../runtime.md#record-portability) before cross-checkout or cross-machine handoff.
 
@@ -228,7 +222,7 @@ The proposed pause request fences new affected work before stopping completes. A
 
 ## Draft boundaries
 
-Accepted shared runtime, Construction, and Standard contracts are authoritative. This draft proposes state, event, pause, and path details. It does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
+Accepted shared runtime, Construction, Standard, and [Mission](../../mission.md) contracts are authoritative. This draft proposes Construction state, event, pause, and operation details. It does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
 
 Apply the accepted [project selection rules](../../cli.md#project-selection), [scope selectors](../../cli.md#scope-and-selectors), [result envelope](../../cli.md#machine-readable-output), [failure result fields](../../cli.md#failure-and-recovery-rules), [exit-code contract](../../cli.md#exit-codes), and [output stream contract](../../cli.md#output-streams). Apply [MVP result formatting](../../cli.md#human-output). Apply the accepted [evidence recording interface](../../cli.md#kepler-audit-record-evidence), [audit queries](../../cli.md#kepler-audit-list), and [shared lint interface](../../cli.md#kepler-lint).
 
