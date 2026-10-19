@@ -59,7 +59,7 @@ The release must keep separate non-author Code Validation and combined-candidate
 
 ## MVP decisions
 
-The accepted Construction policy decisions stay complete. One release-scope decision, SH116, stays open: the certified host and platform combinations for the first Construction MVP. It does not reopen an accepted stage or Activity contract. The 40 implementation choices and 14 deferred questions stay separate from requester policy approval.
+The accepted Construction policy decisions stay complete. One release-scope decision, SH116, stays open: the certified host and platform combinations for the first Construction MVP. It does not reopen an accepted stage or Activity contract. The 39 implementation choices and 14 deferred questions stay separate from requester policy approval.
 
 ### Open MVP release-scope decision
 
@@ -77,11 +77,13 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 ## Review result
 
-The register contains 278 unique IDs. These include 222 completed decisions, 1 pending MVP release-scope decision, and 40 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision.
+The register contains 278 unique IDs. These include 223 completed decisions, 1 pending MVP release-scope decision, and 39 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision.
 
 The requester accepted 78 decisions for the Construction contracts: 16 for Planning, 24 for Implementation and Activity, 16 for Review, and 18 for Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately.
 
-SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. SH102-SH109 separately record accepted CLI project selection, scope selectors, the result envelope, failure fields, exit codes, output streams, MVP result formatting, and evidence recording. The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
+SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. SH102-SH109 separately record accepted CLI project selection, scope selectors, the result envelope, failure fields, exit codes, output streams, MVP result formatting, and evidence recording. SH110 records accepted audit queries.
+
+The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
 
 ## Register rules
 
@@ -185,6 +187,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH107 | CLI output stream contract | Use [output streams](cli.md#output-streams): one final JSON result and a newline on `stdout` for success and failure. Keep optional diagnostics and progress on `stderr` without another result envelope. Keep banners, logs, and child-process output off `stdout`. Callers use JSON and exit code, not diagnostic text, to identify outcomes. Forced termination can prevent a complete response. Human rendering stays under SH108. |
 | SH108 | CLI human output interface | Use [JSON-only operation results](cli.md#human-output) for the MVP, with the same format in terminals, pipes, and agent calls. Do not add `--human`, a result-format selector, or automatic terminal-based switching. Generate help from the parser definitions, with layout as an implementation choice. Any later human result mode must be opt-in. Keep SH107 diagnostics and progress on `stderr`. |
 | SH109 | CLI evidence recording interface | Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) with accepted scope selectors and one typed JSON request on stdin. Use `inputs` entries with `reference` and `purpose` for checked material and relevant inputs, without a separate `material` field. Return the recorded event's `id` and `journal_id` in `data`. Keep phase validation, evidence bindings, recovery, and no-completion rules. Detailed schemas stay under SH49 and SH51. Approval and interaction interfaces stay under SH55-SH56. |
+| SH110 | CLI audit query interface | Use [audit queries](cli.md#kepler-audit-list) with explicit unit scope and exact selectors. Default to compact projections with optional fields and mandatory `id` and `journal_id`. Use pages of 20 records by default, with a maximum of 1000. Bind cursors to the original view and filters, without silent restarts. Keep journal-local order and return full records through `show`. Keep queries read-only, empty matches successful, and missing records or invalid cursors as failures. |
 
 ## MVP implementation choices
 
@@ -229,7 +232,6 @@ The implementation must include typechecking, project-build, and full-suite comm
 | DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF17 | Revision shutdown coordination | How is active implementation stopped during an authorized unit-wide revision? See [upstream revision](phases/construction/README.md#unit-wide-upstream-revision). |
-| SH110 | CLI audit query interface | Set scoped record selectors, filters, pagination, and causal or local-sequence presentation. Do not infer global timestamp order. See [CLI audit operations](cli.md#audit-operations). |
 | SH111 | CLI shared lint interface | Set selected shared-artifact paths and the full read-only validation report. Keep the accepted root lint scope. See [CLI `kepler lint`](cli.md#kepler-lint). |
 | SH112 | CLI Construction lint interface | Set unit and graph selectors, necessary context, and finding format. Keep the accepted task-graph scope. See [CLI Construction lint](cli.md#kepler-workflow-construction-lint). |
 | SH113 | CLI UUID generation interface | Set arguments and results for the proposed root UUID command. Do not add a global allocation registry. See [CLI `kepler uuid`](cli.md#kepler-uuid). |

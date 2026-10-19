@@ -243,6 +243,8 @@ Use `caused_by` for explicit causal references across journals. Local order does
 
 The protocols for safe appends, retries, interrupted writes, and collection stay undecided. This choice sets no physical storage layout or global total order.
 
+The [audit list interface](cli.md#kepler-audit-list) returns compact query projections by default. Omitted fields are unrequested, not absent from the original event. Query projections do not change the stored event envelope, journal order, or causal references.
+
 ## Evidence and content checkpoints
 
 ### Concepts
@@ -388,7 +390,7 @@ For project-scoped operations, apply the accepted [project selection rules](cli.
 
 CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes), [output stream contract](cli.md#output-streams), and [MVP result formatting](cli.md#human-output). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
 
-Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Approval and interaction interfaces stay under SH55-SH56.
+Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Use the accepted [audit queries](cli.md#kepler-audit-list) for read-only history inspection. Approval and interaction interfaces stay under SH55-SH56.
 
 ### Current author
 

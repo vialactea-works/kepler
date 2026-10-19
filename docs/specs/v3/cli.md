@@ -20,7 +20,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Use descriptive root capabilities, such as `git`, `lint`, and `audit`. Do not add generic `util` or `commons` groups.
 - Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted. It does not accept other proposals in this draft.
 - Keep shared artifact checks under root `kepler lint`. Keep Construction task-graph checks under `kepler workflow construction lint`.
-- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence recording interface](#kepler-audit-record-evidence) is accepted. Approval and interaction interfaces and the `list` and `show` verbs stay proposed. Do not add separate Construction evidence, approval, or interaction namespaces.
+- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence recording interface](#kepler-audit-record-evidence) and [audit queries](#kepler-audit-list) are accepted. Approval and interaction interfaces stay proposed. Do not add separate Construction evidence, approval, or interaction namespaces.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
 - Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Do not add effort commands. Keep the requester's effort authority and the agreed adjustment rules.
 - Use a direct `kepler workflow construction revise` operation. Do not add a revision namespace.
@@ -43,7 +43,7 @@ Construction owns its transition rules. A workflow selects stage order. The [Sta
 
 ## Proposed interface rules
 
-The command inventory below lists proposed interfaces, the three `kepler git diff-package` commands, and `kepler audit record evidence`. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
+The command inventory below lists proposed interfaces and accepted command interfaces. Accepted interfaces include three `kepler git diff-package` commands, evidence recording, and audit queries. It does not add commands for future Initialization or Inception phases. It adds no workflow engine, state registry, or utility registry. It also excludes generic status changes, force operations, migrations, and public lock manipulation.
 
 ### Scope and selectors
 
@@ -168,8 +168,8 @@ Any later human result mode must be opt-in.
 | `kepler lint` | Accepted root placement | Report shared artifact rule findings. |
 | `kepler audit record evidence` | Accepted under `audit` | Record evidence from one typed JSON request on stdin. |
 | `kepler audit record <kind>` | Proposed approval and interaction interfaces | Record an approval or interaction fact. |
-| `kepler audit list` | Proposed verb under accepted `audit` namespace | Query audit history. |
-| `kepler audit show` | Proposed verb under accepted `audit` namespace | Read one audit record. |
+| `kepler audit list` | Accepted under `audit` | Query compact audit-event projections with explicit field selection and pagination. |
+| `kepler audit show` | Accepted under `audit` | Read one complete audit event by its journal and event identities. |
 | `kepler workflow construction unit create` | Accepted placement | Create one Construction Unit of Work. |
 | `kepler workflow construction unit list` | Accepted placement | List Units of Work. |
 | `kepler workflow construction unit show` | Accepted placement | Read one Unit of Work and its state. |
@@ -181,7 +181,7 @@ Any later human result mode must be opt-in.
 
 Here, `<kind>` is `approval` or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
 
-The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors). The accepted [evidence interface](#kepler-audit-record-evidence) fixes its stdin request and success identity fields. Other operation arguments and result fields stay open where their contracts say so.
+The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors). The accepted [evidence interface](#kepler-audit-record-evidence) fixes its stdin request and success identity fields. The [audit query interfaces](#kepler-audit-list) fix history selection and results. Other operation arguments and result fields stay open where their contracts say so.
 
 ## Root capabilities
 
@@ -289,15 +289,48 @@ Other evidence request and record fields stay under SH49. Reference encodings st
 
 ### `kepler audit list`
 
-**Proposed query.** Return matching history records for an explicit scope. Do not change workflow state or write an event. Do not sort unrelated journals into a global causal order by timestamp. Keep each journal's local order and use recorded causal references where available.
+**Accepted under [SH110](authoring_progress.md#completed-shared-decisions).** Return compact audit-event projections for an explicit unit scope.
 
-The filters, pagination, and ordering contract stay open.
+```text
+kepler audit list --unit <unit-id> [--stage <stage>] [--task <task-id>] [--activity <activity>] [--attempt <attempt-id>] [--implementation-attempt <attempt-id>] [--type <event-type>] [--fields <field-list>] [--limit <n>] [--cursor <token>] [--project <path>]
+```
+
+Require `--unit`. Apply the accepted [project selection](#project-selection) and [scope selector](#scope-and-selectors) rules, including ownership checks. Use applicable scope selectors as filters. Match event types and IDs exactly.
+
+By default, each entry contains `id`, `journal_id`, `phase`, `type`, and `recorded_at`.
+
+Use `--fields` for a comma-separated list of top-level [event envelope fields](runtime.md#event-envelope-choices). It replaces the default projection, but always keeps `id` and `journal_id`. Match field names exactly. Field selection affects each event entry, not the outer CLI result envelope.
+
+Event payload `data`, `caused_by`, and other metadata are opt-in. These entries are query projections, not complete stored events. Omitted fields mean unrequested, not empty or absent. Keep the full stored event envelope unchanged. Use [audit show](#kepler-audit-show) for a complete original event.
+
+Return the following fields inside `data`:
+
+| Field | Audit list result |
+| --- | --- |
+| `events` | Array of matching event projections for the page. |
+| `next_cursor` | Opaque continuation token. Use `null` when no further page exists. |
+
+Use a positive integer for `--limit`. The default is `20` records per page, with a maximum of `1000`.
+
+Bind each continuation cursor to the original query view and filters. Reject invalid or expired cursors. Do not silently restart the query. Cursor format and query-view retention are implementation choices.
+
+Group events by their originating journal. Keep each journal's stored local order. Cross-journal display order has no causal meaning. Keep recorded `caused_by` values when that field is selected. Do not infer a global event order from timestamps.
+
+For no matching events, return `success` with `events: []` and `next_cursor: null`. This query does not write events or advance workflow state. Apply the existing [failure and recovery rules](#failure-and-recovery-rules).
 
 ### `kepler audit show`
 
-**Proposed query.** Return one identified record and its recorded scope, bindings, and causes. Do not write an audit event or change current state. A timestamp alone does not show causality.
+**Accepted under [SH110](authoring_progress.md#completed-shared-decisions).** Return one complete original event by its journal and event identities.
 
-The record selector and response schema stay open.
+```text
+kepler audit show --unit <unit-id> --journal <journal-id> --id <event-id> [--project <path>]
+```
+
+Require `--unit`, `--journal`, and `--id`. Use full, exact identities and validate unit ownership. Apply the accepted [project selection rules](#project-selection). Do not substitute a current or latest event.
+
+Return the complete original event in `data.event`, including its stored scope, bindings, and causes. Field selection applies only to `audit list`. A timestamp alone does not show causality.
+
+A missing event returns failure under the existing [failure and recovery rules](#failure-and-recovery-rules). This query does not write events or advance workflow state.
 
 ## Construction commands
 
@@ -504,11 +537,10 @@ Forced termination can produce other exit codes or prevent a JSON response. A mi
 
 ## Open decisions
 
-Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence) also stays in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence) and [audit queries](#kepler-audit-list) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH110 | Audit query selectors, filters, pagination, and local or causal ordering presentation. | Keep SH44's envelope, SH53's query interface, SH92-SH94 producer and causal-order rules, and no timestamp-derived global order. |
 | SH111 | Shared `kepler lint` input paths and complete read-only finding format. | Keep its accepted shared-metadata scope and the metadata validation rules in SH18, SH19, and SH21. Do not move task-graph checks to root lint. |
 | SH112 | Construction lint selectors, necessary context, validation coverage, and finding format. | Keep the accepted `kepler workflow construction lint` placement and task graph contract under IP26. Do not change the graph schema. |
 | SH113 | Arguments and result fields for the proposed root UUID operation. | Keep the accepted artifact UUID rules in SH13 and task UUID rules in IP22. Do not add a global allocation registry. |
