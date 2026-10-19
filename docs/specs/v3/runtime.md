@@ -121,7 +121,7 @@ Suspected upstream problems follow the shared [revision authority and escalation
 
 #### Attempt identity and active scope
 
-Give each attempt a distinct identity. A new attempt must not reuse a previous attempt's identity. Git checkpoint reuse does not change this rule.
+Give each stage and Activity attempt its own full lowercase hyphenated UUIDv4 value. Mint the value independently when execution starts. Give every new attempt a fresh value. Do not use counters or timestamp IDs. Do not add a task-attempt or separate run-floor identity, or an ID registry. Git checkpoint reuse does not change this rule.
 
 For Construction, keep at most one active attempt for each fixed unit/stage scope. Apply the separate one-active-attempt limit to each fixed Activity occurrence under [Activity attempts](#activity-attempts). Different task and unit scopes can progress concurrently when dependency and stage-order constraints are satisfied.
 
@@ -135,7 +135,7 @@ Construction sets its [Implementation structure](phases/construction/README.md#i
 
 Task implementation and Task coding are execution contexts, not additional attempt identities. Do not infer Construction's Activity structure for other phases.
 
-More decisions are necessary for attempt ID formats, status values, and exact coordination and binding record formats.
+Status values and exact coordination and phase-specific binding details remain open.
 
 ### Activity attempts
 
@@ -149,7 +149,7 @@ Keep Activity evidence under the Activity's own contract and attempt. Keep enclo
 
 When an upstream revision ends the enclosing stage attempt, end its affected Activity attempts. Do not move historical Activity evidence to a new stage attempt. Ended Activity results cannot complete or cancel newer work, even if candidate bytes and the enclosing stage attempt stay unchanged.
 
-Use shared CLI-owned journals and operations for Activity attempts and evidence. Do not add a second lifecycle engine or a task-coding or protocol-run attempt identity. Activity event payloads, ID formats, commands, and projections stay implementation choices under the unchanged [event envelope](#event-envelope-choices).
+Use shared CLI-owned journals and operations for Activity attempts and evidence. Do not add a second lifecycle engine or a task-coding or protocol-run attempt identity. Phase-owned Activity event payloads, commands, and projections stay implementation choices under the unchanged [event envelope](#event-envelope-choices). Activity attempt IDs follow the shared rules above.
 
 ### Run floor
 
@@ -174,6 +174,8 @@ This rule does not set lock recovery or repair rules for interrupted state write
 Follow the shared [Revision procedure](revision.md#revision-procedure). A stage's proposed boundary does not authorize reopening or a revision cascade.
 
 Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Keep those facts in the phase's append-only event journals. Get current execution state from the recorded decision. CLI-owned operations record the events. Agents must not write them separately.
+
+Give each authorized revision a fresh full lowercase hyphenated UUIDv4 as `revision_id` in phase-owned event data. Keep it distinct from the authorizing event ID and attempt IDs. Related ending and reopening facts reference this revision identity. Keep `caused_by` for direct event IDs. Keep the authorizing event ID and original revision identity when transferring history or retrying the same journal write. Do not add a revision registry, separate lifecycle engine, or second authoritative store.
 
 Follow Construction's [unit-wide upstream revision rules](phases/construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation and Activity attempts through CLI-owned journal events. Calculate current attempt views from those events. Start new attempts only when their stage or Activity executes again.
 
@@ -237,6 +239,8 @@ Workers can receive applicable event IDs with their assignments. Workers can do 
 
 Keep `journal_id` as the event's originating journal identity. Use stable event IDs to detect duplicates.
 
+Event IDs support journal-write deduplication and debugging. They do not replace revision or evidence identities.
+
 Do not persist a numeric `position` field or allocate a separate sequence counter. Local order is the order of events stored in each journal. Collection must keep the original journals or their relative event order. Do not flatten and reorder history by timestamp while discarding local journal order.
 
 Use `caused_by` for explicit causal references across journals. Local order does not resolve conflicting control decisions. Apply the existing transition, attempt, evidence, and approval rules.
@@ -282,23 +286,24 @@ A [Git diff package](diff-package.md) is a derived inspection input. It does not
 
 ### Evidence and approval bindings
 
-Each evidence record identifies:
+Each evidence result uses the shared ten-field event envelope. Its phase-owned `data` includes:
 
-- Its owning phase and applicable stage, Activity, and attempt scope. In Construction, include the unit and task when applicable.
-- The material checked and relevant inputs.
-- The repository identity and checkpoint commit for each repository material input, with appropriate references for other material.
-- The check or review performed, its result, and supporting output.
-- Relevant external conditions, such as the database version.
+- An independently generated `evidence_id`, a full lowercase hyphenated UUIDv4 distinct from the event envelope's `id` and attempt IDs. Give each new check or review result a fresh value. Matching material and outcomes do not justify ID reuse.
+- The applicable stage, Activity, unit, task, and attempt bindings. Include only scopes that apply.
+- One `inputs` array for checked material and other relevant inputs. Each entry has `reference` and `purpose`. References identify each repository and exact checkpoint commit, or other material as appropriate.
+- The check or review performed, the actual executor, its result, retained output references, and relevant conditions.
 
-The [evidence recording interface](cli.md#kepler-audit-record-evidence) uses one request `inputs` array for checked material and relevant inputs. Each entry has `reference` and `purpose`. This request structure does not select the stored evidence schema or change these binding requirements.
+The owning contracts set evidence scope. Cover relevant material, not only files changed by one worker. Keep workflow progress and audit history separate from checked material unless the check covers them. Record bindings through CLI-owned JSON journal events, not artifact frontmatter. Derive current binding views from recorded events.
 
-An approval identifies the requester, applicable attempt, and material approved. Include the checkpoint and other material references that identify what the requester reviewed.
+Use the envelope's `event_version` to version phase-owned data. Do not add a redundant record-version field. This minimum does not define a closed generic schema, reference encoding, result taxonomy, host qualification, separate evidence file, or evidence registry. Detailed phase-owned payload types and event catalogs remain implementation work.
 
-The applicable contracts set the scope. The material covered is not limited to files changed by one worker.
+A retry of the same journal write keeps the existing evidence ID, event ID, and original bindings. This is not a general idempotency protocol or permission to reinterpret caller retries. Recording evidence does not execute a check, grant approval, or complete workflow work. A recorded failed check remains failed. Keep all named evidence duties and apply the existing applicability and retention rules.
 
-Workflow progress and audit records are separate from the material checked, unless a check explicitly covers them.
+The [evidence recording interface](cli.md#kepler-audit-record-evidence) uses one request `inputs` array for checked material and relevant inputs. Each entry has `reference` and `purpose`. This request uses the shared input shape without defining every phase-owned payload field.
 
-Record bindings through CLI-owned JSON journal events, not artifact frontmatter. Derive current binding views from the recorded events. For repository material, the output commit must exist before approval is recorded. Record approval afterwards, referencing that commit and the other reviewed material.
+An approval uses phase-owned event `data` to identify the requester, scope, attempt, reviewed `inputs`, and a reference to the explicit approval decision. Each input uses the same `reference` and `purpose` shape. Keep recorded approvals immutable. An approval for an earlier attempt cannot approve a later attempt. Git identity, a commit, the event producer, a successful journal write, or an artifact cannot substitute for requester consent.
+
+For repository material, create the output commit before recording approval. Reference encodings remain under SH51. Actor proof and the public approval interface remain under SH55. This record format does not add an approval ID, registry, authentication engine, or transcript requirement.
 
 ### Repository checkpoint procedure
 
@@ -423,7 +428,7 @@ Mission creation records the selected workflow in its owning phase journal. Cons
 
 Execution records must refer to the artifacts and units they concern. The CLI generates artifact IDs as UUIDv4 values with cross-project uniqueness and stores them in full lowercase hyphenated form. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions).
 
-Use the shared [evidence and approval bindings](#evidence-and-approval-bindings) for checkpoint and material references. Separate decisions must set exact relationship and record formats.
+Use the shared [evidence and approval bindings](#evidence-and-approval-bindings) for checkpoint and material references. Phase-specific relationship details and payload types remain implementation work under these shared record requirements.
 
 ### Checkpoint retention
 
@@ -437,12 +442,12 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 ## Decisions still required
 
-- Phase-owned state models, projection schemas, status transitions, and attempt ID formats.
+- Phase-owned state models, projection schemas, and status transitions.
 - Journal write, collection, and projection mechanisms within the accepted [Mission contract](mission.md#durable-layout).
 - Other CLI command contracts, selectors, command-specific response schemas, and validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
-- External reference formats and exact evidence and approval record formats. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
+- External reference encodings under SH51 and detailed phase-owned evidence and approval payload types beyond the shared record requirements. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
 - Traceability relationship formats, checkpoint reference names and publication, external evidence-store locations, retention periods, and cleanup rules.
 - Detailed workspace allocation, branch layouts, and shared test-resource isolation within the accepted [Mission contract](mission.md).
 - Journal collection, transfer, and publication mechanics under the accepted [record-portability policy](#record-portability) and [Mission contract](mission.md).

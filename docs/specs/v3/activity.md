@@ -28,7 +28,7 @@ An authorized return makes a new Activity attempt when the Activity starts again
 
 The stage and each Activity own their named evidence. Shared scope and material bindings do not replace either contract. Do not move historical Activity evidence to a new stage attempt.
 
-Use the shared CLI-owned journal and attempt mechanics. Do not add a second lifecycle engine, protocol-run identity, or task-coding attempt identity. Phase event payloads, Activity ID formats, commands, and projections stay implementation choices under the shared [event envelope](runtime.md#event-envelope-choices).
+Use the shared CLI-owned journal and attempt mechanics. Do not add a second lifecycle engine, protocol-run identity, or task-coding attempt identity. Phase-owned Activity event payloads, commands, and projections stay implementation choices under the shared [event envelope](runtime.md#event-envelope-choices). Activity attempt IDs follow the shared [attempt identity rules](runtime.md#attempt-identity-and-active-scope).
 
 ## Construction MVP
 

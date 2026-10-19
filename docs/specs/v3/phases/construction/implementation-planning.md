@@ -324,7 +324,7 @@ Record results through CLI-owned operations and keep supporting output. Identify
 
 Graph validation does not replace semantic review of dependencies, coverage, or the selected solution. The self-review result must cover those judgments.
 
-No separate evidence document or application test run is required by this stage. Exact record formats, validation commands, and event types are still implementation work.
+No separate evidence document or application test run is required by this stage. Apply the shared [evidence and approval record requirements](../../runtime.md#evidence-and-approval-bindings). Detailed phase-owned payload types, validation commands, and event types remain implementation work.
 
 [SH52](../../authoring_progress.md#completed-shared-decisions) records that each stage and Activity states its own named evidence, covered material, and required results. This section states Planning's coverage. Each later contract states its own obligations.
 

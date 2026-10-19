@@ -248,7 +248,7 @@ Keep these results bound to their original scope, attempt, covered material, and
 
 Record results through CLI-owned operations and keep necessary supporting output. For repository material, identify the checkpoint and relevant files. Create the output checkpoint before recording approval. Apply the shared rules for evidence applicability and retention.
 
-A separate evidence document is not required. Exact event types, record formats, and command syntax are still implementation work.
+A separate evidence document is not required. Apply the shared [evidence and approval record requirements](../../runtime.md#evidence-and-approval-bindings). Exact phase event types, payload details, and command syntax remain implementation work.
 
 These records show that the quality specification is valid and requester approval is recorded. They do not prove that an implementation meets the quality targets. No application test run is required by this stage.
 

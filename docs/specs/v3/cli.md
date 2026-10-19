@@ -78,7 +78,7 @@ Unit-based operations may resolve mission context only from unique recorded memb
 
 Keep the accepted [diff-package source selectors and signatures](#kepler-git-diff-package) unchanged. Their `--generation-attempt` and `--integration-attempt` selectors identify source attempts, not consumer attempts.
 
-Attempt ID formats stay under SH47. Other query and operation interfaces stay under SH53, SH54, and SH57-SH60. Use the accepted [failure result fields](#failure-and-recovery-rules) and [exit-code contract](#exit-codes). Other operation-specific arguments, input-path rules, and quoting stay open.
+Attempt IDs follow the accepted shared [attempt identity rules](runtime.md#attempt-identity-and-active-scope). Other query and operation interfaces stay under SH53, SH54, and SH57-SH60. Use the accepted [failure result fields](#failure-and-recovery-rules) and [exit-code contract](#exit-codes). Other operation-specific arguments, input-path rules, and quoting stay open.
 
 ### Project selection
 
@@ -311,7 +311,7 @@ A record must name the affected phase and scope, and bind evidence or approval t
 
 Use this operation for facts that do not belong to another lifecycle transition. A command that starts, completes, pauses, resumes, admits, accepts, or revises work records its own lifecycle event. Do not issue a second audit write for that action.
 
-Authorization proof and actor fields stay open under SH55-SH56. Detailed evidence request and record schemas stay under SH49. Reference encodings stay under SH51.
+The shared evidence and approval record requirements are accepted under SH49 and SH50. Detailed phase-owned payload types remain implementation work. Material-reference encodings remain under SH51. Approval authority proof and actor details, plus the public approval interface, remain under SH55. The public interaction interface remains under SH56.
 
 The [evidence interface](#kepler-audit-record-evidence) is accepted under SH109. Approval and interaction interfaces stay under SH55-SH56. Do not invent an approval protocol or claim that a record alone completes a stage.
 
@@ -323,7 +323,7 @@ Read one typed JSON request object from stdin. Validate it against the owning ph
 
 Use one `inputs` array for the checked material and other relevant inputs. Do not add a separate `material` field to this request. Each entry has `reference` and `purpose`. The reference identifies the input. The purpose explains how the check or review used it.
 
-For repository material, the references must identify the repository and exact checked commit. Keep the existing [evidence bindings](runtime.md#evidence-and-approval-bindings). The request structure does not select the stored evidence schema.
+For repository material, the references identify the repository and exact checked commit. Apply the shared [evidence record minimum](runtime.md#evidence-and-approval-bindings), including one `inputs` array in the accepted shape. Detailed phase-owned payload types and event catalog details remain implementation work.
 
 This fragment shows only the accepted `inputs` structure, not a complete evidence request:
 
@@ -344,12 +344,13 @@ On successful recording, return `success` and exit `0`. Include the following re
 
 | Field | Successful recording result |
 | --- | --- |
-| `id` | The recorded event's ID. |
+| `id` | The recorded event's ID, not the evidence identity. |
 | `journal_id` | The recorded event's originating journal ID. |
+| `evidence_id` | The phase-owned evidence identity, distinct from the event ID. |
 
 Successfully recording a failed check does not make the check pass. Apply the existing [failure and recovery rules](#failure-and-recovery-rules).
 
-Other evidence request and record fields stay under SH49. Reference encodings stay under SH51. This decision does not accept the approval or interaction interfaces under SH55-SH56.
+The receipt's `data.id` and `data.journal_id` identify the event and its originating journal. `data.evidence_id` identifies the phase-owned evidence result. Apply the shared minimum under SH49. Detailed phase payload types remain implementation work. Reference encodings remain under SH51. This decision does not accept approval or interaction interfaces under SH55-SH56.
 
 ### `kepler audit list`
 
@@ -506,7 +507,7 @@ Do not integrate a task until Code Validation succeeds and its independent non-a
 
 Successful acceptance is distinct from requester approval, whole-unit completion, review, or delivery. Do not add unrestricted `task complete`. Generic `activity complete` must not bypass Integration acceptance. The [Code Integration contract](phases/construction/activities/code-integration.md#integration-procedure) owns the check and acceptance rules.
 
-Evidence inputs, lock implementation, and the result schema stay open. The task's Activity attempts and evidence stay bound to their occurrences and enclosing Implementation attempt. A task does not have a separate attempt identity.
+Phase-owned evidence payload details, lock implementation, and the operation result schema remain implementation choices beyond the shared evidence minimum. The task's Activity attempts and evidence stay bound to their occurrences and enclosing Implementation attempt. A task does not have a separate attempt identity.
 
 ## Activity operations
 
@@ -526,7 +527,7 @@ Code Generation owns implementation, typechecking, related tests, and self-revie
 
 A local correction, failed command, pause, resume, or new session keeps the current unended attempt. An authorized return creates a new Activity attempt when that Activity executes again. An Integration-only retry stays within its current Code Integration attempt. Do not add task-coding or protocol-run attempt identities.
 
-Event payloads, completion guards, and evidence schemas stay open. An Activity completion does not complete the enclosing Implementation stage or Unit of Work.
+Phase-owned event payload details, completion guards, and evidence payload types beyond the shared [record minimum](runtime.md#evidence-and-approval-bindings) remain implementation work. An Activity completion does not complete the enclosing Implementation stage or Unit of Work.
 
 ## Revision operation
 
@@ -623,6 +624,6 @@ Accepted command placements, structured-output default, and typed lifecycle writ
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-Other shared runtime and Construction implementation choices stay under SH46-SH51, SH62-SH67, SH69-SH70, SH72, SH84-SH85, SH87, DF14-DF17, and existing SH53-SH60. The [Mission contract](mission.md) settles SH45 storage paths, SH68 workspace policy, and SH86 retained-evidence locations. Remaining choices include journal writes, projections, attempts, locks, workspace allocation, effort changes, task and Activity guards, and recovery. Exact actor and authorization fields stay open under SH55-SH56. Do not invent approval proof or interaction protocols.
+Other shared runtime and Construction implementation choices stay under SH46, SH51, SH62-SH67, SH69-SH70, SH72, SH84-SH85, SH87, DF14-DF17, and existing SH53-SH60. The [Mission contract](mission.md) settles SH45 storage paths, SH68 workspace policy, and SH86 retained-evidence locations. Remaining choices include journal writes, projections, attempts, locks, workspace allocation, effort changes, task and Activity guards, and recovery. Exact actor and authorization fields stay open under SH55-SH56. Do not invent approval proof or interaction protocols.
 
 Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. This CLI draft does not accept other proposals in those contracts.

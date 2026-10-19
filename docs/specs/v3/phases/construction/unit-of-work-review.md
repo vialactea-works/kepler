@@ -206,7 +206,7 @@ Bind this stage's new assessment to its unit-scoped attempt, material, relevant 
 
 Apply the shared [evidence and approval rules](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Create the required repository checkpoint set before recording any requester acceptance.
 
-Exact event types, record formats, commands, and derived report layouts are still implementation work. No new execution-state authority or mandatory report filename is proposed.
+Apply the shared [evidence and approval record requirements](../../runtime.md#evidence-and-approval-bindings). Exact phase event types, payload details, commands, and derived report layouts remain implementation work. No new execution-state authority or mandatory report filename is proposed.
 
 ## Handoff
 

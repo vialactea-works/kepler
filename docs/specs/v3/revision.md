@@ -71,7 +71,7 @@ Activity questions help the orchestrator select a return within the owning stage
 
 1. **Report the finding.** The stage agent reports the evidence, uncertainty, and proposed revision boundary. Use the relevant reopening questionnaire to help with the report.
 2. **Compare the report.** The orchestrator compares the finding with existing decisions, artifacts, and questionnaires. Clarify the existing contract or request investigation when necessary.
-3. **Decide and record.** The orchestrator selects whether to continue, investigate, or authorize reopening from the earliest affected stage. Record its decision and reason through the CLI. If reopening is not authorized, resume stage work or investigate as directed. Proceed to step 4 only after authorization.
+3. **Decide and record.** The orchestrator selects whether to continue, investigate, or authorize reopening from the earliest affected stage. Record the decision and reason through the CLI, using the shared [revision identity](runtime.md#revision-decisions) for an authorization. If reopening is not authorized, resume stage work or investigate as directed. Proceed to step 4 only after authorization.
 4. **Reopen the stages.** Apply the authorized boundary to that stage and every downstream stage within the selected execution scope. Their completion is no longer current. Keep the previous work as history.
 5. **Revise the current stage.** Start a new attempt when the stage starts again. Compare all its artifacts with its current inputs. Update each artifact or make sure that it is valid.
 6. **Complete the current stage.** Execute the stage work and satisfy its completion conditions. Get and record approval when its contract makes it necessary.
@@ -94,7 +94,7 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 
 ## Decisions still required
 
-Use the shared [evidence and checkpoint contract](runtime.md#evidence-and-content-checkpoints) for checkpoint and material references. The CLI infrastructure must still set attempt and revision ID formats, exact binding records, and JSON audit event schemas.
+Use the shared [evidence and checkpoint contract](runtime.md#evidence-and-content-checkpoints) for checkpoint and material references. The shared runtime sets attempt and revision identities and minimum evidence and approval records. Material reference encodings remain under SH51. Phase-owned payload types and JSON event catalogs remain implementation work under their owning contracts.
 
 Keep necessary Git checkpoint objects reachable under the [retention rules](runtime.md#checkpoint-retention). Detailed retention stays open. An audit event or fingerprint alone does not keep output contents.
 

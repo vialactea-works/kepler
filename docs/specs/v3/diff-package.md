@@ -40,7 +40,7 @@ Include cumulative unit changes and relevant task contributions kept from earlie
 
 ## Selectors and resolution
 
-Each command must have its listed unit and source-attempt selectors. Task-scoped commands must also have the task ID and their Generation or Integration attempt selector. `--implementation-attempt` identifies the source Implementation context, not a consumer context. Each task ID is a UUIDv4 string. Use the existing implementation choice for attempt ID format.
+Each command must have its listed unit and source-attempt selectors. Task-scoped commands must also have the task ID and their Generation or Integration attempt selector. `--implementation-attempt` identifies the source Implementation context, not a consumer context. Each task ID is a UUIDv4 string. Attempt selectors use the shared [attempt identity rules](runtime.md#attempt-identity-and-active-scope).
 
 Apply the accepted [scope selector rules](cli.md#scope-and-selectors) without replacing these source-specific selectors. Validate unit, task, and source-attempt ownership against recorded mission membership. Resolve repository identities and checkpoint sets from the selected workspace binding. Do not infer a unit, task, attempt, or candidate. Do not accept an arbitrary range override. A Validation or Review attempt selector is not necessary merely to make its input package. Add no `--mission`, `--repo`, batch, or format option.
 

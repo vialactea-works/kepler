@@ -6,11 +6,11 @@
 
 ## Purpose and authority
 
-Construction owns its state model and event catalog under the shared [execution-state rules](../../runtime.md#execution-state-representation). The shared runtime owns the event envelope, portability, evidence bindings, attempt boundaries, concurrency, and retention.
+Construction owns its state model and event catalog under the shared [execution-state rules](../../runtime.md#execution-state-representation). The shared runtime owns the event envelope, attempt boundaries and identities, revision identity, evidence and approval record requirements, portability, concurrency, and retention.
 
 This is not a stage, implementation plan, task graph extension, or separate lifecycle engine. It adds no task attempt, protocol identity, agent role, or public audit kind. The accepted [Implementation](implementation.md), [Activities](activities/README.md), [Standard workflow](../../workflows/standard/README.md), and [task graph](task-graph.md) contracts are still binding.
 
-The proposed event names, payload schemas, states, and operation details remain implementation choices. Mission and local-runtime paths are accepted in the [Mission contract](../../mission.md). This draft adds no requester approval gate.
+The proposed event names, detailed phase payload schemas, states, and operation details remain implementation choices. Apply the shared identity and record requirements for evidence and approvals. Mission and local-runtime paths are accepted in the [Mission contract](../../mission.md). This draft adds no requester approval gate.
 
 ## Scope and identity
 
@@ -23,9 +23,11 @@ Keep authored identities separate from execution identities. Store execution fac
 | `task_id` | The authored task's UUIDv4 string. It is not an attempt. |
 | Activity occurrence | One Activity definition for one task under one Implementation attempt. |
 | `activity_attempt_id` | One execution of that occurrence, bound to its original parent and material. |
+| `revision_id` | One authorized revision, under the shared [revision identity](../../runtime.md#revision-decisions). |
+| `evidence_id` | One evidence result, separate from event `id`, under the shared [evidence rules](../../runtime.md#evidence-and-approval-bindings). |
 | Definition version | Material references identifying the graph and task definition used. Do not add runtime fields to the authored graph. |
 
-Attempt ID formats stay under SH47. Admission captures a fixed baseline without creating a task attempt.
+Use the shared [attempt identity rules](../../runtime.md#attempt-identity-and-active-scope) for stage and Activity attempt IDs. Admission captures a fixed baseline without creating a task attempt.
 
 Apply the accepted [workflow binding](../../cli.md#workflow-binding). Mission creation records its selected workflow. Construction unit creation records the matching `standard` binding. Later operations and resume use that binding. The event names and payload schemas below remain proposals.
 
@@ -84,7 +86,7 @@ Waiting does not imply that all workers stopped. A command failure, unavailable 
 
 Use the unchanged [ten-field envelope](../../runtime.md#event-envelope-choices). Its fields are `id`, `phase`, `type`, `envelope_version`, `event_version`, `journal_id`, `recorded_at`, `producer`, `caused_by`, and `data`.
 
-The following payload keys and version-one event names are proposals. Record only fields that identify the fact and its bindings.
+The event names, derived states, operation details, and phase-specific payload schemas below are proposals. Apply the accepted shared identity and record requirements for evidence and approval.
 
 | Payload key | Required meaning |
 | --- | --- |
@@ -94,11 +96,13 @@ The following payload keys and version-one event names are proposals. Record onl
 | `task_id` | Required for task and Activity facts. |
 | `activity` | Required for Activity facts. Identify the definition within the task and parent context. |
 | `activity_attempt_id` | Required for an Activity execution fact. Keep its original parent. |
+| `revision_id` | Required for an authorized revision and its related end or reopen facts. |
+| `evidence_id` | Required for each evidence result and distinct from event `id`. |
 | `graph_ref`, `task_definition_ref` | Required for admission and task-readiness evidence. Identify the actual authored input versions. |
 | `checkpoint`, `material_refs` | Identify each repository checkpoint in a covered set and relevant external material. References alone do not keep that material. |
 | `reason` | Required for a wait, pause, ending, or authorized revision. |
 
-Use the envelope's `caused_by` for direct recorded causes. Do not place another causal predecessor list in `data`.
+Use the envelope's `caused_by` for direct causal event IDs. Related revision facts use the shared `revision_id` as a domain identity, not a cause. Do not place another causal predecessor list in `data`.
 
 Stage facts bind their stage and attempt. Task facts bind their task and Implementation attempt. Activity execution facts bind their task, occurrence, Activity attempt, and original enclosing Implementation attempt.
 
@@ -109,20 +113,22 @@ Stage facts bind their stage and attempt. Task facts bind their task and Impleme
 | `construction.unit-effort-selected` | Unit, selected level, prior value when changed, and requester decision reference. |
 | `construction.stage-effort-selected` | Unit, stage, selected override, and requester decision reference. Activities inherit the stage's Effort. |
 | `construction.stage-attempt-started`, `construction.stage-waiting`, `construction.stage-pause-requested`, `construction.stage-paused`, `construction.stage-resumed`, `construction.stage-attempt-completed` | Unit, stage, attempt, actual inputs, applicable reason, and evidence or approvals required by the transition. |
-| `construction.stage-attempt-ended-by-revision`, `construction.stage-reopened` | Authorized revision, affected stage, and original attempt when one exists. Reopening alone creates no attempt. |
+| `construction.stage-attempt-ended-by-revision`, `construction.stage-reopened` | `revision_id`, affected stage, and original attempt when one exists. Reopening alone creates no attempt. |
 | `construction.task-admitted` | Unit, Implementation attempt, task, definition references, fixed repository-qualified baseline set, predecessor provenance, and prerequisite evidence. |
-| `construction.task-scope-ended-by-revision`, `construction.task-scope-reopened` | Unit, parent attempt, task, authorized revision, and affected Activity scopes. Keep original admission records. |
+| `construction.task-scope-ended-by-revision`, `construction.task-scope-reopened` | Unit, parent attempt, task, `revision_id`, and affected Activity scopes. Keep original admission records. |
 | `construction.task-completed` | Unit, parent attempt, task, accepted Integration record, and task conditions that hold. |
 | `construction.activity-attempt-started`, `construction.activity-waiting`, `construction.activity-pause-requested`, `construction.activity-paused`, `construction.activity-resumed`, `construction.activity-attempt-completed` | Identify the full Activity execution scope. Include transition reasons, source references, and evidence required for completion. |
-| `construction.activity-attempt-ended-by-revision`, `construction.activity-reopened` | Unit, task, Activity occurrence, original parent and attempt, revision, and affected scope. |
-| `construction.evidence-recorded`, `construction.approval-recorded`, `construction.interaction-recorded` | Keep the existing public audit kinds. Bind phase-specific records to their scope, material, inputs, result, and actor or requester. |
+| `construction.activity-attempt-ended-by-revision`, `construction.activity-reopened` | Unit, task, Activity occurrence, original parent and attempt, `revision_id`, and affected scope. |
+| `construction.evidence-recorded`, `construction.approval-recorded`, `construction.interaction-recorded` | Keep the existing public audit kinds. Apply the shared evidence and approval record requirements. Bind phase-specific records to their scope, material, inputs, result, and actor or requester. |
 | `construction.integration-prepared` | Identify the Integration scope, lock-captured unit checkpoint set, validated task output, other actual inputs, immutable candidate set, and source evidence. Record the fixed admission baseline separately. |
 | `construction.integration-accepted` | Prepared candidate set, accepted repository results, actual inputs, successful check evidence, current Integration attempt, and applicable authority references. |
-| `construction.revision-authorized` | Orchestrator decision, reason, unit-stage or task-Activity boundary, and supporting findings. |
+| `construction.revision-authorized` | `revision_id`, orchestrator decision, reason, unit-stage or task-Activity boundary, and supporting findings. |
 | `construction.retained-scope-assessed` | Current Implementation attempt and inputs, original scope and attempt references, applicability result, and reason. Keep the original parent and material. |
 | `construction.implementation-completion-assessed` | Current Implementation attempt, final repository-qualified checkpoint set, graph, required checks, Integration results, retained-scope assessments, and handoff assessment. |
 
-These event names do not add public audit kinds. Typed lifecycle operations record their own facts without a second caller write. The CLI's `producer` identifies recording software, not proof that it executed a check. Evidence identifies the actual executor, covered material, relevant inputs, conditions, result, and retained output.
+These event names do not add public audit kinds. Typed lifecycle operations record their own facts without a second caller write. Apply the shared [evidence record minimum](../../runtime.md#evidence-and-approval-bindings) to phase-owned evidence data. It binds `evidence_id`, the actual executor, checked material and relevant inputs, the check or review, its result, retained output references, and conditions.
+
+The CLI's `producer` identifies recording software, not the actual executor or proof of a check. Recording a result does not execute a check, grant approval, or complete work. A recorded failed check remains failed.
 
 Mechanical validation can verify metadata, required sections, links, and graph structure. It cannot replace semantic review or evidence applicability assessment. Existing named stage and Activity evidence remains binding.
 
@@ -212,7 +218,7 @@ Supported concurrent workspaces must share effective live coordination for the s
 
 ## Writes, partial effects, and safe resumption
 
-Validate scope, authority, current attempts, inputs, and revision state before effects. Durable appends and retries keep stable event identities. Exact mechanisms are still SH46, SH64-SH67, and SH87 choices. Do not promise general exactly-once execution.
+Validate scope, authority, current attempts, inputs, and revision state before effects. Retrying the same journal write keeps its existing domain IDs, event ID, and original bindings. For revisions, retain the authorizing event ID and `revision_id`. This does not define general idempotency or change how callers classify retries. Exact mechanisms are still SH46, SH64-SH67, and SH87 choices. Do not promise general exactly-once execution.
 
 Keep event-update coordination short and separate from the long unit Integration lock. Coordinate the final attempt guard with candidate acceptance and its recorded result. A concurrent revision must not let an ended worker accept a candidate. Do not hold project-wide coordination through checks.
 
