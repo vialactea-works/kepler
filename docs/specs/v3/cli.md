@@ -37,6 +37,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Use the shared [failure result fields](#failure-and-recovery-rules) when `status` is `failed`.
 - Use the shared [exit-code contract](#exit-codes) for CLI-controlled results.
 - Use the shared [output stream contract](#output-streams) for default machine-readable output.
+- Use [JSON-only operation results](#human-output) for the MVP.
 
 Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP order. Stage-specific policies stay proposals where their owning contracts say so.
 
@@ -111,7 +112,7 @@ These values describe the command operation. A query can succeed and report an i
 
 Use `{}` when the command has no result fields. Put collection results inside `data`. Success fields, error-code values, and `details` schemas stay command-specific.
 
-Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Apply the accepted [exit-code contract](#exit-codes). Apply the accepted [output stream contract](#output-streams). Optional human rendering stays under SH108. A failed operation still returns a nonzero exit status.
+Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Apply the accepted [exit-code contract](#exit-codes). Apply the accepted [output stream contract](#output-streams). Apply the accepted [MVP result formatting](#human-output). A failed operation still returns a nonzero exit status.
 
 The following example shows proposed unit-creation fields inside `data`. These fields are not an accepted command-specific schema.
 
@@ -123,7 +124,7 @@ The following example shows proposed unit-creation fields inside `data`. These f
 }
 ```
 
-The exact human-output flag is unchosen. Help must use the same command definitions as the parser. Its rendering format stays open.
+Apply the accepted [MVP result formatting](#human-output). Help must use the same command definitions as the parser. Its layout is an implementation choice.
 
 ### Output streams
 
@@ -140,7 +141,19 @@ Keep banners, logs, progress, and child-process output out of `stdout`.
 
 Callers use the JSON result and [exit code](#exit-codes) to identify the outcome. Diagnostic text is not a stable interface.
 
-Forced termination can prevent a complete response. Apply the existing [exit-code and recovery rules](#exit-codes). Optional human rendering stays under SH108.
+Forced termination can prevent a complete response. Apply the existing [exit-code and recovery rules](#exit-codes). Apply the accepted [MVP result formatting](#human-output).
+
+### Human output
+
+**Accepted under [SH108](authoring_progress.md#completed-shared-decisions).** The MVP has JSON-only operation results.
+
+Use the same JSON result format in terminals, pipes, and agent calls. Do not add `--human`, a result-format selector, or automatic terminal-based switching.
+
+Generate help from the parser definitions. Its layout is an implementation choice.
+
+Apply the existing [output stream contract](#output-streams), including optional diagnostics and progress on `stderr`.
+
+Any later human result mode must be opt-in.
 
 ### Command inventory
 
@@ -452,11 +465,10 @@ Forced termination can produce other exit codes or prevent a JSON response. A mi
 
 ## Open decisions
 
-Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), and [output stream contract](#output-streams) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH108 | Whether to offer optional human rendering and how to select it. | Structured machine-readable output stays the default. This row does not add a human-output feature. |
 | SH109 | Typed evidence inputs and bindings for audit recording. | Reuse SH49-SH51 record and material choices, accepted SH52 evidence coverage, and SH55-SH56 approval and interaction interfaces. Do not add raw append. |
 | SH110 | Audit query selectors, filters, pagination, and local or causal ordering presentation. | Keep SH44's envelope, SH53's query interface, SH92-SH94 producer and causal-order rules, and no timestamp-derived global order. |
 | SH111 | Shared `kepler lint` input paths and complete read-only finding format. | Keep its accepted shared-metadata scope and the metadata validation rules in SH18, SH19, and SH21. Do not move task-graph checks to root lint. |
