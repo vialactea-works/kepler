@@ -33,6 +33,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Build help and argument parsing from the same CLI-framework definitions. Do not keep a separate command grammar for help.
 - Apply the shared [project selection rules](#project-selection) to every project-scoped command, including unit creation.
 - Use the shared [scope selectors](#scope-and-selectors) for unit, stage, task, Activity, and attempt identities.
+- Use the shared [result envelope](#machine-readable-output) with required `status` and `data` fields.
 
 Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP order. Stage-specific policies stay proposals where their owning contracts say so.
 
@@ -85,9 +86,31 @@ These requirements also apply to `unit create`. Prepare `.kepler/` explicitly be
 
 **Accepted policy.** Return structured machine-readable output by default. Agents are the main CLI callers. Do not make `--json` necessary, and do not mix progress text or prose with command output.
 
-The exact result envelope, error envelope, exit-code map, and stdout/stderr placement stay open. A failure must still return a structured result and a nonzero exit status. A success result must not claim workflow completion unless the operation shows that fact.
+**Accepted under [SH104](authoring_progress.md#completed-shared-decisions).** Return a JSON object with exactly two top-level fields:
 
-This example shows proposed fields for unit creation. It does not show the common result envelope or all necessary fields.
+| Field | Contract |
+| --- | --- |
+| `status` | Required string. Use `success` or `failed`. |
+| `data` | Required JSON object. Put command-specific result fields here. |
+
+The following example shows the common success envelope:
+
+```json
+{
+  "status": "success",
+  "data": {}
+}
+```
+
+Return `success` only when the requested operation meets its success conditions. Use `failed` for a failed operation. Failed, incomplete, or uncertain operations must not return `success`.
+
+These values describe the command operation. A query can succeed and report an incomplete stage. A completion claim must identify its task, stage, unit, or workflow scope. Its completion conditions must hold.
+
+Use `{}` when the command has no result fields. Put collection results inside `data`. Proposed response schemas below concern the fields inside `data`.
+
+Failure fields inside `data` stay under SH105. Exit codes, stdout/stderr placement, and optional human rendering stay under SH106-SH108. A failed operation still returns a nonzero exit status.
+
+The following example shows proposed unit-creation fields inside `data`. These fields are not an accepted command-specific schema.
 
 ```json
 {
@@ -124,7 +147,7 @@ The exact human-output flag is unchosen. Help must use the same command definiti
 
 Here, `<kind>` is `approval`, `evidence`, or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
 
-The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors). Other arguments and response schemas stay open.
+The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors). Other arguments and command-specific result fields stay open.
 
 ## Root capabilities
 
@@ -168,7 +191,9 @@ Apply the accepted [project selection rules](#project-selection) for `--project`
 
 `--out` selects a new file. Resolve a relative path from the selected project root. Refuse to overwrite an existing file. Without `--out`, make a fresh local temporary package.
 
-Return structured output that identifies the scope, resolved source and material bindings, and output location. Include the complete package-content fingerprint and show whether the diff is empty. On failure, return a structured error and nonzero status without a package-success claim. Package creation does not modify tracked application content or Git metadata, journals, projections, or lifecycle state. It does not create attempts or commits, dispatch work, run checks, record approval, or accept a candidate. See [diff-package](diff-package.md) for scope, package content, attribution, and retention requirements.
+Return the shared [result envelope](#machine-readable-output). Its `data` identifies the scope, resolved source and material bindings, and output location. Include the complete package-content fingerprint and show whether the diff is empty.
+
+On failure, return a structured error and nonzero status without a package-success claim. Package creation does not modify tracked application content or Git metadata, journals, projections, or lifecycle state. It does not create attempts or commits, dispatch work, run checks, record approval, or accept a candidate. See [diff-package](diff-package.md) for scope, package content, attribution, and retention requirements.
 
 ### `kepler lint`
 
@@ -230,7 +255,7 @@ A create failure must not report success. Reject invalid input before writing. I
 
 If a write fails or the process stops partway through, compare actual directory and journal effects with the requested operation. Do this before retrying. Keep uncertain or unrelated material. Do not promise general exactly-once replay. A caller that loses the success response can use `unit list` or `unit show` to read the result. A new request after local midnight can receive a different ID.
 
-The earlier JSON example shows proposed unit-create fields, not an accepted result schema.
+The earlier unit-creation example shows proposed fields inside `data`, not an accepted command-specific schema.
 
 A proposed `--stage-effort <stage>=<level>` option is an open question. Do not treat it as accepted or remove the existing stage-override policy.
 
@@ -361,11 +386,10 @@ The event write protocol, projection rebuild behavior, lock ownership and recove
 
 ## Open decisions
 
-Accepted command placements, structured-output default, typed lifecycle writes, [project selection](#project-selection), and [scope selectors](#scope-and-selectors) stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, typed lifecycle writes, [project selection](#project-selection), [scope selectors](#scope-and-selectors), and the [result envelope](#machine-readable-output) stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH104 | Common success-result fields and the distinction between operation success and workflow completion. | Keep the accepted structured-output default. Keep SH101's logical result requirements. |
 | SH105 | Typed error fields for causes, partial effects, uncertainty, and recovery. Never report false success. | Keep accepted failure behavior. SH61 sets a nonzero result for failure and identifies missing Git author keys. |
 | SH106 | Exit codes for success, failure, usage, unsupported input, and uncertain outcomes. | Keep the accepted nonzero-on-failure rule and SH61's nonzero missing-identity result. |
 | SH107 | Separation of stdout and stderr and one machine-readable result without mixed prose. | Keep structured machine-readable output by default. Do not add progress prose to it. |

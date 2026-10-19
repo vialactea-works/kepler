@@ -228,4 +228,4 @@ The proposed pause request fences new affected work before stopping completes. A
 
 Accepted shared runtime, Construction, and Standard contracts are authoritative. This draft proposes state, event, pause, and path details. It does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
 
-Apply the accepted [project selection rules](../../cli.md#project-selection) and [scope selectors](../../cli.md#scope-and-selectors). Other CLI details stay tracked under SH104-SH115 and SH117. Certified host and platform support is an open question under [SH116](../../authoring_progress.md#mvp-decisions). No omnibus runtime approval gate or implementation roadmap is introduced.
+Apply the accepted [project selection rules](../../cli.md#project-selection), [scope selectors](../../cli.md#scope-and-selectors), and [result envelope](../../cli.md#machine-readable-output). Other CLI details stay tracked under SH105-SH115 and SH117. Certified host and platform support is an open question under [SH116](../../authoring_progress.md#mvp-decisions). No omnibus runtime approval gate or implementation roadmap is introduced.

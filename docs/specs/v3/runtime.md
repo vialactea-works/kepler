@@ -384,6 +384,8 @@ The [CLI command reference](cli.md) records accepted command decisions and propo
 
 For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection.
 
+CLI results use the accepted [result envelope](cli.md#machine-readable-output). Command-specific fields and failure details stay under their own interface decisions.
+
 ### Current author
 
 Give a CLI command that returns the current author as Git `user.name` and Git `user.email`. Resolve both values from the effective Git configuration for the current project. Repository-specific identity settings must apply.
@@ -426,7 +428,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 - Phase-owned state models, projection schemas, status transitions, and attempt ID formats.
 - Journal and projection storage layout.
-- Other CLI command contracts, selectors, response schemas, and validation and authority rules.
+- Other CLI command contracts, selectors, command-specific response schemas, and validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
 - External reference formats and exact evidence and approval record formats. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
