@@ -6,9 +6,9 @@
 
 ## Goal
 
-Define the purpose, scope, required functional behavior, contracts, and functional model of one Unit of Work. Record the decisions that explain the design.
+State the purpose, scope, required functional behavior, contracts, and functional model of one Unit of Work. Record the decisions that explain the design.
 
-The result must give later stages enough information to plan, implement, and verify the required behavior.
+The result must give later stages enough information to plan and do the work, and make sure that the required behavior meets its conditions.
 
 ## Inputs
 
@@ -30,7 +30,7 @@ Start Functional Design when:
 - There is enough initial context to begin investigation and discussion.
 - The requester can resolve consequential product and scope questions.
 
-Completed documents, a complete domain model, and an Inception handoff are not required before the stage starts. Functional Design produces or refines its inputs.
+Completed documents, a complete domain model, and an Inception handoff are not required before the stage starts. Functional Design writes or updates its inputs.
 
 ## Scope
 
@@ -38,16 +38,16 @@ Completed documents, a complete domain model, and an Inception handoff are not r
 
 - Explain the problem, intended outcome, scope, and exclusions.
 - Describe current behavior and distinguish it from required behavior.
-- Define functional requirements and observable acceptance criteria.
+- State functional requirements and observable acceptance criteria.
 - Cover normal behavior, failure cases, and relevant boundary conditions.
-- Define domain concepts, relationships, business rules, states, and invariants.
+- Describe domain concepts, relationships, business rules, states, and invariants.
 - Assign responsibility for rules, data, and interactions.
-- Define relevant contracts, including inputs, outputs, errors, and obligations.
+- State relevant contracts, including inputs, outputs, errors, and obligations.
 - Identify effects on existing users, consumers, and contracts.
 - Record functional design decisions, alternatives, and rationale.
 - Identify questions and constraints for the next stage.
 
-Security-related behavior, such as access denial, belongs here when it defines a functional obligation.
+Security-related behavior, such as access denial, belongs here when it is a functional obligation.
 
 ### Excluded
 
@@ -68,33 +68,33 @@ All paths are relative to the project repository root. `<unit-id>` is the stable
 | Artifact | Location | Responsibility |
 | --- | --- | --- |
 | Project references | `.kepler/reference/` | Supply shared application context. |
-| Unit of Work definition | `.kepler/units-of-work/<unit-id>/unit-of-work.md` | Define the purpose, scope, and context shared by all stages. |
-| Functional design | `.kepler/units-of-work/<unit-id>/design.md` | Define domain behavior, the domain model, functional contracts, and design decisions. |
+| Unit of Work definition | `.kepler/units-of-work/<unit-id>/unit-of-work.md` | State the purpose, scope, and context shared by all stages. |
+| Functional design | `.kepler/units-of-work/<unit-id>/design.md` | Describe domain behavior, the domain model, functional contracts, and design decisions. |
 | Supporting Functional Design files | `.kepler/units-of-work/<unit-id>/details/functional-design/` | Supply linked detail for this stage. |
 
-The Unit of Work directory remains unchanged across stages, retries, and design revisions. Do not derive its identity from a branch, worktree, skill, or task number. Use the shared [unit identity and directory rules](../../unit-of-work.md#identity-and-directory): `YYYY-MM-DD-<slug>`. Use the machine-local creation date and the exact ID as the directory name.
+The Unit of Work directory stays unchanged across stages, retries, and design revisions. Do not derive its identity from a branch, worktree, skill, or task number. Use the shared [unit identity and directory rules](../../unit-of-work.md#identity-and-directory): `YYYY-MM-DD-<slug>`. Use the machine-local creation date and the exact ID as the directory name.
 
 These paths are part of the version 3 draft. They do not migrate existing files or change current CLI path rules.
 
 ### Required information and supporting detail
 
-This stage requires `unit-of-work.md` and `design.md` directly under the Unit of Work directory. Use the shared [Artifact metadata contract](../../metadata.md) for common frontmatter fields. Shared field and value validation follows that contract. Stage-specific fields require further decisions. Dynamic execution state follows the shared [CLI infrastructure contract](../../runtime.md).
+The Unit of Work directory must contain `unit-of-work.md` and `design.md`. Use the shared [Artifact metadata contract](../../metadata.md) for common frontmatter fields. Shared field and value validation follows that contract. A decision is necessary for stage-specific fields. Dynamic execution state follows the shared [CLI infrastructure contract](../../runtime.md).
 
-Create the Unit of Work definition when needed. Preserve and refine an existing definition when Inception or earlier work supplies it. Do not create a second definition for the same Unit of Work.
+Make the Unit of Work definition when necessary. Keep and update an existing definition when Inception or earlier work supplies it. Do not create a second definition for the same Unit of Work.
 
-Functional Design establishes the functional behavior, models, and contracts in `design.md`. Quality Requirements records quality targets and constraints in `quality.md` at the Unit of Work root. Implementation Planning selects the technical solution against both documents.
+Functional Design states the functional behavior, models, and contracts in `design.md`. Quality Requirements records quality targets and constraints in `quality.md` at the Unit of Work root. Implementation Planning selects the technical solution against both documents.
 
-Each required document will have a defined set of required sections. Each section must contain the essential information needed to understand and use its contract.
+Each required document will have a set of required sections. Each section must contain the essential information needed to understand and use its contract.
 
 A required section can link to supporting files for additional detail. It must identify what each linked file explains. Use these files instead of optional inline sections.
 
-Create supporting files only when their content is useful. Do not create empty files or links to files that do not exist. A supporting file is optional to create. An approved requirement remains binding when its detailed definition lives in `details/`.
+Make supporting files only when their content is useful. Do not create empty files or links to files that do not exist. You do not have to make a supporting file. An approved requirement is binding even when its detailed definition is in `details/`.
 
-`kepler-architect` maintains this stage's information with `kepler-design`. Later stages consume the required documents and relevant linked files.
+`kepler-architect` keeps this stage's documents current with `kepler-design`. Later stages consume the required documents and relevant linked files.
 
 ### Unit of Work definition
 
-`unit-of-work.md` has three required sections. Do not require additional subsections.
+`unit-of-work.md` has three required sections. Additional subsections are not necessary.
 
 | Section | Required content |
 | --- | --- |
@@ -106,30 +106,30 @@ A reader must be able to understand the purpose, scope, and relevant constraints
 
 Keep the purpose and scope explicit in this file. A reference can supply existing context, but the section must explain its relevance to this Unit of Work. If there is no relevant context or there are no exclusions, state that briefly.
 
-Use linked supporting files when an explanation needs substantial detail. Detailed requirements, acceptance criteria, models, and design decisions belong in `design.md`.
+Use linked supporting files for substantial detail. Detailed requirements, acceptance criteria, models, and design decisions belong in `design.md`.
 
 ### Functional design
 
-Functional Design requires four sections in `design.md`.
+Use four required sections in `design.md`.
 
 | Section | Required content |
 | --- | --- |
-| Domain behavior | Define required use cases, observable outcomes, and acceptance criteria. Include relevant failures and boundary conditions. State changes to existing behavior. |
-| Domain model | Define relevant domain terms, concepts, relationships, business rules, invariants, and responsibilities. Use the application's ubiquitous language. |
-| Boundaries and interactions | State ownership of behavior and data. Define relevant interactions within or between bounded contexts and the contracts those interactions must follow. Include inputs, outputs, errors, and compatibility requirements where relevant. |
-| Design decisions and open questions | Record significant choices and their reasons, assumptions, unresolved questions, and concerns for the next stage. Link detailed alternatives or analysis. |
+| Domain behavior | State required use cases, observable outcomes, and acceptance criteria. Include relevant failures and boundary conditions. State changes to existing behavior. |
+| Domain model | Describe relevant domain terms, concepts, relationships, business rules, invariants, and responsibilities. Use the application's ubiquitous language. |
+| Boundaries and interactions | State ownership of behavior and data. State relevant interactions within or between bounded contexts and the contracts those interactions must follow. Include inputs, outputs, errors, and compatibility requirements where relevant. |
+| Design decisions and open questions | Record important choices and their reasons, assumptions, unresolved questions, and concerns for the next stage. Link detailed alternatives or analysis. |
 
 Each section is required, but its content can be short. Keep acceptance criteria with their requirements. For an unchanged model or contract, a brief explanation and a precise reference can be sufficient.
 
-Describe entities, value objects, aggregates, domain services, and domain events only when relevant. Do not invent these elements to fill a section. A Unit of Work does not automatically define a bounded context or an aggregate. An interaction boundary does not necessarily separate bounded contexts. A context map is not a required artifact for every Unit of Work.
+Describe entities, value objects, aggregates, domain services, and domain events only when relevant. Do not invent these elements to fill a section. A Unit of Work is not automatically a bounded context or an aggregate. An interaction boundary does not necessarily separate bounded contexts. A context map is not a required artifact for every Unit of Work.
 
 Keep essential information in these sections. Put substantial supporting detail in linked files under `details/functional-design/`. Reference the purpose and scope in `unit-of-work.md` instead of repeating them.
 
-These sections define the Functional Design contribution. Quality Requirements uses `quality.md`. Implementation Planning selects the technical solution before it divides the work into tasks. It records the technical solution and rationale in `plan.md`, with the task graph in `tasks-dag.json`.
+These sections state the Functional Design contribution. Quality Requirements uses `quality.md`. Implementation Planning selects the technical solution before it divides the work into tasks. It records the technical solution and rationale in `plan.md`, with the task graph in `tasks-dag.json`.
 
 ### Content boundaries
 
-Requirements define observable behavior. The model defines the concepts and rules that support that behavior. Contracts define obligations at interaction boundaries. These subjects do not each require a separate document.
+Requirements state observable behavior. The model states the concepts and rules for that behavior. Contracts state obligations at interaction boundaries. No separate document is necessary for each subject.
 
 Keep essential information in the required documents. Add supporting analysis when the detail would make those documents difficult to read. Refer to unchanged Project references instead of writing their content again.
 
@@ -137,7 +137,7 @@ Keep one authoritative location for each definition. Use summaries and reference
 
 Documents must distinguish existing facts, proposed behavior, and assumptions. Record proposed corrections or additions to Project references in the Unit of Work documents. Do not present an unimplemented design as an observed application fact.
 
-The authority, internal file structure, and update rules for Project references remain separate decisions.
+The authority, internal file structure, and update rules for Project references are separate decisions.
 
 ## Effort
 
@@ -146,7 +146,7 @@ Apply the shared [Effort definition](../../effort.md). Use the Unit of Work defa
 | Effort | Functional Design guidance |
 | --- | --- |
 | Minimal | State the purpose, required behavior, acceptance criteria, and relevant contracts concisely. Reference existing models. Add supporting detail where needed to resolve material ambiguity. |
-| Standard | Explain significant functional decisions, interactions, and risks. Add focused supporting files when the required documents would become difficult to read. |
+| Standard | Explain important functional decisions, interactions, and risks. Add focused supporting files when the required documents would become difficult to read. |
 | Comprehensive | Analyze complex models, alternatives, failure conditions, and interactions across boundaries in detail. Link supporting files from the relevant required sections. |
 
 Effort does not prescribe a file count or page length. Add diagrams, tables, or model descriptions only when they explain relevant information. Do not invent complexity to satisfy a effort level.
@@ -155,13 +155,13 @@ Effort does not prescribe a file count or page length. Add diagrams, tables, or 
 
 | Role | Agent | Responsibility |
 | --- | --- | --- |
-| Functional design owner | `kepler-architect` | Investigate context, conduct the discussion, resolve functional questions with the requester, maintain a consistent design, and review its own work. |
+| Functional design owner | `kepler-architect` | Investigate context, conduct the discussion, resolve functional questions with the requester, keep a consistent design, and review its own work. |
 
-`kepler-architect` uses `kepler-design` to perform this stage. Its profile requires domain analysis, requirements discovery, domain-driven design, source investigation, and technical writing capabilities.
+`kepler-architect` uses `kepler-design` for this stage. Its profile must include domain analysis, requirements discovery, domain-driven design, source investigation, and technical writing capabilities.
 
-The agent can inspect existing source and tests and maintain this stage's documents. It must distinguish existing facts, proposed behavior, and assumptions. It must not make consequential product choices for the requester, change production code in this stage, or select the technical solution assigned to Implementation Planning.
+The agent can examine existing source and tests and keep this stage's documents current. It must distinguish existing facts, proposed behavior, and assumptions. It must not make consequential product choices for the requester, change production code in this stage, or select the technical solution assigned to Implementation Planning.
 
-The requester retains authority over product behavior, scope, consequential trade-offs, and approval. No other agent roles are defined for this stage. Requester-triggered external review remains available without selecting a reviewer agent profile here.
+The requester keeps authority over product behavior, scope, consequential trade-offs, and approval. No other agent roles apply to this stage. Requester-triggered external review is available without selecting a reviewer agent profile here.
 
 The shared [orchestrator role](../../revision.md#authority-and-escalation) controls revision authorization outside this stage. It does not replace the Functional Design owner or requester approval.
 
@@ -169,19 +169,19 @@ The shared [orchestrator role](../../revision.md#authority-and-escalation) contr
 
 ### Entry skill
 
-[kepler-design](../../skills.md#kepler-design) is the entry skill for Functional Design. The skill reference defines its procedure responsibilities.
+[kepler-design](../../skills.md#kepler-design) is the entry skill for Functional Design. The skill reference states its procedure responsibilities.
 
-Technical solution selection remains in Implementation Planning. Skill names and packaging do not define stage boundaries.
+Technical solution selection belongs in Implementation Planning. Skill names and packaging do not set stage boundaries.
 
 ### Supporting responsibilities and inspiration
 
 | Responsibility | Version 3 skill | Adaptation |
 | --- | --- | --- |
-| Structured questioning | [kepler-grilling](../../skills.md#kepler-grilling) | Keep focused requester discussion, recommendations, and caller-supplied context and exit conditions. Record confirmed answers where the calling artifact contract requires them. |
+| Structured questioning | [kepler-grilling](../../skills.md#kepler-grilling) | Keep focused requester discussion, recommendations, and caller-supplied context and exit conditions. Record answers after requester confirmation, when the calling artifact contract specifies them. |
 | Domain modeling | [kepler-domain-modelling](../../skills.md#kepler-domain-modelling) | Develop domain language, rules, invariants, and boundaries. Use caller-supplied paths and distinguish existing application facts from proposed changes. |
 | Research | [kepler-research](../../skills.md#kepler-research) | Investigate uncertain facts through source code and primary references. Return findings with sources at the caller's supporting-file path. |
 
-The [skill reference](../../skills.md) defines these responsibilities and records the version 3 name changes. These skills supply behavior to adapt, not old artifact contracts to preserve.
+The [skill reference](../../skills.md) states these responsibilities and records the version 3 name changes. These skills give behavior to adapt. Do not keep old artifact contracts.
 
 For this stage, required content belongs in the root Unit of Work documents. Supporting detail belongs under `details/functional-design/` and must be linked from the relevant required section. Use caller-supplied paths when a supporting skill serves another stage.
 
@@ -191,11 +191,11 @@ Apply the [common skill rules](../../skills.md#common-rules). Supporting skills 
 
 ### Self-review
 
-Self-review is part of `kepler-design`, not a separate supporting skill. `kepler-architect` must perform it before it asks for approval. The self-review checks required content, acceptance criteria, consistency, blocking questions, and concerns passed to later stages.
+Self-review is part of `kepler-design`, not a separate supporting skill. `kepler-architect` must do a self-review before it asks for approval. The self-review checks required content, acceptance criteria, consistency, blocking questions, and concerns passed to later stages.
 
 ### External review
 
-External review by another agent or person occurs only when the requester asks for it. Risk, complexity, and effort do not trigger external review. Self-review remains required whether or not the requester asks for external review.
+External review by another agent or person occurs only when the requester asks for it. Risk, complexity, and effort do not trigger external review. Self-review is still required whether or not the requester asks for external review.
 
 ### Requester approval
 
@@ -206,26 +206,26 @@ The requester must explicitly approve the current functional design. Approval co
 - The domain model and functional contracts.
 - Material decisions, assumptions, and questions passed to later stages.
 
-Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval permits progression to Quality Requirements. It does not authorize implementation or delivery.
+Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval makes progression to Quality Requirements possible. It does not authorize implementation or delivery.
 
-Record approval through CLI-owned JSON journal events, not artifact frontmatter. Derive current approval views from those events. Do not require a separate human-authored approval document. Apply the shared [evidence and approval bindings](../../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact projection fields, event formats, and material reference formats remain undecided.
+Record approval through CLI-owned JSON journal events, not artifact frontmatter. Derive current approval views from those events. A separate human-authored approval document is not necessary. Apply the shared [evidence and approval bindings](../../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact projection fields, event formats, and material reference formats are undecided.
 
 ### Reopening questionnaire
 
 Evaluate each question against the agreed functional design, including linked supporting files. Report the answers and proposed revision boundary to the orchestrator under the shared [Revision procedure](../../revision.md#revision-procedure).
 
-1. Does the finding require a change to the intended outcome, scope, or exclusions of the Unit of Work?
-2. Does it require a change to domain behavior, acceptance criteria, failure behavior, or boundary conditions?
-3. Does it require a change to the meaning of domain terms, concepts, relationships, business rules, invariants, states, or responsibilities?
-4. Does it require a change to ownership at an interaction boundary or a functional contract, including inputs, outputs, errors, or compatibility obligations?
+1. Is a change to the intended outcome, scope, or exclusions of the Unit of Work necessary?
+2. Is a change to domain behavior, acceptance criteria, failure behavior, or boundary conditions necessary?
+3. Is a change to the meaning of domain terms, concepts, relationships, business rules, invariants, states, or responsibilities necessary?
+4. Is a change to interaction-boundary ownership or the functional contract, its inputs, outputs, errors, or compatibility obligations necessary?
 5. Does it invalidate an assumption or decision that the agreed functional design depends on?
-6. Does it expose a required functional decision that remains unresolved, or show that a Functional Design completion condition is no longer met?
+6. Does it expose an unresolved required functional decision or show that a Functional Design completion condition is no longer met?
 
-Apply the shared [questionnaire rules](../../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs remain valid.
+Apply the shared [questionnaire rules](../../revision.md#stage-reopening-questionnaires) to interpret the answers. A change confined to a later stage does not reopen Functional Design while its contract and outputs are valid.
 
 The orchestrator authorizes reopening under the shared [Revision procedure](../../revision.md#revision-procedure). Questionnaire answers do not authorize the stage agent to reopen stages.
 
-A reopened Functional Design stage must repeat self-review. The requester must explicitly approve the revised functional design. Record that approval through CLI-owned JSON journal events. External review remains requester-triggered only.
+A reopened Functional Design stage must repeat self-review. The requester must explicitly approve the revised functional design. Record that approval through CLI-owned JSON journal events. Only the requester can trigger external review.
 
 ## Completion conditions
 
@@ -254,7 +254,7 @@ These examples are not mandatory questions or additional completion conditions. 
 | Who can cancel an order? | Resolve in Functional Design. |
 | What happens when cancellation is refused? | Resolve in Functional Design. |
 | What response-time target applies? | Pass to Quality Requirements if functional behavior is already defined. |
-| Which storage technology should we use? | Pass to Implementation Planning if the functional contract remains unchanged. |
+| Which storage technology should we use? | Pass to Implementation Planning if the functional contract is unchanged. |
 
 ## Handoff
 

@@ -4,7 +4,7 @@
 
 **Status:** Accepted by the requester under [UR16](../../authoring_progress.md#unit-of-work-review-decisions).
 
-The requester accepted the complete Unit of Work Review contract. It defines the review procedure, roles, skills, evidence, approval conditions, and handoff. [CN17](../../authoring_progress.md#completed-construction-decisions) records the agreed whole-unit review scope.
+The requester accepted the complete Unit of Work Review contract. It specifies the review procedure, roles, skills, evidence, approval conditions, and handoff. [CN17](../../authoring_progress.md#completed-construction-decisions) records the agreed whole-unit review scope.
 
 This approval concerns the specification. It does not approve an executing Unit of Work or authorize delivery.
 
@@ -12,7 +12,7 @@ This approval concerns the specification. It does not approve an executing Unit 
 
 Determine whether the complete integrated result satisfies the Unit of Work's agreed outcome, functional contracts, and quality obligations.
 
-Assess the unit as a whole, including interactions between task outputs. A collection of successful task reports does not establish that complete outcome.
+Review the unit as a whole, including interactions between task outputs. A collection of successful task reports does not prove that the complete outcome is met.
 
 ## Inputs
 
@@ -23,7 +23,7 @@ Assess the unit as a whole, including interactions between task outputs. A colle
 - Known deployment constraints and planned delivery dependencies.
 - Earlier review findings and retained evidence when revising the result.
 
-Treat earlier results as inputs with their original bindings. They do not establish completion of this review attempt.
+Treat earlier results as inputs with their original bindings. They do not prove completion of this review attempt.
 
 ## Entry conditions
 
@@ -31,17 +31,17 @@ Start when:
 
 - Implementation is complete under its applicable contract for the current unit.
 - The integrated result, relevant upstream artifacts, and required execution evidence are identified and available.
-- Review scope and unit acceptance conditions are explicit enough to assess the complete outcome.
+- Review scope and unit acceptance conditions are explicit enough for a whole-unit conclusion.
 
-Do not require delivery, publication, deployment, or requester acceptance before performing the review that informs those decisions.
+Do not make delivery, publication, deployment, or requester acceptance a precondition for this review.
 
 ## Scope
 
 ### Included
 
-- Assess the integrated outcome against the unit's purpose, scope, functional behavior, and applicable quality requirements.
+- Determine whether the integrated outcome meets the unit's purpose, scope, functional behavior, and applicable quality requirements.
 - Examine component interactions, compatibility, failure behavior, and required operational or deployment preparation.
-- Check coverage of applicable obligations and assess the relevance of supporting evidence.
+- Identify the applicable obligations. Determine which obligations the supporting evidence covers and whether that evidence is relevant.
 - Identify concrete defects, unsupported claims, missing proof, and material limitations.
 - Report findings, uncertainties, and proposed correction boundaries to the orchestrator.
 - Prepare a reviewed-result handoff for Deliver when completion conditions are met.
@@ -53,7 +53,7 @@ Do not require delivery, publication, deployment, or requester acceptance before
 - Waiving requirements or accepting consequential trade-offs without the requester's authority.
 - Publishing, releasing, deploying, or creating an external review request as an automatic review effect.
 
-The stage can inspect source, retained outputs, interfaces, and available environments. Additional check execution follows existing permissions and relevant project obligations.
+The stage can examine source, retained outputs, interfaces, and available environments. Additional check execution follows existing permissions and relevant project obligations.
 
 ## Artifacts and records
 
@@ -63,12 +63,12 @@ A readable review report can be a derived view or retained evidence attachment. 
 
 Optional authored analysis can use `details/unit-of-work-review/` and `type: supporting-document`. Reference it from the relevant owning artifact or evidence record and explain its purpose.
 
-The integrated implementation and upstream artifacts retain their existing ownership. Review consumes them; it does not redefine their contracts.
+Keep the existing ownership of the integrated implementation and upstream artifacts. Review consumes them. It does not redefine their contracts.
 
 ## Review procedure
 
-1. **Identify the result.** Establish the integrated checkpoint, relevant upstream versions, unit obligations, and originating execution records.
-2. **Assess evidence.** Check required Activity coverage, combined-result checks, relevant conditions, applicability, and retention.
+1. **Identify the result.** Record the integrated checkpoint, relevant upstream versions, unit obligations, and originating execution records.
+2. **Determine evidence coverage.** Determine whether required Activity coverage, combined-result checks, relevant conditions, applicability, and retention satisfy the evidence requirements.
 3. **Review the outcome.** Examine the complete behavior, interactions, failure cases, quality obligations, and deployment preparation against current contracts.
 4. **Report findings.** State each material problem, its evidence, affected obligation, uncertainty, and proposed correction boundary.
 5. **Resolve blocking findings.** Obtain the orchestrator's decision and execute any authorized revision cascade before claiming review completion.
@@ -78,19 +78,19 @@ The integrated implementation and upstream artifacts retain their existing owner
 
 Successful task checks are relevant evidence, not automatic proof of every unit acceptance condition. Determine which obligations they cover and identify gaps.
 
-Assess the final integrated material, not only isolated worker branches or changed files. Use relevant unchanged behavior and configuration when they affect the outcome. The [Unit of Work Review package](../../diff-package.md#unit-of-work-review) covers the range from the original unit checkpoint to the assessed final checkpoint. It does not limit review to changed lines. Review the complete outcome, current contracts, relevant unchanged behavior, and applicable evidence.
+Review the final integrated material, not only isolated worker branches or changed files. Use relevant unchanged behavior and configuration when they affect the outcome. The [Unit of Work Review package](../../diff-package.md#unit-of-work-review) covers the range from the original unit checkpoint to the assessed final checkpoint. It does not limit review to changed lines. Review the complete outcome, current contracts, relevant unchanged behavior, and applicable evidence.
 
-This contract does not require an unconditional repeat of typechecking, the build, and the full suite in this stage. Their required Implementation results must remain applicable.
+This stage does not make an unconditional repeat of typechecking, the build, and the full suite necessary. Use required Implementation results only while they apply to the material and inputs.
 
-Run additional checks when needed to establish an uncovered review obligation, subject to applicable permissions. Do not claim compliance from an unexecuted check.
+Run additional checks when needed to show that an uncovered review obligation is satisfied, subject to applicable permissions. Do not claim compliance from an unexecuted check.
 
-Missing mandatory upstream evidence invalidates the relevant upstream completion. Report it for revision; new review checks do not retroactively complete an earlier stage attempt.
+Missing mandatory upstream evidence invalidates the relevant upstream completion. Report it for revision. New review checks do not retroactively complete an earlier stage attempt.
 
-A changed checkpoint alone does not require repeating valid checks. Apply the shared [evidence applicability rules](../../runtime.md#evidence-applicability) to covered material and relevant inputs.
+A changed checkpoint alone is not a reason to repeat valid checks. Apply the shared [evidence applicability rules](../../runtime.md#evidence-applicability) to covered material and relevant inputs.
 
 ### Findings and correction
 
-A blocking finding prevents establishing an applicable unit obligation or required completion condition. Identify the violated contract or missing evidence; distinguish it from optional advice.
+A blocking finding prevents proof that the unit satisfies an applicable obligation or required completion condition. Identify the violated contract or missing evidence. Distinguish it from optional advice.
 
 A nonblocking limitation must not conceal an unmet requirement. Describe its actual scope and why it does not prevent the agreed outcome.
 
@@ -98,15 +98,15 @@ The reviewer reports facts and proposed boundaries. The orchestrator decides whe
 
 | Finding | Proposed boundary for assessment |
 | --- | --- |
-| The review assessment or its references need correction, with unchanged valid implementation. | Correct within the current review attempt when the stage remains active. |
+| The review assessment or its references are incorrect, with unchanged valid implementation. | Correct within the current review attempt when the stage is active. |
 | The implementation or required Implementation evidence is invalid. | Implementation, followed by a new Unit of Work Review and Deliver. |
 | The task graph or technical solution must change. | Implementation Planning and every subsequent unit stage. |
 | Functional or quality obligations are invalid. | The earliest affected upstream stage and its downstream cascade. |
-| Delivery instructions alone need correction after valid review. | Deliver, while its inputs and the reviewed result remain valid. |
+| A valid review leaves only Delivery instructions to correct. | Deliver, while its inputs and the reviewed result are still valid. |
 
-An upstream revision invalidates current downstream completion immediately. Reexecute the affected stages even when some artifact bytes remain unchanged.
+An upstream revision invalidates current downstream completion immediately. Reexecute the affected stages even when some artifact bytes stay unchanged.
 
-Code Generation, Code Validation, and Code Integration are Activities within Implementation. Apply its accepted [post-completion return rule](implementation.md#return-after-completed-implementation) when that unit stage reopens. Reopened Activities require new attempts and evidence. Unaffected Activity records retain their original bindings after applicability assessment; the new unit attempt still requires its own completion assessment.
+Code Generation, Code Validation, and Code Integration are Activities within Implementation. Apply its accepted [post-completion return rule](implementation.md#return-after-completed-implementation) when that unit stage reopens. After reopening, Activities must use new attempts and evidence. Keep unaffected Activity records with their original bindings after applicability assessment. The new unit attempt must have its own completion assessment.
 
 ## Effort
 
@@ -115,20 +115,20 @@ Apply the shared [effort definition](../../effort.md).
 | Effort | Unit of Work Review guidance |
 | --- | --- |
 | Minimal | State coverage, material findings, evidence applicability, and the whole-unit conclusion concisely. |
-| Standard | Explain significant interactions, quality concerns, verification gaps, and correction rationale. |
+| Standard | Explain important interactions, quality concerns, verification gaps, and correction rationale. |
 | Comprehensive | Analyze complex failure paths, cross-boundary effects, operational concerns, and evidence limitations in supporting detail. |
 
 Effort does not remove whole-unit coverage, independent assessment, blocking-finding resolution, or applicable requester authority.
 
 ## Agent roles
 
-`kepler-reviewer` is the accepted stage owner. The role needs functional analysis, code review, quality assessment, and evidence evaluation capabilities.
+`kepler-reviewer` is the accepted stage owner. The reviewer must have capabilities in functional analysis, code review, quality assessment, and evidence evaluation.
 
 The reviewer must not be the primary implementation author for the reviewed result. Earlier task review participation does not itself prevent whole-unit review.
 
-Review independence does not require a different model, vendor, or human. The reviewer must assess the actual integrated material and relevant contracts independently.
+A different model, vendor, or person is not necessary for independent review. The reviewer must review the actual integrated material and relevant contracts independently.
 
-The orchestrator owns revision decisions and coordination. The requester retains authority over the intended outcome, scope, consequential trade-offs, and applicable acceptance.
+The orchestrator owns revision decisions and coordination. The requester has authority over the intended outcome, scope, consequential trade-offs, and applicable acceptance.
 
 These assignments do not implement agent profiles. [CN22](../../authoring_progress.md#completed-construction-decisions) selects an orchestrator-controlled subagent model for Implementation only. It does not select a worker model for Unit of Work Review.
 
@@ -146,17 +146,17 @@ These additional review and approval rules are accepted.
 
 ### Self-review
 
-Self-review belongs in `kepler-review`. Check that the assessment covers the complete unit, uses applicable evidence, addresses blocking findings, and identifies the correct result.
+Self-review belongs in `kepler-review`. It must cover the complete unit, use applicable evidence, address blocking findings, and identify the correct result.
 
-Self-review checks the review's completeness. It does not replace the required independent whole-unit assessment or task-level feedback.
+Self-review reports whether review coverage is complete. It does not replace the required independent whole-unit assessment or task-level feedback.
 
 ### Additional review
 
-Additional external review occurs only when the requester asks for it. The Unit of Work Review stage remains required.
+Additional external review occurs only when the requester asks for it. The Unit of Work Review stage is still required.
 
 ### Requester acceptance
 
-Resolve requester-owned consequential choices before completion. Require separate whole-unit acceptance only when an applicable authority rule or requester instruction requires it.
+Resolve requester-owned consequential choices before completion. Obtain separate whole-unit acceptance only when an applicable authority rule or requester instruction makes it necessary.
 
 When acceptance is required, present the actual integrated result, assessment, material limitations, and decisions covered. Record explicit acceptance against the current review attempt and reviewed material through CLI-owned operations.
 
@@ -166,8 +166,8 @@ A positive review, successful checks, or a repository commit does not grant requ
 
 1. Does a finding invalidate the whole-unit conclusion, review coverage, or assessment of a required obligation?
 2. Does the reviewed material or a relevant input differ from what the review evidence covers?
-3. Does a blocking finding remain unresolved or lack an authorized correction decision?
-4. Does evidence fail to establish required upstream completion or an applicable unit acceptance condition?
+3. Is a blocking finding unresolved or missing an authorized correction decision?
+4. Does evidence fail to prove required upstream completion or an applicable unit acceptance condition?
 5. Does an applicable requester acceptance no longer cover the current reviewed material or consequential decision?
 
 Report answers and the proposed earliest boundary to the orchestrator under the shared [revision procedure](../../revision.md#revision-procedure).
@@ -181,8 +181,8 @@ Complete the stage when:
 - The current integrated result and relevant upstream contracts are identified and consistent.
 - The complete unit outcome has been reviewed against applicable functional, quality, compatibility, and known deployment obligations.
 - Required execution evidence is available, applicable, retained, and sufficient for the obligations it claims to cover.
-- Missing proof has been resolved through appropriate checks or authorized upstream revision, not by waiving required evidence.
-- No blocking finding or unresolved requester-owned consequential choice remains.
+- Missing proof has been resolved through applicable checks or authorized upstream revision, not by waiving required evidence.
+- No blocking finding or requester-owned consequential choice is unresolved.
 - Nonblocking limitations have explicit scope and rationale consistent with current obligations.
 - The independent assessment, self-review, and any requested additional review are complete.
 - Any applicable requester acceptance is recorded against the actual reviewed material.
@@ -195,18 +195,18 @@ Publication, release, deployment, and completed delivery operations are not revi
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
 | Implementation evidence assessment | Final integrated material, upstream contracts, required Activity records, conditions, and integration provenance. | Required earlier evidence is present, applicable, and retained. Claimed coverage and any gaps are explicit. |
-| Whole-unit review result | Complete integrated outcome against unit scope, functional design, quality requirements, plan, and known delivery constraints. | Independent assessment establishes the required outcome. Blocking findings are resolved; self-review confirms coverage and handoff accuracy. |
-| Additional check result | Material, obligation, and conditions that require additional verification during review. | The identified check succeeds and supplies the missing review proof without replacing mandatory upstream records. |
+| Whole-unit review result | Complete integrated outcome against unit scope, functional design, quality requirements, plan, and known delivery constraints. | Independent assessment shows the required outcome. Blocking findings are resolved. Self-review states that coverage is complete and the handoff is accurate. |
+| Additional check result | Material, obligation, and conditions that make additional verification necessary during review. | The identified check succeeds and supplies the missing review proof without replacing mandatory upstream records. |
 | Requested additional review result | Material and scope identified in an additional review request. | The requested review is complete and its blocking findings are resolved. |
 | Applicable requester acceptance record | Integrated result, assessment, material limitations, and decisions covered by required acceptance. | The requester explicitly accepts the identified material for the current review attempt. |
 
 Additional check and review rows apply only when their stated conditions occur. These conditions do not make required unit coverage optional.
 
-Bind this stage's new assessment to its unit-scoped attempt, material, relevant inputs, result, and supporting output. Preserve originating bindings when referencing earlier evidence. The package selects Implementation material without requiring a completed Review. The actual Review result remains bound to this current Review attempt.
+Bind this stage's new assessment to its unit-scoped attempt, material, relevant inputs, result, and supporting output. Keep originating bindings when referencing earlier evidence. The package selects Implementation material. A completed Review is not necessary to render it. The actual Review result stays bound to this current Review attempt.
 
 Apply the shared [evidence and approval rules](../../runtime.md#evidence-and-approval-bindings), applicability rules, and retention rules. Create the output checkpoint before recording any required requester acceptance.
 
-Exact event types, record formats, commands, and derived report layouts remain implementation work. No new execution-state authority or mandatory report filename is proposed.
+Exact event types, record formats, commands, and derived report layouts are still implementation work. No new execution-state authority or mandatory report filename is proposed.
 
 ## Handoff
 
@@ -214,6 +214,6 @@ Exact event types, record formats, commands, and derived report layouts remain i
 
 Supply the reviewed integrated checkpoint, current upstream artifacts, review result, evidence references, and any applicable requester acceptance.
 
-Include known delivery constraints, remaining nonblocking limitations, planned prerequisites, and operations that need existing permissions or requester decisions.
+Include known delivery constraints, remaining nonblocking limitations, planned prerequisites, and operations that are subject to existing permissions or requester decisions.
 
-Deliver must establish its own requested outcome and operation authority. A successful review does not imply permission to push, merge, publish, release, or deploy.
+Deliver must show that its requested outcome is met and its operation is authorized. A successful review does not imply permission to push, merge, publish, release, or deploy.

@@ -6,62 +6,62 @@
 
 Record decisions about the Kepler CLI, structured persistence, and audit system.
 
-The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. Phase-owned projections, paths, commands, and write protocols remain under design. This document does not implement CLI behavior or migrate existing data.
+The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. Phase-owned projections, paths, commands, and write protocols stay under design. This document does not add CLI behavior or migrate existing data.
 
-The [Construction runtime draft](phases/construction/runtime.md) proposes Construction-specific state names, lifecycle guards, event payloads, and storage examples. It is not a stage and does not replace this shared contract. Its proposals remain unapproved implementation choices.
+The [Construction runtime draft](phases/construction/runtime.md) proposes Construction-specific state names, lifecycle guards, event payloads, and storage examples. It is not a stage and does not replace this shared contract. Its proposals are not approved implementation choices.
 
 ## Data responsibilities
 
 | Data | Representation | Responsibility |
 | --- | --- | --- |
-| Artifact metadata | Frontmatter on Markdown artifacts; JSON artifact representation follows its own contract. | For Markdown, record identity, classification, ownership, schema version, and author under the shared [metadata contract](metadata.md). JSON metadata follows its own artifact contract. |
-| Authored content | Markdown artifact bodies and authored JSON task graphs. | Define purpose, scope, requirements, design, plans, and supporting evidence. |
+| Artifact metadata | Frontmatter on Markdown artifacts. JSON artifact representation follows its own contract. | For Markdown, record identity, classification, ownership, schema version, and author under the shared [metadata contract](metadata.md). JSON metadata follows its own artifact contract. |
+| Authored content | Markdown artifact bodies and authored JSON task graphs. | State purpose, scope, requirements, design, plans, and supporting evidence. |
 | Execution state | Derived phase-owned views, queried through the `kepler` CLI. | Represent current progress, attempts, approvals, and changing settings from each phase's journals. |
-| Audit history | Authoritative append-only structured JSON event journals, recorded through CLI-owned operations. | Preserve lifecycle facts, decisions, settings, revisions, approvals, and evidence bindings needed to derive execution state. |
+| Audit history | Authoritative append-only structured JSON event journals, recorded through CLI-owned operations. | Keep lifecycle facts, decisions, settings, revisions, approvals, and evidence bindings necessary to derive execution state. |
 
 ## Record portability
 
-[SH74](authoring_progress.md#completed-shared-decisions) defines which records travel with the project. These rules preserve the existing journal authority, evidence bindings, and concurrency contracts.
+[SH74](authoring_progress.md#completed-shared-decisions) states which records travel with the project. These rules keep the existing journal authority, evidence bindings, and concurrency contracts.
 
 | Record | Portability rule |
 | --- | --- |
 | Authored project artifacts | Version with the project under their authored-content and metadata contracts. |
-| Phase-owned append-only JSON journals | Version as portable workflow history. Preserve their event identities and original bindings. |
-| Derived projections and caches | Keep local and disposable. Rebuild them from retained journals. |
+| Phase-owned append-only JSON journals | Version as portable workflow history. Keep their event identities and original bindings. |
+| Derived projections and caches | Keep local and disposable. Rebuild them from kept journals. |
 | Live locks and process registries | Keep as unversioned runtime coordination data. Copying history must not restore ownership. |
-| Evidence content | Version suitable files. Retain large or sensitive content externally with durable references and preserved material. |
+| Evidence content | Version suitable files. Keep large or sensitive content externally with durable references and the material. |
 
 ### Current journals and Git snapshots
 
 Working journals can contain uncommitted events. The CLI uses current durable history under the owning phase's validation rules.
 
-Do not require a new commit solely for an event append, worker dispatch, or session resume. Existing checkpoint requirements still apply to the material being checked or handed off. Do not add global `HEAD` agreement or shared admission commits.
+A new commit is not necessary solely for an event append, worker dispatch, or session resume. Existing checkpoint requirements still apply to the material being checked or handed off. Do not add global `HEAD` agreement or shared admission commits.
 
-Separate worker or workspace journals remain permitted. Preserve event and journal identities, local event order, causal references, original attempts, and evidence bindings. Do not flatten or reorder history by timestamps. Git merge success alone does not validate workflow history.
+A system may use separate worker or workspace journals. Keep event and journal identities, local event order, causal references, original attempts, and evidence bindings. Do not flatten or reorder history by timestamps. Git merge success alone does not validate workflow history.
 
-Git can transfer a committed history snapshot made available to the receiver. It does not synchronize ongoing events or establish live worker or lock ownership.
+Git can transfer a committed history snapshot made available to the receiver. It does not synchronize ongoing events or show live worker or lock ownership.
 
 ### Handoff and recovery
 
-Same-checkout recovery can use current durable journals and preserved unfinished work under the [recovery rule](#interrupted-work-recovery).
+Same-checkout recovery can use current durable journals and unfinished work that the [recovery rule](#interrupted-work-recovery) says to keep.
 
-Before a cross-checkout or cross-machine handoff completes, provide the history relevant to the receiving scope. Include required causal records, checkpoint material, and accessible evidence.
+Before a cross-checkout or cross-machine handoff completes, make the history relevant to the receiving scope available. Include necessary causal records, checkpoint material, and accessible evidence.
 
-Missing required records, checkpoint objects, or evidence block only the affected handoff or work. Use existing recovery and revision rules to resolve missing material. Do not infer successful completion or recreate requester approval.
+Missing necessary records, checkpoint objects, or evidence block only the affected handoff or work. Use existing recovery and revision rules to resolve missing material. Do not infer successful completion or recreate requester approval.
 
-History transfer does not start workers, restore locks, or grant new consent. Confirm current assignment and that earlier workers stopped before resuming the same work. A stale snapshot cannot establish that no newer event or live lock exists.
+History transfer does not start workers, restore locks, or grant new consent. Before you resume this work, make sure that its assignment is current. Make sure that no earlier worker is active on the same work. A stale snapshot cannot show that no newer event or live lock exists.
 
 ### Evidence and privacy
 
-Keep secrets out of versioned records. Journals need necessary workflow facts, not full session transcripts.
+Keep secrets out of versioned records. Journals record necessary workflow facts, not full session transcripts.
 
-Retain required evidence content, not only its reference or fingerprint. Keep required Git checkpoint objects reachable through retained references. Make required references and objects available to the receiver. Names and commit IDs alone do not preserve material.
+Keep necessary evidence content, not only its reference or fingerprint. Keep necessary Git checkpoint objects reachable through their references. Make necessary references and objects available to the receiver. Names and commit IDs alone do not keep material.
 
 Version-control policy does not authorize publication or other delivery operations.
 
 ### Implementation boundary
 
-Storage paths, journal collection, synchronization, locking, and checkpoint publication mechanics remain implementation choices. Retention periods and cleanup remain [deferred](authoring_progress.md#deferred-decisions). This policy does not implement a storage engine, transfer command, or live coordination protocol.
+Storage paths, journal collection, synchronization, locking, and checkpoint publication mechanics stay implementation choices. Retention periods and cleanup stay [deferred](authoring_progress.md#deferred-decisions). This policy does not set a storage engine, transfer command, or live coordination protocol.
 
 ## Rules
 
@@ -69,9 +69,11 @@ Storage paths, journal collection, synchronization, locking, and checkpoint publ
 
 Keep artifact metadata separate from execution state. Mostly immutable does not mean that every field can never change. Follow the shared [metadata change rules](metadata.md#metadata-changes).
 
-For Markdown artifacts, use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. The metadata contract defines their meanings and when they are required. Apply its [field validation rules](metadata.md#field-validation). Validation is read-only: report invalid names or values and preserve content for correction. Do not convert value types or generate missing values during validation. Creation operations can populate fields explicitly. Stage-specific fields remain undecided.
+For Markdown artifacts, use the shared [common fields](metadata.md#common-fields): `id`, `type`, `schema_version`, `unit_id`, `author`, and `labels`. The metadata contract gives their meanings and states when they must be present. Apply its [field validation rules](metadata.md#field-validation). Validation is read-only: report invalid names or values and keep content for correction.
 
-For Markdown artifacts, apply the shared [schema-version rules](metadata.md#schema-version). Report unsupported schema versions and leave those artifacts unchanged. JSON artifact metadata and schema identification follow the JSON artifact's own contract. Do not migrate data automatically. The migration procedure remains deferred under DF05.
+Do not convert value types or generate missing values during validation. Creation operations can populate fields explicitly. Stage-specific fields stay undecided.
+
+For Markdown artifacts, apply the shared [schema-version rules](metadata.md#schema-version). Report unsupported schema versions and leave those artifacts unchanged. JSON artifact metadata and schema identification follow the JSON artifact's own contract. Do not migrate data automatically. The migration procedure stays deferred under DF05.
 
 Do not store progress, completion flags, current attempts, approvals, pause checkpoints, or changing execution settings in authored artifacts. This includes Markdown frontmatter, Markdown status sections, and `tasks-dag.json`.
 
@@ -83,117 +85,117 @@ Agents and skills must use the `kepler` CLI to query execution state and record 
 
 #### Execution-state representation
 
-Workflow execution state is derived from phase-owned event journals. No independently authoritative state files are required. Each phase owns its state model and projection schemas. Materialized views are disposable.
+Workflow execution state is derived from phase-owned event journals. No independently authoritative state files are necessary. Each phase owns its state model and projection schemas. Materialized views are disposable.
 
-The journals are the persisted source of workflow truth. This replaces the earlier state-plus-audit representation; state files cannot remain a second authority.
+The journals are the persisted source of workflow truth. This replaces the earlier state-plus-audit representation. State files cannot be a second authority.
 
-Each phase is a bounded context. Shared tracking mechanics do not impose Construction's unit/task hierarchy or status vocabulary on other phases. Agent scopes follow the owning phase and stage contracts; not all agents are task-scoped.
+Each phase is a bounded context. Shared tracking mechanics do not impose Construction's unit/task hierarchy or status vocabulary on other phases. Agent scopes follow the owning phase and stage contracts. Not all agents are task-scoped.
 
-The CLI can calculate views directly or use rebuildable projections. Rebuilding a projection does not rerun work or create approvals. A projection does not replace retained evidence or checks against actual work.
+The CLI can calculate views directly or use rebuildable projections. Rebuilding a projection does not rerun work or record approvals. A projection does not replace kept evidence or checks against actual work.
 
-This representation does not require one shared journal or a global total order. The [event envelope](#event-envelope-choices) is agreed. Exact type definitions and the event catalog belong to implementation. Journal layout, collection, and write protocols remain separate decisions.
+One shared journal or a global total order is not necessary for this representation. The [event envelope](#event-envelope-choices) is agreed. Exact type definitions and the event catalog belong to implementation. Journal layout, collection, and write protocols stay separate decisions.
 
-Record the unit effort default and explicit stage overrides as journal events through the CLI. Derive their current values from those events. Their selection and approval rules remain in the shared [Effort definition](effort.md).
+Record the unit effort default and explicit stage overrides as journal events through the CLI. The CLI calculates their current values from those events. Their selection and approval rules stay in the shared [Effort definition](effort.md).
 
-Record requester approvals and their reviewed-material bindings as journal events through the CLI. Approval views are derived from those events. A frontmatter flag, an existing artifact, or a Git commit does not establish approval or completion.
+Record requester approvals and their reviewed-material bindings as journal events through the CLI. Approval views are derived from those events. A frontmatter flag, an existing artifact, or a Git commit does not show approval or completion.
 
-Markdown views can present execution state, but they remain derived views, not authoritative records. The authoring progress file tracks specification work, not Unit of Work execution.
+Markdown views can present execution state, but they stay derived views, not authoritative records. The authoring progress file tracks specification work, not Unit of Work execution.
 
 ### Stage attempts
 
-A stage attempt is one execution of a stage within the scope defined by its phase contract. It includes the stage's internal correction loops.
+A stage attempt is one execution of a stage within the scope that its phase contract sets. It includes the stage's internal correction loops.
 
-Construction uses unit-scoped stage attempts. Implementation coordinates its Activity attempts under one unit-scoped attempt. Other phases define their own execution scopes.
+Construction uses unit-scoped stage attempts. Implementation coordinates its Activity attempts under one unit-scoped attempt. Other phases set their own execution scopes.
 
 - Create a stage attempt when the stage starts for the first time.
-- Self-review and repeated edits after failed checks keep the same attempt while corrections remain within that stage.
+- Self-review and repeated edits after failed checks keep the same attempt while corrections stay within that stage.
 - A stage report or revision recommendation does not create a new attempt.
 - Create a new attempt when a stage executes again after reopening authorized by the orchestrator.
 - Apply this rule to every stage in the authorized revision cascade when each stage executes again.
 - Pauses, resumes, and new agent sessions keep the same attempt.
 - A failed command alone does not create a new attempt.
-- Link the stage's named evidence and any required approvals to the stage attempt.
-- Keep previous attempts as history. Their completion does not establish completion of the current attempt.
+- Link the stage's named evidence and required approvals to the stage attempt.
+- Keep previous attempts as history. Their completion does not show completion of the current attempt.
 
-Suspected upstream problems follow the shared [revision authority and escalation rules](revision.md#authority-and-escalation). Stage and Activity workers report findings and proposed boundaries. The orchestrator decides whether to authorize reopening and where to start.
+Suspected upstream problems follow the shared [revision authority and escalation rules](revision.md#authority-and-escalation). Stage and Activity workers report findings and proposed boundaries. The orchestrator selects whether to authorize reopening and where to start.
 
 #### Attempt identity and active scope
 
 Give each attempt a distinct identity. A new attempt must not reuse a previous attempt's identity. Git checkpoint reuse does not change this rule.
 
-For Construction, allow zero or one active attempt for each fixed unit/stage scope. Apply the separate one-active-attempt limit to each fixed Activity occurrence under [Activity attempts](#activity-attempts). Different task and unit scopes can progress concurrently when the accepted dependency graph and stage order permit it.
+For Construction, keep at most one active attempt for each fixed unit/stage scope. Apply the separate one-active-attempt limit to each fixed Activity occurrence under [Activity attempts](#activity-attempts). Different task and unit scopes can progress concurrently when dependency and stage-order constraints are satisfied.
 
 For this limit, active means started and not ended. Paused attempts and attempts waiting for review or approval still occupy their scope. Resuming work keeps the existing attempt identity.
 
-Preserve each limit under concurrent start or resume requests. Two requests for the same scope must not create two active attempts. Coordination must not become a global Git gate for unrelated scopes.
+Keep each limit under concurrent start or resume requests. Two requests for the same scope must not create two active attempts. Coordination must not become a global Git gate for unrelated scopes.
 
-This constraint does not require every task to execute every Activity. Phase and stage contracts define the applicable scopes.
+It is not necessary for every task to execute every Activity. Phase and stage contracts set the applicable scopes.
 
-Construction defines its [Implementation structure](phases/construction/README.md#implementation). Record the relationship between its unit-scoped stage attempt and each Activity attempt through the shared journal mechanics. Derive relationship views from those events.
+Construction sets its [Implementation structure](phases/construction/README.md#implementation). Record the relationship between its unit-scoped stage attempt and each Activity attempt through the shared journal mechanics. Get relationship views from those events.
 
 Task implementation and Task coding are execution contexts, not additional attempt identities. Do not infer Construction's Activity structure for other phases.
 
-Attempt ID formats, status values, and exact coordination and binding record formats require further decisions.
+More decisions are necessary for attempt ID formats, status values, and exact coordination and binding record formats.
 
 ### Activity attempts
 
-An Activity attempt is one execution of an Activity occurrence within an enclosing stage attempt. Bind it to that occurrence and the enclosing attempt. The stage attempt supplies coordination context; it does not replace the Activity attempt.
+An Activity attempt is one execution of an Activity occurrence within an enclosing stage attempt. Bind it to that occurrence and the enclosing attempt. The stage attempt supplies coordination context. It does not replace the Activity attempt.
 
-Each Activity attempt has a distinct identity and its own run floor. Allow at most one active attempt for a fixed Activity occurrence. An authorized return creates a new attempt when the Activity executes again.
+Each Activity attempt has a distinct identity and its own run floor. Keep at most one active attempt for a fixed Activity occurrence. An authorized return creates a new attempt when the Activity executes again.
 
 Failed commands, local corrections within the current Activity, waits, pauses, resumes, and new sessions do not create another attempt. An Integration-only retry stays within its current Code Integration attempt.
 
 Keep Activity evidence under the Activity's own contract and attempt. Keep enclosing stage evidence under the stage contract and attempt. Shared scope and material bindings do not replace either contract.
 
-When an upstream revision ends the enclosing stage attempt, end its affected Activity attempts. Do not move historical Activity evidence to a new stage attempt. Ended Activity results cannot complete or cancel newer work, even if candidate bytes and the enclosing stage attempt remain unchanged.
+When an upstream revision ends the enclosing stage attempt, end its affected Activity attempts. Do not move historical Activity evidence to a new stage attempt. Ended Activity results cannot complete or cancel newer work, even if candidate bytes and the enclosing stage attempt stay unchanged.
 
-Use shared CLI-owned journals and operations for Activity attempts and evidence. Do not add a second lifecycle engine or a task-coding or protocol-run attempt identity. Activity event payloads, ID formats, commands, and projections remain implementation choices under the unchanged [event envelope](#event-envelope-choices).
+Use shared CLI-owned journals and operations for Activity attempts and evidence. Do not add a second lifecycle engine or a task-coding or protocol-run attempt identity. Activity event payloads, ID formats, commands, and projections stay implementation choices under the unchanged [event envelope](#event-envelope-choices).
 
 ### Run floor
 
 Use the applicable attempt identity as the run floor for its scope. The run floor is not a separate identifier.
 
-Earlier-attempt evidence and approvals cannot establish completion of the current attempt in that scope. Late results retain their original attempt binding. They must not change a newer attempt's progress or establish its completion, even when the Git checkpoint matches.
+Earlier-attempt evidence and approvals cannot show completion of the current attempt in that scope. Late results keep their original attempt binding. They must not change a newer attempt's progress or show its completion, even when the Git checkpoint matches.
 
-Pauses, resumes, and internal correction loops retain the same run floor. Progress in other scopes does not change it. This contract does not define an additional verification-round boundary within an attempt.
+Pauses, resumes, and internal correction loops keep the same run floor. Progress in other scopes does not change it. This contract does not set an additional verification-round boundary within an attempt.
 
-Attempt binding and [evidence applicability](#evidence-applicability) are separate checks. A matching attempt identity does not establish that evidence covers the required material and relevant inputs. Stage and Activity completion conditions and revision authority still apply.
+Attempt binding and [evidence applicability](#evidence-applicability) are separate checks. A matching attempt identity does not show that evidence covers the necessary material and relevant inputs. Stage and Activity completion conditions and revision authority still apply.
 
 ### Interrupted-work recovery
 
-Resume from CLI-recorded progress after checking the actual work and evidence. Preserve unfinished work and continue the same attempt if it has not ended. Confirm that no previous worker is still changing the same work. Repeat work only where results are missing or no longer valid. Resolve conflicting records before resuming the affected work.
+Resume from CLI-recorded progress after making sure that the actual work and evidence match the recorded progress. Keep unfinished work and continue the same attempt if it has not ended. Make sure that no previous worker changes the same work. Repeat work only where results are missing or no longer valid. Resolve conflicting records before resuming the affected work.
 
-Use the existing [revision procedure](revision.md#revision-procedure) when upstream contracts are invalid. Independent work can continue while its inputs and contracts remain valid.
+Use the existing [revision procedure](revision.md#revision-procedure) when upstream contracts are invalid. Independent work can continue while its inputs and contracts stay valid.
 
-This rule does not define lock recovery or repair of interrupted state writes.
+This rule gives no lock recovery rules or repair rules for interrupted state writes.
 
 ### Revision decisions
 
 Follow the shared [Revision procedure](revision.md#revision-procedure). A stage's proposed boundary does not authorize reopening or a revision cascade.
 
-Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Retain those facts in the phase's append-only event journals. Derive current execution state from the recorded decision. CLI-owned operations record the events; agents must not write them separately.
+Record the orchestrator's decision and reason through the CLI. Include the selected execution scope and starting stage. Keep those facts in the phase's append-only event journals. Get current execution state from the recorded decision. CLI-owned operations record the events. Agents must not write them separately.
 
-Follow Construction's [unit-wide upstream revision rules](phases/construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation and Activity attempts through CLI-owned journal events. Derive current attempt views from those events. Start new attempts only when their stage or Activity executes again.
+Follow Construction's [unit-wide upstream revision rules](phases/construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation and Activity attempts through CLI-owned journal events. Calculate current attempt views from those events. Start new attempts only when their stage or Activity executes again.
 
-Phase-owned projection fields and detailed revision arguments remain undecided. The [CLI command reference](cli.md#revision-operation) records the agreed `revise` placement. The implementation defines revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
+Phase-owned projection fields and detailed revision arguments stay undecided. The [CLI command reference](cli.md#revision-operation) records the agreed `revise` placement. The implementation sets revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
 
 ### Audit ownership
 
 CLI-owned application operations validate workflow transitions and record the resulting structured events. Current execution state is derived from those events. Callers must not append duplicate lifecycle records after an operation or write event records by hand.
 
-The journals retain earlier events when work is revised or approved again. Rebuildable views reflect recorded history; they do not become an independent workflow authority.
+The journals keep earlier events when work is revised or approved again. Rebuildable views reflect recorded history. They do not become an independent workflow authority.
 
 The CLI records the requester's approval. It does not replace the requester as the approval authority.
 
 ## Event envelope choices
 
-These choices define the approved shared event envelope. All fields in the following table are required.
+These choices set the approved shared event envelope. All fields in the following table must be present.
 
 | Field | Purpose |
 | --- | --- |
 | `id` | Stable event identity. |
 | `phase` | Owning workflow phase. |
-| `type` | The recorded fact, defined by its owning phase. |
+| `type` | The recorded fact, set by its owning phase. |
 | `envelope_version` | Version of the shared envelope. |
 | `event_version` | Version of the phase-owned event payload. |
 | `journal_id` | Originating journal identity. |
@@ -217,29 +219,29 @@ Use `producer` to identify the software that originally recorded the event. The 
 | `name` | `kepler` |
 | `version` | The actual version of the CLI that recorded the event. |
 
-Use this information to investigate recorded events. Imported events retain their original producer values. The importing CLI must not replace those values with its own identity.
+Use this information to investigate recorded events. Imported events keep their original producer values. The importing CLI must not replace those values with its own identity.
 
-The field does not identify the requester, agent, model, or host. Record required actor identities in the phase-owned event data. Producer values do not prove approval or authorize a transition.
+The field does not identify the requester, agent, model, or host. Record necessary actor identities in the phase-owned event data. Producer values do not show approval or authorize a transition.
 
 ### Causal references
 
-Use `caused_by`, not `causes`, for the required list of direct causal event IDs. Use `[]` when no recorded causal predecessor exists. The references point from the current event to its causes. Each phase's implementation defines its event catalog and required causal references.
+Use `caused_by`, not `causes`, for direct causal event IDs. Use `[]` when no recorded causal predecessor exists. The references point from the current event to its causes. Each phase's implementation sets its event catalog and necessary causal references.
 
 An event can have several direct causes. Referenced events can belong to other journals. Do not repeat indirect ancestors solely to reconstruct the causal chain.
 
-A timestamp alone does not establish causality. Causal references do not replace attempt or material bindings. They do not prove that a transition was valid.
+A timestamp alone does not show causality. Causal references do not replace attempt or material bindings. They do not show that a transition was valid.
 
-Workers can receive applicable event IDs with their assignments. This does not require workers to inspect global history.
+Workers can receive applicable event IDs with their assignments. Workers can do their work without a global-history inspection.
 
 ### Journal identity and order
 
 Keep `journal_id` as the event's originating journal identity. Use stable event IDs to detect duplicates.
 
-Do not persist a numeric `position` field or allocate a separate sequence counter. Local order is the order of events stored in each journal. Collection must preserve the original journals or their relative event order. Do not flatten and reorder history by timestamp while discarding local journal order.
+Do not persist a numeric `position` field or allocate a separate sequence counter. Local order is the order of events stored in each journal. Collection must keep the original journals or their relative event order. Do not flatten and reorder history by timestamp while discarding local journal order.
 
 Use `caused_by` for explicit causal references across journals. Local order does not resolve conflicting control decisions. Apply the existing transition, attempt, evidence, and approval rules.
 
-The protocols for safe appends, retries, interrupted writes, and collection remain undecided. This choice does not establish a physical storage layout or a global total order.
+The protocols for safe appends, retries, interrupted writes, and collection stay undecided. This choice sets no physical storage layout or global total order.
 
 ## Evidence and content checkpoints
 
@@ -255,7 +257,7 @@ The protocols for safe appends, retries, interrupted writes, and collection rema
 
 Attempt identity is separate from commit identity. An attempt can reference several checkpoints. Different attempts can reference the same checkpoint.
 
-A commit identifies content. It does not establish that checks passed or that the requester approved the work.
+A commit identifies content. It does not show that checks passed or that the requester approved the work.
 
 ### Material references
 
@@ -269,11 +271,11 @@ A Git checkpoint identifies repository material. An evidence record can referenc
 | MR or PR | Platform identifier, reviewed commit, and relevant review content. |
 | CI pipeline | Pipeline, job, and execution identifiers, plus the content actually tested. |
 | Container image | Image digest, with its tag as an additional label. |
-| Local or external logs | Retrieval location and a retained copy, object version, or content digest. |
+| Local or external logs | Retrieval location and a copy that stays available, an object version, or a content digest. |
 
-A mutable URL or tag alone may not identify what was examined. Where necessary, retain the relevant content or reference an immutable version.
+A mutable URL or tag alone is not sufficient to identify what you examined. Where necessary, keep the relevant content or reference an immutable version.
 
-A [Git diff package](diff-package.md) is a derived inspection input. It does not itself establish check success, approval, or workflow authority. It preserves original producer attempt and material bindings. A consuming check or review binds its result to its own current attempt. The package does not change lifecycle state.
+A [Git diff package](diff-package.md) is a derived inspection input. It does not itself show check success, approval, or workflow authority. It keeps original producer attempt and material bindings. A consuming check or review binds its result to its own current attempt. The package does not change lifecycle state.
 
 ### Evidence and approval bindings
 
@@ -287,7 +289,7 @@ Each evidence record identifies:
 
 An approval identifies the requester, applicable attempt, and material approved. Include the checkpoint and other material references that identify what the requester reviewed.
 
-Applicable contracts determine the required scope. The material covered is not limited to files changed by one worker.
+The applicable contracts set the scope. The material covered is not limited to files changed by one worker.
 
 Workflow progress and audit records are separate from the material checked, unless a check explicitly covers them.
 
@@ -298,20 +300,20 @@ Record bindings through CLI-owned JSON journal events, not artifact frontmatter.
 Use this procedure when evidence covers repository material.
 
 1. **Record the starting checkpoint.** Reuse an existing commit when it represents the required starting state. Task baselines follow the admission rules below.
-2. **Perform the work.** Edit and perform trial checks within the owning stage's or Activity's responsibilities. Internal correction loops do not require a commit for each action.
-3. **Prepare the output checkpoint.** Create a checkpoint in the work's own workspace when ready. Include the repository material that the required checks will cover.
-4. **Check the checkpoint.** Run required final checks against that snapshot and record their results. Apply the shared attempt and revision rules when corrections are needed.
-5. **Obtain required approval.** Bind approval to the reviewed material and checkpoint. Complete the stage or Activity only after its completion conditions are satisfied.
+2. **Do the work.** Edit and run trial checks within the owning stage's or Activity's responsibilities. Internal correction loops do not make a commit necessary for each action.
+3. **Prepare the output checkpoint.** Create a checkpoint in the work's own workspace when ready. Include the repository material that the necessary checks will cover.
+4. **Run final checks.** Run the necessary checks against that snapshot and record their results. Apply the shared attempt and revision rules when corrections are necessary.
+5. **Get approval when necessary.** Bind approval to the reviewed material and checkpoint. Complete the stage or Activity only after its completion conditions are satisfied.
 
-The checked material must match the checkpoint. Relevant uncommitted or untracked inputs cannot be silently treated as committed content.
+The material that passed the checks must match the checkpoint. Relevant uncommitted or untracked inputs cannot be silently treated as committed content.
 
-Reuse existing commits when appropriate. If the material is unchanged, starting and output references can identify the same commit. No new commit is required solely for attempt identity, task admission, or progress recording.
+Reuse existing commits when appropriate. If the material is unchanged, starting and output references can identify the same commit. A new commit is not necessary solely for attempt identity, task admission, or progress recording.
 
 ### Evidence applicability
 
 A different commit identifier does not automatically make evidence stale. An audit-only commit can leave all application code and configuration unchanged.
 
-Within the applicable attempt, earlier evidence can remain usable after verifying that its covered material and relevant inputs remain unchanged. Retain the record's original checkpoint and context references. If those inputs changed, obtain evidence covering the changed material.
+Within the applicable attempt, earlier evidence can stay usable after a check shows that its covered material and relevant inputs are unchanged. Keep the record's original checkpoint and context references. If those inputs changed, get evidence for the changed material.
 
 After an authorized revision, identical content does not transfer previous completion into the new attempt. Execute the reopened stage or Activity and satisfy its conditions again.
 
@@ -319,29 +321,29 @@ A material mismatch does not authorize a revision cascade. Report suspected upst
 
 ## Parallel execution
 
-In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages follow the selected workflow's order. Apply the fixed [Activity order](phases/construction/README.md#implementation) within each task, not across different tasks. Activity feedback routes do not add or change task dependency edges. Other phases define their own execution relationships.
+In Construction, dependency-ready tasks and independent units can run concurrently. Unit-scoped stages follow the selected workflow's order. Apply the fixed [Activity order](phases/construction/README.md#implementation) within each task, not across different tasks. Activity feedback routes do not add or change task dependency edges. Other phases set their own execution relationships.
 
-Starting tasks and recording progress must not depend on shared admission commits or a global coordinator `HEAD`. Independent work must not require unrelated workspaces to become clean or stop progressing.
+Task starts and progress records must not depend on shared admission commits or a global coordinator `HEAD`. Do not make a clean unrelated workspace a condition for other work to continue.
 
-Each task records its actual starting inputs. Running tasks do not need to match a changing coordinator `HEAD`.
+Each task records its actual starting inputs. Do not compare them with a changing coordinator `HEAD`.
 
-Workflow event writes and derived views must support concurrent work. Keep event-update coordination short. Test resources need isolation where concurrent runs could interfere.
+Workflow event writes and derived views must not prevent concurrent work. Keep event-update coordination short. Isolation is necessary for test resources when concurrent runs could interfere.
 
-Construction's [integration lock](phases/construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current checkpoint, candidate preparation, checks, and acceptance. This lock can cover long-running checks; it is not a global agent, task admission, or test gate.
+Construction's [integration lock](phases/construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current checkpoint, candidate preparation, checks, and acceptance. This lock covers long-running checks. It is not a global agent, task admission, or test gate.
 
-Separate unit integration workspaces and isolated workspaces for concurrent writers are one possible arrangement. Exact workspace and branch layouts remain undecided.
+Separate unit integration workspaces and isolated workspaces for concurrent writers are one possible arrangement. Exact workspace and branch layouts stay undecided.
 
 ### Task admission and baselines
 
 Admission is the start boundary for selecting a task's baseline.
 
-1. **Check readiness.** Confirm that the plan permits execution and all required predecessor outputs are available in the unit's integrated state.
-2. **Select the baseline.** Capture the current integration commit for that unit at admission. It must include all required predecessor outputs. Record that checkpoint as the task's starting baseline.
-3. **Keep the recorded baseline.** Once admitted, the task keeps that baseline. Later commits alone do not invalidate it or force it to restart. Assess evidence applicability from its covered material and relevant inputs.
+1. **Readiness.** Make sure that the plan lets execution start. Make sure that all necessary predecessor outputs are in the unit's integrated state.
+2. **Select the baseline.** Capture the current integration commit for that unit at admission. It must include all necessary predecessor outputs. Record that checkpoint as the task's starting baseline.
+3. **Keep the recorded baseline.** Once admitted, the task keeps that baseline. Later commits alone do not invalidate it or force it to restart. Compare the evidence with its covered material and relevant inputs, then report whether it still applies.
 
-Use Git history or recorded integration provenance to establish inclusion of predecessor outputs. A later commit timestamp alone does not establish inclusion.
+Use Git history or recorded integration provenance to show that predecessor outputs are included. A later commit timestamp alone does not show inclusion.
 
-Use the unit's integration branch, not a global coordinator `HEAD`. Admission does not require creating another commit. Do not return to an older predecessor checkpoint when newer integrated unit work exists at admission.
+Use the unit's integration branch, not a global coordinator `HEAD`. Admission does not make another commit necessary. Do not return to an older predecessor checkpoint when newer integrated unit work exists at admission.
 
 #### Example
 
@@ -354,65 +356,67 @@ This example is illustrative. `C1` and `C2` are commit labels, not identifier fo
 
 ### Integration and verification
 
-Task outputs can have separate checkpoints. Results for those checkpoints do not establish that their combined result works.
+Task outputs can have separate checkpoints. Results for those checkpoints do not show that their combined result works.
 
-Construction's [Code Integration Activity](phases/construction/activities/code-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Read the current checkpoint after acquiring the lock. Check the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against that candidate while holding the lock. All three must succeed before authorized acceptance. Record actual Integration inputs separately from the fixed admission baseline. Task completion requires successful acceptance and the applicable completion conditions.
+Construction's [Code Integration Activity](phases/construction/activities/code-integration.md#integration-procedure) follows prepare, check, then accept under the unit's integration lock. Read the current checkpoint after acquiring the lock. Run the necessary checks on the combined candidate before it becomes the unit's integrated state. Run typechecking, the project build, and the full application test suite against that candidate while holding the lock. All three must succeed before authorized acceptance.
 
-Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phases/construction/README.md#agreed-boundaries) defines these duties. Integration checks do not replace them. A build result establishes typechecking only when the command also performs the required typechecking. Any additional integration checks and project-specific check configuration require separate decisions.
+Record actual Integration inputs separately from the fixed admission baseline. Successful acceptance and the applicable completion conditions are necessary for task completion.
 
-A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator; Integration does not authorize a cascade.
+Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phases/construction/README.md#agreed-boundaries) gives these duties. Integration checks do not replace them. A build result counts as typechecking only when the command also does the necessary typechecking. Separate decisions are necessary for additional integration checks and project-specific check configuration.
+
+A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator. Integration does not authorize a cascade.
 
 ## Stage and Activity evidence
 
-Stage and Activity contracts define their named evidence, covered material, and required results. Shared bindings do not replace those definitions.
+Stage and Activity contracts give their named evidence, covered material, and necessary results. Shared bindings do not replace those definitions.
 
-The accepted [Generation](phases/construction/activities/code-generation.md#evidence-coverage), [Validation](phases/construction/activities/code-validation.md#evidence-coverage), and [Integration](phases/construction/activities/code-integration.md#evidence-coverage) Activity contracts define Activity evidence. The accepted [Implementation contract](phases/construction/implementation.md#evidence-coverage) defines stage-level completion evidence. The accepted [Review contract](phases/construction/unit-of-work-review.md#evidence-coverage) defines whole-unit assessment evidence. The accepted [Deliver contract](phases/construction/deliver.md#evidence-coverage) defines preparation, authority, operation, verification, and handoff evidence.
+The accepted [Generation](phases/construction/activities/code-generation.md#evidence-coverage), [Validation](phases/construction/activities/code-validation.md#evidence-coverage), and [Integration](phases/construction/activities/code-integration.md#evidence-coverage) Activity contracts give Activity evidence. The accepted [Implementation contract](phases/construction/implementation.md#evidence-coverage) gives stage-level completion evidence. The accepted [Review contract](phases/construction/unit-of-work-review.md#evidence-coverage) gives whole-unit assessment evidence. The accepted [Deliver contract](phases/construction/deliver.md#evidence-coverage) gives preparation, authority, operation, verification, and handoff evidence.
 
-Each stage and Activity owns its named evidence, covered material, and required results under [SH52](authoring_progress.md#completed-shared-decisions). Referencing earlier evidence preserves its originating attempt and material bindings; it does not transfer stage or Activity completion.
+Each stage and Activity owns its named evidence, covered material, and necessary results under [SH52](authoring_progress.md#completed-shared-decisions). Referencing earlier evidence keeps its originating attempt and material bindings. It does not transfer stage or Activity completion.
 
 ## CLI responsibilities
 
 Expose operations to read progress, change execution state, and record interactions and approvals. Also expose operations to manage pause and resume checkpoints and apply the shared [Revision procedure](revision.md#revision-procedure).
 
-Keep phase transition rules and event recording in their owning application operations. The CLI invokes those operations; JSON journals retain the resulting facts. Current state and query views are derived. Skills must not implement separate event or state writers.
+Keep phase transition rules and event recording in their owning application operations. The CLI invokes those operations. JSON journals keep the resulting facts. Get current state and query views from the journals. Skills must not add separate event or state writers.
 
-The [CLI command reference](cli.md) records accepted command decisions and proposed operation contracts. It owns command organization and interface details. This infrastructure contract owns persistence and shared execution rules. Neither document implements CLI behavior.
+The [CLI command reference](cli.md) records accepted command decisions and proposed operation contracts. It owns command organization and interface details. This infrastructure contract owns persistence and shared execution rules. Neither document sets CLI behavior.
 
 ### Current author
 
-Provide a CLI command that returns the current author as Git `user.name` and Git `user.email`. Resolve both values from the effective Git configuration for the current project. Repository-specific identity settings must apply.
+Give a CLI command that returns the current author as Git `user.name` and Git `user.email`. Resolve both values from the effective Git configuration for the current project. Repository-specific identity settings must apply.
 
 Skills use this command to obtain the original creator's identity when creating an artifact. Store the frontmatter `author` value as one `Name <email>` string under the shared [author identity rules](metadata.md#author-identity).
 
-The command returns the current Git identity, not the stored creator of an existing artifact. Do not use its result to replace `author` during later edits. Explicit correction of incorrect attribution is permitted. Record later contributions through Git history and audit records.
+The command returns the current Git identity, not the stored creator of an existing artifact. Do not use its result to replace `author` during later edits. Change `author` only to correct incorrect attribution explicitly. Record later contributions through Git history and audit records.
 
-Apply the accepted [missing-identity policy](metadata.md#missing-identity) under SH61. A missing or blank name or email makes lookup fail with a nonzero result identifying each missing key. Check identity before writing an artifact that requires `author`. Do not write incomplete author metadata or record successful creation or completion after this failure.
+Apply the accepted [missing-identity policy](metadata.md#missing-identity) under SH61. A missing or blank name or email makes lookup fail with a nonzero result identifying each missing key. Make sure that both identity values are present before writing an artifact with an `author` field. Do not write incomplete author metadata or record successful creation or completion after this failure.
 
-Do not prompt inside the CLI, change Git configuration automatically, or invent a fallback identity. The calling agent explains the problem and retries after the appropriate identity is configured. Preserve existing authors and continue unaffected work.
+Do not prompt inside the CLI, change Git configuration automatically, or invent a fallback identity. The calling agent explains the problem and retries after the appropriate identity is configured. Keep existing authors and continue unaffected work.
 
-The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git author`. Structured output is the default. The command name, exact response fields, and error codes remain implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices).
+The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git author`. Structured output is the default. The command name, exact response fields, and error codes stay implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices).
 
 ### Unit creation
 
-Create unit IDs in the format `YYYY-MM-DD-<slug>` under the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). Use the machine's local timezone to determine the date when the CLI creates the unit.
+Create unit IDs in the format `YYYY-MM-DD-<slug>` under the shared [unit identity and directory rules](unit-of-work.md#identity-and-directory). Use the machine's local timezone to set the date when the CLI creates the unit.
 
 Use the exact unit ID as the directory name. The CLI must detect duplicate IDs within the project and must not overwrite an existing unit. Do not regenerate an existing ID during revision or resume.
 
-The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement and proposes inputs, effects, output, and failure behavior. Its detailed contract remains a draft.
+The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement and proposes inputs, effects, output, and failure behavior. Its detailed contract stays a draft.
 
 ## Traceability and revision outputs
 
 Execution records must refer to the artifacts and units they concern. The CLI generates artifact IDs as UUIDv4 values with cross-project uniqueness and stores them in full lowercase hyphenated form. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions).
 
-Use the shared [evidence and approval bindings](#evidence-and-approval-bindings) for checkpoint and material references. Exact relationship and record formats require separate decisions.
+Use the shared [evidence and approval bindings](#evidence-and-approval-bindings) for checkpoint and material references. Separate decisions must set exact relationship and record formats.
 
 ### Checkpoint retention
 
-Keep required checkpoint commits reachable through retained Git references. A commit identifier stored in JSON alone does not preserve the commit.
+Keep necessary checkpoint commits reachable through Git references. A commit identifier stored in JSON alone does not keep the commit.
 
-Git preserves committed repository material while the required objects remain available. External environments, ignored outputs, and separate evidence logs need their own retention rules.
+Git keeps committed repository material while the necessary objects stay available. External environments, ignored outputs, and separate evidence logs must have their own retention rules.
 
-Audit events and content fingerprints do not preserve artifact contents by themselves. Apply the accepted [record-portability policy](#record-portability) to journals, local runtime data, and retained evidence. Retention periods and cleanup remain deferred; publication mechanics and storage locations remain implementation choices.
+Audit events and content fingerprints do not keep artifact contents by themselves. Apply the accepted [record-portability policy](#record-portability) to journals, local runtime data, and evidence content. Retention periods and cleanup are deferred. Publication mechanics and storage locations stay implementation choices.
 
 An interrupted attempt may have no output checkpoint. Its record must not claim a completed snapshot. Follow the shared [interrupted-work recovery rule](#interrupted-work-recovery).
 
@@ -420,7 +424,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 - Phase-owned state models, projection schemas, status transitions, and attempt ID formats.
 - Journal and projection storage layout.
-- Remaining CLI command contracts, selectors, response schemas, and validation and authority rules.
+- Other CLI command contracts, selectors, response schemas, and validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
 - External reference formats and exact evidence and approval record formats. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
@@ -430,7 +434,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 ## Inspiration
 
-The AWS AI-DLC audit model provides inspiration for command-owned events and retained history. AWS also retains `aidlc-state.md`. Kepler derives phase-owned execution state from JSON event journals instead of adopting that state-plus-audit representation.
+The AWS AI-DLC audit model gives an example for command-owned events and kept history. AWS also keeps `aidlc-state.md`. Kepler derives phase-owned execution state from JSON event journals instead of adopting that state-plus-audit representation.
 
 Source: `https://github.com/awslabs/aidlc-workflows/blob/d27f96b6ab26a0e4571a3e79422bea2c5136e9d5/docs/guide/10-state-and-audit.md`.
 

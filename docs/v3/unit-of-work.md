@@ -6,9 +6,9 @@
 
 ## Definition
 
-A Unit of Work groups work around a coherent intended outcome that the requester can evaluate and accept as a whole. Acceptance cohesion is its primary boundary.
+A Unit of Work groups work around a coherent intended outcome. The requester can compare the outcome with the acceptance conditions before accepting the Unit of Work as a whole. Acceptance cohesion is its primary boundary.
 
-Construction operates on one Unit of Work. A unit can contain several requirements and implementation tasks. It does not automatically define a DDD bounded context or an aggregate.
+Construction operates on one Unit of Work. A unit can contain several requirements and implementation tasks. It is not automatically a DDD bounded context or an aggregate.
 
 ## Rules
 
@@ -17,7 +17,7 @@ Construction operates on one Unit of Work. A unit can contain several requiremen
 - The CLI creates the unit ID in the format `YYYY-MM-DD-<slug>`.
 - The date is the date when the CLI creates the unit, in the machine's local timezone. It is not the date when implementation starts.
 - The slug describes the unit with lowercase words separated by hyphens.
-- The complete ID must be unique within the project. Cross-project uniqueness is not required.
+- The complete ID must be unique within the project. Cross-project uniqueness is not necessary.
 - Use the exact ID as the directory name: `.kepler/units-of-work/<unit-id>/`.
 - Keep the complete ID and directory name unchanged across stages, revisions, retries, branches, and worktrees. Do not update the date or slug when the description or machine timezone changes.
 - Every unit-owned artifact records this ID in `unit_id`. Each artifact keeps its separate UUID in `id`.
@@ -32,37 +32,37 @@ This path is illustrative:
 
 ### Acceptance cohesion
 
-Group work by the outcome to be accepted. Use that outcome to assess whether the included work belongs together.
+Group work by the outcome to be accepted. Use the outcome to select which work belongs together.
 
 ### Coverage
 
-Assign every agreed requirement in the decomposition's scope to at least one Unit of Work. Each unit must contribute an identifiable outcome. Identify missing coverage before accepting the decomposition.
+Assign every agreed requirement in the decomposition's scope to at least one Unit of Work. Each unit must contribute an identifiable outcome. Identify missing coverage before you accept the decomposition.
 
 ### Dependencies
 
-Record what each unit needs from other units and the relevant interaction contracts. Use these dependencies when assessing whether the proposed boundaries are practical.
+Record what each unit must get from other units and the relevant interaction contracts. Use these dependencies when you set practical boundaries.
 
 ### Verification
 
-Define meaningful acceptance conditions for each unit, considering its dependencies. The result must be verifiable as an outcome, not only as a set of completed tasks.
+Give meaningful acceptance conditions for each unit based on its dependencies. The conditions must show an outcome, not only a set of completed tasks.
 
 ### Deployment
 
-Include the deployment aspect in the Unit of Work definition. The accepted [Deliver contract](phases/construction/deliver.md#deployment-information) defines deployment information, unit-root `delivery.md` instructions, and stage-specific timing under [SH77 through SH79](authoring_progress.md#completed-shared-decisions).
+Include deployment in the Unit of Work definition. The accepted [Deliver contract](phases/construction/deliver.md#deployment-information) gives deployment information, unit-root `delivery.md` instructions, and stage-specific timing under [SH77 through SH79](authoring_progress.md#completed-shared-decisions).
 
-Record known deployment constraints without moving technical solution selection out of Implementation Planning.
+Record known deployment constraints. Keep technical solution selection in Implementation Planning.
 
 ## Walking skeleton
 
-A walking skeleton is a specialized kind of Unit of Work. It establishes a minimal executable, deployable, and observable path through the important boundaries of a solution.
+A walking skeleton is a specialized kind of Unit of Work. It shows a minimal path through the important solution boundaries. That path is executable, deployable, and observable.
 
-Its acceptance cohesion comes from proving that integrated path. It does not need to complete the broader product feature.
+Its acceptance cohesion comes from proof of that integrated path. Completion of the broader product feature is not necessary for acceptance.
 
 ### Origins
 
 | Situation | Treatment |
 | --- | --- |
-| Inception | Produce a walking skeleton unit when decomposition identifies a need to prove the integrated solution early. |
+| Inception | Use a walking skeleton when decomposition makes early proof of the integrated solution necessary. |
 | Greenfield work | Recommend a walking skeleton as the first unit. Subsequent units extend it. |
 | Direct requester proposal | Suggest a preceding walking skeleton unit when the proposed work depends on significant, unproven integration or deployment assumptions. |
 
@@ -71,34 +71,34 @@ The requester must accept an additional preceding unit and its scope. Record the
 ### Rules
 
 - Use the normal Unit of Work documents, Construction stages, and approval rules.
-- Define the path, boundaries, deployment target, and evidence needed for acceptance.
-- Keep functional scope narrow while exercising the important integrations.
-- Preserve the implementation for subsequent units to extend.
+- Give the path, boundaries, deployment target, and evidence necessary for acceptance.
+- Keep functional scope narrow and include the important integrations.
+- Keep the implementation for subsequent units to extend.
 - Select technical mechanisms during Implementation Planning, not during Inception.
-- Do not add a separate skeleton when the originally proposed unit already provides a suitable thin integrated outcome.
+- Do not add a separate skeleton when the originally proposed unit already gives a suitable thin integrated outcome.
 
 ### Metadata
 
-Record the canonical `walking-skeleton` label in `labels` on the unit's `unit-of-work.md`. Its artifact `type` remains `unit-of-work`. Use the shared [labels contract](metadata.md#labels), not a separate `unit_kind` field.
+Record the canonical `walking-skeleton` label in `labels` on the unit's `unit-of-work.md`. Its artifact `type` stays `unit-of-work`. Use the shared [labels contract](metadata.md#labels), not a separate `unit_kind` field.
 
-Labels are available to any artifact, and the requester can add labels outside the canonical set. They must not record execution state. Dynamic state follows the [CLI infrastructure contract](runtime.md).
+Artifacts can use canonical labels or labels selected by the requester. They must not record execution state. Dynamic state follows the [CLI infrastructure contract](runtime.md).
 
 ## Decomposition procedure
 
 1. Identify the intended outcomes and known requirements.
 2. Group work by acceptance cohesion.
-3. Check coverage and identify candidate splits.
+3. Compare known requirements with planned unit outcomes, then identify possible splits.
 4. Record dependencies and interaction boundaries.
-5. Confirm that each unit has a verifiable outcome.
+5. Make sure that each unit has a verifiable outcome.
 6. Agree the boundaries with the requester.
 
 ## Decisions still required
 
-- Additional scope and size criteria, and the detailed decomposition questionnaire, remain unresolved beyond the MVP under [SH75/SH76](authoring_progress.md#deferred-decisions).
+- Additional scope and size criteria, and the detailed decomposition questionnaire, stay unresolved beyond the MVP under [SH75/SH76](authoring_progress.md#deferred-decisions).
 
 Use the accepted cohesion, coverage, dependency, verification, and decomposition rules for the Construction MVP. This does not select additional criteria or a questionnaire contract.
 
-The [authoring progress record](authoring_progress.md#mvp-decisions) tracks these decisions. Remaining artifact metadata details are shared decisions. The [CLI infrastructure contract](runtime.md) defines the separation between artifact metadata and execution state.
+The [authoring progress record](authoring_progress.md#mvp-decisions) lists these decisions. Artifact metadata details that stay open are shared decisions. The [CLI infrastructure contract](runtime.md) sets the separation between artifact metadata and execution state.
 
 ## Inspiration
 
