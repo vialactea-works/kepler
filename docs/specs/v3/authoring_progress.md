@@ -59,7 +59,7 @@ The release must keep separate non-author Code Validation and combined-candidate
 
 ## MVP decisions
 
-The accepted Construction policy decisions stay complete. One release-scope decision, SH116, stays open: the certified host and platform combinations for the first Construction MVP. It does not reopen an accepted stage or Activity contract. The 48 implementation choices and 14 deferred questions stay separate from requester policy approval.
+The accepted Construction policy decisions stay complete. One release-scope decision, SH116, stays open: the certified host and platform combinations for the first Construction MVP. It does not reopen an accepted stage or Activity contract. The 47 implementation choices and 14 deferred questions stay separate from requester policy approval.
 
 ### Open MVP release-scope decision
 
@@ -77,11 +77,11 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 ## Review result
 
-The register contains 278 unique IDs. These include 214 completed decisions, 1 pending MVP release-scope decision, and 48 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision.
+The register contains 278 unique IDs. These include 215 completed decisions, 1 pending MVP release-scope decision, and 47 MVP implementation choices. It also contains 14 deferred questions and 1 retired question. SH116 is the only pending MVP release-scope decision.
 
 The requester accepted 78 decisions for the Construction contracts: 16 for Planning, 24 for Implementation and Activity, 16 for Review, and 18 for Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately.
 
-SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
+SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and command definitions. SH102 separately records the accepted CLI project selection rules. The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
 
 ## Register rules
 
@@ -177,6 +177,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH74 | Record version-control policy | [Record portability](runtime.md#record-portability): version authored project artifacts and phase journals. Keep projections and live runtime coordination data unversioned. Version suitable evidence. Keep large or sensitive content outside the project with durable references to the content. Keep event and journal identities, order, causality, attempts, and evidence bindings. Give relevant history, checkpoint material, and accessible evidence during cross-checkout or cross-machine handoff. Missing necessary material blocks only affected work. A new commit is not necessary solely for an event, dispatch, or session resume. Git merge success does not validate workflow history. Replay does not start workers, restore locks, or grant new consent. Keep secrets out of versioned records. Do not store full session transcripts in journals. Paths and synchronization are implementation work. Retention periods and cleanup are deferred. |
 | SH100 | Generated diff-package capability | Record diff packages as an optional derived inspection capability for Code Validation, Code Integration, and Unit of Work Review. Keep the original material and attempt bindings. Packages add no workflow stage, Activity, evidence authority, or completion gate. [Git diff packages](diff-package.md). |
 | SH101 | Diff-package Git command interface | Use three source-scoped commands under `kepler git diff-package`. Give explicit source selectors, project and output rules, and bounded effects. The existing MVP release work covers implementation. This decision adds no approval gate. See [CLI contract](cli.md#kepler-git-diff-package) and [Git diff packages](diff-package.md). |
+| SH102 | CLI project selection interface | [Project selection](cli.md#project-selection): use optional `--project <path>`, with relative paths from the invocation working directory. Without it, use that directory itself. The selected directory must be a Git working-tree root with an existing local `.kepler/` directory, including for unit creation. Accept linked worktrees and reject bare repositories. Do not search ancestors, select another root, run setup, initialize Git, or create `.kepler/`. Return a structured error and nonzero status on failure. |
 
 ## MVP implementation choices
 
@@ -221,7 +222,6 @@ The implementation must include typechecking, project-build, and full-suite comm
 | DF15 | Task-state transitions | What detailed transitions govern Construction tasks? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF16 | Dependency invalidation | How does a dependency change affect task readiness and validity? See [remaining implementation work](phases/construction/README.md#remaining-implementation-work). |
 | DF17 | Revision shutdown coordination | How is active implementation stopped during an authorized unit-wide revision? See [upstream revision](phases/construction/README.md#unit-wide-upstream-revision). |
-| SH102 | CLI project selection interface | Set the common project and worktree selector, absent-selector behavior, path resolution, and unresolved or ambiguous project failure. Keep the three diff-package commands under their accepted SH101 rules. See [CLI](cli.md#scope-and-selectors). |
 | SH103 | CLI scope selector grammar | Set shared spelling and encoding for unit, stage, task, Activity, parent, and attempt scopes, including ownership mismatch handling. Do not select an implicit active or latest scope. See [CLI](cli.md#scope-and-selectors). |
 | SH104 | CLI success result envelope | Set common result fields and distinguish operation success from workflow completion. See [CLI](cli.md#machine-readable-output). |
 | SH105 | CLI error result envelope | Set typed error fields for scoped causes, partial effects, and recovery information. Never report false success. See [CLI](cli.md#failure-and-recovery-rules). |

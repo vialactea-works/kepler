@@ -31,6 +31,7 @@ The following decisions are accepted. They do not accept every command detail in
 - Keep `list`, `show`, and `lint` read-only. They do not write events, advance workflow state, or create audit records. Do not infer one global event order from timestamps.
 - Return structured machine-readable output by default, for both results and errors. Do not make `--json` necessary or mix progress text and prose into machine-readable output.
 - Build help and argument parsing from the same CLI-framework definitions. Do not keep a separate command grammar for help.
+- Apply the shared [project selection rules](#project-selection) to every project-scoped command, including unit creation.
 
 Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP order. Stage-specific policies stay proposals where their owning contracts say so.
 
@@ -42,9 +43,19 @@ The command inventory below lists the proposed commands in this draft and the th
 
 Every command that reads or changes unit state must identify its scope. A task operation must identify its Unit of Work and task. An Activity operation must also identify the Activity occurrence and enclosing stage attempt. A mutation of an existing attempt must identify that attempt. Do not attach an earlier result to whichever attempt is current. Do not select an implicit active or most-recent unit.
 
-The placeholders `<unit-id>`, `<task-id>`, `<stage>`, and `<activity>` show the necessary scope. They do not set final argument syntax. Exact selectors, path rules, defaults, and quoting stay open for other commands. The [diff-package family](#kepler-git-diff-package) gives its exact selectors, path rules, and signatures below.
+The placeholders `<unit-id>`, `<task-id>`, `<stage>`, and `<activity>` show the necessary scope. They do not set final argument syntax. Other scope-selector syntax, input-path rules, defaults, and quoting stay open. The [diff-package family](#kepler-git-diff-package) gives its exact source selectors and signatures below.
 
-Each command that uses a project root must name its project selector in the command contract. If that command cannot resolve its project, it must fail. It must not run setup or silently create a project.
+### Project selection
+
+**Accepted under [SH102](authoring_progress.md#completed-shared-decisions).** Each project-scoped command has an optional `--project <path>` selector. Global commands, such as `setup` and `uuid`, do not use project selection.
+
+Resolve a relative `--project` path from the working directory at command invocation. Without `--project`, select that working directory itself. Do not search ancestor directories or silently select a different project root.
+
+The selected directory must be a Git working-tree root with an existing local `.kepler/` directory. Use Git to validate the root. Accept linked worktrees whose `.git` entry is a file. Reject bare repositories and paths inside a worktree that are not its root.
+
+If either condition fails, return a structured error and a nonzero exit status. Do not run setup, initialize a Git repository, or create `.kepler/` during project resolution. Error fields and exact exit codes stay under SH105 and SH106.
+
+These requirements also apply to `unit create`. Prepare `.kepler/` explicitly before creating the first unit. Completed Initialization is not a prerequisite.
 
 ### Machine-readable output
 
@@ -129,7 +140,7 @@ kepler git diff-package unit-review --unit <unit-id> --implementation-attempt <a
 
 `--implementation-attempt` selects the source Implementation context, not a consumer attempt. Validate unit, task, and source-attempt ownership. Each task ID is a UUIDv4 string. Do not infer a unit, task, attempt, or candidate. Do not accept arbitrary range overrides. A new Validation or Review attempt is not necessary for package generation.
 
-`--project` selects the Git project or worktree. Without `--project`, discover it from the current directory. Fail if the root does not resolve to a Git project or worktree. Necessary records and Git objects must be available. Do not run setup or make units.
+Apply the accepted [project selection rules](#project-selection) for `--project` and its default. Necessary records and Git objects must be available. Do not create units.
 
 `--out` selects a new file. Resolve a relative path from the selected project root. Refuse to overwrite an existing file. Without `--out`, make a fresh local temporary package.
 
@@ -179,7 +190,7 @@ Construction uses the [accepted Unit of Work identity rules](unit-of-work.md#ide
 kepler workflow construction unit create <slug> [--effort minimal|standard|comprehensive] [--project <path>]
 ```
 
-This signature is a draft, not an accepted complete contract. The user has not approved all of its selectors or creation mechanics.
+This signature is a draft, not an accepted complete contract. Its project selector follows the accepted [project selection rules](#project-selection), including the existing `.kepler/` directory. Other selectors and creation mechanics stay proposed.
 
 The command creates one Unit of Work directory under `.kepler/units-of-work/<unit-id>/`. Use the ID format `YYYY-MM-DD-<slug>`, the machine-local date at creation, and the exact ID as the directory name. The complete ID must be unique in the selected project. Do not change it during revision or resume.
 
@@ -187,7 +198,6 @@ The command creates one Unit of Work directory under `.kepler/units-of-work/<uni
 
 - Use lowercase words separated by single hyphens for `<slug>`. Reject invalid input. Do not normalize it silently. The exact valid characters stay open.
 - Use `--effort` to select Minimal, Standard, or Comprehensive. Use Standard if the requester has not selected another level.
-- Treat `--project <path>` as an explicit project selector. The project used when this option is absent is unresolved.
 - Do not choose an active Unit of Work implicitly. A newly created unit is not automatically selected for later commands.
 
 On success, make the unit directory and record the creation and initial effort facts exactly once. These are necessary effects of this draft. They do not set the storage schema or a general exactly-once replay protocol. Do not write `unit-of-work.md`, placeholders, requirements, plans, or task files. Do not start a stage or attempt, launch agents, approve work, make branches or worktrees, or make commits. Do not run setup or migration.
@@ -204,7 +214,7 @@ A proposed `--stage-effort <stage>=<level>` option is an open question. Do not t
 
 **Proposed query.** List Units of Work in an explicit project scope. Read directory identity and derived execution state. Do not create a unit, select an active unit, write history, or infer a single global order from event timestamps.
 
-Project selection, filters, ordering, and response fields stay open.
+Apply the accepted [project selection rules](#project-selection). Filters, ordering, and response fields stay open.
 
 ### `kepler workflow construction unit show`
 
@@ -222,7 +232,7 @@ The unit selector and response fields stay open. This query must not select a un
 
 Readiness facts do not show that free-form acceptance criteria are satisfied. The command cannot show that an external service or resource is available without current evidence. Lint is read-only: keep invalid files and do not repair them.
 
-The project and unit selectors, full check coverage, and finding schema stay open.
+Apply the accepted [project selection rules](#project-selection). The unit selector, full check coverage, and finding schema stay open.
 
 ## Stage operations
 
@@ -323,11 +333,10 @@ The event write protocol, projection rebuild behavior, lock ownership and recove
 
 ## Open decisions
 
-The accepted command placements, structured-output default, typed lifecycle writes, and exact three [diff-package signatures](#kepler-git-diff-package) stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
+Accepted command placements, structured-output default, typed lifecycle writes, and [project selection](#project-selection) stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The following interface details stay open implementation choices. Their technical answers do not create requester approval gates.
 
 | ID | Open interface detail | Existing contract boundary |
 | --- | --- | --- |
-| SH102 | Project selection, path resolution, absent-selector behavior, and unresolved or ambiguous project errors. | Progress, transition, unit-create, and author interfaces stay under SH53, SH54, SH59, and SH60. The accepted diff-package project selector stays fixed under SH101. |
 | SH103 | Shared unit, stage, task, Activity, parent, and attempt selector grammar, including ownership-mismatch errors. Do not select an implicit active or latest scope. | Existing query and transition choices stay under SH53, SH54, and SH57-SH60. Keep the exact source selectors under SH101. |
 | SH104 | Common success-result fields and the distinction between operation success and workflow completion. | Keep the accepted structured-output default. Keep SH101's logical result requirements. |
 | SH105 | Typed error fields for causes, partial effects, uncertainty, and recovery. Never report false success. | Keep accepted failure behavior. SH61 sets a nonzero result for failure and identifies missing Git author keys. |

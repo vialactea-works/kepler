@@ -107,7 +107,7 @@ Named host/platform certification stays open under [SH116](authoring_progress.md
 
 ## First use and resume
 
-Start affected execution only when compatible resources and necessary host capabilities are available. Use an explicit Git project and unit identity. An empty application is valid. Completed Initialization and Inception are not prerequisites.
+Start affected execution only when compatible resources and necessary host capabilities are available. Use an explicit Git project and unit identity. Apply the accepted [project selection rules](cli.md#project-selection), including the existing local `.kepler/` directory. An empty application is valid. Completed Initialization and Inception are not prerequisites.
 
 Start with a clear unit request. Select or create the unit through its existing CLI contract. Invoke the selected Standard stage's entry skill under its authority and completion rules. Use the [CLI grammar](cli.md). Unchosen selectors are proposals.
 

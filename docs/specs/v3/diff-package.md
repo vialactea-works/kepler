@@ -44,7 +44,7 @@ Each command must have its listed unit and source-attempt selectors. Task-scoped
 
 Validate unit, task, and source-attempt ownership. Do not infer a unit, task, attempt, or candidate. Do not accept an arbitrary range override. A Validation or Review attempt selector is not necessary merely to make its input package.
 
-`--project <path>` selects the Git project or worktree. Without it, discover the Git project from the current directory. Fail if the path does not resolve to a Git project or worktree. Necessary scope records must be available. Do not run setup or create a Unit of Work. Different worktree roots can refer to the same repository only when the recorded material and phase context agree.
+Apply the accepted [project selection rules](cli.md#project-selection) for `--project <path>` and its default. Necessary scope records must be available. Do not create a Unit of Work. Different worktree roots can refer to the same repository only when the recorded material and phase context agree.
 
 Fail when a necessary binding is missing or ambiguous, or a necessary Git object is unavailable. Do not invent a narrower package or silently fall back to a broad or global range. Compare the declared ancestry or provenance relationship with the existing rules. Compare ancestry only within the declared provenance.
 
