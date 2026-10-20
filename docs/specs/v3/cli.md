@@ -1,24 +1,24 @@
-# Kepler v3 CLI draft
+# Kepler v3 CLI contract
 
 [Version 3 reference](README.md) | [CLI infrastructure](runtime.md)
 
-**Status:** Draft for discussion.
+**Status:** Approved by the requester under [SH122](authoring_progress.md#completed-shared-decisions).
 
 ## Purpose and status
 
-This document gives a human-readable draft of the Kepler v3 command line interface. It separates accepted policy from proposed command details. Saving this draft does not approve its proposals or add CLI behavior.
+This document defines the Kepler v3 command line interface. The requester approved the complete contract, including its command names, arguments, output fields, and operation rules. This approval does not approve an executing Unit of Work or show implementation or release.
 
-The command placements marked **Accepted** follow the requester's decisions. The command names, arguments, output fields, and detailed operation rules marked **Proposed** are open for review. The [runtime contract](runtime.md) sets shared event and execution rules. The accepted [Mission contract](mission.md) sets mission policy, not command syntax. This document does not replace those rules.
+The [runtime contract](runtime.md) sets shared event and execution rules. The accepted [Mission contract](mission.md) sets mission policy, not command syntax. This document does not replace those rules. Details left unspecified remain implementation choices.
 
 The current CLI does not have this v3 command tree. Its root has `setup` and `workbench` commands. The v3 `setup` contract keeps the installation role. It is not the Initialization phase. This reference does not remove or migrate existing commands.
 
 ## Accepted policy
 
-The following decisions are accepted. They do not accept every command detail in this draft.
+The following decisions are part of this approved contract.
 
 - Use `kepler workflow <phase>` for phase-owned workflow operations. Construction commands belong under `kepler workflow construction`.
 - Use descriptive root capabilities, such as `git`, `lint`, and `audit`. Do not add generic `util` or `commons` groups.
-- Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted. It does not accept other proposals in this draft.
+- Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted.
 - Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Use the accepted [Construction lint interface](#kepler-workflow-construction-lint) for task-graph checks.
 - Use the accepted [setup interface](#kepler-setup) for Kepler's bundled resources and default settings. Native hosts or skill managers own [agent resource installation](installation.md#agent-resource-ownership).
 - Use the accepted [UUID interface](#kepler-uuid) to generate one UUIDv4 without creating an artifact or task.
@@ -44,11 +44,11 @@ The following decisions are accepted. They do not accept every command detail in
 - Use the shared [output stream contract](#output-streams) for default machine-readable output.
 - Return [JSON-only operation results](#human-output).
 
-Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction stage sequence. Stage-specific policies stay proposals where their owning contracts say so.
+Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction stage sequence. Each owning stage contract sets its policies.
 
-## Proposed interface rules
+## Interface rules
 
-The command inventory below lists proposed and accepted interfaces. Accepted interfaces include three diff-package commands, evidence and approval recording, interaction recording, audit queries, and shared lint. Setup, UUID generation, Construction lint, Standard workflow binding, SH53 queries, and SH54 transitions are also accepted. SH57-SH60 and SH62 accept their named interface details. SH63 accepts later effort changes through structured interaction records. Other details remain proposals unless their owners accepted them.
+The command inventory below defines accepted interfaces under SH122. Earlier decision IDs keep their original scope. Details not specified by this contract remain implementation choices.
 
 Do not add commands for future Initialization or Inception phases. Do not add a workflow engine, state registry, or utility registry. Exclude generic status changes, force operations, migrations, and public lock manipulation.
 
@@ -89,7 +89,7 @@ Unit-scoped operations resolve mission through unique recorded membership and mu
 
 A mission-aware query for unbound work reports missing binding; it does not adopt or hide the unit. Queries do not write history, change state, dispatch work, or select a persistent current unit or mission. They do not prove unknown external prerequisites.
 
-Keep effort defaults, stage overrides, and workflow binding in `unit show`. Do not return bulk artifact or repository contents by default or add a new cursor system. Exact state vocabularies and response fields remain implementation details.
+Keep effort defaults, stage overrides, and workflow binding in `unit show`. Do not return bulk artifact or repository contents by default or add a new cursor system. Use the accepted [Construction states](phases/construction/runtime.md#derived-states). Response fields not specified by the contract remain implementation details.
 
 Keep the accepted [diff-package source selectors and signatures](#kepler-git-diff-package) unchanged. Their `--generation-attempt` and `--integration-attempt` selectors identify source attempts, not consumer attempts.
 
@@ -137,7 +137,7 @@ Use `{}` when the command has no result fields. Put collection results inside `d
 
 Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Apply the accepted [exit-code contract](#exit-codes). Apply the accepted [output stream contract](#output-streams). Apply the accepted [JSON-only result format](#human-output). A failed operation still returns a nonzero exit status.
 
-The following example shows proposed unit-creation fields inside `data`. These fields are not an accepted command-specific schema.
+The following example illustrates unit-creation fields inside `data`. It is not a complete command-specific schema. Fields not specified elsewhere remain implementation choices.
 
 ```json
 {
@@ -204,7 +204,7 @@ Any later human result mode must be opt-in.
 
 Here, `<kind>` is `approval` or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
 
-The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors), including SH54 mission selection where no unit supplies context. The accepted [evidence interface](#kepler-audit-record-evidence) fixes its stdin request and success identity fields. The [approval](#kepler-audit-record-approval) and [interaction](#kepler-audit-record-interaction) interfaces fix their typed requests. The [audit query interfaces](#kepler-audit-list) fix history selection and results. Other operation arguments and result fields stay open where their contracts say so.
+The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors), including SH54 mission selection where no unit supplies context. The accepted [evidence interface](#kepler-audit-record-evidence) fixes its stdin request and success identity fields. The [approval](#kepler-audit-record-approval) and [interaction](#kepler-audit-record-interaction) interfaces fix their typed requests. The [audit query interfaces](#kepler-audit-list) fix history selection and results. Operation arguments and result fields not specified by their contracts remain implementation choices.
 
 ## Root capabilities
 
@@ -391,7 +391,7 @@ Commit repository output before recording approval. Recording approval does not 
 
 A request may carry an explicit structured effort selection. It can set the unit default, set a stage override, or remove a stage override. The owning phase validates scope, level, and requester authority under existing rules. It derives effort from the recorded selection. Do not infer selections from interaction prose, free-form references, or arbitrary participant messages. Ordinary interactions without a selection remain informational.
 
-Keep the selection in the same recorded interaction. The caller must faithfully record the requester's actual selection. Do not append a separate effort event or add a setter command, generic state-patching operation, or independent setting file. Keep field names, types, and event catalogs as implementation details. Do not require a new decision reference or consent-proof protocol.
+Keep the selection in the same recorded interaction. The caller must faithfully record the requester's actual selection. Do not append a separate effort event or add a setter command, generic state-patching operation, or independent setting file. Keep field names, types, and event details not specified by accepted contracts as implementation choices. Do not require a new decision reference or consent-proof protocol.
 
 Record meaningful questions, answers, clarifications, and decision context. Do not require full conversations or transcripts. Keep secrets out of records.
 
@@ -454,7 +454,7 @@ Later operations and resume read that recorded binding. Expose it through `unit 
 
 The CLI uses the recorded workflow binding and exposes no per-command selector or switching operation. It defines no generic workflow registry. Binding Standard does not start a stage, grant execution authority, or approve a Unit of Work.
 
-Exact event payload and response-field encoding remain implementation details under the existing runtime and query decisions. SH115 accepts the workflow binding; SH59 separately accepts the full unit-creation signature.
+Event payload details and response-field encodings not specified by accepted runtime and query contracts remain implementation choices. SH115 accepts the workflow binding; SH59 separately accepts the full unit-creation signature.
 
 ### `kepler workflow construction unit create`
 
@@ -478,13 +478,13 @@ Apply the existing unit-identity, project-selection, workflow-binding, and failu
 
 Reject invalid input before writing. If creation stops after partial changes, reconcile actual directory and journal effects before retrying. Keep uncertain or unrelated material. Do not promise general exactly-once replay. Exact result fields and partial-write mechanisms remain implementation choices under the shared contracts.
 
-Expose the unit effort default, explicit overrides, and effective stage levels through `unit show`. The existing unit-creation example shows proposed result fields, not an accepted command-specific result schema. Initial effort records do not select the later effort-change interface or an event catalog.
+Expose the unit effort default, explicit overrides, and effective stage levels through `unit show`. The unit-creation example illustrates result fields, not a complete command-specific result schema. Initial effort records do not replace the accepted later effort-change interface or Construction event catalog.
 
 ### `kepler workflow construction unit list`
 
 **Accepted query under SH53.** List Units of Work in an explicit record-home scope. Read directory identity, derived execution state, and mission membership. Distinguish known unbound units. Do not create a unit, adopt or hide unbound work, select an active unit, or write history. Do not infer a single global order from event timestamps.
 
-Apply the accepted [project selection rules](#project-selection). Return compact JSON. Filters, ordering, state vocabulary, and response fields stay implementation details.
+Apply the accepted [project selection rules](#project-selection). Return compact JSON with the accepted [Construction states](phases/construction/runtime.md#derived-states). Filters, ordering, and response fields not specified by the contract remain implementation details.
 
 ### `kepler workflow construction unit show`
 
@@ -492,9 +492,9 @@ Apply the accepted [project selection rules](#project-selection). Return compact
 
 Activities inherit their stage's effort. They do not have their own override. Do not add an effort command. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). Under SH63, later selections use the existing interaction record.
 
-Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Resolve mission context from unique recorded membership. For an unbound unit, report the missing binding. Do not adopt or hide it. Return compact JSON without bulk artifact contents. Exact state vocabulary and response fields remain implementation details.
+Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Resolve mission context from unique recorded membership. For an unbound unit, report the missing binding. Do not adopt or hide it. Return compact JSON with the accepted [Construction states](phases/construction/runtime.md#derived-states), without bulk artifact contents.
 
-Expose the accepted [workflow binding](#workflow-binding). Exact response fields stay open under the existing query decisions. This query must not select a unit for later commands.
+Expose the accepted [workflow binding](#workflow-binding). Response fields not specified by the contract remain implementation choices. This query must not select a unit for later commands.
 
 ### `kepler workflow construction lint`
 
@@ -540,7 +540,7 @@ Each mutation records its own typed lifecycle event and uses accepted short scop
 
 Starting a stage does not launch an agent. A failed or partial transition returns a nonzero operation result. Do not mark a stage complete from a successful process exit alone.
 
-Apply each owning phase's accepted authority, attempt, evidence, and completion rules. SH58 accepts pause safety and same-attempt resume, not state names or event payloads. Exact payloads and recovery mechanisms for interrupted transitions remain implementation work. A timeout or absent session does not prove that workers stopped. See the [stage catalog](phases/construction/README.md#stage-catalog).
+Apply each owning phase's accepted authority, attempt, evidence, and completion rules. SH58 accepts pause safety and same-attempt resume. CN23 separately approves the [Construction states and event requirements](phases/construction/runtime.md). Payload details not specified there and recovery mechanisms remain implementation work. A timeout or absent session does not prove that workers stopped. See the [stage catalog](phases/construction/README.md#stage-catalog).
 
 ## Task operations
 
@@ -576,7 +576,7 @@ Use `--unit <unit-id>`, `--task <task-id>`, `--activity <activity>`, and `--impl
 | `activity pause` | **Accepted under SH58.** Block new affected work. Keep the attempt identity, history, and active-scope reservation. Acknowledge a completed pause only after workers stop and locks reconcile. |
 | `activity resume` | **Accepted under SH58.** Verify inputs and ownership, then resume the same attempt. Keep its active-scope reservation. Unrelated work continues. |
 
-Code Generation owns implementation, typechecking, related tests, and self-review. Code Validation owns necessary typechecking, the project build, the full application test suite, and independent non-author feedback. Code Integration owns combined-candidate checks and acceptance. These check duties stay binding. The detailed Activity contracts mark other proposals separately.
+Code Generation owns implementation, typechecking, related tests, and self-review. Code Validation owns necessary typechecking, the project build, the full application test suite, and independent non-author feedback. Code Integration owns combined-candidate checks and acceptance. These duties and the accepted detailed Activity contracts stay binding.
 
 A local correction, failed command, pause, resume, or new session keeps the current unended attempt. An authorized return creates a new Activity attempt when that Activity executes again. An Integration-only retry stays within its current Code Integration attempt. Do not add task-coding or protocol-run attempt identities.
 
@@ -675,16 +675,16 @@ These codes describe the command operation. A successful query can exit `0` whil
 
 Forced termination can produce other exit codes or prevent a JSON response. A missing response does not prove success. Apply existing recovery rules.
 
-## Open decisions
+## Implementation details and exclusions
 
 Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [JSON-only result format](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence), [audit queries](#kepler-audit-list), and [shared lint interface](#kepler-lint) also stay in force. The accepted [Construction lint](#kepler-workflow-construction-lint), [UUID](#kepler-uuid), [setup](#kepler-setup), and [workflow binding](#workflow-binding) interfaces also stay in force.
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended targets](installation.md#intended-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-SH57-SH67 accept their named interfaces and policy boundaries. Exact request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 accept policy guarantees without adding public CLI interfaces. Their exact mechanisms remain implementation work.
+SH57-SH67 accept their named interfaces and policy boundaries. Request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values not specified by accepted contracts remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 accept policy guarantees without adding public CLI interfaces. Their exact mechanisms remain implementation work.
 
 SH51 and SH53-SH67 are settled. The [Mission contract](mission.md) sets the existing SH45 storage paths, SH68 workspace policy, SH86 retained-evidence locations, and SH64-SH66 coordination domains. The [runtime contract](runtime.md#short-scoped-coordination) sets the lock and owner-record requirements. Exact key and record details remain implementation choices.
 
-Other choices include exact journal append and import mechanisms under SH87, projections, workspace allocation, and unaccepted task and Activity details. Actor representation and phase payload fields under SH55-SH56 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
+Other choices include exact journal append and import mechanisms under SH87, projection encodings, workspace allocation, and task or Activity details not specified by accepted contracts. Actor representation and phase payload fields not specified under SH55-SH56 or CN23 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
 
-Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. This CLI draft does not accept other proposals in those contracts.
+Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. Approval of this contract does not resolve deferred decisions in other contracts.

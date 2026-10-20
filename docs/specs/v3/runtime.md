@@ -6,9 +6,9 @@
 
 Record decisions about the Kepler CLI, structured persistence, and audit system.
 
-The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. The [Mission contract](mission.md) sets accepted record and local-runtime paths. Phase-owned projections, commands, and write protocols stay under design. This document does not add CLI behavior or migrate existing data.
+The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. The [Mission contract](mission.md) sets accepted record and local-runtime paths. Mechanisms not specified by accepted contracts remain implementation work. This document does not add CLI behavior or migrate existing data.
 
-The [Construction runtime draft](phases/construction/runtime.md) proposes Construction-specific state names, lifecycle guards, and event payloads. It is not a stage and does not replace this shared contract. The accepted [Mission contract](mission.md) owns mission storage policy.
+The [Construction runtime contract](phases/construction/runtime.md), approved under CN23, defines Construction-specific state names, lifecycle guards, and event payload requirements. It is not a stage and does not replace this shared contract. The accepted [Mission contract](mission.md) owns mission storage policy.
 
 ## Data responsibilities
 
@@ -442,7 +442,7 @@ Expose operations to read progress, change execution state, and record evidence,
 
 Keep phase transition rules and event recording in their owning application operations. The CLI invokes those operations. JSON journals keep the resulting facts. Get current state and query views from the journals. Skills must not add separate event or state writers.
 
-The [CLI command reference](cli.md) records accepted command decisions and proposed operation contracts. It owns command organization and interface details. This infrastructure contract owns persistence and shared execution rules. Neither document sets CLI behavior.
+The [CLI command reference](cli.md), approved under SH122, defines command organization and interface contracts. This infrastructure contract owns persistence and shared execution rules. Neither document implements CLI behavior.
 
 For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. For mission operations, `--project` selects the record home. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection. Use `--mission <mission-id>` only when a mission-scoped operation has no unit context. Unit-scoped operations resolve mission context only from unique recorded membership.
 

@@ -4,21 +4,21 @@
 
 This folder is the canonical source for the version 3 Kepler workflow. Use this specification to make skills, CLI features, templates, tests, and user documentation.
 
-This reference contains accepted contracts and designs in progress. Each document states its status. An accepted contract does not show implementation or release.
+This reference contains approved Construction MVP contracts and deferred design work. Each document states its status. An approved contract does not show implementation or release.
 
 [Authoring progress](authoring_progress.md) lists the next decisions, shared open questions, and deferred work.
 
 [Skills](skills.md) sets version 3 skill names and responsibilities.
 
-[CLI commands and contracts](cli.md) records accepted CLI decisions, proposed command contracts, and open interface details.
+[CLI commands and contracts](cli.md) defines the approved CLI interfaces under SH122. Details left unspecified remain implementation choices.
 
 [Mission](mission.md) owns the accepted mission identity, record-home, workspace, storage, checkpoint, recovery, and pre-mission contracts.
 
 [Git diff packages](diff-package.md) sets rules for generated inspection material in three existing Construction scopes. It is a Git capability, not a new workflow milestone.
 
-The [Construction runtime draft](phases/construction/runtime.md) gives proposed Construction state and event details. The accepted [Mission contract](mission.md) owns mission and storage policy. Neither document adds a stage.
+The [Construction runtime contract](phases/construction/runtime.md) defines approved Construction state, event, and operation requirements under CN23. The accepted [Mission contract](mission.md) owns mission and storage policy. Neither document adds a stage.
 
-The [installation contract](installation.md) contains accepted setup, intended-target, and resource-ownership rules under SH114, SH116, and SH117. Its installation-generation schema stays a proposal. Neither document shows implemented or released v3 behavior.
+The [installation contract](installation.md) is approved under SH124, including its installation-generation record. Earlier setup, intended-target, and resource-ownership decisions under SH114, SH116, and SH117 keep their scope. Specification approval does not show implemented or released v3 behavior.
 
 The version 2 reference stays in a separate document set. Its contracts do not automatically apply to version 3.
 
@@ -61,7 +61,7 @@ These locations organize the specification. The [Mission contract](mission.md#du
 
 A **workflow** selects a series of phase-owned stages. Its definition sets their order and routing. The selected stages keep their own contracts.
 
-A **Unit of Work** replaces the previous **change** concept. Standard has one Unit of Work per mission. A Unit of Work can contain several implementation tasks. The shared [Unit of Work draft](unit-of-work.md) sets its acceptance boundary, decomposition procedure, and walking skeleton kind.
+A **Unit of Work** replaces the previous **change** concept. Standard has one Unit of Work per mission. A Unit of Work can contain several implementation tasks. The shared [Unit of Work contract](unit-of-work.md), approved under SH123, sets its acceptance boundary, decomposition procedure, and walking skeleton kind.
 
 A **stage** sets a phase-owned responsibility that workflows can use. Its phase contract sets its execution scope. A skill gives a procedure that can help with that responsibility. Stage boundaries do not depend on skill names or packaging.
 

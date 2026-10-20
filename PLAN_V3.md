@@ -19,8 +19,9 @@ This is a roadmap for implementation, not a second workflow specification or an 
 
 - Add the behavior in all six accepted stage contracts and all three accepted Activity contracts. Keep FD13, NF12, IP19, IE21, IE24, IE25, IE27, UR16, DL18, and the task graph accepted under IP26.
 - Use the current [authoring register](docs/specs/v3/authoring_progress.md), including full-contract approvals recorded after older passages, when those passages show a proposal. Specification acceptance does not mean approval for an executing unit. It does not show that implementation is done.
-- Make each implementation-owned choice in its owning milestone. These choices include event types, payloads, response fields, repository identities, journal protocols, lock release, startup integration, and installation receipts. Record the selected design and its tests. Do not add requester-approval gates for technical encodings.
-- Keep fixed command signatures and accepted schemas. Examples and proposed state names are not mandatory schemas. Get a requester decision only when a choice changes agreed behavior, authority, evidence, or material scope.
+- Apply the complete CLI, Unit of Work, Construction runtime, and installation contracts approved under SH122, SH123, CN23, and SH124. Keep deferred decisions separate.
+- Make each implementation-owned choice in its owning milestone. These choices include event and payload details not specified by accepted contracts, response fields, repository identities, journal protocols, lock release, startup integration, and installation receipts. Record the selected design and its tests. Do not add requester-approval gates for technical encodings.
+- Keep fixed command signatures, accepted state names, and accepted schemas. Illustrative examples do not add schema requirements. Get a requester decision only when a choice changes agreed behavior, authority, evidence, or material scope.
 - Make direct Construction entry, existing projects, greenfield repositories, and walking skeletons available. Do not make completed Initialization, Inception, existing application code, or passing application tests entry requirements.
 
 ### Deliberate exclusions
@@ -233,10 +234,10 @@ Foundation tasks with no dependency links can start together. Skills and prompts
 
 ## M05: Add durable history and event-derived state
 
-**Sources:** [shared runtime](docs/specs/v3/runtime.md), [Construction runtime](docs/specs/v3/phases/construction/runtime.md), SH43-SH51, SH74, SH84, SH87.
+**Sources:** [shared runtime](docs/specs/v3/runtime.md), [Construction runtime](docs/specs/v3/phases/construction/runtime.md), SH43-SH51, SH74, SH84, SH87, CN23.
 
 - [ ] M05.1 Give the unchanged ten-field event envelope TypeScript interfaces and runtime validation. Keep envelope and payload versions as independent domains. Their numeric values can match. Keep UTC `Z` timestamps, the source CLI producer/version, journal identity, direct `caused_by` IDs, and phase-owned data.
-- [ ] M05.2 Use accepted rules for Construction's typed event catalog and payloads. Keep event, attempt, revision, evidence, graph, and task identities distinct. Do not make proposed draft names accepted policy. Do not add approval/task-attempt IDs.
+- [ ] M05.2 Use Construction's state names, event catalog, and payload requirements approved under CN23. Keep event, attempt, revision, evidence, graph, and task identities distinct. Define unspecified payload types within those requirements. Do not add approval/task-attempt IDs.
 - [ ] M05.3 Add the journal adapter at `.kepler/missions/<mission-id>/history/<phase>/<journal-id>.jsonl`. Use one writer per journal. Make each append durable before success. Do not make independent journals share an append lock.
 - [ ] M05.4 Use original event/domain IDs, producer, bindings, causes, and position for same-write retries and deduplication. Record a conflict when content under one ID differs. Keep damaged bytes and uncertain newer facts. Do not truncate history. An older valid prefix is not current truth.
 - [ ] M05.5 Use internal interfaces for validated journal collection/import and causal resolution. Do not add a public import command or synchronization service. Keep original journals, local order, identities, and bindings. Block state-dependent work in each scope when unknown, unsupported, incomplete, or conflicting history may affect it. Do not discard uncertain newer control facts just because their effect is unproven. Keep unaffected scopes available.
@@ -399,9 +400,9 @@ Foundation tasks with no dependency links can start together. Skills and prompts
 
 ## M15: Add compatible setup and installation resources
 
-**Sources:** [installation](docs/specs/v3/installation.md), [setup](docs/specs/v3/cli.md#kepler-setup), SH114, SH116-SH117.
+**Sources:** [installation](docs/specs/v3/installation.md), [setup](docs/specs/v3/cli.md#kepler-setup), SH114, SH116-SH117, SH124.
 
-- [ ] M15.1 Select a minimal representation for generation, compatibility, digest, and managed-resource receipt data. Keep the meanings of CLI release, bundle generation, artifact/event formats, and native resource facts distinct. Do not use draft `installation.json` fields/location as an accepted schema. Do not add a host-certification framework.
+- [ ] M15.1 Use the installation-generation field names, meanings, and `installation.json` location approved under SH124. Select minimal encodings for generation, compatibility, digest, and managed-resource receipt data not specified by the contract. Keep CLI release, bundle generation, artifact/event formats, and native resource facts distinct. Do not add a host-certification framework.
 - [ ] M15.2 Add `kepler setup` without `--force` or bypass options. Resolve symlinks. Select the bundle by explicit override, installed sidecar, then source fallback only when applicable. If override validation or selected-bundle compatibility fails, return a failed result. Do not use silent fallback.
 - [ ] M15.3 Do compatibility and full-bundle-digest checks before writes. Install compatible v3 templates/guidelines and only missing default settings. Change existing files only when valid ownership records and matching digests show unmodified installer-managed content.
 - [ ] M15.4 Keep settings, unknown/user-modified resources, project data, and unsupported history. Necessary-path conflicts cause failure without merging or overwriting. After partial failure, keep the prior usable generation. Record known effects. Remove only operation-owned temporary/partial material.

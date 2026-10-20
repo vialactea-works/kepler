@@ -1,12 +1,12 @@
-# Kepler v3 installation contract draft
+# Kepler v3 installation contract
 
-[Version 3 reference](README.md) | [CLI draft](cli.md) | [Skills](skills.md) | [Construction runtime draft](phases/construction/runtime.md) | [Authoring progress](authoring_progress.md)
+[Version 3 reference](README.md) | [CLI contract](cli.md) | [Skills](skills.md) | [Construction runtime contract](phases/construction/runtime.md) | [Authoring progress](authoring_progress.md)
 
-**Status:** Draft with accepted setup, resource-ownership, and intended-target decisions under SH114, SH116, and SH117. Other proposals stay drafts. Kepler v3 is not implemented or released. This specification does not claim current support or authorize installation.
+**Status:** Approved by the requester under [SH124](authoring_progress.md#completed-shared-decisions). Earlier decisions SH114, SH116, and SH117 keep their scope. Kepler v3 is not implemented or released. This approval does not claim current support or authorize installation.
 
 ## Purpose and boundary
 
-This draft gives observable installation and host-readiness behavior for the Construction workflow. Keep installed software and host resources separate from authored project artifacts, workflow history, and live coordination.
+This contract gives observable installation and host-readiness behavior for the Construction workflow. Keep installed software and host resources separate from authored project artifacts, workflow history, and live coordination.
 
 Installation and setup do not run Initialization, create units, dispatch workers, or apply workflow transitions. Installation grants no implementation or delivery authority. A portable skill file alone does not make a working host integration.
 
@@ -48,9 +48,9 @@ Each installer reports its own writes and failures. Keep installation results wi
 
 These responsibilities add no Kepler host-verification framework, profile registry, or agent test system. They do not change the accepted stage, Activity, or role contracts.
 
-## Proposed installation generation
+## Installation generation
 
-An installation record lists resources and their compatibility status. It is not workflow authority or a general dependency resolver. The proposed version-one record contains:
+An installation record lists resources and their compatibility status. It is not workflow authority or a general dependency resolver. The accepted version-one record contains:
 
 | Field | Meaning |
 | --- | --- |
@@ -62,7 +62,7 @@ An installation record lists resources and their compatibility status. It is not
 | `host_binding` | Host/platform identity, native role bindings, resource versions, and available installation facts. These values do not prove tested agent behavior. |
 | `compatibility` | The declared supported combination of these resources. |
 
-The proposed location is `<Kepler global home>/installation.json`. Exact record fields, location, and recording mechanics remain implementation details within the accepted resource-ownership rules. These names are proposals, not accepted schemas. They add no separate approval or certification gate.
+Store the record at `<Kepler global home>/installation.json`. SH124 approves this location and the field names and meanings above. Field types, nested encodings, and recording mechanics not specified here remain implementation details within the accepted resource-ownership rules. This record adds no separate approval or certification gate.
 
 A compatibility statement must cover the actual CLI, bundle, skills, and host binding. Similar version strings, latest tags, or portable files alone do not show compatibility. Missing, incomplete, or unsupported compatibility information prevents a workflow-ready claim.
 
@@ -142,7 +142,7 @@ Start affected execution only when compatible resources and necessary host capab
 
 Apply the accepted [mission startup rules](mission.md#workspace-selection-and-preparation) before the first stage. Define the workspace and complete authorized preparation. Resolve the mission through explicit selection or unique recorded unit membership. Do not adopt unbound units implicitly.
 
-Start with a clear unit request. Select or create the unit through its existing CLI contract. Invoke the selected Standard stage's entry skill under its authority and completion rules. Use the [CLI grammar](cli.md). Unchosen selectors are proposals.
+Start with a clear unit request. Select or create the unit through its existing CLI contract. Invoke the selected Standard stage's entry skill under its authority and completion rules. Use the approved [CLI grammar](cli.md). Do not infer additional selectors.
 
 Setup neither selects the workflow nor launches an agent. Mission creation records the workflow binding. Unit creation records the matching [Standard workflow binding](cli.md#workflow-binding). Later operations and resume use the recorded binding.
 
@@ -154,12 +154,12 @@ Resume from the explicit project, unit, current history, material, and safe work
 
 An installation upgrade does not convert v2 artifacts, translate old status, or adopt old history as v3 authority. Keep unsupported history and unfinished work. Missing compatibility prevents affected v3 operations without changing their data.
 
-Existing Core path resolution and legacy copying stay separate from artifact conversion. This draft changes neither those shared rules nor the deferred migration policy. It grants no deletion, external rollback, or distributed synchronization authority.
+Existing Core path resolution and legacy copying stay separate from artifact conversion. This contract changes neither those shared rules nor the deferred migration policy. It grants no deletion, external rollback, or distributed synchronization authority.
 
 The operator selects rollout timing under applicable authority. SH116 selects intended targets without agent certification. It does not authorize installation or deployment. SH117 assigns native-resource writes to the host or skill manager.
 
 ## Remaining implementation details
 
-Setup, intended targets, and resource ownership are accepted under SH114, SH116, and SH117. Exact installation-record and receipt encodings remain implementation details, not separate requester approval gates. The proposed installation-generation schema is not accepted by these decisions.
+SH124 approves the complete installation contract, including the installation-generation record. SH114, SH116, and SH117 keep their earlier approval scopes. Encodings and mechanisms not specified here remain implementation details, not separate requester approval gates.
 
-These decisions do not reopen accepted stage contracts or create an implementation plan. `implementation-map.md` stays outside this specification task.
+These approvals do not reopen accepted stage contracts or create an implementation plan. `implementation-map.md` stays outside this specification task.

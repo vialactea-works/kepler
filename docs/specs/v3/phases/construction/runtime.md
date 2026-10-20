@@ -1,8 +1,8 @@
-# Construction runtime draft
+# Construction runtime contract
 
-[Construction catalog](README.md) | [Shared runtime contract](../../runtime.md) | [CLI draft](../../cli.md) | [Authoring progress](../../authoring_progress.md)
+[Construction catalog](README.md) | [Shared runtime contract](../../runtime.md) | [CLI contract](../../cli.md) | [Authoring progress](../../authoring_progress.md)
 
-**Status:** Draft for discussion. This document proposes Construction state, event, and operation details. The accepted [Mission contract](../../mission.md) owns mission and storage policy. No approval here shows implementation or release.
+**Status:** Approved by the requester under [CN23](../../authoring_progress.md#completed-construction-decisions). Approval covers this document's state, event, and operation requirements. The accepted [Mission contract](../../mission.md) owns mission and storage policy. This approval does not approve an executing unit or show implementation or release.
 
 ## Purpose and authority
 
@@ -10,9 +10,9 @@ Construction owns its state model and event catalog under the shared [execution-
 
 This is not a stage, implementation plan, task graph extension, or separate lifecycle engine. It adds no task attempt, protocol identity, agent role, or public audit kind. The accepted [Implementation](implementation.md), [Activities](activities/README.md), [Standard workflow](../../workflows/standard/README.md), and [task graph](task-graph.md) contracts are still binding.
 
-SH54 accepts the normal-transition operations and selector rule in the [CLI reference](../../cli.md). SH58 accepts pause and resume safety. SH62 accepts simple phase-owned effort events and queries. These decisions do not accept this draft's state names, event names, detailed payload schemas, or extra transition guards.
+SH54 accepts the normal-transition operations and selector rule in the [CLI reference](../../cli.md). SH58 accepts pause and resume safety. SH62 accepts simple phase-owned effort events and queries. CN23 separately approves the state names, event names, payload requirements, and transition guards specified here.
 
-Apply shared identity and record requirements for evidence and approvals. The [Mission contract](../../mission.md) owns mission and local-runtime paths. This draft adds no requester approval gate. DF14-DF17 accept the labeled rules below, but do not accept the remaining proposal vocabulary or payloads.
+Apply shared identity and record requirements for evidence and approvals. The [Mission contract](../../mission.md) owns mission and local-runtime paths. This contract adds no requester approval gate. DF14-DF17 keep their original approval scopes.
 
 ## Scope and identity
 
@@ -31,13 +31,13 @@ Keep authored identities separate from execution identities. Store execution fac
 
 Use the shared [attempt identity rules](../../runtime.md#attempt-identity-and-active-scope) for stage and Activity attempt IDs. Admission captures a fixed baseline without creating a task attempt.
 
-Apply the accepted [workflow binding](../../cli.md#workflow-binding). Mission creation records its selected workflow. Construction unit creation records the matching `standard` binding. Later operations and resume use that binding. The event names and payload schemas below remain proposals.
+Apply the accepted [workflow binding](../../cli.md#workflow-binding). Mission creation records its selected workflow. Construction unit creation records the matching `standard` binding. Later operations and resume use that binding. CN23 approves the event names and payload requirements below.
 
-## Proposed derived states
+## Derived states
 
-The following vocabulary is a proposal for derived views. SH58 does not select these state names. Journals are authoritative. Projections are disposable.
+Use the following vocabulary for derived views under CN23. Journals are authoritative. Projections are disposable.
 
-| Scope | Proposed state | Meaning |
+| Scope | State | Meaning |
 | --- | --- | --- |
 | Stage or Activity | `not_started` | No attempt has started for the occurrence. |
 | Stage or Activity | `running` | The current attempt is executing. |
@@ -71,11 +71,11 @@ Derive these logical rules from existing task, Activity, Integration, evidence, 
 | Acceptance | Accept only a current combined candidate that passed required checks under the unit lock. Check current authority and revision state at final acceptance. |
 | Task completion | Require accepted Integration and all task conditions. Keep readiness, admission, Activity completion, Integration acceptance, and task completion distinct. Task completion does not complete Implementation or grant approval. |
 
-Do not add a task-attempt identity or a generic status-setting command. Exact event names and the remaining proposed state vocabulary stay implementation details.
+Do not add a task-attempt identity or a generic status-setting command. Use the state vocabulary and event names approved under CN23.
 
 ## Transition guards and results
 
-These are logical operations, not additional public commands. The [CLI reference](../../cli.md) owns public grammar and the typed-write boundary. SH54 accepts its named normal transitions and existing authority, attempt, evidence, and completion rules. SH58 accepts pause and resume safety. Neither decision selects this draft's state names, event details, or extra transition guards.
+These are logical operations, not additional public commands. The [CLI reference](../../cli.md) owns public grammar and the typed-write boundary. SH54 accepts its named normal transitions and existing authority, attempt, evidence, and completion rules. SH58 accepts pause and resume safety. CN23 separately approves the state names, event requirements, and transition guards specified here.
 
 | Scope and operation | Guard | Recorded result |
 | --- | --- | --- |
@@ -104,9 +104,9 @@ Waiting does not imply that all workers stopped. A command failure, unavailable 
 
 Use the unchanged [ten-field envelope](../../runtime.md#event-envelope-choices). Its fields are `id`, `phase`, `type`, `envelope_version`, `event_version`, `journal_id`, `recorded_at`, `producer`, `caused_by`, and `data`.
 
-The event names, derived states, operation details, and phase-specific payload schemas below are proposals. SH62 accepts phase-owned facts for the unit effort default and explicit stage overrides, with selection attribution where applicable. It also requires queries for the default, overrides, and effective stage levels. Resolve stage override, then unit default, then Standard; Activities inherit their stage. Keep effort out of frontmatter and separate authoritative state files.
+CN23 approves the event names, derived states, operation details, and phase-specific payload requirements specified here. SH62 accepts phase-owned facts for the unit effort default and explicit stage overrides, with selection attribution where applicable. It also requires queries for the default, overrides, and effective stage levels. Resolve stage override, then unit default, then Standard; Activities inherit their stage. Keep effort out of frontmatter and separate authoritative state files.
 
-SH62 does not select event names, detailed payloads, projection schemas, or one event per field. SH63 carries later structured effort selections in the recorded interaction; it adds no separate effort event.
+SH62 keeps its original scope. Payload types and projection encodings not specified here remain implementation details. SH63 carries later structured effort selections in the recorded interaction; it adds no separate effort event.
 
 Apply the shared identity and record requirements for evidence and approval. Under SH84, use existing artifact UUIDs and execution-scope IDs in phase-owned event data. Bind actual content versions or repository checkpoints where the owning contract requires them. Do not require artifact bindings on unrelated events. Keep SH51 reference strings opaque.
 
@@ -130,9 +130,9 @@ Use the envelope's `caused_by` for direct causal event IDs. Related revision fac
 
 Stage facts bind their stage and attempt. Task facts bind their task and Implementation attempt. Activity execution facts bind their task, occurrence, Activity attempt, and original enclosing Implementation attempt.
 
-| Proposed event `type` | Required data and binding |
+| Event `type` | Required data and binding |
 | --- | --- |
-| `construction.unit-created` | Mission and unit identities, directory, creation inputs including initial effort, and matching `standard` workflow binding. This proposal requires no linked Effort event or event per field. |
+| `construction.unit-created` | Mission and unit identities, directory, creation inputs including initial effort, and matching `standard` workflow binding. This contract requires no linked Effort event or event per field. |
 | `construction.unit-baseline-selected` | Original unit Review baseline set, integration targets, and capture before first admission. Keep it across returns. Keep it distinct from the mission starting set. |
 | `construction.stage-attempt-started`, `construction.stage-waiting`, `construction.stage-pause-requested`, `construction.stage-paused`, `construction.stage-resumed`, `construction.stage-attempt-completed` | Unit, stage, attempt, actual inputs, applicable reason, and evidence or approvals required by the transition. |
 | `construction.stage-attempt-ended-by-revision`, `construction.stage-reopened` | `revision_id`, affected stage, and original attempt when one exists. Reopening alone creates no attempt. |
@@ -173,7 +173,7 @@ Reference only already recorded direct causes. Causal links complement guards. T
 
 Keep each journal's local order. Do not infer global order from timestamps. Stable event IDs detect duplicates. Equal IDs with contradictory content are conflicts, not duplicates. Do not persist numeric positions, allocate sequence counters, or relabel old records.
 
-### Proposed projection derivation
+### Projection derivation
 
 1. Select the explicit project, unit, and requested scope.
 2. Load relevant phase journals while keeping their local order.
@@ -274,13 +274,13 @@ After interruption, review actual journals, Git refs, candidate material, check 
 
 Under SH58, a pause request blocks new affected work before stopping completes. A completed-pause acknowledgment requires stopped workers and reconciled locks. A timeout, absent session, or unknown lock effect does not prove stopping. Resume verifies inputs and ownership while keeping the same attempt and reservations. Unrelated work continues.
 
-## Draft boundaries
+## Contract boundaries
 
-Accepted shared runtime, Construction, Standard, and [Mission](../../mission.md) contracts are authoritative. DF14-DF17 accept the rules labeled with those IDs in this draft. Other Construction state, event, and operation details remain proposals.
+Accepted shared runtime, Construction, Standard, and [Mission](../../mission.md) contracts are authoritative. CN23 approves this complete Construction runtime contract. DF14-DF17 keep their original scopes for the rules labeled with those IDs.
 
 SH58 accepts pause safety. SH62 accepts minimum effort facts and queries. SH63 accepts structured later selections in existing interaction records. SH64-SH66 accept lock and cross-workspace coordination rules. SH67 accepts manual lock recovery.
 
-DF14-DF17 do not accept the remaining proposed state vocabulary, event catalog, operation details, or payload schemas. This draft does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
+This approval covers the specified state vocabulary, event catalog, operation details, and payload requirements. It does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
 
 Apply the accepted [project selection rules](../../cli.md#project-selection), [scope selectors](../../cli.md#scope-and-selectors), [result envelope](../../cli.md#machine-readable-output), [failure result fields](../../cli.md#failure-and-recovery-rules), [exit-code contract](../../cli.md#exit-codes), and [output stream contract](../../cli.md#output-streams). Apply the accepted [JSON-only result format](../../cli.md#human-output). Apply the accepted [evidence recording interface](../../cli.md#kepler-audit-record-evidence), [audit queries](../../cli.md#kepler-audit-list), and [shared lint interface](../../cli.md#kepler-lint).
 
