@@ -6,7 +6,7 @@
 
 Construction operates on one Unit of Work. Standard has one unit per mission. The [Mission contract](../../mission.md) sets mission startup and workspace facts. Each stage has its own responsibilities and assigned skills and agents.
 
-Construction owns its execution state model and projection schemas under the shared [execution-state representation](../../runtime.md#execution-state-representation). The [Construction runtime draft](runtime.md) proposes its derived states, lifecycle guards, and event facts. The [Mission contract](../../mission.md) owns accepted mission and storage policy. The runtime draft adds no stage.
+Construction owns its execution state model and projection schemas under the shared [execution-state representation](../../runtime.md#execution-state-representation). The [Construction runtime draft](runtime.md) proposes remaining derived states, lifecycle guards, and event facts. It also records accepted DF14-DF17 rules for check commands, task transitions, dependency invalidation, and revision shutdown. The [Mission contract](../../mission.md) owns accepted mission and storage policy. The runtime draft adds no stage.
 
 The [Standard workflow](../../workflows/standard/README.md) selects the unit-stage order. Construction owns the stage definitions and Implementation structure. The requester accepted Functional Design and Quality Requirements under FD13 and NF12. Implementation Planning and Implementation are accepted under IP19 and IE21. Unit of Work Review and Deliver are accepted under UR16 and DL18. The requester separately accepted Code Generation under IE24, Code Validation under IE25, and Code Integration under IE27.
 
@@ -133,11 +133,11 @@ Tasks are accepted through successful Code Validation and Code Integration, not 
 
 The requester accepted [Planning](implementation-planning.md), [Implementation](implementation.md), [Unit of Work Review](unit-of-work-review.md), and [Deliver](deliver.md). Their contracts state required evidence, completion, role and skill responsibilities, reopening questions, and handoffs. The task graph writer and validator are still implementation work.
 
-Typechecking, the project build, and the full application test suite are required integration checks. Additional applicable obligations still apply. General extra-check policy is deferred. Project check configuration is still MVP implementation work. Candidate checks precede acceptance under the agreed integration procedure.
+Typechecking, the project build, and the full application test suite are required integration checks. Additional applicable obligations still apply. General extra-check policy stays deferred under DF13. Under accepted [DF14](../../authoring_progress.md#completed-construction-decisions), use repository-native scripts or task targets and explicit repository-qualified commands in existing planning material. Missing commands block affected checks. Candidate checks precede acceptance under the agreed integration procedure.
 
 SH64-SH66 settle the lock mechanism, owner-record facts, and cross-workspace coordination. Exact key encodings, record fields, and finer release protocols remain implementation choices. SH67 accepts manual unlock as a recovery policy. Follow the shared [coordination rules](../../runtime.md#short-scoped-coordination), [Mission paths](../../mission.md#local-storage-and-concurrency), and [interrupted-work recovery rules](../../runtime.md#interrupted-work-recovery).
 
-Detailed task-state transitions, dependency invalidation, and shutdown coordination are release implementation work under DF15-DF17, not new requester approval gates. Interrupted work follows the shared [recovery rule](../../runtime.md#interrupted-work-recovery).
+[DF15](runtime.md#accepted-task-transition-rules), [DF16](runtime.md#dependency-invalidation), and [DF17](runtime.md#revision-shutdown-coordination) accept task-transition, dependency-invalidation, and revision-shutdown rules. Implementation must satisfy these rules. They add no requester approval gate. Interrupted event-write recovery follows [SH87](../../runtime.md#interrupted-event-write-recovery).
 
 ## Specification use
 

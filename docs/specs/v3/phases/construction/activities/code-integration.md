@@ -26,7 +26,9 @@ Hold the lock through reading current state, preparation, checks, and acceptance
 
 For optional inspection, use the [Code Integration package](../../../diff-package.md#code-integration) with the owning operation's recorded checkpoint set and prepared candidate set. Package rendering consumes those recorded bindings. It does not acquire or manage the lock, prepare or accept a candidate, or add an independent review step.
 
-A build proves typechecking only when it does that check. Additional project obligations still apply. Project-specific check configuration remains under DF14. Apply the shared [lock and ownership rules](../../../runtime.md#short-scoped-coordination) and [Mission coordination paths](../../../mission.md#local-storage-and-concurrency). Exact key encodings, record fields, and finer release protocols remain implementation choices under SH64-SH66. SH67 accepts manual unlock after conflicting workers stop and effects reconcile.
+A build proves typechecking only when it does that check. Under accepted [DF14](../../../authoring_progress.md#completed-construction-decisions), repository-native scripts or task targets define checks. DF14 records exact repository-qualified commands in `plan.md` and the task's `verification.method`. The operation does not autodetect commands or add a configuration file. A missing command blocks its affected check. Additional project obligations still apply.
+
+Apply the [Verification strategy](../implementation-planning.md#verification-strategy), shared [lock and ownership rules](../../../runtime.md#short-scoped-coordination), and [Mission coordination paths](../../../mission.md#local-storage-and-concurrency). Exact key encodings, record fields, and finer release protocols remain implementation choices under SH64-SH66. SH67 accepts manual unlock after conflicting workers stop and effects reconcile.
 
 Keep the admission baseline fixed despite later integrations. Do not add global `HEAD`, shared admission-commit, clean-workspace, or completed-batch gates.
 

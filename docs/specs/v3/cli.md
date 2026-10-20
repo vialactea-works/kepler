@@ -653,12 +653,12 @@ These rules add no storage path or lock command. Apply the accepted [runtime coo
 - Validate inputs and authorization before changing state.
 - Return a nonzero status when the requested operation fails. Do not return a successful transition result for an incomplete write.
 - If an operation stops after a partial effect, examine the actual journal, projection, directory, candidate, and lock state before retry. Keep uncertain work and history.
-- Use stable event identities and phase validation to resolve duplicate or interrupted requests. Do not claim general exactly-once replay until the write protocol is set.
+- Follow [SH87 event-write recovery](runtime.md#interrupted-event-write-recovery) to resolve duplicate or interrupted writes. Preserve original records and reconcile actual effects before claiming current state. Do not claim general exactly-once effects.
 - Never let a late result from an earlier attempt change a newer attempt or show its completion.
 - Keep query and lint commands read-only. Projection rebuilds and history queries do not rerun checks or create approvals.
 - Keep local journal order. Use causal links for cross-journal causes. Do not use timestamps to invent a global ordering.
 
-The event write protocol, projection rebuild behavior, and physical storage remain implementation choices under [CLI infrastructure](runtime.md#execution-state-representation). SH64-SH66 accept lock directories, minimum owner-record facts, and cross-workspace coordination. The [Mission contract](mission.md#local-storage-and-concurrency) sets their local paths. Exact key encodings and record fields remain implementation choices. SH67 accepts manual lock-artifact removal under its recovery limits. This policy adds no lock-management command.
+Exact SH87 append and import mechanisms, projections, and physical storage remain implementation choices under [CLI infrastructure](runtime.md#execution-state-representation). SH64-SH66 accept lock directories, required owner-record facts, and cross-workspace coordination. The [Mission contract](mission.md#local-storage-and-concurrency) sets their local paths. Exact key encodings and record fields remain implementation choices. SH67 accepts manual lock-artifact removal under its recovery limits. This policy adds no lock-management command.
 
 ### Exit codes
 
@@ -681,10 +681,10 @@ Accepted command placements, structured-output default, and typed lifecycle writ
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-SH57-SH67 accept their named interfaces and policy boundaries. Exact request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 remain implementation choices.
+SH57-SH67 accept their named interfaces and policy boundaries. Exact request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 accept policy guarantees without adding public CLI interfaces. Their exact mechanisms remain implementation work.
 
 SH51 and SH53-SH67 are settled. The [Mission contract](mission.md) sets the existing SH45 storage paths, SH68 workspace policy, SH86 retained-evidence locations, and SH64-SH66 coordination domains. The [runtime contract](runtime.md#short-scoped-coordination) sets the lock and owner-record requirements. Exact key and record details remain implementation choices.
 
-Other choices include journal writes, projections, workspace allocation, task and Activity details, and recovery under SH87. Actor representation and phase payload fields under SH55-SH56 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
+Other choices include exact journal append and import mechanisms under SH87, projections, workspace allocation, and unaccepted task and Activity details. Actor representation and phase payload fields under SH55-SH56 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
 
 Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. This CLI draft does not accept other proposals in those contracts.

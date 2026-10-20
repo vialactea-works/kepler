@@ -179,7 +179,19 @@ Resume still checks inputs, attempts, ownership, and recovery conditions. Preser
 
 Do not add automatic rollback, lock stealing, a global gate, a public force-unlock command, or a cancellation or worker-kill engine. Limit manual removal to the identified Kepler lock artifact. Actual destructive recovery requires separate operator authority.
 
-This shared recovery rule does not set repair details for interrupted journal writes.
+### Interrupted event-write recovery
+
+Use one writer for each JSONL journal. Make each append durable before reporting success. Append to separate journals independently.
+
+Retry the same write with its original event ID and domain IDs. Preserve its producer, bindings, causes, and journal position. An event ID does not replace revision, evidence, or attempt IDs.
+
+Preserve complete original records and their order. Keep damaged bytes. Reconcile incomplete writes with actual effects before treating current state as authoritative. Block conflicting records and affected work.
+
+Validate imported records and their required causal material before treating them as authoritative. Preserve original identities, producers, bindings, causes, and order during import.
+
+Do not hide an uncertain newer fact behind a valid older prefix. Preserve the bytes and report affected uncertainty until reconciliation is complete.
+
+Do not claim general exactly-once effects, global append serialization, silent truncation or deletion, automatic rollback, or automatic Git repair. Append and import mechanisms remain implementation work within these guarantees. This contract selects no extra recovery document, path convention, import command, storage engine, or schema.
 
 ### Revision decisions
 
@@ -257,7 +269,7 @@ Do not persist a numeric `position` field or allocate a separate sequence counte
 
 Use `caused_by` for explicit causal references across journals. Local order does not resolve conflicting control decisions. Apply the existing transition, attempt, evidence, and approval rules.
 
-The protocols for safe appends, retries, interrupted writes, and collection stay undecided. This choice sets no physical storage layout or global total order.
+The accepted [interrupted event-write recovery rules](#interrupted-event-write-recovery) set append and import guarantees. Exact mechanisms remain implementation work. This choice sets no physical storage layout or global total order.
 
 The [audit list interface](cli.md#kepler-audit-list) returns compact query projections by default. Omitted fields are unrequested, not absent from the original event. Query projections do not change the stored event envelope, journal order, or causal references.
 
@@ -307,7 +319,7 @@ The owning contracts set evidence scope. Cover relevant material, not only files
 
 Use the envelope's `event_version` to version phase-owned data. Do not add a redundant record-version field. Do not add a closed generic schema, result taxonomy, host qualification, separate evidence file, or evidence registry. SH51 sets no reference encoding. Detailed phase-owned payload types and event catalogs remain implementation work.
 
-A retry of the same journal write keeps the existing evidence ID, event ID, and original bindings. This is not a general idempotency protocol or permission to reinterpret caller retries. Recording evidence does not execute a check, grant approval, or complete workflow work. A recorded failed check remains failed. Keep all named evidence duties and apply the existing applicability and retention rules.
+Follow [interrupted event-write recovery](#interrupted-event-write-recovery) for retries. Keep the existing evidence ID, event ID, and original bindings. This is not a general idempotency protocol or permission to reinterpret caller retries. Recording evidence does not execute a check, grant approval, or complete workflow work. A recorded failed check remains failed. Keep all named evidence duties and apply the existing applicability and retention rules.
 
 The [evidence recording interface](cli.md#kepler-audit-record-evidence) uses one request `inputs` array for checked material and relevant inputs. Each entry has `reference` and `purpose`. This request uses the shared input shape without defining every phase-owned payload field.
 
@@ -351,7 +363,7 @@ Workflow event writes and derived views must not prevent concurrent work. Keep e
 
 Separate Git worktrees do not isolate databases, queues, ports, or test data. Use disposable instances, distinct namespaces, temporary directories, or nonconflicting ports where needed. Put check-specific setup and isolation in the existing task `verification.method`. If a resource cannot be isolated, serialize only the checks that use it or report the blocker. Unrelated work and tests continue.
 
-Existing task guidance and prerequisites keep their scopes. Add no graph fields, automatic allocation, environment schema, resource registry, TestRun identity, or global test gate. Keep required Validation and Integration checks, and preserve DF14 for project-specific Integration configuration.
+Existing task guidance and prerequisites keep their scopes. Add no graph fields, automatic allocation, environment schema, resource registry, TestRun identity, or global test gate. Keep required Validation and Integration checks. Apply [DF14](authoring_progress.md#completed-construction-decisions) for project-specific Integration commands.
 
 Construction's [integration lock](phases/construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current repository-qualified checkpoint set, candidate preparation, checks, and acceptance across required repositories. This lock covers long-running checks. It is not a global agent, task admission, or test gate.
 
@@ -379,7 +391,7 @@ The lock directory holds exclusion. Missing or partial owner metadata does not m
 
 On release, confirm that the lock still belongs to the current owner. Never remove a replacement holder's claim. A read-token-then-delete sequence alone does not prove this invariant. Exact field names, token encoding, key encoding, and finer release protocols remain implementation choices. The [Mission contract](mission.md#local-storage-and-concurrency) sets local paths and shared identity rules.
 
-Journal append and collection protocols, interrupted-write recovery, and projection mechanisms remain implementation work. SH87 owns interrupted event-write recovery. SH67 permits manual lock-artifact removal under the recovery limits above.
+Exact journal append, import, and projection mechanisms remain implementation work within the accepted [SH87 recovery rules](#interrupted-event-write-recovery). SH67 permits manual lock-artifact removal under the recovery limits above.
 
 ### Task admission and baselines
 
@@ -410,7 +422,7 @@ Construction's [Code Integration Activity](phases/construction/activities/code-i
 
 Record actual Integration inputs separately from the fixed admission baseline. Successful acceptance of every necessary repository result and the applicable completion conditions are necessary for task completion. Repository commits do not form an atomic cross-repository commit or authorize automatic rollback.
 
-Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phases/construction/README.md#agreed-boundaries) gives these duties. Integration checks do not replace them. A build result counts as typechecking only when its command also runs the necessary typechecking. Separate decisions are necessary for additional integration checks and project-specific check configuration.
+Code Validation runs typechecking, the project build, and the full application test suite, and owns independent non-author feedback. The [Construction contract](phases/construction/README.md#agreed-boundaries) gives these duties. Integration checks do not replace them. A build result counts as typechecking only when its command also runs the necessary typechecking. [DF13](authoring_progress.md#deferred-decisions) defers only a general extra-check policy. Apply accepted project-specific check configuration under [DF14](authoring_progress.md#completed-construction-decisions).
 
 A conflict can block the affected integration. Unrelated ready tasks and units continue. Report suspected upstream problems to the orchestrator. Integration does not authorize a cascade.
 
@@ -484,11 +496,11 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 
 ## Decisions still required
 
-- Phase-owned state models, projection schemas, and status transitions.
-- Journal write, collection, and projection mechanisms within the accepted [Mission contract](mission.md#durable-layout).
+- Phase-owned state models, unaccepted state vocabulary, projection schemas, and exact transition implementation details.
+- Exact journal append, import, collection, and projection mechanisms under accepted [SH87 rules](#interrupted-event-write-recovery) and [Mission paths](mission.md#durable-layout).
 - Other CLI command contracts, selectors, command-specific response schemas, and validation and authority rules.
-- Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
-- Exact lock-key encoding, owner-record field names and token encoding, and finer release protocols remain implementation choices. SH64-SH66 accept the lock mechanism, minimum ownership facts, and cross-workspace coordination rules. The [Mission contract](mission.md#local-storage-and-concurrency) sets the local paths. SH67 accepts manual lock-artifact removal under the recovery limits.
+- Admission coordination and other runtime details not set by accepted contracts.
+- Exact lock-key encoding, owner-record field names and token encoding, and finer release protocols remain implementation choices. SH64-SH66 accept the lock mechanism, required ownership facts, and cross-workspace coordination rules. The [Mission contract](mission.md#local-storage-and-concurrency) sets the local paths. SH67 accepts manual lock-artifact removal under the recovery limits.
 - Detailed phase-owned evidence and approval payload types beyond the shared record requirements. Material reference strings follow SH51. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
 - External evidence-store locations remain implementation choices. Retention periods and cleanup remain deferred.
 - Detailed workspace allocation mechanisms that follow SH69 and the accepted [Mission contract](mission.md).

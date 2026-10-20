@@ -126,11 +126,15 @@ Follow the agreed [attempt scopes](README.md#attempts-and-completion) and [retur
 | Authorized unit-wide revision from Planning or earlier | Apply the agreed shutdown procedure. End affected execution attempts, keep history, and restart only after revised upstream completion. |
 | Interrupted work | Compare actual work and evidence with CLI progress. Make sure previous workers have stopped before resuming the same unended attempt. |
 
-The [unit-wide revision rule](README.md#unit-wide-upstream-revision) prevents ended attempts from completing tasks or accepting candidates. Physical worker shutdown and detailed transitions remain implementation work. Apply the shared [lock and ownership rules](../../runtime.md#short-scoped-coordination) and [Mission coordination paths](../../mission.md#local-storage-and-concurrency). Exact key encodings and record fields remain implementation choices under SH64-SH66. SH67 accepts manual unlock after workers stop and effects reconcile.
+The [unit-wide revision rule](README.md#unit-wide-upstream-revision) prevents ended attempts from completing tasks or accepting candidates. Under [DF17](runtime.md#revision-shutdown-coordination), establish the scoped barrier from recorded revision authority before waiting for a long check to finish. Then stop affected workers and reconcile effects and locks before replacement work. A timeout or missing session does not prove stopping. Unknown stopping, ownership, or effects block affected restart; independent valid work continues.
+
+Physical stopping and effects reconciliation remain implementation work. Apply the shared [lock and ownership rules](../../runtime.md#short-scoped-coordination) and [Mission coordination paths](../../mission.md#local-storage-and-concurrency). Exact key encodings and record fields remain implementation choices under SH64-SH66. SH67 accepts manual unlock after workers stop and effects reconcile.
 
 ### Return after completed Implementation
 
 This rule applies when the orchestrator selects Implementation as the unit-stage revision boundary after its completion. Earlier upstream boundaries keep their own cascade rules.
+
+Under accepted [DF16](runtime.md#dependency-invalidation), reassess dependents using graph edges, required inputs, actual material, and evidence applicability. Preserve valid work, original evidence bindings, and fixed admissions and baselines. Do not infer dependencies from file conflicts or add a dependency engine.
 
 1. **Reopen the unit stages.** Reopen Implementation, Unit of Work Review, and Deliver. Start a new unit Implementation attempt when execution resumes.
 2. **Select affected task scopes.** Identify each task's earliest invalid Activity and reopen it and every following Activity. Include dependent tasks when changed outputs invalidate their work or evidence. Start new Activity attempts when those Activities execute.

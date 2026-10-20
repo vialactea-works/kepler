@@ -43,7 +43,7 @@ Upstream stages occur before the revision boundary. Downstream stages occur afte
 
 Construction's task-local [Activity return paths](phases/construction/README.md#return-paths) apply within an active Implementation attempt. The orchestrator authorizes returns. They do not automatically restart that enclosing attempt. Independent task work continues while its inputs and contracts stay valid.
 
-A unit-wide upstream revision still applies the full unit-stage cascade. Construction sets rules for active task work during that cascade. See [handling of active task work](phases/construction/README.md#unit-wide-upstream-revision). Detailed task-state transitions, dependency invalidation, and shutdown coordination stay release implementation work under DF15 through DF17, not new requester-approval decisions.
+A unit-wide upstream revision still applies the full unit-stage cascade. Construction applies accepted [task transition rules](phases/construction/runtime.md#accepted-task-transition-rules), [dependency invalidation](phases/construction/runtime.md#dependency-invalidation), and [revision shutdown coordination](phases/construction/runtime.md#revision-shutdown-coordination) within that cascade. These rules add no requester-approval decisions.
 
 ### Artifacts and evidence
 
@@ -98,6 +98,6 @@ Use the shared [evidence and checkpoint contract](runtime.md#evidence-and-conten
 
 Keep necessary Git checkpoint objects reachable under the [retention rules](runtime.md#checkpoint-retention). SH72 requires a first-step handoff check and failure when required objects are missing or unreachable. Retention periods and cleanup stay open. An audit event or fingerprint alone does not keep output contents.
 
-Use the shared [interrupted-work recovery rule](runtime.md#interrupted-work-recovery). SH64-SH67 set the lock mechanism, owner-record facts, cross-workspace claims, and manual lock-artifact recovery. Recovery for interrupted state writes remains open under SH87. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
+Use the shared [interrupted-work recovery rule](runtime.md#interrupted-work-recovery). SH64-SH67 set the lock mechanism, owner-record facts, cross-workspace claims, and manual lock-artifact recovery. SH87 accepts [interrupted event-write recovery](runtime.md#interrupted-event-write-recovery); exact append and import mechanisms remain implementation work. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
 
 This document records the shared revision authority. Construction sets the orchestrator's [task execution responsibilities](phases/construction/README.md#implementation). A separate contract is necessary for each other responsibility.

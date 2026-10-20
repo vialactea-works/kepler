@@ -12,7 +12,7 @@ This is not a stage, implementation plan, task graph extension, or separate life
 
 SH54 accepts the normal-transition operations and selector rule in the [CLI reference](../../cli.md). SH58 accepts pause and resume safety. SH62 accepts simple phase-owned effort events and queries. These decisions do not accept this draft's state names, event names, detailed payload schemas, or extra transition guards.
 
-Apply shared identity and record requirements for evidence and approvals. The [Mission contract](../../mission.md) owns mission and local-runtime paths. This draft adds no requester approval gate.
+Apply shared identity and record requirements for evidence and approvals. The [Mission contract](../../mission.md) owns mission and local-runtime paths. This draft adds no requester approval gate. DF14-DF17 accept the labeled rules below, but do not accept the remaining proposal vocabulary or payloads.
 
 ## Scope and identity
 
@@ -58,6 +58,20 @@ The following vocabulary is a proposal for derived views. SH58 does not select t
 For active-scope limits, `running`, `pausing`, `paused`, and `waiting` are all unended attempts. Completion and revision ending release that attempt's active reservation. Reopening invalidates completion immediately but creates no replacement attempt before execution.
 
 Readiness, admission, Activity completion, task completion, and unit-stage completion are distinct. None grants requester approval or delivery authority. Failed commands and local corrections alone do not create attempts.
+
+## Accepted task transition rules
+
+Derive these logical rules from existing task, Activity, Integration, evidence, and revision events. This table selects no public state strings, new event types, or event payloads.
+
+| Boundary | Accepted rule |
+| --- | --- |
+| Admission | Require applicable inputs and satisfied prerequisites. Required predecessor outputs must be integrated. A readiness query does not dispatch work. |
+| Activity execution | Use the fixed Code Generation, Code Validation, and Code Integration route. Bind each occurrence to its task and parent Implementation attempt. |
+| Waiting or internal correction | Keep the relevant unended attempts. An authorized reexecution starts a new Activity attempt. An Integration-only retry keeps the current Integration attempt. |
+| Acceptance | Accept only a current combined candidate that passed required checks under the unit lock. Check current authority and revision state at final acceptance. |
+| Task completion | Require accepted Integration and all task conditions. Keep readiness, admission, Activity completion, Integration acceptance, and task completion distinct. Task completion does not complete Implementation or grant approval. |
+
+Do not add a task-attempt identity or a generic status-setting command. Exact event names and the remaining proposed state vocabulary stay implementation details.
 
 ## Transition guards and results
 
@@ -182,7 +196,7 @@ Validate the records and causal material required by the receiving scope before 
 
 Incomplete, unsupported, or conflicting imports cannot show authoritative current state for scopes they may affect. Block affected state-dependent work until reconciliation shows that the required history is complete. If isolation is unproven, block the larger affected scope. Previously validated history does not prove that missing new control facts cannot change that scope.
 
-Collection and interrupted-import mechanics remain implementation work under the accepted [coordination contract](../../runtime.md#short-scoped-coordination) and SH87. This rule adds no import or handoff command, publication service, storage transaction, or live synchronization protocol.
+Apply the accepted [SH87 journal recovery rules](../../runtime.md#interrupted-event-write-recovery) and existing [coordination contract](../../runtime.md#short-scoped-coordination) to incomplete or conflicting imports. Exact collection and import mechanisms remain implementation work. This rule adds no import or handoff command, publication service, storage transaction, or live synchronization protocol.
 
 ## Revision and retained-scope rules
 
@@ -197,6 +211,26 @@ Keep the accepted return cases separate.
 A new parent can consume applicable results from an older parent. Retained-input assessments reference those original records. They do not reparent them. Reopened Activities still execute and record fresh evidence. Do a new unit completion assessment, followed by Review and Deliver under their contracts.
 
 Never rewrite an admission baseline during correction. New admissions after an upstream revision are separate records, not edits to old baselines. Keep the original unit baseline used for whole-unit Review across these returns. Apply [IE22](../../authoring_progress.md#completed-implementation-decisions) without transferring prior completion to reopened scopes.
+
+## Dependency invalidation
+
+Use existing task-graph edges and evidence applicability to identify affected dependents. Do not infer dependencies from file conflicts or add a dependency engine.
+
+When an input or predecessor output changes, reassess each dependent against its required inputs and actual material. Block affected work when a required prerequisite is invalid or unknown. Preserve valid work and each original evidence binding. Do not reparent evidence or rewrite admissions or fixed baselines.
+
+The orchestrator authorizes corrections and revisions. Use existing Activity return routes for task-local corrections and the shared revision procedure for upstream changes. Do not start a revision cascade without orchestrator authorization. Unrelated commits alone do not invalidate task work.
+
+An authorized unit-wide upstream revision executes its full required downstream cascade, even when outputs are unchanged. Under IE22, invalidate current completion only for affected work or evidence. Complete Review and Deliver again under their contracts. Keep parent-attempt and retained-scope cases distinct. Independent valid work continues.
+
+## Revision shutdown coordination
+
+Use recorded revision authority and existing short scoped coordination to block affected admissions immediately. Reject completion and Integration acceptance from affected old attempts. Do not wait for a long check to finish before establishing this barrier.
+
+Then stop affected workers and reconcile actual effects and locks before replacement work starts. A timeout or missing session does not prove that a worker stopped. End affected attempts and preserve their history. Start new attempts only on reexecution after required upstream stages complete.
+
+Unknown worker stopping, ownership, or effects block affected restart. Independent valid units continue.
+
+Manual lock removal remains available under SH67 after workers stop and effects reconcile. Do not add automatic takeover, timeout success, kill frameworks, public cancellation or force commands, lock-management commands, or proof protocols.
 
 ## Inspection-source facts
 
@@ -214,11 +248,11 @@ Package selectors name original producer contexts. Consuming Validation and Revi
 
 Isolate concurrent writers. During Implementation, the orchestrator dispatches workers and keeps Generation and non-author Validation contexts separate. This model does not select execution topology for other stages. The [Mission contract](../../mission.md#workspace-selection-and-preparation) sets startup bindings and isolation policy.
 
-Apply the accepted [Implementation context rules](implementation.md#admission-and-coordination) under SH69. For shared check resources, use the existing task `verification.method` and apply the [SH70 parallel-execution rules](../../runtime.md#parallel-execution). SH66 continues to set cross-workspace coordination.
+Apply the accepted [Implementation context rules](implementation.md#admission-and-coordination) under SH69. For shared check resources, use the existing task `verification.method` and apply the [SH70 parallel-execution rules](../../runtime.md#parallel-execution). Apply [DF14](../../authoring_progress.md#completed-construction-decisions) for explicit repository-qualified check commands. SH66 continues to set cross-workspace coordination.
 
 Integration reads current unit material only after acquiring its unit lock. Keep that lock through preparation, typechecking, build, full-suite checks, and acceptance. Make sure that the current attempt, revision boundary, authority, actual inputs, and bytes still meet the required conditions before acceptance. Other permitted tasks and units continue.
 
-Task `verification.method` owns planned procedures, setup, fixtures, versions, resources, and isolation. Actual evidence identifies check configuration, executor, commands, conditions, resource versions, results, and retained output. Project-specific check configuration is still DF14. Keep applicable additional checks.
+Task `verification.method` owns planned procedures, setup, fixtures, versions, resources, and isolation. Actual evidence identifies check configuration, executor, commands, conditions, resource versions, results, and retained output. Under [DF14](../../authoring_progress.md#completed-construction-decisions), use repository-native scripts or task targets. Record explicit repository-qualified commands in the existing plan and task verification method. Keep applicable additional checks.
 
 Do not add `verification.environment`, task `coordination`, or dependency-output fields to the graph. A build shows typechecking only when it does that check. Successful process exit alone does not show semantic acceptance or workflow completion.
 
@@ -230,9 +264,9 @@ Supported concurrent workspaces must share effective live coordination for the s
 
 ## Writes, partial effects, and safe resumption
 
-Validate scope, authority, current attempts, inputs, and revision state before effects. Retrying the same journal write keeps its existing domain IDs, event ID, and original bindings. For revisions, retain the authorizing event ID and `revision_id`. This does not define general idempotency or change how callers classify retries.
+Validate scope, authority, current attempts, inputs, and revision state before effects. Apply [SH87](../../runtime.md#interrupted-event-write-recovery) to retries. Keep the original event ID, domain IDs, producer, bindings, and causes. For revisions, retain the authorizing event ID and `revision_id`. This does not define general exactly-once effects or change how callers classify retries.
 
-The shared [short scoped coordination contract](../../runtime.md#short-scoped-coordination) is accepted under SH46 and SH64-SH66. Apply its lock and ownership rules. Exact key encodings, owner-record fields, and finer release protocols remain implementation choices. Interrupted journal-write recovery remains under SH87. SH67 accepts manual unlock recovery. Do not promise general exactly-once execution.
+The shared [short scoped coordination contract](../../runtime.md#short-scoped-coordination) is accepted under SH46 and SH64-SH66. Apply its lock and ownership rules. Exact key encodings, owner-record fields, and finer release protocols remain implementation choices. Follow the accepted [SH87 journal recovery rules](../../runtime.md#interrupted-event-write-recovery). SH67 accepts manual unlock recovery. Do not promise general exactly-once effects.
 
 Keep event-update coordination short and separate from the long unit Integration lock. Coordinate the final attempt guard with candidate acceptance and its recorded result. A concurrent revision must not let an ended worker accept a candidate. Do not hold project-wide coordination through checks.
 
@@ -242,11 +276,11 @@ Under SH58, a pause request blocks new affected work before stopping completes. 
 
 ## Draft boundaries
 
-Accepted shared runtime, Construction, Standard, and [Mission](../../mission.md) contracts are authoritative. This draft proposes remaining Construction state, event, and operation details.
+Accepted shared runtime, Construction, Standard, and [Mission](../../mission.md) contracts are authoritative. DF14-DF17 accept the rules labeled with those IDs in this draft. Other Construction state, event, and operation details remain proposals.
 
 SH58 accepts pause safety. SH62 accepts minimum effort facts and queries. SH63 accepts structured later selections in existing interaction records. SH64-SH66 accept lock and cross-workspace coordination rules. SH67 accepts manual lock recovery.
 
-These decisions do not accept the remaining state vocabulary or event catalog. This draft does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
+DF14-DF17 do not accept the remaining proposed state vocabulary, event catalog, operation details, or payload schemas. This draft does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
 
 Apply the accepted [project selection rules](../../cli.md#project-selection), [scope selectors](../../cli.md#scope-and-selectors), [result envelope](../../cli.md#machine-readable-output), [failure result fields](../../cli.md#failure-and-recovery-rules), [exit-code contract](../../cli.md#exit-codes), and [output stream contract](../../cli.md#output-streams). Apply [MVP result formatting](../../cli.md#human-output). Apply the accepted [evidence recording interface](../../cli.md#kepler-audit-record-evidence), [audit queries](../../cli.md#kepler-audit-list), and [shared lint interface](../../cli.md#kepler-lint).
 

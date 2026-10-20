@@ -81,10 +81,12 @@ A reference does not prove material identity, version, approval, consent, check 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `scope` | Non-empty string. | Behavior, contract, or other material covered by verification. |
-| `method` | Non-empty string. | Exact available command or specified verification procedure, including required fixtures, versions, resources, and isolation conditions. |
+| `method` | Non-empty string. | Exact repository-qualified command or specified verification procedure. Include required fixtures, versions, resources, and isolation conditions. |
 | `expected_result` | Non-empty string. | Observable condition that shows success. |
 
 `method` describes how to run the check, including its setup. `prerequisites` specifies when required external conditions must be available.
+
+Under DF14, use repository-native scripts or task targets. Record exact commands in `plan.md` and the task's existing `verification.method`. Supply commands explicitly. Do not autodetect them, execute arbitrary prose, add configuration files, or add graph fields. A missing command blocks its affected check.
 
 Record expectations here, not actual results. Missing verification infrastructure must have planned coverage under the [verification strategy](implementation-planning.md#verification-strategy).
 

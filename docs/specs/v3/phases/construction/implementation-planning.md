@@ -187,7 +187,9 @@ Plan the lowest test level that proves each behavior. Use unit tests for isolate
 
 Include relevant failures and boundary conditions. State expected results and required fixtures, environments, and resource isolation. Each graph verification object's `method` records its procedure and required setup, including applicable versions, resources, and isolation conditions. Identify any execution permissions required for planned checks. Planning does not grant those permissions.
 
-Identify available project commands and their scope. For missing infrastructure, plan work that makes it available before dependent verification uses it. Do not invent successful results or waive required checks because infrastructure is absent.
+Under DF14, reuse repository-native scripts or task targets. Record each exact repository-qualified command in this strategy and the task's existing `verification.method`. Supply commands explicitly to execution. Do not autodetect commands or add a configuration file. The CLI must not execute arbitrary prose as commands. A missing command blocks its affected check.
+
+Missing future infrastructure does not block unrelated work or greenfield Planning. Plan work that supplies each required command before its check. Do not invent successful results or waive required checks because infrastructure is absent.
 
 Keep the agreed [Activity check duties](README.md#agreed-boundaries):
 
@@ -199,7 +201,7 @@ Integration holds the unit lock through preparation, checks, and acceptance. The
 
 Identify which commands do each required check. A build that omits typechecking does not satisfy that separate duty.
 
-Project check configuration is still implementation work under [DF14](../../authoring_progress.md#mvp-implementation-choices). Keep additional applicable project obligations without selecting the deferred general extra-check policy.
+Keep applicable project check obligations under accepted [DF14](../../authoring_progress.md#completed-construction-decisions). Keep the general extra-check policy deferred under [DF13](../../authoring_progress.md#deferred-decisions). Add no graph fields, command family, registry, or payload schema for check configuration.
 
 This stage states the verification work. Later stages execute it. Planning completion does not show that implementation checks have passed.
 

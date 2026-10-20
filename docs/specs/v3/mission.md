@@ -250,7 +250,7 @@ Do not claim handoff success or resume affected work without required material. 
 
 A handoff must include relevant mission history, authored artifacts, necessary repository objects, and accessible evidence. Copying the mission directory alone may not supply code checkpoints from other repositories.
 
-Validate received history before using it for authority. Keep unsupported, conflicting, or interrupted input for reconciliation. Missing or uncertain history blocks affected work. Widen the blocked scope only when safe isolation cannot be shown.
+Validate received history under the shared [SH87 journal recovery rules](runtime.md#interrupted-event-write-recovery) before using it for authority. Keep unsupported, conflicting, or interrupted input for reconciliation. Missing or uncertain history blocks affected work. Widen the blocked scope only when safe isolation cannot be shown.
 
 On resume:
 
