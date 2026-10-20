@@ -2,7 +2,7 @@
 
 ## Outcome and scope
 
-Make the accepted contracts in [docs/specs/v3/](docs/specs/v3/README.md) available in a release with behavior tests. Include executable CLI operations and Core behavior that other code can use. Also include authored-artifact tools, templates, Construction skills, four native agent definitions, installation resources, and user documents.
+Build a release that implements the specifications in [docs/specs/v3/](docs/specs/v3/README.md). Verify its behavior with tests. Include executable CLI operations and Core behavior that other code can use. Also include authored-artifact tools, templates, Construction skills, four native agent definitions, installation resources, and user documents.
 
 Use the full Standard workflow:
 
@@ -13,15 +13,14 @@ Functional Design -> Quality Requirements -> Implementation Planning
 
 During Implementation, each task follows Code Generation -> Code Validation -> Code Integration. Tasks with no dependency between them can start together when all their dependencies are available. Keep integration for each unit in sequence through candidate preparation, necessary checks, and acceptance.
 
-This is a roadmap for implementation, not a second workflow specification or an approval record. Its checkboxes show work on Kepler itself. They do not replace CLI-owned execution records in a managed Unit of Work.
+This roadmap tracks work on Kepler itself. Its checkboxes do not replace CLI-owned execution records in a managed Unit of Work.
 
-### Specification authority
+### Specification baseline
 
-- Add the behavior in all six accepted stage contracts and all three accepted Activity contracts. Keep FD13, NF12, IP19, IE21, IE24, IE25, IE27, UR16, DL18, and the task graph accepted under IP26.
-- Use the current [authoring register](docs/specs/v3/authoring_progress.md), including full-contract approvals recorded after older passages, when those passages show a proposal. Specification acceptance does not mean approval for an executing unit. It does not show that implementation is done.
-- Apply the complete CLI, Unit of Work, Construction runtime, and installation contracts approved under SH122, SH123, CN23, and SH124. Keep deferred decisions separate.
-- Make each implementation-owned choice in its owning milestone. These choices include event and payload details not specified by accepted contracts, response fields, repository identities, journal protocols, lock release, startup integration, and installation receipts. Record the selected design and its tests. Do not add requester-approval gates for technical encodings.
-- Keep fixed command signatures, accepted state names, and accepted schemas. Illustrative examples do not add schema requirements. Get a requester decision only when a choice changes agreed behavior, authority, evidence, or material scope.
+- Implement all six Standard stages, all three Implementation Activities, and the task graph. Include the CLI, Unit of Work, Construction runtime, and installation contracts.
+- Follow the specified command signatures, state names, artifact schemas, payload requirements, and installation records. Illustrative examples do not add schema requirements.
+- Make unspecified technical choices in their owning milestones. These include payload types, response encodings, repository identities, journal protocols, lock release, startup integration, and installation receipts. Record each design and its tests. Do not add requester-approval gates for technical encodings.
+- Get a requester decision before changing agreed behavior, authority, evidence obligations, or material scope.
 - Make direct Construction entry, existing projects, greenfield repositories, and walking skeletons available. Do not make completed Initialization, Inception, existing application code, or passing application tests entry requirements.
 
 ### Deliberate exclusions
@@ -124,7 +123,7 @@ packages/core/tests/
   integration/
 ```
 
-This is a proposed test layout, not a production resource registry. Add resource files only for dependencies that the tests use.
+Use this test layout as a guide. It is not a production resource registry. Add resource files only for dependencies that the tests use.
 
 | Layer | Responsibility |
 | --- | --- |
@@ -237,7 +236,7 @@ Foundation tasks with no dependency links can start together. Skills and prompts
 **Sources:** [shared runtime](docs/specs/v3/runtime.md), [Construction runtime](docs/specs/v3/phases/construction/runtime.md), SH43-SH51, SH74, SH84, SH87, CN23.
 
 - [ ] M05.1 Give the unchanged ten-field event envelope TypeScript interfaces and runtime validation. Keep envelope and payload versions as independent domains. Their numeric values can match. Keep UTC `Z` timestamps, the source CLI producer/version, journal identity, direct `caused_by` IDs, and phase-owned data.
-- [ ] M05.2 Use Construction's state names, event catalog, and payload requirements approved under CN23. Keep event, attempt, revision, evidence, graph, and task identities distinct. Define unspecified payload types within those requirements. Do not add approval/task-attempt IDs.
+- [ ] M05.2 Implement Construction's state names, event catalog, and payload requirements. Keep event, attempt, revision, evidence, graph, and task identities distinct. Define unspecified payload types within those requirements. Do not add approval/task-attempt IDs.
 - [ ] M05.3 Add the journal adapter at `.kepler/missions/<mission-id>/history/<phase>/<journal-id>.jsonl`. Use one writer per journal. Make each append durable before success. Do not make independent journals share an append lock.
 - [ ] M05.4 Use original event/domain IDs, producer, bindings, causes, and position for same-write retries and deduplication. Record a conflict when content under one ID differs. Keep damaged bytes and uncertain newer facts. Do not truncate history. An older valid prefix is not current truth.
 - [ ] M05.5 Use internal interfaces for validated journal collection/import and causal resolution. Do not add a public import command or synchronization service. Keep original journals, local order, identities, and bindings. Block state-dependent work in each scope when unknown, unsupported, incomplete, or conflicting history may affect it. Do not discard uncertain newer control facts just because their effect is unproven. Keep unaffected scopes available.
@@ -252,9 +251,9 @@ Foundation tasks with no dependency links can start together. Skills and prompts
 **Sources:** [Mission](docs/specs/v3/mission.md), [coordination](docs/specs/v3/runtime.md#short-scoped-coordination), SH64-SH72, SH118-SH121.
 
 - [ ] M06.1 Use typed interfaces for mission creation and workspace preparation. Record the mission UUIDv4, title, and request. Record the selected workflow, repository identities, and selected contexts. Record integration targets, starting commits or explicit no-commit conditions, and the single logical record home.
-- [ ] M06.2 Find and write the smallest callable CLI-owned startup entry needed for first use. The specification selects no mission-create signature. Select this integration as implementation work. Record its actual request/result contract. Connect skills to it. Do not make the creator internal-only.
+- [ ] M06.2 Add the smallest callable CLI-owned startup entry needed for first use. Define its request/result contract within the Mission and CLI requirements. Connect skills to it. Do not make the creator internal-only.
 
-  Do not give agents instructions to edit journals by hand. Do not claim that a new signature was accepted. Add no generic mission registry or workflow engine.
+  Do not give agents instructions to edit journals by hand. Add no generic mission registry or workflow engine.
 - [ ] M06.3 Prepare only selected existing, new, or previous workspaces and selected current/default/other/new branches. Write instructions for explicit preparation of the record home's `.kepler/` marker before project resolution. Do not add an Initialization stage or implicit resolver writes.
 
   Keep the selected workspaces and contexts. Use existing operation authority without a separate request for each preparation step. Keep dirty work, existing paths, and explicit choices. Do not silently stash, reset, switch, move, or make resources again.
@@ -402,7 +401,7 @@ Foundation tasks with no dependency links can start together. Skills and prompts
 
 **Sources:** [installation](docs/specs/v3/installation.md), [setup](docs/specs/v3/cli.md#kepler-setup), SH114, SH116-SH117, SH124.
 
-- [ ] M15.1 Use the installation-generation field names, meanings, and `installation.json` location approved under SH124. Select minimal encodings for generation, compatibility, digest, and managed-resource receipt data not specified by the contract. Keep CLI release, bundle generation, artifact/event formats, and native resource facts distinct. Do not add a host-certification framework.
+- [ ] M15.1 Implement the installation-generation record with its specified field names and meanings at `<Kepler global home>/installation.json`. Select minimal encodings for generation, compatibility, digest, and managed-resource receipt data not specified by the contract. Keep CLI release, bundle generation, artifact/event formats, and native resource facts distinct. Do not add a host-certification framework.
 - [ ] M15.2 Add `kepler setup` without `--force` or bypass options. Resolve symlinks. Select the bundle by explicit override, installed sidecar, then source fallback only when applicable. If override validation or selected-bundle compatibility fails, return a failed result. Do not use silent fallback.
 - [ ] M15.3 Do compatibility and full-bundle-digest checks before writes. Install compatible v3 templates/guidelines and only missing default settings. Change existing files only when valid ownership records and matching digests show unmodified installer-managed content.
 - [ ] M15.4 Keep settings, unknown/user-modified resources, project data, and unsupported history. Necessary-path conflicts cause failure without merging or overwriting. After partial failure, keep the prior usable generation. Record known effects. Remove only operation-owned temporary/partial material.
