@@ -94,7 +94,9 @@ The event names, derived states, operation details, and phase-specific payload s
 
 SH62 does not select event names, detailed payloads, projection schemas, or one event per field. SH63 carries later structured effort selections in the recorded interaction; it adds no separate effort event.
 
-Apply the shared identity and record requirements for evidence and approval. Do not override SH51 or add a second `material` array or structured reference sidecar. Bind repository checkpoints to the owning phase's actual work, including workspace bindings, stage outputs, admissions, and Integration results. Do not parse reference strings for bindings.
+Apply the shared identity and record requirements for evidence and approval. Under SH84, use existing artifact UUIDs and execution-scope IDs in phase-owned event data. Bind actual content versions or repository checkpoints where the owning contract requires them. Do not require artifact bindings on unrelated events. Keep SH51 reference strings opaque.
+
+Do not infer identity or version from titles, paths, or arbitrary strings. Add no generic relationship graph, registry, edge catalog, or sidecar. Do not add a second `material` array or fields to the shared envelope, frontmatter, or task graph. Bind repository checkpoints to the owning phase's actual work, including workspace bindings, stage outputs, admissions, and Integration results.
 
 | Payload key | Required meaning |
 | --- | --- |
@@ -174,11 +176,13 @@ Replay does not execute checks, recreate approval, dispatch workers, restore loc
 
 ### History collection and import
 
+At the first handoff step, apply the [Mission checkpoint preflight](../../mission.md#evidence-transfer-and-recovery). It checks only required commits and objects in their actual repositories. A missing or unreachable object fails the handoff. Do not claim handoff success or resume affected work without required material. Do not automatically publish, pin, create references, fetch, copy material, or make commits to repair failure. Keep the failure scoped and retain available work, history, and evidence.
+
 Validate the records and causal material required by the receiving scope before treating transferred history as usable. Keep received bytes, journal identities, local order, causes, producer values, and original bindings after failed or interrupted imports. Report the failed or uncertain import. Do not claim a completed handoff.
 
 Incomplete, unsupported, or conflicting imports cannot show authoritative current state for scopes they may affect. Block affected state-dependent work until reconciliation shows that the required history is complete. If isolation is unproven, block the larger affected scope. Previously validated history does not prove that missing new control facts cannot change that scope.
 
-Collection and interrupted-import mechanics remain implementation work under the accepted [coordination contract](../../runtime.md#short-scoped-coordination) and SH87. This rule adds no import command, storage transaction, or live synchronization protocol.
+Collection and interrupted-import mechanics remain implementation work under the accepted [coordination contract](../../runtime.md#short-scoped-coordination) and SH87. This rule adds no import or handoff command, publication service, storage transaction, or live synchronization protocol.
 
 ## Revision and retained-scope rules
 
@@ -210,7 +214,7 @@ Package selectors name original producer contexts. Consuming Validation and Revi
 
 Isolate concurrent writers. During Implementation, the orchestrator dispatches workers and keeps Generation and non-author Validation contexts separate. This model does not select execution topology for other stages. The [Mission contract](../../mission.md#workspace-selection-and-preparation) sets startup bindings and isolation policy.
 
-SH66 sets cross-workspace coordination. Exact allocation mechanisms remain implementation choices. Branch layout remains under SH69. Shared test-resource isolation remains under SH70.
+Apply the accepted [Implementation context rules](implementation.md#admission-and-coordination) under SH69. For shared check resources, use the existing task `verification.method` and apply the [SH70 parallel-execution rules](../../runtime.md#parallel-execution). SH66 continues to set cross-workspace coordination.
 
 Integration reads current unit material only after acquiring its unit lock. Keep that lock through preparation, typechecking, build, full-suite checks, and acceptance. Make sure that the current attempt, revision boundary, authority, actual inputs, and bytes still meet the required conditions before acceptance. Other permitted tasks and units continue.
 

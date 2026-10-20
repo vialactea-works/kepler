@@ -136,6 +136,8 @@ Two independent tasks can share a broker namespace and interfere with each other
 
 The orchestrator and workers interpret these instructions. They do not create graph edges or allocate locks automatically. Separate Git workspaces alone do not isolate shared external resources.
 
+For check-specific setup and isolation, use the existing `verification.method`. When needed, use disposable instances, distinct namespaces, temporary directories, or nonconflicting ports. If a resource cannot be isolated, serialize only the checks that use it or report the blocker. Unrelated work and tests continue. Existing `guidance` and `prerequisites` keep their scopes. Add no graph fields or automatic resource allocation.
+
 ## Validation rules
 
 - Parse strict JSON. Reject duplicate object keys, comments, and trailing commas.

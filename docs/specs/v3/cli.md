@@ -346,7 +346,9 @@ Read one typed JSON request object from stdin. Validate it against the owning ph
 
 Use one `inputs` array for the checked material and other relevant inputs. Do not add a separate `material` field to this request. Each entry has `reference` and `purpose`. Treat `reference` as opaque caller-supplied text under SH51. Preserve valid text without parsing it as a path or URI, normalizing it, or resolving it automatically. Existing field and non-empty text rules still apply.
 
-For repository material, bind the actual repository and checkpoint set using facts from the owning phase's work. These include workspace bindings, stage output checkpoints, task admissions, and Integration results. The CLI does not infer bindings by parsing reference strings. Apply the shared [evidence record requirements](runtime.md#evidence-and-approval-bindings). Detailed phase-owned payload types and event catalog details remain implementation work.
+For repository material, bind the actual repository and checkpoint set using facts from the owning phase's work. These include workspace bindings, stage output checkpoints, task admissions, and Integration results. The CLI does not infer bindings by parsing reference strings.
+
+Under SH84, phase-owned event data uses existing artifact UUIDs and applicable execution-scope IDs. Bind actual artifact versions or checkpoints where the owning contract requires them. Do not add shared envelope or task-graph fields. Apply the shared [evidence record requirements](runtime.md#evidence-and-approval-bindings). Detailed phase-owned payload types and event catalog details remain implementation work.
 
 This fragment shows only the accepted `inputs` structure, not a complete evidence request:
 
@@ -605,11 +607,13 @@ Compare affected evidence and artifacts with revised contracts under the shared 
 
 Apply the accepted [SH74 policy](runtime.md#record-portability) to authored artifacts, event journals, derived views, live coordination data, and evidence. Version authoritative history. Keep projections and live runtime coordination data unversioned.
 
-Give relevant journals, necessary causal records, checkpoint material, and accessible evidence for cross-checkout or cross-machine handoff. Missing necessary material blocks only the affected handoff or work. Apply existing recovery and revision rules. Do not infer success or new consent from history transfer.
+Give relevant journals, necessary causal records, checkpoint material, and accessible evidence for cross-checkout or cross-machine handoff. At the first handoff step, apply the [Mission checkpoint preflight](mission.md#evidence-transfer-and-recovery). It checks only required objects in their actual repositories. Missing or unreachable objects fail the affected handoff.
+
+Do not claim success or resume affected work without required material. Do not automatically repair a failed preflight. Keep the failure scoped and retain available work, history, and evidence. Apply existing recovery and revision rules. Do not infer success or new consent from history transfer.
 
 Current durable journals and unfinished work can help with recovery in the same checkout. No new commit is necessary solely for recording an event, dispatching a worker, or resuming a session. Keep existing checkpoint and unit Integration lock requirements.
 
-This policy does not accept proposed CLI syntax or set publication and synchronization protocols.
+This policy adds no handoff command and does not select an automatic publication or synchronization protocol.
 
 ## Failure and recovery rules
 
@@ -677,7 +681,7 @@ Accepted command placements, structured-output default, and typed lifecycle writ
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-SH57-SH67 accept their named interfaces and policy boundaries. Exact request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values remain implementation details. SH69-SH70, SH72, SH84-SH85, SH87, and DF14-DF17 remain implementation choices.
+SH57-SH67 accept their named interfaces and policy boundaries. Exact request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 remain implementation choices.
 
 SH51 and SH53-SH67 are settled. The [Mission contract](mission.md) sets the existing SH45 storage paths, SH68 workspace policy, SH86 retained-evidence locations, and SH64-SH66 coordination domains. The [runtime contract](runtime.md#short-scoped-coordination) sets the lock and owner-record requirements. Exact key and record details remain implementation choices.
 

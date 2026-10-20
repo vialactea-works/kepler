@@ -83,9 +83,13 @@ Apply shared metadata to optional supporting Markdown documents, using `supporti
 
 The orchestrator applies the agreed [admission rules](../../runtime.md#task-admission-and-baselines). Record the current repository-qualified unit integration set containing required predecessor outputs. Keep that admitted baseline set fixed.
 
+Respect each repository's recorded startup strategy and Integration target. For isolated parallel writers, use separate task branches or worktrees based on their fixed admission baselines. Keep each task context through Code Generation, Code Validation, and Code Integration. Do not require per-Activity branches or a default branch model. Do not replace an explicitly selected context, force branch-name grammar, or create resources solely because of a suggestion. Preserve greenfield/no-commit startup and existing Mission authority and preparation rules.
+
 Supply each worker with its task identity, current definition, relevant contracts, baseline, attempt scope, and verification obligations. Include prerequisite conditions and coordination constraints.
 
-Start independent ready task implementations concurrently. Scoped coordination is necessary for shared-file or resource conflicts. They do not show an output dependency by themselves.
+Start independent ready task implementations concurrently. Scoped coordination is necessary for shared-file or resource conflicts. Put check-specific setup and isolation in the existing task `verification.method` under [shared-resource instructions](task-graph.md#shared-file-and-resource-instructions). Separate worktrees do not isolate databases, queues, ports, or test data.
+
+If a resource cannot be isolated, serialize only checks that use it or report the blocker. Unrelated work and tests continue. This adds no graph field or global gate. Shared-file or resource conflicts do not show an output dependency by themselves.
 
 Global coordinator `HEAD` agreement, shared admission commits, unrelated clean workspaces, and completed task batches are not necessary. Later unit integration commits alone do not invalidate running tasks.
 

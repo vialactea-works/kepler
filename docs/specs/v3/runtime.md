@@ -45,9 +45,9 @@ Git can transfer a committed history snapshot made available to the receiver. It
 
 Same-checkout recovery can use current durable journals and unfinished work that the [recovery rule](#interrupted-work-recovery) says to keep.
 
-Before a cross-checkout or cross-machine handoff completes, make the history relevant to the receiving scope available. Include necessary causal records, checkpoint material, and accessible evidence.
+Before a cross-checkout or cross-machine handoff completes, make the history relevant to the receiving scope available. Include necessary causal records, checkpoint material, and accessible evidence. At the first handoff step, apply the [Mission checkpoint preflight](mission.md#evidence-transfer-and-recovery).
 
-Missing necessary records, checkpoint objects, or evidence block only the affected handoff or work. Use existing recovery and revision rules to resolve missing material. Do not infer successful completion or recreate requester approval.
+Missing necessary records, checkpoint objects, or evidence block only the affected handoff or work. A missing or unreachable required checkpoint fails the handoff; do not claim success or resume affected work without its material. The failure grants no repair authority. Existing permissions still govern separate Git operations and normal task-worktree or candidate preparation. Do not infer successful completion or recreate requester approval.
 
 History transfer does not start workers, restore locks, or grant new consent. Before you resume this work, make sure that its assignment is current. Make sure that no earlier worker is active on the same work. A stale snapshot cannot show that no newer event or live lock exists.
 
@@ -55,13 +55,13 @@ History transfer does not start workers, restore locks, or grant new consent. Be
 
 Keep secrets out of versioned records. Journals record necessary workflow facts, not full session transcripts.
 
-Keep necessary evidence content, not only its reference or fingerprint. Keep necessary Git checkpoint objects reachable through their references. Make necessary references and objects available to the receiver. Names and commit IDs alone do not keep material.
+Keep necessary evidence content, not only its reference or fingerprint. Keep necessary Git checkpoint objects reachable through existing references in their repositories. Existing retained references, including ordinary branches or tags, can satisfy this rule. A commit ID alone does not keep an object. Apply the [Mission handoff preflight](mission.md#evidence-transfer-and-recovery).
 
 Version-control policy does not authorize publication or other delivery operations.
 
 ### Implementation boundary
 
-The [Mission contract](mission.md#durable-layout) sets mission-history and local-runtime paths. SH43 still permits disposable projections, but selects no persisted views directory. Do not add a substitute cache tree. Journal collection, synchronization, and checkpoint publication mechanics stay implementation choices.
+The [Mission contract](mission.md#durable-layout) sets mission-history and local-runtime paths. SH43 still permits disposable projections, but selects no persisted views directory. Do not add a substitute cache tree. Journal collection and synchronization mechanics stay implementation choices. SH72 requires the Mission handoff preflight and forbids automatic publication or repair as a response to a failed handoff. SH85 excludes dedicated checkpoint retention references from the MVP.
 
 Apply the accepted [lock requirements](#short-scoped-coordination) and Mission coordination paths. Exact key and owner-record details remain implementation choices. Retention periods and cleanup stay [deferred](authoring_progress.md#deferred-decisions).
 
@@ -347,11 +347,17 @@ Task starts and progress records must not depend on shared admission commits or 
 
 Each task records its actual starting inputs. Do not compare them with a changing coordinator `HEAD`.
 
-Workflow event writes and derived views must not prevent concurrent work. Keep event-update coordination short. Isolation is necessary for test resources when concurrent runs could interfere.
+Workflow event writes and derived views must not prevent concurrent work. Keep event-update coordination short.
+
+Separate Git worktrees do not isolate databases, queues, ports, or test data. Use disposable instances, distinct namespaces, temporary directories, or nonconflicting ports where needed. Put check-specific setup and isolation in the existing task `verification.method`. If a resource cannot be isolated, serialize only the checks that use it or report the blocker. Unrelated work and tests continue.
+
+Existing task guidance and prerequisites keep their scopes. Add no graph fields, automatic allocation, environment schema, resource registry, TestRun identity, or global test gate. Keep required Validation and Integration checks, and preserve DF14 for project-specific Integration configuration.
 
 Construction's [integration lock](phases/construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current repository-qualified checkpoint set, candidate preparation, checks, and acceptance across required repositories. This lock covers long-running checks. It is not a global agent, task admission, or test gate.
 
-Use the [Mission contract](mission.md#workspace-selection-and-preparation) for startup workspace choices and isolation requirements. SH66 sets shared-checkout coordination. Branch layouts and shared test-resource isolation remain implementation choices under SH69 and SH70.
+Use the [Mission contract](mission.md#workspace-selection-and-preparation) for per-repository startup strategies and Integration targets. Under SH69, isolated parallel task writers use separate task branches or worktrees from fixed admission baselines. Keep each task context through its Activity sequence. Do not impose per-Activity branches, a default branch model, branch-name grammar, or replacement of an explicitly selected context.
+
+Under SH70, put check-specific setup in the existing task `verification.method`. Apply the resource isolation and scoped serialization rules above. SH66 continues to govern shared-checkout coordination.
 
 ### Short scoped coordination
 
@@ -458,17 +464,21 @@ Mission creation records the selected workflow in its owning phase journal. Cons
 
 ## Traceability and revision outputs
 
-Execution records must refer to the artifacts and units they concern. The CLI generates artifact IDs as UUIDv4 values with cross-project uniqueness and stores them in full lowercase hyphenated form. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions).
+Use existing artifact UUIDs to identify artifacts and existing execution-scope IDs in phase-owned event data to identify applicable scopes. Bind actual content versions or repository checkpoints where the owning contract requires them. An artifact UUID identifies the artifact, not its content version. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions).
 
-Use the shared [evidence and approval bindings](#evidence-and-approval-bindings) for checkpoint and material references. Phase-specific relationship details and payload types remain implementation work under these shared record requirements.
+Keep caller-supplied material references opaque under SH51. Do not infer artifact identity or version from titles, paths, or arbitrary strings. Do not add a generic relationship graph, registry, edge catalog, or parallel sidecar. Do not add fields to the shared envelope, frontmatter, or task graph. Do not require artifact bindings on unrelated events.
+
+Detailed phase-owned payload schemas remain implementation work. Use the shared [evidence and approval bindings](#evidence-and-approval-bindings).
 
 ### Checkpoint retention
 
-Keep each necessary checkpoint commit reachable through a retained reference in its repository. A commit identifier stored in JSON alone does not keep the commit.
+Keep each necessary checkpoint commit reachable through an existing retained reference in its repository. Existing retained references, including ordinary branches or tags, can satisfy this rule. A commit identifier stored in JSON alone does not keep the commit.
+
+The MVP does not create dedicated checkpoint retention references or reserve a checkpoint-specific Git reference namespace. Use existing commit objects and retained repository history. This policy does not change required checkpoint, evidence, approval, or attempt bindings.
 
 Git keeps committed repository material while the necessary objects stay available. External environments, ignored outputs, and separate evidence logs must have their own retention rules.
 
-Audit events and content fingerprints do not keep artifact contents by themselves. Apply the accepted [record-portability policy](#record-portability) to journals, local runtime data, and evidence content. Retention periods and cleanup are deferred. Checkpoint-reference publication and external evidence storage remain implementation choices.
+Audit events and content fingerprints do not keep artifact contents by themselves. Apply the accepted [record-portability policy](#record-portability) to journals, local runtime data, and evidence content. SH72 requires the handoff preflight and forbids automatic publication or repair of missing objects as a response to a failed handoff. Retention periods and cleanup remain deferred. External evidence storage details remain implementation choices.
 
 An interrupted attempt may have no output checkpoint. Its record must not claim a completed snapshot. Follow the shared [interrupted-work recovery rule](#interrupted-work-recovery).
 
@@ -480,9 +490,9 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Exact lock-key encoding, owner-record field names and token encoding, and finer release protocols remain implementation choices. SH64-SH66 accept the lock mechanism, minimum ownership facts, and cross-workspace coordination rules. The [Mission contract](mission.md#local-storage-and-concurrency) sets the local paths. SH67 accepts manual lock-artifact removal under the recovery limits.
 - Detailed phase-owned evidence and approval payload types beyond the shared record requirements. Material reference strings follow SH51. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
-- Traceability relationship formats, checkpoint reference names and publication, external evidence-store locations, retention periods, and cleanup rules.
-- Detailed workspace allocation, branch layouts, and shared test-resource isolation within the accepted [Mission contract](mission.md).
-- Journal collection, transfer, and publication mechanics under the accepted [record-portability policy](#record-portability) and [Mission contract](mission.md).
+- External evidence-store locations remain implementation choices. Retention periods and cleanup remain deferred.
+- Detailed workspace allocation mechanisms that follow SH69 and the accepted [Mission contract](mission.md).
+- Journal collection and transfer mechanics under the accepted [record-portability policy](#record-portability) and [Mission contract](mission.md). SH72 does not add automatic checkpoint publication or repair.
 
 ## Inspiration
 

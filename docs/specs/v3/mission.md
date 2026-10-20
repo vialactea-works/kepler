@@ -151,7 +151,7 @@ Resolve these choices before the first stage starts:
 | Starting point | The selected reference and resolved commit for each repository, or its explicit no-commit condition. |
 | Record home | The one working tree that owns durable mission records. |
 
-For isolated code changes, propose a new worktree and branch from the selected base. The requester can choose an existing context. Do not create resources merely because they are the suggested default.
+Respect each repository's recorded startup strategy and Integration target. Propose a new branch and worktree from the selected base for isolated code changes. The requester can choose an existing context. Do not force a default branch model or branch-name grammar. Do not replace selected contexts or create resources solely because of a suggestion.
 
 A default branch can supply the starting base. Direct edits to that branch require an explicit selection. Do not guess `main`, `master`, or an implicit previous branch.
 
@@ -205,7 +205,7 @@ Coordinate shared writable Integration targets by actual identity in the code re
 
 All supported concurrent participants must share effective coordination for resources they can mutate. If safe ownership cannot be established, do not reuse that working context. Choose isolation or resolve the ownership conflict.
 
-A mission workspace does not force workers into one checkout. Isolate concurrent writers and interfering check resources. Keep Generation and independent Validation contexts separate.
+A mission workspace does not force workers into one checkout. Isolate concurrent writers and interfering check resources under the shared [parallel-execution rules](runtime.md#parallel-execution). Keep Generation and independent Validation contexts separate.
 
 Use the shared [short scoped coordination contract](runtime.md#short-scoped-coordination). Keep the existing long unit Integration lock through candidate preparation, required checks, and acceptance. Do not make either lock a global mission, project, or repository test gate.
 
@@ -242,7 +242,11 @@ Keep authoritative journals and suitable authored artifacts versioned in the rec
 
 Separate writer journals remain permitted. Preserve event identities, originating journal identities, local order, original producer values, causes, attempts, and material bindings. Do not create a timestamp-based global order.
 
-Keep required checkpoint commits reachable through retained references in each repository. A JSON commit reference alone does not keep its objects. Reference naming and publication mechanisms remain under their existing decisions.
+Keep required checkpoint commits reachable through references in each repository. Existing retained references, including ordinary branches or tags, can satisfy this rule. A JSON commit reference alone does not keep its objects.
+
+At the first step of a handoff, check only required checkpoint commits and objects in their actual repositories. Confirm that each required object exists and is reachable through an existing reference. If an object is missing or unreachable, fail the handoff.
+
+Do not claim handoff success or resume affected work without required material. Do not automatically publish, pin, create references, fetch, copy material, or make commits to repair failure. Keep the failure scoped and retain available work, history, and evidence. This check does not scan unrelated repositories. It adds no custom reference namespace or retention mechanism.
 
 A handoff must include relevant mission history, authored artifacts, necessary repository objects, and accessible evidence. Copying the mission directory alone may not supply code checkpoints from other repositories.
 
@@ -287,7 +291,9 @@ Retention periods, archive operations, and automatic cleanup remain outside this
 
 This contract settles policy, not interfaces or mechanisms. This batch selects no mission-create command. SH54 selects `--mission <mission-id>` when a mission-scoped operation lacks unit context; unit-scoped operations use unique recorded membership. SH59 accepts the full unit-create interface in [the CLI reference](cli.md#kepler-workflow-construction-unit-create).
 
-Event payload schemas and journal transactions remain implementation choices. Material references follow SH51 and do not supply repository or checkpoint bindings by themselves. Lock directories, owner-record facts, and cross-workspace coordination follow SH64-SH66. Exact key encodings, claim formats, and finer release protocols remain implementation choices. Branch allocation, checkpoint reference names, and publication remain under their existing decisions. Retention and cleanup remain separate.
+Event payload schemas and journal transactions remain implementation choices. Material references follow SH51 and do not supply repository or checkpoint bindings by themselves. Lock directories, owner-record facts, and cross-workspace coordination follow SH64-SH66. Exact key encodings, claim formats, and finer release protocols remain implementation choices.
+
+SH69 governs selected branch and worktree contexts. SH72 governs handoff preflight and failure. SH85 excludes dedicated checkpoint retention references from the MVP. Retention periods and cleanup remain deferred.
 
 Unit-based existing operations may resolve a mission from unique recorded membership. Mission-aware queries must handle unbound units explicitly. This Mission contract added no `--mission`, `--repo`, batch, or format selector. SH54 later adds `--mission <mission-id>` only when a mission-scoped operation lacks unit context. Unit-based operations do not need that selector. This extension does not change diff-package signatures or existing audit-list/show signatures.
 

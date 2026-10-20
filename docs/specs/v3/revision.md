@@ -96,7 +96,7 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 
 Use the shared [evidence and checkpoint contract](runtime.md#evidence-and-content-checkpoints) for checkpoint and material references. The shared runtime sets attempt and revision identities and required evidence and approval records. SH51 accepts opaque caller-supplied material-reference strings. Bind actual repository checkpoints and evidence through recorded workspace and operation facts, not by parsing those strings. Phase-owned payload types and JSON event catalogs remain implementation work under their owning contracts.
 
-Keep necessary Git checkpoint objects reachable under the [retention rules](runtime.md#checkpoint-retention). Detailed retention stays open. An audit event or fingerprint alone does not keep output contents.
+Keep necessary Git checkpoint objects reachable under the [retention rules](runtime.md#checkpoint-retention). SH72 requires a first-step handoff check and failure when required objects are missing or unreachable. Retention periods and cleanup stay open. An audit event or fingerprint alone does not keep output contents.
 
 Use the shared [interrupted-work recovery rule](runtime.md#interrupted-work-recovery). SH64-SH67 set the lock mechanism, owner-record facts, cross-workspace claims, and manual lock-artifact recovery. Recovery for interrupted state writes remains open under SH87. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
 
