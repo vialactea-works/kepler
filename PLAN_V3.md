@@ -46,13 +46,36 @@ The starting point is commit `e7ccbb6` on `wt/feat-kepler-v3-worktree-20261020`.
 | Area | Existing implementation | Planned treatment |
 | --- | --- | --- |
 | Workspace | Two Bun-managed TypeScript packages: `packages/core` and `packages/cli`. | Keep both packages. Do not add a package only for architectural layers. |
-| Core | Settings, global/project paths, and safe legacy-directory copying. | Keep public behavior. Add v3 domain rules, application interfaces, and use cases that other code can use. Do not treat legacy-directory copies as converted artifacts. |
-| CLI | NestJS/`nest-commander`, `setup`, and legacy `workbench` operations. | Use existing command/provider wiring and output seams. Add the v3 tree and result contracts. The legacy workbench success does not show v3 coverage. |
+| Core library | Settings, global/project paths, and safe legacy-directory copying. | Keep public behavior. Add only reusable, phase-independent v3 types, pure rules, and contracts. Do not treat legacy-directory copies as converted artifacts. |
+| CLI | NestJS/`nest-commander`, `setup`, and legacy `workbench` operations. | Use existing command/provider wiring and output seams. Own v3 commands, Mission and Construction operations, and their adapters. The legacy workbench success does not show v3 coverage. |
 | Runtime seams | Typed filesystem, process, Git, setup, and output interfaces already exist. | Use seams that have the necessary contracts. Replace legacy state assumptions. Do not use them as v3 truth. |
 | Markdown | Custom frontmatter parsing and legacy artifact/body checks. | Use `remark` and `remark-frontmatter` for v3 Markdown processing. |
 | Resources | Legacy templates and skills. No repository-owned four-role v3 agent set. | Write all v3 resources from accepted contracts. |
 | Tests and release | Vitest tests, subprocess checks, and shell smoke scripts for installer, standalone binary, and packed Core. | Keep useful behavior tests. Use the behavior boundary, not the folder name, to select a test project. Replace smoke scripts with full integration/E2E tests. |
 | Scripts | `scripts/check-versions.mjs`. | Use TypeScript for this script. Update all callers. |
+
+### Core library and CLI ownership
+
+Keep the existing two packages. `packages/cli` may depend on `packages/core`; Core must not depend on the CLI, NestJS, or command/output adapters. Keep new Core domain rules and use cases independent of host APIs. Do not put every pure rule in Core: phase-specific Mission and Construction policy remains with the CLI bounded contexts. Keep effects behind narrow typed contracts and in operation-specific adapters. Do not add a package for an architectural layer. These assignments guide implementation; the accepted specifications remain authoritative for behavior. See [the M01 package map](docs/specs/v3/implementation-map.md).
+
+| Milestone | Core library (`packages/core`) | CLI and non-package resources |
+| --- | --- | --- |
+| M01 | Keep reusable Core exports and their public-contract checks. | Establish CLI application/adapter seams and test the executable boundaries. |
+| M02 | Own shared artifact types and phase-independent metadata parsing and validation. | Own repository-scoped artifact operations and stage-specific checks. Keep templates as authored resources. |
+| M03 | Add only generic JSON helpers when another client needs them. | Own the Construction task-DAG format, validation, and authored graph operations. |
+| M04 | Keep CLI and host behavior out of Core. | Own command parsing, result reporting, selectors, UUID/Git-author commands, and project resolution. |
+| M05 | Own phase-independent event-envelope types and pure shared rules. | Own phase payloads, journals, replay, projections, and history operations. |
+| M06 | Expose only phase-neutral reusable types or pure helpers. | Own Mission operations, record-home/workspace policy, coordination, and their effects. |
+| M07 | Add shared public contracts only when they serve non-CLI clients. | Own audit commands, recording rules, and query projections. |
+| M08 | Reuse shared artifact and metadata contracts. | Own unit management and Construction query behavior. |
+| M09 | Keep Standard lifecycle policy out of Core. | Own stage operations, transitions, and completion guards. |
+| M10 | Keep task and Activity lifecycle policy out of Core. | Own admission, Activity execution, check coordination, and Integration. |
+| M11 | Keep revision and recovery policy out of Core. | Own revision, pause/resume, recovery, and their coordination. |
+| M12 | Do not add Git or diff-package adapters to Core. | Own source-bound Git diff-package operations and effects. |
+| M13 | Keep skill behavior on published CLI/library contracts. | Keep skills as resources; they guide work and do not become runtime authority. |
+| M14 | Keep agent roles and prompts out of Core. | Keep agent definitions as resources that use the accepted CLI operations. |
+| M15 | Keep the published Core API and package artifacts compatible. | Own CLI setup/install operations and versioned bundle resources. |
+| M16 | Verify public Core behavior, exports, and packed-consumer compatibility. | Verify CLI behavior, end-to-end workflows, and distribution. |
 
 ## Engineering requirements for all milestones
 
@@ -61,7 +84,7 @@ The starting point is commit `e7ccbb6` on `wt/feat-kepler-v3-worktree-20261020`.
 1. Write runtime code, tests, executable fixtures, helpers, and development scripts in TypeScript. Do not write hand-coded `.js` or `.mjs` files, including generated test-consumer fixtures. Use `.ts` for the existing version-check script.
 2. Use the repository's ESM `.js` import specifiers in TypeScript where its compiler setup uses them. Keep these specifiers in TypeScript source. Do not make authored JavaScript files for them. Keep compiler output as a generated compilation/package artifact.
 3. Use interfaces extensively at application and infrastructure boundaries. Give each use case an inbound contract. Give it narrow outbound contracts for artifacts, journals, Git, workspaces, coordination, checks, filesystem access, identifiers, time, and output. Give collaborators to use cases instead of making concrete implementations in use cases.
-4. Do not put Nest, Commander, filesystem APIs, process libraries, or host SDKs in domain rules or application use cases. Make CLI handlers translate requests and give results. Make adapters do effects. Set dependencies toward the application core, which other code can use.
+4. Do not put Nest, Commander, filesystem APIs, process libraries, or host SDKs in domain rules or application use cases. Make CLI handlers translate requests and give results. Make adapters do effects. Direct dependencies toward domain/use-case contracts. The application core is an architectural boundary; it does not mean every use case belongs in the `packages/core` library.
 5. Use existing ports when their contracts agree. Name interfaces by domain responsibility, such as `Journal`, `Workspace`, or `CheckRunner`. Do not add mechanical `I`/`Port` suffixes. Do not add a universal repository, service locator, or plugin registry.
 6. Supply in-memory or deterministic implementations for isolated tests. Add shared public-contract tests for replaceable adapters. Do compile-time checks for exported types. Do runtime checks too.
 7. Pin dependency versions. Keep package manifests, exports, Bun compilation, and the text `bun.lock` current. Keep the no-code-comments convention.
