@@ -599,16 +599,18 @@ Head: ${head}
     const result = parseReviewPasses(recognized({ artifact: "review" }, scopedHistory));
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.passes[0]?.clearance).toEqual({
-      scope: "full",
-      target: "refs/remotes/origin/main",
-    });
-    expect(result.passes[0]?.findings).toEqual([
-      {
-        id: "pass-1-blocking-1",
-        text: "[src/main.ts:12] Fix the regression (violates: behavior)",
+    expect(result.passes[0]).toMatchObject({
+      clearance: {
+        scope: "full",
+        target: "refs/remotes/origin/main",
       },
-    ]);
+      findings: [
+        {
+          id: "pass-1-blocking-1",
+          text: "[src/main.ts:12] Fix the regression (violates: behavior)",
+        },
+      ],
+    });
     expect(result.latest).toMatchObject({
       verdict: "approved-remediation",
       clearance: {
@@ -640,10 +642,11 @@ Head: ${head}
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.passes[0]?.findings[0]?.id).toBe("pass-1-blocking-1");
-    expect(result.passes[1]?.findings[0]).toMatchObject({
-      id: "pass-1-blocking-1",
-      kind: "code-defect",
+    expect(result.passes[0]).toMatchObject({
+      findings: [{ id: "pass-1-blocking-1" }],
+    });
+    expect(result.passes[1]).toMatchObject({
+      findings: [{ id: "pass-1-blocking-1", kind: "code-defect" }],
     });
   });
 

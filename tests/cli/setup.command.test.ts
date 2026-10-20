@@ -9,37 +9,33 @@ import {
   RESULT_OUTPUT_SINK,
   ResultReporter,
 } from "../../packages/cli/src/cli/nest/result-reporter.js";
-import { SetupService } from "../../packages/cli/src/cli/setup.service.js";
+import {
+  SetupService,
+  type Setup,
+  type SetupFiles,
+} from "../../packages/cli/src/cli/setup.service.js";
 import {
   SETUP_BUNDLE_LOCATOR,
-  SETUP_FILE_SYSTEM_HOME,
-  type SetupFileSystemHome,
+  SETUP_FILES,
+  SETUP_OPERATION,
 } from "../../packages/cli/src/cli/setup-runtime.js";
 
 type Event =
   | { readonly type: "stdout" | "stderr"; readonly value: string }
   | { readonly type: "exitCode"; readonly value: 0 | 1 | 2 };
 
-function makeFileSystem(
-  overrides: Partial<SetupFileSystemHome> = {},
-): SetupFileSystemHome {
+function makeFiles(overrides: Partial<SetupFiles> = {}): SetupFiles {
   return {
-    ensureKeplerHome: () => {},
-    existsSync: (path) =>
-      path === "/bundle/templates" || path === "/bundle/guidelines",
-    copyDirectory: () => {},
-    readdirRecursive: () => ["plan.md", "nested/requirements.md"],
-    isFile: () => true,
-    writeFileSync: () => {},
-    guidelinesDir: () => "/kepler/guidelines",
-    settingsPath: () => "/kepler/settings.yaml",
-    templatesDir: () => "/kepler/templates",
+    ensureHome: () => {},
+    copyTemplates: () => ["nested/requirements.md", "plan.md"],
+    copyGuidelineManifests: () => {},
+    writeDefaultSettings: () => {},
     ...overrides,
   };
 }
 
 async function createSetupHarness(options?: {
-  fileSystem?: SetupFileSystemHome;
+  files?: SetupFiles;
   bundleLocator?: () => string;
 }) {
   const [{ SetupCommand }, { SetupModule }] = await Promise.all([
@@ -50,8 +46,8 @@ async function createSetupHarness(options?: {
   const module = await Test.createTestingModule({
     imports: [SetupModule],
   })
-    .overrideProvider(SETUP_FILE_SYSTEM_HOME)
-    .useValue(options?.fileSystem ?? makeFileSystem())
+    .overrideProvider(SETUP_FILES)
+    .useValue(options?.files ?? makeFiles())
     .overrideProvider(SETUP_BUNDLE_LOCATOR)
     .useValue(options?.bundleLocator ?? (() => "/bundle"))
     .overrideProvider(RESULT_OUTPUT_SINK)
@@ -70,7 +66,7 @@ async function createSetupHarness(options?: {
     events,
     module,
     reporter: module.get(ResultReporter),
-    service: module.get(SetupService),
+    setup: module.get<Setup>(SETUP_OPERATION),
   };
 }
 
@@ -79,7 +75,7 @@ describe("SetupCommand", () => {
     const harness = await createSetupHarness();
 
     try {
-      expect(harness.service).toBeInstanceOf(SetupService);
+      expect(harness.setup).toBeInstanceOf(SetupService);
       expect(harness.reporter).toBeInstanceOf(ResultReporter);
 
       await harness.command.run([], { force: true });
@@ -100,8 +96,8 @@ describe("SetupCommand", () => {
 
   it("reports a filesystem failure once with exit code 2", async () => {
     const harness = await createSetupHarness({
-      fileSystem: makeFileSystem({
-        ensureKeplerHome: () => {
+      files: makeFiles({
+        ensureHome: () => {
           throw new Error("permission denied");
         },
       }),
@@ -163,7 +159,7 @@ describe("SetupCommand", () => {
       providers: [
         SetupCommand,
         {
-          provide: SetupService,
+          provide: SETUP_OPERATION,
           useValue: {
             setup: () => {
               setupCalls += 1;

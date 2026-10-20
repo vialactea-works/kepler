@@ -32,11 +32,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+
       - name: Read package.json version
         id: read-version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          VERSION="$(bun scripts/package-version.ts package.json)"
+          printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check if version should be released
         id: version-check
@@ -105,11 +108,24 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Compile version checker
+        run: |
+          bun build --compile \
+            scripts/check-versions.ts \
+            --outfile "$RUNNER_TEMP/check-versions"
+
       - name: Check synchronized package versions
-        run: bun run check:version
+        run: |
+          "$RUNNER_TEMP/check-versions"
 
       - name: Build packages
         run: bun run build
+
+      - name: Pull Docker E2E image
+        run: |
+          image='oven/bun:1.4.0@sha256:'
+          image="${image}5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6"
+          docker pull "$image"
 
       - name: Run test suite
         run: bun run test
@@ -251,7 +267,8 @@ jobs:
       - name: Pack the core package
         run: |
           PACKAGE_VERSION="$(
-            node -p "require('./packages/core/package.json').version"
+            bun scripts/package-version.ts \
+              packages/core/package.json
           )"
           PACKAGE_ARCHIVE="kepler-core-${PACKAGE_VERSION}.tgz"
           (

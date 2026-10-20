@@ -25,7 +25,9 @@ describe("artifact metadata schemas", () => {
 
     expect(schema.$schema).toBe("http://json-schema.org/draft-07/schema#");
     expect(schema.type).toBe("object");
-    expect(schema.required).toEqual(expect.arrayContaining(requiredFields[artifact]));
+    expect(schema.required).toEqual(
+      expect.arrayContaining([...requiredFields[artifact]]),
+    );
   });
 
   it("validates dependency-mode execution and scheduling amendment metadata", () => {

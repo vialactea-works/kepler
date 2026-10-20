@@ -23,9 +23,11 @@
     "build": "tsc -p tsconfig.json",
     "prepack": "bun run build",
     "test": "bun --bun vitest run --root ../.. --config vitest.config.ts packages/core/tests",
-    "test:package": "bash scripts/pack-smoke.sh"
+    "test:package": "bun --bun vitest run --root ../.. --config vitest.config.ts packages/core/tests/integration/packed-package.test.ts"
   },
   "dependencies": {
+    "remark": "15.0.1",
+    "remark-frontmatter": "5.0.0",
     "yaml": "2.4.5"
   }
 }

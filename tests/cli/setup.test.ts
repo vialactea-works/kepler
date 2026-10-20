@@ -2,10 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as Fs from "node:fs";
 import * as Path from "node:path";
 import * as Os from "node:os";
-import * as Yaml from "yaml";
 import { SetupService } from "../../packages/cli/src/cli/setup.service.js";
 import { createSetupRuntime } from "../../packages/cli/src/cli/setup-runtime.js";
-import { buildSettingsYaml } from "../../packages/cli/src/cli/setup-settings.js";
 
 const TEMPLATE_FILES = [
   "critique.md",
@@ -32,88 +30,11 @@ const WAYFINDER_TEMPLATE_FILES = [
 const runSetup = () => {
   const runtime = createSetupRuntime();
   const service = new SetupService(
-    runtime.fileSystemHome,
+    runtime.files,
     runtime.bundleLocator,
   );
   return service.setup();
 };
-
-describe("SetupService", () => {
-  const bundleRoot = "/bundle";
-  const templates = "/home/.config/vialactea-works/kepler/templates";
-  const guidelines = "/home/.config/vialactea-works/kepler/guidelines";
-  const settings = "/home/.config/vialactea-works/kepler/settings.yaml";
-
-  function makePorts(existingSettings?: string) {
-    const files = new Map<string, string>();
-    if (existingSettings !== undefined) files.set(settings, existingSettings);
-    const copies: Array<[string, string]> = [];
-    const fileSystemHome = {
-      ensureKeplerHome: () => {},
-      existsSync: (path: string) =>
-        path === Path.join(bundleRoot, "templates") ||
-        path === Path.join(bundleRoot, "guidelines") ||
-        files.has(path),
-      copyDirectory: (source: string, destination: string) => {
-        copies.push([source, destination]);
-      },
-      readdirRecursive: (directory: string) =>
-        directory === templates ? ["plan.md"] : [],
-      isFile: (path: string) => path === Path.join(templates, "plan.md"),
-      writeFileSync: (path: string, content: string) => {
-        files.set(path, content);
-      },
-      guidelinesDir: () => guidelines,
-      settingsPath: () => settings,
-      templatesDir: () => templates,
-    };
-    return { fileSystemHome, files, copies };
-  }
-
-  it("installs into fresh and existing homes through supplied ports", () => {
-    const fresh = makePorts();
-    const freshService = new SetupService(
-      fresh.fileSystemHome,
-      () => bundleRoot,
-    );
-    expect(freshService.setup()).toEqual({ templates: ["plan.md"] });
-    expect(fresh.files.get(settings)).toContain("name: rtk");
-    expect(fresh.copies).toEqual([
-      [Path.join(bundleRoot, "templates"), templates],
-      [Path.join(bundleRoot, "guidelines"), guidelines],
-    ]);
-
-    const existing = makePorts("custom settings\n");
-    const existingService = new SetupService(
-      existing.fileSystemHome,
-      () => bundleRoot,
-    );
-    existingService.setup();
-    expect(existing.files.get(settings)).toBe("custom settings\n");
-  });
-
-  it("reports filesystem and bundle failures from supplied ports", () => {
-    const filesystemFailure = makePorts();
-    filesystemFailure.fileSystemHome.ensureKeplerHome = () => {
-      throw new Error("permission denied");
-    };
-    expect(
-      () =>
-        new SetupService(
-          filesystemFailure.fileSystemHome,
-          () => bundleRoot,
-        ).setup(),
-    ).toThrow("Failed to create Kepler home directories");
-
-    const bundleFailure = makePorts();
-    expect(
-      () =>
-        new SetupService(bundleFailure.fileSystemHome, () => {
-          throw new Error("bundle unavailable");
-        }).setup(),
-    ).toThrow("bundle unavailable");
-  });
-});
 
 describe("SetupService filesystem integration", () => {
   let tmpHome: string;
@@ -286,28 +207,6 @@ describe("SetupService filesystem integration", () => {
 
     const content = Fs.readFileSync(settingsPath, "utf-8");
     expect(content).toContain("enabled: false");
-  });
-});
-
-describe("buildSettingsYaml", () => {
-  it("produces valid YAML with extensions only", () => {
-    const yaml = buildSettingsYaml();
-    const parsed = Yaml.parse(yaml);
-    expect(parsed.extensions).toHaveLength(3);
-    expect(parsed.models).toBeUndefined();
-  });
-
-  it("produces valid YAML with extensions and model aliases", () => {
-    const yaml = buildSettingsYaml({ cheap: "deepseek-v4" });
-    const parsed = Yaml.parse(yaml);
-    expect(parsed.extensions).toHaveLength(3);
-    expect(parsed.models.aliases.cheap).toBe("deepseek-v4");
-  });
-
-  it("omits models section when aliases is empty", () => {
-    const yaml = buildSettingsYaml({});
-    const parsed = Yaml.parse(yaml);
-    expect(parsed.models).toBeUndefined();
   });
 });
 

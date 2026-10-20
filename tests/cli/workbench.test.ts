@@ -1,49 +1,37 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
-import * as Os from "node:os";
 import * as Path from "node:path";
-import { spawnSync } from "node:child_process";
 import { VERSION } from "../../src/index.js";
 import {
   taskBreakdownDigestFromDefinitions,
   taskDefinitionDigest,
 } from "../../packages/cli/src/workbench/artifact-body.js";
+import { createE2EHarness, type E2EHarness } from "../e2e/harness.js";
 
-const entrypoint = Path.resolve("packages/cli/src/cli/main.ts");
+let harness: E2EHarness;
 
 const runCli = (cwd: string, ...arguments_: string[]) => {
-  const result = spawnSync(process.execPath, ["run", entrypoint, ...arguments_], {
-    cwd,
-    encoding: "utf8",
-    killSignal: "SIGKILL",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 5000,
-  });
-  if (result.error !== undefined)
-    throw new Error(
-      `CLI subprocess failed (${arguments_.join(" ")}): ${result.error.message}`,
-    );
-  return result;
+  const result = harness.cli.run(arguments_, { cwd });
+  return {
+    status: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 };
 
 const git = (cwd: string, ...arguments_: string[]) => {
-  const result = spawnSync("git", arguments_, { cwd, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(result.stderr);
+  harness.resources.runGit(cwd, ...arguments_);
 };
 
-const gitOutput = (cwd: string, ...arguments_: string[]) => {
-  const result = spawnSync("git", arguments_, { cwd, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(result.stderr);
-  return result.stdout.trim();
-};
+const gitOutput = (cwd: string, ...arguments_: string[]) =>
+  harness.resources.runGit(cwd, ...arguments_);
 
 describe("workbench CLI", () => {
   let temporaryDirectory: string;
 
-  beforeEach(() => {
-    temporaryDirectory = Fs.mkdtempSync(
-      Path.join(Os.tmpdir(), "kepler-workbench-cli-"),
-    );
+  beforeEach(async () => {
+    harness = await createE2EHarness({ application: "native" });
+    temporaryDirectory = harness.resources.workspaceDirectory;
     Fs.writeFileSync(
       Path.join(temporaryDirectory, "tsconfig.json"),
       JSON.stringify({
@@ -58,8 +46,8 @@ describe("workbench CLI", () => {
     );
   });
 
-  afterEach(() => {
-    Fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+  afterEach(async () => {
+    await harness.cleanup();
   });
 
   it("reports the shared CLI version", () => {

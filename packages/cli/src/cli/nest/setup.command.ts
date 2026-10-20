@@ -1,5 +1,7 @@
+import { Inject } from "@nestjs/common";
 import { Command, CommandRunner, Option } from "nest-commander";
-import { SetupService, type SetupResult } from "../setup.service.js";
+import { SETUP_OPERATION } from "../setup-runtime.js";
+import type { Setup, SetupResult } from "../setup.service.js";
 import { ResultReporter } from "./result-reporter.js";
 
 @Command({
@@ -8,7 +10,7 @@ import { ResultReporter } from "./result-reporter.js";
 })
 export class SetupCommand extends CommandRunner {
   constructor(
-    private readonly setupService: SetupService,
+    @Inject(SETUP_OPERATION) private readonly setup: Setup,
     private readonly reporter: ResultReporter,
   ) {
     super();
@@ -24,7 +26,7 @@ export class SetupCommand extends CommandRunner {
     _options?: Record<string, unknown>,
   ): Promise<void> {
     try {
-      const result = this.setupService.setup();
+      const result = this.setup.setup();
       this.reporter.report({
         stdout: this.formatSuccess(result),
         stderr: "",

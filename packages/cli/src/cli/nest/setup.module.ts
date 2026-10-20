@@ -2,9 +2,14 @@ import { Module } from "@nestjs/common";
 import {
   createSetupRuntime,
   SETUP_BUNDLE_LOCATOR,
-  SETUP_FILE_SYSTEM_HOME,
+  SETUP_FILES,
+  SETUP_OPERATION,
 } from "../setup-runtime.js";
-import { SetupService } from "../setup.service.js";
+import {
+  SetupService,
+  type SetupBundleLocator,
+  type SetupFiles,
+} from "../setup.service.js";
 import { ResultModule } from "./result.module.js";
 import { SetupCommand } from "./setup.command.js";
 
@@ -12,16 +17,21 @@ import { SetupCommand } from "./setup.command.js";
   imports: [ResultModule],
   providers: [
     SetupCommand,
-    SetupService,
     {
-      provide: SETUP_FILE_SYSTEM_HOME,
-      useFactory: () => createSetupRuntime().fileSystemHome,
+      provide: SETUP_OPERATION,
+      useFactory: (files: SetupFiles, bundleLocator: SetupBundleLocator) =>
+        new SetupService(files, bundleLocator),
+      inject: [SETUP_FILES, SETUP_BUNDLE_LOCATOR],
+    },
+    {
+      provide: SETUP_FILES,
+      useFactory: () => createSetupRuntime().files,
     },
     {
       provide: SETUP_BUNDLE_LOCATOR,
       useFactory: () => createSetupRuntime().bundleLocator,
     },
   ],
-  exports: [SetupService, SETUP_FILE_SYSTEM_HOME, SETUP_BUNDLE_LOCATOR],
+  exports: [SETUP_OPERATION, SETUP_FILES, SETUP_BUNDLE_LOCATOR],
 })
 export class SetupModule {}

@@ -438,13 +438,15 @@ describe("artifact metadata contracts", () => {
       recognized(".kepler/maps/effort/route.md", validArtifacts[13][1], body),
     );
     expectInvalid(result, "missing-section");
-    expect(
-      result.diagnostics.find(
-        (diagnostic) =>
-          diagnostic.code === "missing-section" &&
-          diagnostic.expected === section,
-      ),
-    ).toBeDefined();
+    if (result._tag === "invalid") {
+      expect(
+        result.diagnostics.find(
+          (diagnostic) =>
+            diagnostic.code === "missing-section" &&
+            diagnostic.expected === section,
+        ),
+      ).toBeDefined();
+    }
   });
 
   it("keeps route subheadings and local labels out of unit records", () => {

@@ -19,8 +19,18 @@ const fixture = () => {
   const home = Path.join(root, "home");
   Fs.mkdirSync(repository);
   Fs.mkdirSync(home);
-  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-  Object.assign(env, { HOME: home, XDG_CONFIG_HOME: Path.join(home, ".config"), GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" });
+  const env: NodeJS.ProcessEnv = {
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+    HOME: home,
+    LC_ALL: "C.UTF-8",
+    PATH: process.env.PATH ?? "",
+    TMPDIR: Os.tmpdir(),
+    TZ: "UTC",
+    XDG_CONFIG_HOME: Path.join(home, ".config"),
+  };
   const git = (...args: string[]) => command(repository, env, "git", args);
   const key = Path.join(root, "identity");
   command(root, env, "ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "dispatch@example.invalid", "-f", key]);

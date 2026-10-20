@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "cd ../.. && bun --bun vitest run --config vitest.config.ts tests/cli tests/workbench"
+    "test": "cd ../.. && bun run build && bun --bun vitest run --config vitest.config.ts tests/cli tests/workbench"
   },
   "dependencies": {
     "@vialactea-works/kepler-core": "workspace:*",

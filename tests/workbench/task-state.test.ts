@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
 import * as Path from "node:path";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
 import { taskBreakdownDigestFromDefinitions, taskDefinitionDigest } from "../../packages/cli/src/workbench/artifact-body.js";
-import { cleanupRepos, commitAll, fixtureEnvironment, git, makeChangeDir, makeRepo, runCommand, commitPaths, write } from "./helpers.js";
+import { createE2EHarness, type E2EHarness } from "../e2e/harness.js";
+import { cleanupRepos, commitAll, git, makeChangeDir, makeRepo, runCommand, commitPaths, write } from "./helpers.js";
 
-const sourceCli = fileURLToPath(new URL("../../packages/cli/src/cli/main.ts", import.meta.url));
+let harness: E2EHarness | undefined;
+
 const invoke = (cwd: string, worker: string, ...args: string[]) => {
+  if (harness === undefined) throw new Error("E2E harness is not initialized");
   const mode = ["diff", "context"].includes(args[0] ?? "") ? [] : ["task-state"];
-  const result = spawnSync("bun", [sourceCli, "workbench", ...mode, ...args], { cwd, encoding: "utf8", env: { ...fixtureEnvironment, PI_SESSION_ID: worker } });
-  return { status: result.status ?? -1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+  const result = harness.cli.run(["workbench", ...mode, ...args], {
+    cwd,
+    env: { PI_SESSION_ID: worker },
+  });
+  return { status: result.exitCode, stdout: result.stdout, stderr: result.stderr };
 };
 
 const fixture = (dependent = false) => {
@@ -31,11 +35,13 @@ const fixture = (dependent = false) => {
   write(root, "src/counter.ts", "export const count = 0;\n");
   write(root, "src/label.ts", "export const label = 'pending';\n");
   write(root, "tooling/harness.ts", "export const ready = false;\n");
+  write(root, "tooling/verify-counter.ts", "import { count } from '../src/counter.js';\nif (count !== 1) process.exit(1);\n");
+  write(root, "tooling/verify-label.ts", "import { label } from '../src/label.js';\nif (label !== 'ready') process.exit(1);\n");
   const base = commitAll(root, "Seed signed owned fixture");
   const blob = git(root, "rev-parse", "HEAD:AGENTS.md");
   const tasks = [1, 2].map((id) => {
     const title = id === 1 ? "Set count" : "Set label";
-    const verify = id === 1 ? "bun -e \"import { count } from './src/counter.ts'; if (count !== 1) process.exit(1)\"" : "bun -e \"import { label } from './src/label.ts'; if (label !== 'ready') process.exit(1)\"";
+    const verify = id === 1 ? "bun tooling/verify-counter.ts" : "bun tooling/verify-label.ts";
     const definition = `### Task ${id}: ${title}\n\n- Goal: ${title} to its accepted value.\n- Depends on: ${dependent && id === 2 ? "Task 1" : "none"}\n- Files: src/${id === 1 ? "counter" : "label"}.ts\n- Acceptance:\n  - ${id === 1 ? "Count is 1." : "Label is ready."}\n- Steps:\n  1. Red — verify the current value fails.\n  2. Green — implement the accepted value.\n  3. Refactor — preserve the behavior.\n- Verify: ${verify}\n- Commit: feat: ${title.toLowerCase()}`;
     const definitionDigest = taskDefinitionDigest(definition);
     const notes = { version: 1, repository: root, intentCommit: "tactical:task-state-fixture", taskDefinition: definitionDigest, inputs: [{ path: "AGENTS.md", blob }] };
@@ -72,7 +78,18 @@ const complete = (f: ReturnType<typeof fixture>, task = 1, valid = true) => {
 
 const publish = (f: ReturnType<typeof fixture>, taskHead: string, task = 1) => invoke(f.root, "coordinator-fixture", "--publish", "--task", `${task}`, "--change-dir", f.changeDir, "--expected-head", git(f.root, "rev-parse", "HEAD"), "--task-head", taskHead, "--verify", f.tasks[task - 1]?.verify ?? "");
 
-afterEach(cleanupRepos);
+beforeEach(async () => {
+  harness = await createE2EHarness({ application: "native" });
+});
+
+afterEach(async () => {
+  try {
+    cleanupRepos();
+  } finally {
+    await harness?.cleanup();
+    harness = undefined;
+  }
+});
 
 describe("native guarded task-state", () => {
   it("admits a task with durable original Base and isolated worker provenance before dispatch", () => {
