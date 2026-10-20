@@ -90,7 +90,9 @@ Waiting does not imply that all workers stopped. A command failure, unavailable 
 
 Use the unchanged [ten-field envelope](../../runtime.md#event-envelope-choices). Its fields are `id`, `phase`, `type`, `envelope_version`, `event_version`, `journal_id`, `recorded_at`, `producer`, `caused_by`, and `data`.
 
-The event names, derived states, operation details, and phase-specific payload schemas below are proposals. SH62 accepts simple phase-owned events for the unit effort default and explicit stage overrides, with selection attribution where applicable. It also requires queries for the default, overrides, and effective stage levels. Resolve stage override, then unit default, then Standard; Activities inherit their stage. Keep effort out of frontmatter and separate authoritative state files. SH62 does not select event names, detailed payloads, projection schemas, or one event per field.
+The event names, derived states, operation details, and phase-specific payload schemas below are proposals. SH62 accepts phase-owned facts for the unit effort default and explicit stage overrides, with selection attribution where applicable. It also requires queries for the default, overrides, and effective stage levels. Resolve stage override, then unit default, then Standard; Activities inherit their stage. Keep effort out of frontmatter and separate authoritative state files.
+
+SH62 does not select event names, detailed payloads, projection schemas, or one event per field. SH63 carries later structured effort selections in the recorded interaction; it adds no separate effort event.
 
 Apply the shared identity and record requirements for evidence and approval. Do not override SH51 or add a second `material` array or structured reference sidecar. Bind repository checkpoints to the owning phase's actual work, including workspace bindings, stage outputs, admissions, and Integration results. Do not parse reference strings for bindings.
 
@@ -114,10 +116,8 @@ Stage facts bind their stage and attempt. Task facts bind their task and Impleme
 
 | Proposed event `type` | Required data and binding |
 | --- | --- |
-| `construction.unit-created` | Mission and unit identities, directory, creation inputs, and matching `standard` workflow binding. This proposal does not require a linked Effort event or one event per field. |
+| `construction.unit-created` | Mission and unit identities, directory, creation inputs including initial effort, and matching `standard` workflow binding. This proposal requires no linked Effort event or event per field. |
 | `construction.unit-baseline-selected` | Original unit Review baseline set, integration targets, and capture before first admission. Keep it across returns. Keep it distinct from the mission starting set. |
-| `construction.unit-effort-selected` | Unit and selected level. Record selection attribution where applicable. Exact payload fields remain open. |
-| `construction.stage-effort-selected` | Unit, stage, and selected override. Record selection attribution where applicable. Activities inherit the stage's Effort. Exact payload fields remain open. |
 | `construction.stage-attempt-started`, `construction.stage-waiting`, `construction.stage-pause-requested`, `construction.stage-paused`, `construction.stage-resumed`, `construction.stage-attempt-completed` | Unit, stage, attempt, actual inputs, applicable reason, and evidence or approvals required by the transition. |
 | `construction.stage-attempt-ended-by-revision`, `construction.stage-reopened` | `revision_id`, affected stage, and original attempt when one exists. Reopening alone creates no attempt. |
 | `construction.task-admitted` | Unit, Implementation attempt, task, definition references, fixed repository-qualified baseline set, predecessor provenance, and prerequisite evidence. |
@@ -125,7 +125,7 @@ Stage facts bind their stage and attempt. Task facts bind their task and Impleme
 | `construction.task-completed` | Unit, parent attempt, task, accepted Integration record, and task conditions that hold. |
 | `construction.activity-attempt-started`, `construction.activity-waiting`, `construction.activity-pause-requested`, `construction.activity-paused`, `construction.activity-resumed`, `construction.activity-attempt-completed` | Identify the full Activity execution scope. Include transition reasons, source references, and evidence required for completion. |
 | `construction.activity-attempt-ended-by-revision`, `construction.activity-reopened` | Unit, task, Activity occurrence, original parent and attempt, `revision_id`, and affected scope. |
-| `construction.evidence-recorded`, `construction.approval-recorded`, `construction.interaction-recorded` | Keep the existing public audit kinds. Apply the shared evidence and approval record requirements. Bind phase-specific records to their scope, material, inputs, result, and actor or requester. |
+| `construction.evidence-recorded`, `construction.approval-recorded`, `construction.interaction-recorded` | Keep the existing public audit kinds. Apply shared evidence and approval requirements. Bind phase-specific records to their scope, material, inputs, result, and actor or requester. A structured effort selection stays in the same interaction record under SH63. The owning phase validates scope, level, and requester authority. Do not infer selections from text or add a separate effort event. |
 | `construction.integration-prepared` | Identify the Integration scope, lock-captured unit checkpoint set, validated task output, other actual inputs, immutable candidate set, and source evidence. Record the fixed admission baseline separately. |
 | `construction.integration-accepted` | Prepared candidate set, accepted repository results, actual inputs, successful check evidence, current Integration attempt, and applicable authority references. |
 | `construction.revision-authorized` | `revision_id`, orchestrator decision, reason, unit-stage or task-Activity boundary, and supporting findings. |
@@ -144,7 +144,7 @@ Reference only already recorded direct causes. Causal links complement guards. T
 
 | Current fact | Direct recorded causes |
 | --- | --- |
-| Initial Effort selection | Use available selection attribution where applicable. SH62 does not require a separate linked event. |
+| Initial effort selection | Record initial values with unit creation under SH59. Later changes use the structured selection in the same interaction under SH63, not a linked effort event. |
 | Task admission | Current Implementation start, baseline selection, required predecessor acceptances, and prerequisite evidence. |
 | Activity start | Its admission or applicable retained-input assessment, plus preceding completion or authorized return. |
 | Stage or Activity completion | Its current attempt start and the required evidence and approval records. |
@@ -208,7 +208,9 @@ Package selectors name original producer contexts. Consuming Validation and Revi
 
 ## Workspaces and check evidence
 
-Isolate concurrent writers. During Implementation, the orchestrator dispatches workers and keeps Generation and non-author Validation contexts separate. This model does not select execution topology for other stages. The [Mission contract](../../mission.md#workspace-selection-and-preparation) sets startup bindings and isolation policy. Detailed allocation remains under SH66. Branch layout remains under SH69.
+Isolate concurrent writers. During Implementation, the orchestrator dispatches workers and keeps Generation and non-author Validation contexts separate. This model does not select execution topology for other stages. The [Mission contract](../../mission.md#workspace-selection-and-preparation) sets startup bindings and isolation policy.
+
+SH66 sets cross-workspace coordination. Exact allocation mechanisms remain implementation choices. Branch layout remains under SH69. Shared test-resource isolation remains under SH70.
 
 Integration reads current unit material only after acquiring its unit lock. Keep that lock through preparation, typechecking, build, full-suite checks, and acceptance. Make sure that the current attempt, revision boundary, authority, actual inputs, and bytes still meet the required conditions before acceptance. Other permitted tasks and units continue.
 
@@ -226,7 +228,7 @@ Supported concurrent workspaces must share effective live coordination for the s
 
 Validate scope, authority, current attempts, inputs, and revision state before effects. Retrying the same journal write keeps its existing domain IDs, event ID, and original bindings. For revisions, retain the authorizing event ID and `revision_id`. This does not define general idempotency or change how callers classify retries.
 
-The shared [short scoped coordination contract](../../runtime.md#short-scoped-coordination) is accepted under SH46. Exact mechanisms remain under SH64-SH67 and SH87. Do not promise general exactly-once execution.
+The shared [short scoped coordination contract](../../runtime.md#short-scoped-coordination) is accepted under SH46 and SH64-SH66. Apply its lock and ownership rules. Exact key encodings, owner-record fields, and finer release protocols remain implementation choices. Interrupted journal-write recovery remains under SH87. SH67 accepts manual unlock recovery. Do not promise general exactly-once execution.
 
 Keep event-update coordination short and separate from the long unit Integration lock. Coordinate the final attempt guard with candidate acceptance and its recorded result. A concurrent revision must not let an ended worker accept a candidate. Do not hold project-wide coordination through checks.
 
@@ -236,7 +238,11 @@ Under SH58, a pause request blocks new affected work before stopping completes. 
 
 ## Draft boundaries
 
-Accepted shared runtime, Construction, Standard, and [Mission](../../mission.md) contracts are authoritative. This draft proposes remaining Construction state, event, and operation details. SH58 accepts pause safety, and SH62 accepts minimum effort records and queries. Neither approval accepts the remaining state vocabulary or event catalog. This draft does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
+Accepted shared runtime, Construction, Standard, and [Mission](../../mission.md) contracts are authoritative. This draft proposes remaining Construction state, event, and operation details.
+
+SH58 accepts pause safety. SH62 accepts minimum effort facts and queries. SH63 accepts structured later selections in existing interaction records. SH64-SH66 accept lock and cross-workspace coordination rules. SH67 accepts manual lock recovery.
+
+These decisions do not accept the remaining state vocabulary or event catalog. This draft does not alter required checks, approval authority, metadata, authored graph fields, the envelope, or diff-package signatures.
 
 Apply the accepted [project selection rules](../../cli.md#project-selection), [scope selectors](../../cli.md#scope-and-selectors), [result envelope](../../cli.md#machine-readable-output), [failure result fields](../../cli.md#failure-and-recovery-rules), [exit-code contract](../../cli.md#exit-codes), and [output stream contract](../../cli.md#output-streams). Apply [MVP result formatting](../../cli.md#human-output). Apply the accepted [evidence recording interface](../../cli.md#kepler-audit-record-evidence), [audit queries](../../cli.md#kepler-audit-list), and [shared lint interface](../../cli.md#kepler-lint).
 

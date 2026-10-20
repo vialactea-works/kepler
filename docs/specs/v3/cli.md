@@ -24,9 +24,9 @@ The following decisions are accepted. They do not accept every command detail in
 - Use the accepted [UUID interface](#kepler-uuid) to generate one UUIDv4 without creating an artifact or task.
 - Apply the accepted [Standard workflow binding](#workflow-binding) to each Construction unit and its mission.
 - Apply the accepted [Mission contract](mission.md) for mission identity, record-home selection, workspace facts, membership, and pre-mission boundaries. Do not infer mission membership or add command options from that policy.
-- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence interface](#kepler-audit-record-evidence), [approval interface](#kepler-audit-record-approval), [interaction interface](#kepler-audit-record-interaction), and [audit queries](#kepler-audit-list) are accepted under SH109, SH55-SH56, and SH110. Do not add separate Construction evidence, approval, or interaction namespaces.
+- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence interface](#kepler-audit-record-evidence), [approval interface](#kepler-audit-record-approval), [interaction interface](#kepler-audit-record-interaction), and [audit queries](#kepler-audit-list) are accepted under SH109, SH55-SH56, SH63, and SH110. Do not add separate Construction evidence, approval, or interaction namespaces.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
-- Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Do not add effort commands. Keep the requester's effort authority and the agreed adjustment rules.
+- Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Record later changes through structured selections in existing interaction records. Do not add an effort setter command. Keep the requester's effort authority and agreed adjustment rules.
 - Use a direct `kepler workflow construction revise` operation. Do not add a revision namespace.
 - Use typed, phase-validated operations to record events. Do not expose raw journal append.
 - Use one dedicated component for [short scoped coordination](runtime.md#short-scoped-coordination). Keep its coordination rules and diagnostics together.
@@ -48,7 +48,7 @@ Construction owns its transition rules. A workflow selects stage order. The [Sta
 
 ## Proposed interface rules
 
-The command inventory below lists proposed and accepted interfaces. Accepted interfaces include three `kepler git diff-package` commands, evidence recording, approval and interaction recording, audit queries, and shared lint. Setup, UUID generation, Construction lint, Standard workflow binding, SH53 queries, and SH54 normal transitions are also accepted. SH57-SH60 and SH62 accept the listed revision, pause/resume, unit-creation, current-author, and effort-record details. Other details in this draft remain proposals unless their owners accepted them.
+The command inventory below lists proposed and accepted interfaces. Accepted interfaces include three diff-package commands, evidence and approval recording, interaction recording, audit queries, and shared lint. Setup, UUID generation, Construction lint, Standard workflow binding, SH53 queries, and SH54 transitions are also accepted. SH57-SH60 and SH62 accept their named interface details. SH63 accepts later effort changes through structured interaction records. Other details remain proposals unless their owners accepted them.
 
 Do not add commands for future Initialization or Inception phases. Do not add a workflow engine, state registry, or utility registry. Exclude generic status changes, force operations, migrations, and public lock manipulation.
 
@@ -190,7 +190,7 @@ Any later human result mode must be opt-in.
 | `kepler git diff-package unit-review` | Accepted under `git` | Package the complete unit's integrated changes for Review. |
 | `kepler lint` | Accepted root interface | Validate shared Markdown metadata for explicit file paths. |
 | `kepler audit record evidence` | Accepted under `audit` | Record evidence from one typed JSON request on stdin. |
-| `kepler audit record <kind>` | Accepted for `approval` and `interaction` under SH55-SH56 | Record a typed approval or interaction fact. |
+| `kepler audit record <kind>` | Accepted for `approval` and `interaction` under SH55-SH56; SH63 extends interaction records | Record a typed approval or interaction fact, including an explicit structured effort selection. |
 | `kepler audit list` | Accepted under `audit` | Query compact audit-event projections with explicit field selection and pagination. |
 | `kepler audit show` | Accepted under `audit` | Read one complete audit event by its journal and event identities. |
 | `kepler workflow construction unit create` | Accepted under SH59 | Create one Construction Unit of Work with its initial effort. |
@@ -385,11 +385,15 @@ Commit repository output before recording approval. Recording approval does not 
 
 ### `kepler audit record interaction`
 
-**Accepted under SH56.** Use this operation with applicable [scope selectors](#scope-and-selectors) and one typed JSON request from stdin. Record participants, concise content, relevant free-form references, and an optional reply reference. A reply reference does not require a UUID or URI grammar. Keep actual causal event IDs in `caused_by` and separate from domain references.
+**Accepted under SH56 and SH63.** Use this operation with existing [scope selectors](#scope-and-selectors) and one typed JSON request from stdin. Record participants, concise content, relevant free-form references, and an optional reply reference. A reply reference does not require a UUID or URI grammar. Keep actual causal event IDs in `caused_by` and separate from domain references.
+
+A request may carry an explicit structured effort selection. It can set the unit default, set a stage override, or remove a stage override. The owning phase validates scope, level, and requester authority under existing rules. It derives effort from the recorded selection. Do not infer selections from interaction prose, free-form references, or arbitrary participant messages. Ordinary interactions without a selection remain informational.
+
+Keep the selection in the same recorded interaction. The caller must faithfully record the requester's actual selection. Do not append a separate effort event or add a setter command, generic state-patching operation, or independent setting file. Keep field names, types, and event catalogs as implementation details. Do not require a new decision reference or consent-proof protocol.
 
 Record meaningful questions, answers, clarifications, and decision context. Do not require full conversations or transcripts. Keep secrets out of records.
 
-Do not duplicate evidence, approvals, or lifecycle events. Interaction text does not grant approval or complete work. Use existing result, stream, and exit contracts. Detailed actor representation and payload fields remain implementation details.
+Do not duplicate evidence, approvals, or lifecycle events. Interaction text does not grant approval or complete work. A structured effort selection does not create an approval record. Use existing result, stream, and exit contracts. Detailed actor representation and payload fields remain implementation details.
 
 ### `kepler audit list`
 
@@ -484,7 +488,7 @@ Apply the accepted [project selection rules](#project-selection). Return compact
 
 **Accepted query under SH53.** Show one Unit of Work by its explicit identity. Include its current effort default, explicit stage overrides, and effective stage effort levels. Also include workflow binding, mission membership, and scoped stage and task progress. Derive effort from recorded events. Do not change state, write history, or select a persistent current unit or mission.
 
-Activities inherit their stage's effort. They do not have their own override. Do not add effort commands. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). The interface for later effort changes remains implementation work under SH63.
+Activities inherit their stage's effort. They do not have their own override. Do not add an effort command. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). Under SH63, later selections use the existing interaction record.
 
 Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Resolve mission context from unique recorded membership. For an unbound unit, report the missing binding. Do not adopt or hide it. Return compact JSON without bulk artifact contents. Exact state vocabulary and response fields remain implementation details.
 
@@ -554,7 +558,7 @@ Do not integrate a task until Code Validation succeeds and its independent non-a
 
 Successful acceptance is distinct from requester approval, whole-unit completion, review, or delivery. Do not add unrestricted `task complete`. Generic `activity complete` must not bypass Integration acceptance. The [Code Integration contract](phases/construction/activities/code-integration.md#integration-procedure) owns the check and acceptance rules.
 
-Phase-owned evidence payload details, lock implementation, and the operation result schema remain implementation choices beyond the shared evidence minimum. The task's Activity attempts and evidence stay bound to their occurrences and enclosing Implementation attempt. A task does not have a separate attempt identity.
+Phase-owned evidence payload details and the operation result schema remain implementation choices beyond the shared evidence minimum. Exact lock-key encodings, owner-record fields, and finer release protocols remain implementation choices under SH64-SH66. Apply the accepted [coordination rules](runtime.md#short-scoped-coordination) and [Mission paths](mission.md#local-storage-and-concurrency). The task's Activity attempts and evidence stay bound to their occurrences and enclosing Implementation attempt. A task does not have a separate attempt identity.
 
 ## Activity operations
 
@@ -640,7 +644,7 @@ This example shows the failure structure, not agreed error-code values or `detai
 }
 ```
 
-These rules apply to the proposed command contracts. They do not select a storage or lock implementation.
+These rules add no storage path or lock command. Apply the accepted [runtime coordination contract](runtime.md#short-scoped-coordination) and [Mission storage policy](mission.md#local-storage-and-concurrency).
 
 - Validate inputs and authorization before changing state.
 - Return a nonzero status when the requested operation fails. Do not return a successful transition result for an incomplete write.
@@ -650,7 +654,7 @@ These rules apply to the proposed command contracts. They do not select a storag
 - Keep query and lint commands read-only. Projection rebuilds and history queries do not rerun checks or create approvals.
 - Keep local journal order. Use causal links for cross-journal causes. Do not use timestamps to invent a global ordering.
 
-The event write protocol, projection rebuild behavior, lock ownership and recovery, and physical storage stay implementation decisions under [CLI infrastructure](runtime.md#execution-state-representation).
+The event write protocol, projection rebuild behavior, and physical storage remain implementation choices under [CLI infrastructure](runtime.md#execution-state-representation). SH64-SH66 accept lock directories, minimum owner-record facts, and cross-workspace coordination. The [Mission contract](mission.md#local-storage-and-concurrency) sets their local paths. Exact key encodings and record fields remain implementation choices. SH67 accepts manual lock-artifact removal under its recovery limits. This policy adds no lock-management command.
 
 ### Exit codes
 
@@ -673,8 +677,10 @@ Accepted command placements, structured-output default, and typed lifecycle writ
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-SH57-SH60 and SH62 accept their named interfaces and policy minimums; exact request payloads, event names, projection fields, and error-code values remain implementation details. SH63-SH67, SH69-SH70, SH72, SH84-SH85, SH87, and DF14-DF17 remain implementation choices.
+SH57-SH67 accept their named interfaces and policy boundaries. Exact request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values remain implementation details. SH69-SH70, SH72, SH84-SH85, SH87, and DF14-DF17 remain implementation choices.
 
-SH51 and SH53-SH62 are settled. The [Mission contract](mission.md) settles SH45 storage paths, SH68 workspace policy, and SH86 retained-evidence locations. Remaining choices include journal writes, projections, locks, workspace allocation, later effort changes, task and Activity details, and recovery. Actor representation and phase payload fields under SH55-SH56 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
+SH51 and SH53-SH67 are settled. The [Mission contract](mission.md) sets the existing SH45 storage paths, SH68 workspace policy, SH86 retained-evidence locations, and SH64-SH66 coordination domains. The [runtime contract](runtime.md#short-scoped-coordination) sets the lock and owner-record requirements. Exact key and record details remain implementation choices.
+
+Other choices include journal writes, projections, workspace allocation, task and Activity details, and recovery under SH87. Actor representation and phase payload fields under SH55-SH56 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
 
 Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. This CLI draft does not accept other proposals in those contracts.

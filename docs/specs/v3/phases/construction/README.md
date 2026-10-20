@@ -95,7 +95,7 @@ The orchestrator records task completion only after successful acceptance and sa
 
 Do not use this lock as a task admission gate. The agreed rules keep parallel execution for Code Generation, Code Validation, and Activities in other units. Independent tasks continue while their inputs and contracts are valid.
 
-Lock ownership does not introduce another attempt identity or run floor.
+Lock ownership does not introduce another attempt identity or run floor. Apply the accepted [shared lock and ownership rules](../../runtime.md#short-scoped-coordination) and [Mission coordination paths](../../mission.md#local-storage-and-concurrency).
 
 ### Return paths
 
@@ -135,7 +135,7 @@ The requester accepted [Planning](implementation-planning.md), [Implementation](
 
 Typechecking, the project build, and the full application test suite are required integration checks. Additional applicable obligations still apply. General extra-check policy is deferred. Project check configuration is still MVP implementation work. Candidate checks precede acceptance under the agreed integration procedure.
 
-Lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery are open in the shared CLI infrastructure contract.
+SH64-SH66 settle the lock mechanism, owner-record facts, and cross-workspace coordination. Exact key encodings, record fields, and finer release protocols remain implementation choices. SH67 accepts manual unlock as a recovery policy. Follow the shared [coordination rules](../../runtime.md#short-scoped-coordination), [Mission paths](../../mission.md#local-storage-and-concurrency), and [interrupted-work recovery rules](../../runtime.md#interrupted-work-recovery).
 
 Detailed task-state transitions, dependency invalidation, and shutdown coordination are release implementation work under DF15-DF17, not new requester approval gates. Interrupted work follows the shared [recovery rule](../../runtime.md#interrupted-work-recovery).
 

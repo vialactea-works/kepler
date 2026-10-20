@@ -28,7 +28,7 @@ Effort does not select which stages execute. It does not change required informa
 | Default | Use Standard when the requester has not selected another level. |
 | Authority | The agent recommends adjustments with a short rationale. The requester selects whether to accept them. |
 | Selection criteria | Compare uncertainty, domain complexity, interactions, consequences of incorrect decisions, and available references with the selected level. Code size alone is insufficient. |
-| Recording | Record the unit default and explicit stage overrides as simple phase-owned journal events through the `kepler` CLI, not artifact frontmatter. Record selection attribution where applicable. Derive current selections from those events. Exact event names and payloads stay implementation choices. |
+| Recording | Record the unit default and explicit stage overrides as phase-owned facts under SH62. For later changes, use a structured selection in an existing interaction record under SH63; do not add a second event. Derive current selections from recorded facts. Exact field names and projections stay implementation choices. |
 | Changes during work | Compare the current effort with the analysis necessary for new findings. Changes apply to current and future work. Revisiting completed work follows the shared revision rules. |
 
 ## Selection procedure
@@ -38,6 +38,8 @@ Effort does not select which stages execute. It does not change required informa
 3. If you recommend an adjustment, state it and its rationale. The requester selects whether to accept it.
 4. Record the selected level and each stage override through the `kepler` CLI.
 5. Compare the current effort with the analysis necessary for new findings. Select another level when the current level is not sufficient or has detail that is not necessary.
+
+Under SH63, a later effort selection is structured data in the existing `kepler audit record interaction` request. It sets the unit default, sets a stage override, or removes a stage override so the stage inherits its unit default. The owning phase validates scope, level, and requester authority under existing rules, then derives effort from the recorded selection. Do not infer selections from prose, references, or arbitrary participant messages; ordinary interactions without a selection remain informational. Do not add a separate effort event, setter command, generic state patch, or setting file. Keep field names, types, and catalogs as implementation choices.
 
 Use the shared [Revision procedure](revision.md#revision-procedure) if completed work must be revisited. An effort selection does not replace stage completion conditions.
 
@@ -77,6 +79,6 @@ For Implementation Planning, use `plan.md` and `tasks-dag.json`. Its [accepted c
 
 For Deliver, use `delivery.md` with sections for outcome, operations, verification and recovery, and decisions. Use the [accepted Deliver contract](phases/construction/deliver.md#required-sections). These contracts do not add a document-level effort setting.
 
-The shared [execution-state representation](runtime.md#execution-state-representation) derives current selections from journal events. SH62 accepts simple phase-owned events for the unit default and explicit stage overrides, plus queries for the default, overrides, and effective stage levels. Resolve an override before the unit default, then use Standard. Activities inherit their stage's effort.
+The shared [execution-state representation](runtime.md#execution-state-representation) derives current selections from recorded facts. SH62 accepts phase-owned facts for the unit default and explicit stage overrides, plus queries for the default, overrides, and effective stage levels. Resolve an override before the unit default, then use Standard. Activities inherit their stage's effort.
 
-Keep these settings out of frontmatter and separate authoritative state files. Exact event names, payloads, and projection fields remain implementation choices. SH63 leaves the interface for later effort changes to implementation.
+Keep these settings out of frontmatter and separate authoritative state files. SH63 accepts structured later selections in existing interaction records. Do not add a separate effort event or setter command. The owning phase validates each selection. Exact field names, types, and projection fields remain implementation choices.

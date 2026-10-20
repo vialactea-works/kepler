@@ -61,7 +61,9 @@ Version-control policy does not authorize publication or other delivery operatio
 
 ### Implementation boundary
 
-The [Mission contract](mission.md#durable-layout) sets mission-history and local-runtime paths. SH43 still permits disposable projections, but selects no persisted views directory. Do not add a substitute cache tree. Journal collection, synchronization, locking, and checkpoint publication mechanics stay implementation choices. Retention periods and cleanup stay [deferred](authoring_progress.md#deferred-decisions).
+The [Mission contract](mission.md#durable-layout) sets mission-history and local-runtime paths. SH43 still permits disposable projections, but selects no persisted views directory. Do not add a substitute cache tree. Journal collection, synchronization, and checkpoint publication mechanics stay implementation choices.
+
+Apply the accepted [lock requirements](#short-scoped-coordination) and Mission coordination paths. Exact key and owner-record details remain implementation choices. Retention periods and cleanup stay [deferred](authoring_progress.md#deferred-decisions).
 
 ## Rules
 
@@ -169,7 +171,15 @@ Resume from CLI-recorded progress after making sure that the actual work and evi
 
 Use the existing [revision procedure](revision.md#revision-procedure) when upstream contracts are invalid. Independent work can continue while its inputs and contracts stay valid.
 
-This rule does not set lock recovery or repair rules for interrupted state writes.
+SH67 supports manual removal of the complete identified Kepler lock artifact as a deadlock escape hatch. This manual recovery does not require a working CLI or owner handshake. Use the lock and ownership rules under SH64-SH66. Missing or partial owner metadata does not make a lock available. This is not automatic age-based takeover.
+
+Stop conflicting owners and workers before removing the lock artifact. Reconcile partial journal writes, Git and candidate effects, and ownership before resuming. Removal does not stop workers, undo effects, end attempts, approve work, or prove that resumption is safe.
+
+Resume still checks inputs, attempts, ownership, and recovery conditions. Preserve work, history, Git objects, evidence, and unrelated scopes. Before release, a holder must confirm that the current claim still belongs to it. It must not remove a replacement holder's claim.
+
+Do not add automatic rollback, lock stealing, a global gate, a public force-unlock command, or a cancellation or worker-kill engine. Limit manual removal to the identified Kepler lock artifact. Actual destructive recovery requires separate operator authority.
+
+This shared recovery rule does not set repair details for interrupted journal writes.
 
 ### Revision decisions
 
@@ -341,7 +351,7 @@ Workflow event writes and derived views must not prevent concurrent work. Keep e
 
 Construction's [integration lock](phases/construction/README.md#integration-order-and-locking) serializes Code Integration within each unit. Hold that lock through reading the current repository-qualified checkpoint set, candidate preparation, checks, and acceptance across required repositories. This lock covers long-running checks. It is not a global agent, task admission, or test gate.
 
-Use the [Mission contract](mission.md#workspace-selection-and-preparation) for startup workspace choices and isolation requirements. Detailed allocation mechanisms, branch layouts, and shared test-resource isolation stay implementation choices under SH66, SH69, and SH70.
+Use the [Mission contract](mission.md#workspace-selection-and-preparation) for startup workspace choices and isolation requirements. SH66 sets shared-checkout coordination. Branch layouts and shared test-resource isolation remain implementation choices under SH69 and SH70.
 
 ### Short scoped coordination
 
@@ -353,7 +363,17 @@ The CLI must have one dedicated application component for this coordination. Kee
 
 Scope coordination to the affected work. Do not add a global lock around every append or hold short coordination during long checks. Keep the existing unit Integration lock separate. Report coordination errors through existing CLI failure and diagnostic contracts.
 
-This settles coordination scope and component ownership, not the implementation mechanisms. Append and collection protocols remain implementation work. SH64-SH67 and SH87 still own lock, ownership, and recovery mechanisms.
+SH64 selects local filesystem lock directories, acquired through atomic directory creation and managed by the existing dedicated CLI coordination component. Use short locks for contended control operations. Keep them scoped and do not hold them during long checks. Keep the unit Integration lock separate. Hold it through current-checkpoint capture, candidate preparation, required checks, and acceptance.
+
+Keep independent journal appends independent. Do not add a shared append gate, database, daemon, generic coordination engine, or distributed lease service.
+
+Store a small, unversioned owner record within each lock artifact. Record an acquisition ownership token. Record the machine and process-incarnation identity that distinguishes PID reuse. Also record the actual resource or control scope and applicable workflow or attempt context.
+
+The lock directory holds exclusion. Missing or partial owner metadata does not make a lock available. Keep the record inside the lock artifact as unversioned local metadata. Do not use it as frontmatter, workflow truth, approval, a domain attempt ID, or a registry. It creates no separate authority or store.
+
+On release, confirm that the lock still belongs to the current owner. Never remove a replacement holder's claim. A read-token-then-delete sequence alone does not prove this invariant. Exact field names, token encoding, key encoding, and finer release protocols remain implementation choices. The [Mission contract](mission.md#local-storage-and-concurrency) sets local paths and shared identity rules.
+
+Journal append and collection protocols, interrupted-write recovery, and projection mechanisms remain implementation work. SH87 owns interrupted event-write recovery. SH67 permits manual lock-artifact removal under the recovery limits above.
 
 ### Task admission and baselines
 
@@ -458,7 +478,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 - Journal write, collection, and projection mechanisms within the accepted [Mission contract](mission.md#durable-layout).
 - Other CLI command contracts, selectors, command-specific response schemas, and validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
-- Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
+- Exact lock-key encoding, owner-record field names and token encoding, and finer release protocols remain implementation choices. SH64-SH66 accept the lock mechanism, minimum ownership facts, and cross-workspace coordination rules. The [Mission contract](mission.md#local-storage-and-concurrency) sets the local paths. SH67 accepts manual lock-artifact removal under the recovery limits.
 - Detailed phase-owned evidence and approval payload types beyond the shared record requirements. Material reference strings follow SH51. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
 - Traceability relationship formats, checkpoint reference names and publication, external evidence-store locations, retention periods, and cleanup rules.
 - Detailed workspace allocation, branch layouts, and shared test-resource isolation within the accepted [Mission contract](mission.md).

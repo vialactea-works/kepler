@@ -122,7 +122,7 @@ Follow the agreed [attempt scopes](README.md#attempts-and-completion) and [retur
 | Authorized unit-wide revision from Planning or earlier | Apply the agreed shutdown procedure. End affected execution attempts, keep history, and restart only after revised upstream completion. |
 | Interrupted work | Compare actual work and evidence with CLI progress. Make sure previous workers have stopped before resuming the same unended attempt. |
 
-The [unit-wide revision rule](README.md#unit-wide-upstream-revision) prevents ended attempts from completing tasks or accepting candidates. Physical shutdown, detailed transitions, and lock recovery are still implementation work.
+The [unit-wide revision rule](README.md#unit-wide-upstream-revision) prevents ended attempts from completing tasks or accepting candidates. Physical worker shutdown and detailed transitions remain implementation work. Apply the shared [lock and ownership rules](../../runtime.md#short-scoped-coordination) and [Mission coordination paths](../../mission.md#local-storage-and-concurrency). Exact key encodings and record fields remain implementation choices under SH64-SH66. SH67 accepts manual unlock after workers stop and effects reconcile.
 
 ### Return after completed Implementation
 
@@ -265,7 +265,7 @@ The completion assessment is new unit-scoped work. It consumes Activity evidence
 
 Keep the final integrated checkpoint set and necessary task checkpoint sets, candidate material, logs, and external evidence. A commit identifier or mutable external link alone does not keep them.
 
-Record results through CLI-owned operations. Exact payloads, commands, status transitions, and lock mechanisms are still implementation work. This specification does not include those operations.
+Record results through CLI-owned operations. Exact payloads, commands, and status transitions remain implementation work. Apply the accepted [lock and ownership rules](../../runtime.md#short-scoped-coordination) and [Mission coordination paths](../../mission.md#local-storage-and-concurrency). Exact key encodings, owner-record fields, and finer release protocols remain implementation choices under SH64-SH66. This specification does not include those operations.
 
 ## Handoff
 

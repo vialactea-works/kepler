@@ -98,6 +98,6 @@ Use the shared [evidence and checkpoint contract](runtime.md#evidence-and-conten
 
 Keep necessary Git checkpoint objects reachable under the [retention rules](runtime.md#checkpoint-retention). Detailed retention stays open. An audit event or fingerprint alone does not keep output contents.
 
-Use the shared [interrupted-work recovery rule](runtime.md#interrupted-work-recovery). Lock recovery and interrupted state-write recovery stay open. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
+Use the shared [interrupted-work recovery rule](runtime.md#interrupted-work-recovery). SH64-SH67 set the lock mechanism, owner-record facts, cross-workspace claims, and manual lock-artifact recovery. Recovery for interrupted state writes remains open under SH87. This document records revision authority, safeguards, editorial corrections, the shared cascade rule, and the questionnaire mechanism. It does not approve all earlier revision and recovery proposals.
 
 This document records the shared revision authority. Construction sets the orchestrator's [task execution responsibilities](phases/construction/README.md#implementation). A separate contract is necessary for each other responsibility.

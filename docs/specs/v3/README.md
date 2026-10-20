@@ -36,7 +36,7 @@ General project preparation belongs to Initialization, not Construction. Mission
 
 The [Standard workflow](workflows/standard/README.md#stages) puts Implementation between Implementation Planning and Unit of Work Review. Construction sets that stage's [task execution rules](phases/construction/README.md#implementation). This unit-scoped stage contains task scopes that can run in parallel when their dependencies are satisfied. Each task follows the fixed [Activity](activity.md) sequence: Code Generation, Code Validation, then Code Integration. Dedicated [Code Generation](phases/construction/activities/code-generation.md), [Code Validation](phases/construction/activities/code-validation.md), and [Code Integration](phases/construction/activities/code-integration.md) contracts set those Activity rules. These execution relationships apply only to Construction.
 
-[Code Integration](phases/construction/activities/code-integration.md#integration-procedure) prepares and checks each combined candidate under the unit lock. Authorized operations accept only the checked material. Typechecking, the project build, and the full application test suite must succeed before acceptance. This serializes integrations within that unit while work on other tasks and units can continue under their own contracts.
+[Code Integration](phases/construction/activities/code-integration.md#integration-procedure) prepares and checks each combined candidate under the unit lock. Authorized operations accept only the checked material. Typechecking, the project build, and the full application test suite must succeed before acceptance. This serializes integrations within that unit while work on other tasks and units can continue under their own contracts. The [shared runtime](runtime.md#short-scoped-coordination) sets lock and ownership rules. The [Mission contract](mission.md#local-storage-and-concurrency) sets local coordination domains.
 
 During Construction's [unit-wide upstream revision](phases/construction/README.md#unit-wide-upstream-revision), the orchestrator stops new task admissions and active implementation work for that unit. Independent units continue while their inputs and contracts stay valid.
 
@@ -126,7 +126,7 @@ Under the [parallel execution rules](runtime.md#parallel-execution), dependency-
 
 Each Unit of Work has one default effort. Use Standard when the requester has not selected another level. Stages inherit the unit default unless an explicit stage override exists. The agent recommends adjustments. The requester selects which adjustments to accept.
 
-Stages apply this shared definition to their work. Activities inherit their owning stage's effort and do not have separate overrides. Effort does not prescribe a file count or page length. SH62 accepts phase-owned effort events and queries for defaults, overrides, and effective stage levels. Exact event names, payloads, and projection fields remain implementation choices. SH63 keeps later effort changes in implementation work.
+Stages apply this shared definition to their work. Activities inherit their owning stage's effort and have no separate overrides. Effort does not prescribe a file count or page length. SH62 accepts phase-owned facts and queries for defaults, overrides, and effective stage levels; exact names, fields, and projections remain implementation choices. Under SH63, the owning phase derives later effort selections from structured data in existing interaction records, not prose. Do not add a separate effort event or setter command.
 
 ## Writing convention
 

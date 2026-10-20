@@ -193,7 +193,15 @@ Shared checkout ownership must also cover writers from other missions or record 
 <code-repository-git-common-directory>/kepler/workspaces/<local-workspace-key>/
 ```
 
-The local key and claim format are implementation choices. Claims must identify the actual working context, not only a branch label. Do not assume coordination with arbitrary unmanaged processes.
+Resolve record-home paths from the explicitly selected record-home repository. Resolve code ownership from the actual participating code repository, not the caller's current directory. Do not use a worktree's private Git metadata as the common directory.
+
+A normal clone uses its `.git/` directory as its common directory. Linked worktrees have private Git metadata but share one physical Git common directory. Resolve that actual common directory. Do not infer it from a `.git` file or a guessed directory. These common directories can be the same when the record home and code repository are the same. Otherwise, keep them separate.
+
+`workspaces/` stores local attachments, preparation observations, and claims; it does not store code checkouts. Use the mission coordination path for mission-local operations. Use the code-repository path for checkout and shared-resource claims. Keep these namespaces as shown above. Do not add a top-level lock registry, a marker to a secondary repository, a symlink convention, or a second registry.
+
+Key each checkout claim by its actual worktree or checkout identity. Do not use only branch, mission, or record-home labels. All supported participants for the same resource must resolve the same effective identity, including aliases and symlinks. Different actual checkouts keep separate claims and retain parallel work.
+
+Coordinate shared writable Integration targets by actual identity in the code repository's coordination domain. Do not key them only by one mission or input checkout. Exact local key encodings, claim formats, and subpaths remain implementation choices. This contract does not claim coordination with arbitrary unmanaged processes.
 
 All supported concurrent participants must share effective coordination for resources they can mutate. If safe ownership cannot be established, do not reuse that working context. Choose isolation or resolve the ownership conflict.
 
@@ -279,7 +287,7 @@ Retention periods, archive operations, and automatic cleanup remain outside this
 
 This contract settles policy, not interfaces or mechanisms. This batch selects no mission-create command. SH54 selects `--mission <mission-id>` when a mission-scoped operation lacks unit context; unit-scoped operations use unique recorded membership. SH59 accepts the full unit-create interface in [the CLI reference](cli.md#kepler-workflow-construction-unit-create).
 
-Event payload schemas and journal transactions remain implementation choices. Material references follow SH51 and do not supply repository or checkpoint bindings by themselves. Lock mechanisms, claim formats, branch allocation, checkpoint reference names, and publication remain under their existing decisions. Retention and cleanup remain separate.
+Event payload schemas and journal transactions remain implementation choices. Material references follow SH51 and do not supply repository or checkpoint bindings by themselves. Lock directories, owner-record facts, and cross-workspace coordination follow SH64-SH66. Exact key encodings, claim formats, and finer release protocols remain implementation choices. Branch allocation, checkpoint reference names, and publication remain under their existing decisions. Retention and cleanup remain separate.
 
 Unit-based existing operations may resolve a mission from unique recorded membership. Mission-aware queries must handle unbound units explicitly. This Mission contract added no `--mission`, `--repo`, batch, or format selector. SH54 later adds `--mission <mission-id>` only when a mission-scoped operation lacks unit context. Unit-based operations do not need that selector. This extension does not change diff-package signatures or existing audit-list/show signatures.
 
