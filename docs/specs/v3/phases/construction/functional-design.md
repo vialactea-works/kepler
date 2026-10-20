@@ -74,7 +74,7 @@ All paths are relative to the selected record-home working-tree root. `<unit-id>
 
 The Unit of Work directory stays unchanged across stages, retries, and design revisions. Do not derive its identity from a branch, worktree, skill, or task number. Use the shared [unit identity and directory rules](../../unit-of-work.md#identity-and-directory): `YYYY-MM-DD-<slug>`. Use the machine-local creation date and the exact ID as the directory name.
 
-These mission-owned paths follow the accepted [Mission contract](../../mission.md#durable-layout). They do not migrate existing files. Mission creation and complete unit-creation syntax remain open.
+These mission-owned paths follow the accepted [Mission contract](../../mission.md#durable-layout). They do not migrate existing files. Mission creation remains open. SH59 accepts the complete unit-creation interface in the [CLI reference](../../cli.md#kepler-workflow-construction-unit-create).
 
 ### Required information and supporting detail
 

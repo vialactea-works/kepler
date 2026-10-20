@@ -48,7 +48,7 @@ Construction owns its transition rules. A workflow selects stage order. The [Sta
 
 ## Proposed interface rules
 
-The command inventory below lists proposed interfaces and accepted command interfaces. Accepted interfaces include three `kepler git diff-package` commands, evidence recording, approval and interaction recording, audit queries, and shared lint. Setup, UUID generation, Construction lint, Standard workflow binding, the SH53 queries, and the SH54 normal transitions are also accepted. Pause and resume remain under SH58. These decisions accept only the named operations and existing rules, not every detail in this draft.
+The command inventory below lists proposed and accepted interfaces. Accepted interfaces include three `kepler git diff-package` commands, evidence recording, approval and interaction recording, audit queries, and shared lint. Setup, UUID generation, Construction lint, Standard workflow binding, SH53 queries, and SH54 normal transitions are also accepted. SH57-SH60 and SH62 accept the listed revision, pause/resume, unit-creation, current-author, and effort-record details. Other details in this draft remain proposals unless their owners accepted them.
 
 Do not add commands for future Initialization or Inception phases. Do not add a workflow engine, state registry, or utility registry. Exclude generic status changes, force operations, migrations, and public lock manipulation.
 
@@ -79,7 +79,7 @@ Validate all selected scope and ownership relationships. Return a structured err
 
 Unit-based operations resolve mission context only from unique recorded membership. Mission-aware queries must identify unbound units.
 
-SH53 accepts the existing query operations listed below. SH54 accepts the normal phase-owned transitions and a mission selector when no unit supplies context. The original SH103 scope selectors remain unchanged. Do not add a `--repo` selector. The full unit-creation command syntax remains open under SH59.
+SH53 accepts the existing query operations listed below. SH54 accepts the normal phase-owned transitions and a mission selector when no unit supplies context. The original SH103 scope selectors remain unchanged. Do not add a `--repo` selector. SH59 accepts the full unit-creation signature below.
 
 **Mission selection under SH54.** For a mission-scoped operation without a unit identity, accept `--mission <mission-id>`. Require the full, exact mission UUIDv4. `--project` still selects the record home.
 
@@ -93,7 +93,7 @@ Keep effort defaults, stage overrides, and workflow binding in `unit show`. Do n
 
 Keep the accepted [diff-package source selectors and signatures](#kepler-git-diff-package) unchanged. Their `--generation-attempt` and `--integration-attempt` selectors identify source attempts, not consumer attempts.
 
-Attempt IDs follow the accepted shared [attempt identity rules](runtime.md#attempt-identity-and-active-scope). Use the accepted [failure result fields](#failure-and-recovery-rules) and [exit-code contract](#exit-codes). Revision details stay under SH57, pause and resume under SH58, and full unit-creation syntax under SH59. Other operation-specific arguments, real path operands, and quoting remain implementation choices unless an accepted contract sets them.
+Attempt IDs follow the accepted shared [attempt identity rules](runtime.md#attempt-identity-and-active-scope). Use the accepted [failure result fields](#failure-and-recovery-rules) and [exit-code contract](#exit-codes). SH57 accepts the revision interface and its authority and cascade rules. SH58 accepts pause and resume safety. SH59 accepts the full unit-creation signature. Other payload details remain implementation choices unless an accepted contract sets them.
 
 ### Project selection
 
@@ -184,7 +184,7 @@ Any later human result mode must be opt-in.
 | --- | --- | --- |
 | `kepler setup` | Accepted root interface | Install compatible bundled resources and missing default settings. |
 | `kepler uuid` | Accepted root interface | Return one UUIDv4 in `data.uuid`. |
-| `kepler git author` | Proposed command under accepted `git` namespace | Return the effective Git author identity. |
+| `kepler git author` | Accepted under SH60 | Return effective repository Git values in `data.name` and `data.email`. |
 | `kepler git diff-package validation` | Accepted under `git` | Package a task's generated output for Code Validation. |
 | `kepler git diff-package integration` | Accepted under `git` | Package a prepared combined candidate for Code Integration inspection. |
 | `kepler git diff-package unit-review` | Accepted under `git` | Package the complete unit's integrated changes for Review. |
@@ -193,14 +193,14 @@ Any later human result mode must be opt-in.
 | `kepler audit record <kind>` | Accepted for `approval` and `interaction` under SH55-SH56 | Record a typed approval or interaction fact. |
 | `kepler audit list` | Accepted under `audit` | Query compact audit-event projections with explicit field selection and pagination. |
 | `kepler audit show` | Accepted under `audit` | Read one complete audit event by its journal and event identities. |
-| `kepler workflow construction unit create` | Accepted placement | Create one Construction Unit of Work. |
+| `kepler workflow construction unit create` | Accepted under SH59 | Create one Construction Unit of Work with its initial effort. |
 | `kepler workflow construction unit list` | Accepted query under SH53 | List Units of Work, including known unbound units. |
 | `kepler workflow construction unit show` | Accepted query under SH53 | Read one Unit of Work, its state, effort, and workflow binding. |
 | `kepler workflow construction lint` | Accepted phase interface | Validate the selected unit's canonical task graph without changing it. |
-| `kepler workflow construction stage <operation>` | Accepted `show`, `start`, and `complete`; pause/resume remain under SH58 | Read or change one unit-scoped stage attempt under its contract. |
+| `kepler workflow construction stage <operation>` | Accepted `show`, `start`, `complete`, `pause`, and `resume` under SH53-SH54 and SH58 | Read or change one unit-scoped stage attempt under its contract. |
 | `kepler workflow construction task <operation>` | Accepted `list`, `show`, `ready`, `admit`, and `integrate` under SH53-SH54 | Read task state, admit a task, or integrate its result. |
-| `kepler workflow construction activity <operation>` | Accepted `show`, `start`, and `complete`; pause/resume remain under SH58 | Read or change one task-scoped Activity attempt under its contract. |
-| `kepler workflow construction revise` | Accepted placement. Detailed operation proposed. | Apply an authorized unit-stage cascade or task-local Activity return. |
+| `kepler workflow construction activity <operation>` | Accepted `show`, `start`, `complete`, `pause`, and `resume` under SH53-SH54 and SH58 | Read or change one task-scoped Activity attempt under its contract. |
+| `kepler workflow construction revise` | Accepted under SH57 | Apply an authorized revision within the selected stage or Activity scope. |
 
 Here, `<kind>` is `approval` or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
 
@@ -253,15 +253,21 @@ Do not use a UUID as the readable unit ID. Attempt and event IDs follow their ow
 
 ### `kepler git author`
 
-**Proposed operation.** Return `user.name` and `user.email` from the effective Git configuration for the selected project. This operation supplies the values for the shared [author identity rules](metadata.md#author-identity). It returns the current Git identity, not the stored author of an existing artifact.
+**Accepted under SH60.** Use this interface:
 
-Do not replace an artifact's original author during later edits.
+```text
+kepler git author [--project <path>]
+```
 
-**Accepted failure policy under [SH61](authoring_progress.md#completed-shared-decisions).** An absent, empty, or whitespace-only name or email makes lookup fail. Return a nonzero result identifying each missing key. Do not prompt inside the CLI, change Git configuration automatically, or invent a fallback identity.
+Return `user.name` and `user.email` from the effective Git configuration for the selected project. Put them in `data.name` and `data.email`. This operation supplies values for the shared [author identity rules](metadata.md#author-identity). It returns the current Git identity, not an artifact's original author or requester consent.
+
+Do not replace an artifact's original author during later edits. Keep this lookup read-only. Do not prompt, change Git configuration, or invent a fallback identity.
+
+**Accepted failure policy under [SH61](authoring_progress.md#completed-shared-decisions).** An absent, empty, or whitespace-only name or email makes lookup fail. Return a nonzero result identifying each missing key.
 
 Callers must make sure that both identity values are present before writing an artifact with an `author` field. Do not write incomplete author metadata or record successful creation or completion after this failure. The calling agent explains the problem and retries after the appropriate identity is configured. Keep existing authors and continue unaffected work. Apply the [shared identity policy](metadata.md#missing-identity) and existing metadata validation rules.
 
-Command-specific error codes and success fields stay implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices). This accepted failure policy does not accept the other command proposal.
+Command-specific error-code values remain implementation choices under SH60.
 
 ### `kepler git diff-package`
 
@@ -442,29 +448,31 @@ Later operations and resume read that recorded binding. Expose it through `unit 
 
 The MVP has no per-command workflow selector, workflow switching, or generic workflow registry. Binding Standard does not start a stage, grant execution authority, or approve a Unit of Work.
 
-Exact event payload and response-field encoding remain implementation details under the existing runtime and query decisions. This choice does not accept the complete unit-creation interface.
+Exact event payload and response-field encoding remain implementation details under the existing runtime and query decisions. SH115 accepts the workflow binding; SH59 separately accepts the full unit-creation signature.
 
 ### `kepler workflow construction unit create`
 
-**Full interface remains open under SH59.** Use `--mission <mission-id>` under SH54 and require its full exact UUIDv4. `--project` selects the record home. The complete command signature, including effort inputs, remains open. Apply the accepted [workflow binding](#workflow-binding) at creation. The earlier proposed form remains incomplete; do not infer its other arguments from this policy.
+**Accepted under SH59.** Use this interface:
 
-Unit creation records mission identity, the `standard` workflow binding, the unit identity, and the initial effort. Use the ID format `YYYY-MM-DD-<slug>`, the machine-local date at creation, and the exact ID as the directory name. Its path is `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/`, relative to the record-home root. The complete ID must be unique across that project, including known unbound units. Do not change it during revision or resume.
+```text
+kepler workflow construction unit create <slug> --mission <mission-id> [--effort <level>] [--stage-effort <stage>=<level>]... [--project <path>]
+```
 
-**Proposed input rules:**
+Use an existing mission. Require the full, exact mission UUIDv4. `--project` selects the record home under the accepted [project selection rules](#project-selection). Apply the accepted [Standard workflow binding](#workflow-binding).
 
-- Use lowercase words separated by single hyphens for `<slug>`. Reject invalid input. Do not normalize it silently. The exact valid characters stay open.
-- Select Minimal, Standard, or Comprehensive at creation. Use Standard if the requester has not selected another level. The input syntax remains open.
-- Do not choose an active Unit of Work implicitly. A newly created unit is not automatically selected for later commands.
+Use the accepted Effort levels: Minimal, Standard, and Comprehensive. Use Standard when `--effort` is absent. A stage override replaces the unit default for that stage. Permit repeated `--stage-effort` options only for distinct stage keys; reject duplicate stage overrides. This exception does not change the duplicate-selector rule.
 
-On success, make the unit directory and record mission membership, workflow binding, and initial effort facts. These are necessary effects, not a general exactly-once replay protocol. Do not write `unit-of-work.md`, placeholders, requirements, plans, or task files. Do not start a stage or attempt, launch agents, approve work, create branches or worktrees, or make commits. Do not run setup or migration.
+Use the existing lowercase, hyphenated `<slug>` rule in the [unit identity contract](unit-of-work.md#identity-and-directory). This interface adds no slug character-set or conversion policy. Reject invalid input; do not normalize it silently. Generate the unit ID with the machine-local creation date, and use its exact ID as the directory name. Keep the complete ID unique across the record-home project, including known unbound units. Do not change it during revision or resume.
 
-A create failure must not report success. Reject invalid input before writing. If the record home cannot be resolved, fail without running setup. If the ID is registered, including to an unbound unit, or its destination exists, refuse without overwriting or adopting it. Under concurrent requests for the same ID, at most one request succeeds.
+Create the unit directory. Record mission membership, the matching `standard` workflow binding, the generated unit identity, and initial effort.
 
-If a write fails or the process stops partway through, compare actual directory and journal effects with the requested operation. Do this before retrying. Keep uncertain or unrelated material. Do not promise general exactly-once replay. A caller that loses the success response can use `unit list` or `unit show` to read the result. A new request after local midnight can receive a different ID.
+Do not create a mission, run setup, or migrate data. Do not create `unit-of-work.md`, requirements, plans, or task files. Do not create placeholders. Do not start a stage or attempt, launch agents, approve work, or make commits. Do not create workspaces, branches, or worktrees. A new unit does not become an implicit current selection.
 
-The earlier unit-creation example shows proposed fields inside `data`, not an accepted command-specific schema.
+Apply the existing unit-identity, project-selection, workflow-binding, and failure-recovery rules. Refuse a registered ID, including a known unbound unit, or an existing destination. Do not adopt or overwrite either. Under concurrent requests for the same ID, at most one request succeeds.
 
-A proposed `--stage-effort <stage>=<level>` option is an open question. Do not treat it as accepted or remove the existing stage-override policy.
+Reject invalid input before writing. If creation stops after partial changes, reconcile actual directory and journal effects before retrying. Keep uncertain or unrelated material. Do not promise general exactly-once replay. Exact result fields and partial-write mechanisms remain implementation choices under the shared contracts.
+
+Expose the unit effort default, explicit overrides, and effective stage levels through `unit show`. The existing unit-creation example shows proposed result fields, not an accepted command-specific result schema. Initial effort records do not select the later effort-change interface or an event catalog.
 
 ### `kepler workflow construction unit list`
 
@@ -474,9 +482,9 @@ Apply the accepted [project selection rules](#project-selection). Return compact
 
 ### `kepler workflow construction unit show`
 
-**Accepted query under SH53.** Show one Unit of Work by its explicit identity. Include its current effort default, stage overrides, workflow binding, mission membership, and scoped stage and task progress. Calculate effort overrides from recorded events. Do not change state, write history, or select a persistent current unit or mission.
+**Accepted query under SH53.** Show one Unit of Work by its explicit identity. Include its current effort default, explicit stage overrides, and effective stage effort levels. Also include workflow binding, mission membership, and scoped stage and task progress. Derive effort from recorded events. Do not change state, write history, or select a persistent current unit or mission.
 
-Activities inherit their stage's effort. They do not have their own override. Do not add effort commands. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). The CLI inputs and operation placement for those decisions stay implementation details.
+Activities inherit their stage's effort. They do not have their own override. Do not add effort commands. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). The interface for later effort changes remains implementation work under SH63.
 
 Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Resolve mission context from unique recorded membership. For an unbound unit, report the missing binding. Do not adopt or hide it. Return compact JSON without bulk artifact contents. Exact state vocabulary and response fields remain implementation details.
 
@@ -510,7 +518,7 @@ Keep lint read-only. Do not repair, migrate, generate identifiers, write events,
 
 ## Stage operations
 
-The existing scoped commands below support SH53 queries and SH54 normal transitions. They use the recorded [Standard workflow binding](#workflow-binding). Construction owns transitions. Standard selects the sequence. Pause and resume remain under SH58.
+The existing scoped commands below support SH53 queries, SH54 normal transitions, and SH58 pause/resume. They use the recorded [Standard workflow binding](#workflow-binding). Construction owns transitions. Standard selects the sequence.
 
 Use `--unit <unit-id>` and `--stage <stage>` under the accepted [scope selectors](#scope-and-selectors). Mutations of an existing stage attempt also use `--attempt <attempt-id>`.
 
@@ -519,14 +527,14 @@ Use `--unit <unit-id>` and `--stage <stage>` under the accepted [scope selectors
 | `stage start` | **Accepted under SH54.** Start the authorized stage in its unit scope. Create a distinct stage attempt only when execution starts. Enforce the one-active-attempt limit for that fixed scope. |
 | `stage show` | **Accepted under SH53.** Read the selected stage's derived state, attempt, effort, and relevant evidence. Do not write or advance state. |
 | `stage complete` | **Accepted under SH54.** Record completion only when the owning phase's completion conditions hold for the current attempt and material. Completing one stage does not complete the workflow. |
-| `stage pause` | **Proposed under SH58.** Pause the current stage attempt without ending it or freeing its active scope. Keep its identity and history. |
-| `stage resume` | **Proposed under SH58.** Resume the same paused attempt. Do not create a second active attempt. Make sure recovery rules are clear before work resumes. |
+| `stage pause` | **Accepted under SH58.** Block new affected work. Keep the attempt identity, history, and active-scope reservation. Acknowledge a completed pause only after workers stop and locks reconcile. |
+| `stage resume` | **Accepted under SH58.** Verify inputs and ownership, then resume the same attempt. Keep its active-scope reservation. Unrelated work continues. |
 
 Each mutation records its own typed lifecycle event and uses accepted short scoped coordination. Do not ask callers to write a duplicate event. Mutations of an existing attempt name its exact ID. A start creates its UUIDv4 only when execution starts.
 
 Starting a stage does not launch an agent. A failed or partial transition returns a nonzero operation result. Do not mark a stage complete from a successful process exit alone.
 
-Apply each owning phase's accepted authority, attempt, evidence, and completion rules. Additional internal state vocabularies, payload details, pause/resume behavior, and recovery of interrupted transitions remain implementation choices or SH58 proposals. See the [stage catalog](phases/construction/README.md#stage-catalog).
+Apply each owning phase's accepted authority, attempt, evidence, and completion rules. SH58 accepts pause safety and same-attempt resume, not state names or event payloads. Exact payloads and recovery mechanisms for interrupted transitions remain implementation work. A timeout or absent session does not prove that workers stopped. See the [stage catalog](phases/construction/README.md#stage-catalog).
 
 ## Task operations
 
@@ -550,7 +558,7 @@ Phase-owned evidence payload details, lock implementation, and the operation res
 
 ## Activity operations
 
-Activities are fixed, task-scoped parts of the unit's Implementation stage: Code Generation, Code Validation, then Code Integration. They are not stages. Follow the [Construction Activity rules](phases/construction/activities/README.md#shared-execution-rules) and [attempt rules](runtime.md#activity-attempts). SH54 accepts normal start and complete operations. Pause and resume remain under SH58.
+Activities are fixed, task-scoped parts of the unit's Implementation stage: Code Generation, Code Validation, then Code Integration. They are not stages. Follow the [Construction Activity rules](phases/construction/activities/README.md#shared-execution-rules) and [attempt rules](runtime.md#activity-attempts). SH54 accepts normal start and complete operations. SH58 also accepts pause and resume safety.
 
 Use `--unit <unit-id>`, `--task <task-id>`, `--activity <activity>`, and `--implementation-attempt <attempt-id>` under the accepted [scope selectors](#scope-and-selectors). Mutations of an existing Activity attempt also use `--attempt <attempt-id>`.
 
@@ -559,8 +567,8 @@ Use `--unit <unit-id>`, `--task <task-id>`, `--activity <activity>`, and `--impl
 | `activity start` | **Accepted under SH54.** Start one Activity occurrence for an admitted task under the active Implementation attempt. Create its distinct attempt when execution starts. Enforce at most one active attempt for that occurrence. |
 | `activity show` | **Accepted under SH53.** Read one Activity occurrence and its attempts, evidence bindings, and current state. Do not write or advance state. |
 | `activity complete` | **Accepted under SH54.** Record completion only when that Activity's conditions and evidence hold for its current attempt. Code Integration can complete only with a matching accepted candidate from `task integrate`. |
-| `activity pause` | **Proposed under SH58.** Pause the current Activity attempt without ending it. Keep its identity and active scope. |
-| `activity resume` | **Proposed under SH58.** Resume the same paused Activity attempt after making sure that earlier workers stopped and its inputs stay valid. |
+| `activity pause` | **Accepted under SH58.** Block new affected work. Keep the attempt identity, history, and active-scope reservation. Acknowledge a completed pause only after workers stop and locks reconcile. |
+| `activity resume` | **Accepted under SH58.** Verify inputs and ownership, then resume the same attempt. Keep its active-scope reservation. Unrelated work continues. |
 
 Code Generation owns implementation, typechecking, related tests, and self-review. Code Validation owns necessary typechecking, the project build, the full application test suite, and independent non-author feedback. Code Integration owns combined-candidate checks and acceptance. These check duties stay binding. The detailed Activity contracts mark other proposals separately.
 
@@ -572,20 +580,22 @@ Phase-owned event payload details, completion guards, and evidence payload types
 
 ### `kepler workflow construction revise`
 
-**Accepted placement.** Use this direct operation for an authorized revision. Do not add `kepler workflow construction revision` or another revision namespace.
+**Accepted under SH57.** Keep this direct operation for authorized revisions. Do not add a revision namespace.
 
-**Proposed scope.** This proposal has two cases:
+The accepted revision scope has two cases:
 
 1. A unit-stage cascade from the orchestrator-selected earliest affected stage through every downstream Standard stage in the authorized unit scope.
 2. A task-local return to an authorized Activity, then each later Activity for that task in the accepted order.
 
-The command records the authorized decision and reason through a typed phase operation. It must identify the selected unit, scope, and boundary. Do not invent an authorization proof protocol. A worker's finding or proposed boundary does not authorize revision.
+Use the existing exact selectors for the affected unit, attempt, and stage or Activity boundary. Read the reason and supporting inputs from one JSON request on stdin. Exact request fields and payload schemas remain implementation work.
 
-For a unit-wide upstream revision, stop new admissions and active Implementation work for that unit. End affected Implementation and Activity attempts. Keep their history and work. Prevent ended attempts from accepting candidates or completing tasks. Independent units continue when their inputs stay valid.
+The orchestrator authorizes the scope and boundary. A worker's finding or proposed boundary does not authorize a revision. Do not silently change approved product behavior or scope. Do not add an authorization proof protocol.
 
-For a task-local code correction, the orchestrator can return the task to Code Generation. The task must pass Code Validation and Code Integration again. A return starts a new Activity attempt when the Activity executes. An Integration-only retry stays in the current Integration attempt and does not become a revision.
+For a unit-wide upstream revision, stop new admissions and active Implementation work for that unit. Apply the full cascade within the authorized scope, even when downstream outputs appear unchanged. End affected old attempts, preserve their history and work, and prevent ended attempts from accepting candidates or completing tasks. Keep valid parent scope for task-local returns under IE22. Do not require callers to enumerate cascade-derived attempts. Start new attempts only when execution restarts.
 
-Compare affected evidence and artifacts with the revised contracts under the shared [revision procedure](revision.md#revision-procedure). Update them when they no longer meet those contracts. Do not delete prior artifacts, transfer old completion into a new attempt, or reopen unrelated scopes without authorization. Exact boundary arguments, evidence inputs, cascade events, and partial-failure recovery stay open.
+For a task-local code correction, return to Code Generation, then repeat Code Validation and Code Integration as required. An Integration-only retry stays within its current attempt and is not a revision. Independent scopes continue when their inputs and contracts remain valid.
+
+Compare affected evidence and artifacts with revised contracts under the shared [revision procedure](revision.md#revision-procedure). Do not delete prior artifacts, transfer old completion to a new attempt, or reopen unrelated scopes without authorization. Event catalogs and partial-write mechanisms remain implementation work.
 
 ## Record portability
 
@@ -663,6 +673,8 @@ Accepted command placements, structured-output default, and typed lifecycle writ
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-Other shared runtime and Construction implementation choices stay under SH57-SH60, SH62-SH67, SH69-SH70, SH72, SH84-SH85, SH87, and DF14-DF17. SH51 and SH53-SH56 are settled. The [Mission contract](mission.md) settles SH45 storage paths, SH68 workspace policy, and SH86 retained-evidence locations. Remaining choices include journal writes, projections, attempts, locks, workspace allocation, effort changes, task and Activity details, and recovery. Actor representation and phase payload fields under SH55-SH56 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
+SH57-SH60 and SH62 accept their named interfaces and policy minimums; exact request payloads, event names, projection fields, and error-code values remain implementation details. SH63-SH67, SH69-SH70, SH72, SH84-SH85, SH87, and DF14-DF17 remain implementation choices.
+
+SH51 and SH53-SH62 are settled. The [Mission contract](mission.md) settles SH45 storage paths, SH68 workspace policy, and SH86 retained-evidence locations. Remaining choices include journal writes, projections, locks, workspace allocation, later effort changes, task and Activity details, and recovery. Actor representation and phase payload fields under SH55-SH56 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
 
 Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. This CLI draft does not accept other proposals in those contracts.

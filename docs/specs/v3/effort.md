@@ -28,7 +28,7 @@ Effort does not select which stages execute. It does not change required informa
 | Default | Use Standard when the requester has not selected another level. |
 | Authority | The agent recommends adjustments with a short rationale. The requester selects whether to accept them. |
 | Selection criteria | Compare uncertainty, domain complexity, interactions, consequences of incorrect decisions, and available references with the selected level. Code size alone is insufficient. |
-| Recording | Record the unit default and explicit stage overrides as journal events through the `kepler` CLI, not artifact frontmatter. Calculate current selections from those events. Exact payloads and operations stay open. |
+| Recording | Record the unit default and explicit stage overrides as simple phase-owned journal events through the `kepler` CLI, not artifact frontmatter. Record selection attribution where applicable. Derive current selections from those events. Exact event names and payloads stay implementation choices. |
 | Changes during work | Compare the current effort with the analysis necessary for new findings. Changes apply to current and future work. Revisiting completed work follows the shared revision rules. |
 
 ## Selection procedure
@@ -77,4 +77,6 @@ For Implementation Planning, use `plan.md` and `tasks-dag.json`. Its [accepted c
 
 For Deliver, use `delivery.md` with sections for outcome, operations, verification and recovery, and decisions. Use the [accepted Deliver contract](phases/construction/deliver.md#required-sections). These contracts do not add a document-level effort setting.
 
-The shared [execution-state representation](runtime.md#execution-state-representation) calculates current selections from journal events. Event payloads, projection fields, and CLI operations for the unit default and stage overrides stay undecided. These are changing execution settings, not artifact identity metadata. This definition does not set persistence or CLI options.
+The shared [execution-state representation](runtime.md#execution-state-representation) derives current selections from journal events. SH62 accepts simple phase-owned events for the unit default and explicit stage overrides, plus queries for the default, overrides, and effective stage levels. Resolve an override before the unit default, then use Standard. Activities inherit their stage's effort.
+
+Keep these settings out of frontmatter and separate authoritative state files. Exact event names, payloads, and projection fields remain implementation choices. SH63 leaves the interface for later effort changes to implementation.

@@ -277,7 +277,7 @@ Retention periods, archive operations, and automatic cleanup remain outside this
 
 ## Implementation boundaries
 
-This contract settles policy, not interfaces or mechanisms. This batch selects no mission-create command. SH54 selects `--mission <mission-id>` when a mission-scoped operation lacks unit context; unit-scoped operations use unique recorded membership. The full unit-create syntax remains under SH59.
+This contract settles policy, not interfaces or mechanisms. This batch selects no mission-create command. SH54 selects `--mission <mission-id>` when a mission-scoped operation lacks unit context; unit-scoped operations use unique recorded membership. SH59 accepts the full unit-create interface in [the CLI reference](cli.md#kepler-workflow-construction-unit-create).
 
 Event payload schemas and journal transactions remain implementation choices. Material references follow SH51 and do not supply repository or checkpoint bindings by themselves. Lock mechanisms, claim formats, branch allocation, checkpoint reference names, and publication remain under their existing decisions. Retention and cleanup remain separate.
 

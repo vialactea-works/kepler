@@ -95,7 +95,9 @@ The CLI can calculate views directly or use rebuildable projections. Rebuilding 
 
 One shared journal or a global total order is not necessary for this representation. The [event envelope](#event-envelope-choices) is agreed. Exact type definitions and the event catalog belong to implementation. Journal layout, collection, and write protocols stay separate decisions.
 
-Record the unit effort default and explicit stage overrides as journal events through the CLI. The CLI calculates their current values from those events. Their selection and approval rules stay in the shared [Effort definition](effort.md).
+Under SH62, record the unit effort default and explicit stage overrides as simple phase-owned journal events through the CLI. Record selection attribution where applicable. Derive current values from those events, and expose the default, overrides, and effective stage levels through [unit show](cli.md#kepler-workflow-construction-unit-show). Resolve stage override, then unit default, then Standard. Activities inherit their stage's effort.
+
+Keep settings out of frontmatter and separate authoritative state files. Exact event names, payloads, and projection fields remain implementation choices. Their selection rules stay in the shared [Effort definition](effort.md).
 
 Record requester approvals and their reviewed-material bindings as journal events through the CLI. Approval views are derived from those events. A frontmatter flag, an existing artifact, or a Git commit does not show approval or completion.
 
@@ -179,7 +181,7 @@ Give each authorized revision a fresh full lowercase hyphenated UUIDv4 as `revis
 
 Follow Construction's [unit-wide upstream revision rules](phases/construction/README.md#unit-wide-upstream-revision). Record the end of affected Implementation and Activity attempts through CLI-owned journal events. Calculate current attempt views from those events. Start new attempts only when their stage or Activity executes again.
 
-Phase-owned projection fields and detailed revision arguments stay undecided. The [CLI command reference](cli.md#revision-operation) records the agreed `revise` placement. The implementation sets revision event types and payload schemas within the agreed [event envelope](#event-envelope-choices).
+SH57 accepts `kepler workflow construction revise`, its existing exact scope and attempt selectors, and a JSON stdin request for the reason and supporting inputs. Exact request fields, projection fields, event types, and payload schemas remain implementation choices. See the [CLI command reference](cli.md#revision-operation) and the agreed [event envelope](#event-envelope-choices).
 
 ### Audit ownership
 
@@ -412,7 +414,7 @@ Use the accepted [Construction lint interface](cli.md#kepler-workflow-constructi
 
 ### Current author
 
-Give a CLI command that returns the current author as Git `user.name` and Git `user.email`. Resolve both values from the effective Git configuration for the current project. Repository-specific identity settings must apply.
+Under SH60, use `kepler git author [--project <path>]` to return effective project Git `user.name` and `user.email` in `data.name` and `data.email`. Repository-specific identity settings must apply.
 
 Skills use this command to obtain the original creator's identity when creating an artifact. Store the frontmatter `author` value as one `Name <email>` string under the shared [author identity rules](metadata.md#author-identity).
 
@@ -422,7 +424,7 @@ Apply the accepted [missing-identity policy](metadata.md#missing-identity) under
 
 Do not prompt inside the CLI, change Git configuration automatically, or invent a fallback identity. The calling agent explains the problem and retries after the appropriate identity is configured. Keep existing authors and continue unaffected work.
 
-The [CLI command reference](cli.md#kepler-git-author) proposes `kepler git author`. Structured output is the default. The command name, success fields, and command-specific error codes stay implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices).
+The accepted [CLI command reference](cli.md#kepler-git-author) sets the command and success fields. Structured output is the default. Command-specific error-code values remain implementation choices under SH60.
 
 ### Unit creation
 
@@ -430,7 +432,7 @@ Create unit IDs in the format `YYYY-MM-DD-<slug>` under the shared [unit identit
 
 Use the exact unit ID as the directory name under its mission. Detect duplicate IDs across the record-home project, including known unbound units. Do not overwrite an existing unit or regenerate its ID during revision or resume. See the [Mission layout](mission.md#durable-layout).
 
-The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement. SH54 selects `--mission <mission-id>` for mission input. The full command syntax remains open under SH59.
+The accepted [unit creation command](cli.md#kepler-workflow-construction-unit-create) sets the full signature under SH59. SH54 selects `--mission <mission-id>` when a mission-scoped operation lacks unit context. Mission creation remains outside the selected CLI interface.
 
 Mission creation records the selected workflow in its owning phase journal. Construction unit creation records the matching `standard` binding in the Construction journal. Later operations and resume use that binding, and `unit show` exposes it. Do not add workflow or mission fields to frontmatter or the authored task graph.
 

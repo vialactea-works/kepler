@@ -113,7 +113,7 @@ To classify a unit as a walking skeleton, record this label on its `unit-of-work
 
 `author` identifies the artifact's original creator. Store it as one string in `Name <email>` form. Use Git `user.name` for the name and Git `user.email` for the email.
 
-When you create an artifact, use the planned [current-author CLI command](runtime.md#current-author) to read these values. The command reads the current project's effective Git configuration.
+When you create an artifact, use the accepted [current-author CLI command](runtime.md#current-author) to read these values. The command reads the selected project's effective Git configuration.
 
 Keep `author` during subsequent edits, including edits by another person. A different Git profile must not replace the stored attribution automatically. Change `author` only to correct incorrect attribution explicitly.
 
@@ -133,7 +133,7 @@ The calling agent explains the problem and the necessary Git configuration. Retr
 
 Keep existing authors. Let unaffected work continue. Other operations keep their own identity and authority requirements.
 
-[SH61](authoring_progress.md#completed-shared-decisions) records this policy. Exact error codes and response fields stay implementation choices under [SH60](authoring_progress.md#mvp-implementation-choices). Existing identity-format and read-only validation rules stay unchanged.
+[SH61](authoring_progress.md#completed-shared-decisions) records this policy. SH60 fixes the command and success fields; command-specific error-code values remain implementation choices. Existing identity-format and read-only validation rules stay unchanged.
 
 #### Example
 

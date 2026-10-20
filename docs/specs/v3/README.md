@@ -88,7 +88,7 @@ The accepted Implementation Planning contract has `plan.md` and `tasks-dag.json`
 
 The accepted [Implementation contract](phases/construction/implementation.md#artifacts-and-records) gives implementation outputs and scoped CLI-owned evidence, without a required execution Markdown document. The accepted [Review contract](phases/construction/unit-of-work-review.md#artifacts-and-records) gives review records without a required review Markdown document. The accepted [Deliver contract](phases/construction/deliver.md#artifacts) includes required unit-root `delivery.md` for authored instructions. Operation results and changing execution state stay separate CLI-owned records. These specifications do not show that version 3 is implemented.
 
-These paths do not migrate existing data. Mission creation and complete unit-creation syntax remain open under their interface decisions.
+These paths do not migrate existing data. Mission creation remains open. SH59 accepts the complete unit-creation interface in [the CLI reference](cli.md#kepler-workflow-construction-unit-create).
 
 Further decisions are necessary for the authority, internal file structure, and update rules for Project references. Keep the distinction between observed facts and proposed behavior explicit.
 
@@ -126,7 +126,7 @@ Under the [parallel execution rules](runtime.md#parallel-execution), dependency-
 
 Each Unit of Work has one default effort. Use Standard when the requester has not selected another level. Stages inherit the unit default unless an explicit stage override exists. The agent recommends adjustments. The requester selects which adjustments to accept.
 
-Stages apply this shared definition to their work. Activities inherit their owning stage's effort and do not have separate overrides. Effort does not prescribe a file count or page length. Record effort selections as journal events through the CLI. Calculate current settings from those events. Exact payloads, projection fields, and CLI operations stay part of the shared CLI infrastructure contract.
+Stages apply this shared definition to their work. Activities inherit their owning stage's effort and do not have separate overrides. Effort does not prescribe a file count or page length. SH62 accepts phase-owned effort events and queries for defaults, overrides, and effective stage levels. Exact event names, payloads, and projection fields remain implementation choices. SH63 keeps later effort changes in implementation work.
 
 ## Writing convention
 
