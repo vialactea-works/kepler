@@ -60,7 +60,7 @@ Future task prerequisites do not all have to be available before independent rea
 - Publishing, merging into an external target, releasing, or deploying merely because Code Integration succeeds.
 - Selecting a worker topology other than the agreed orchestrator-controlled subagent model, or giving workers authority to select their own topology.
 
-[CN22](../../authoring_progress.md#completed-construction-decisions) keeps the MVP execution model. It does not constrain other phases or remove ready-task parallelism. [CN20](../../authoring_progress.md#deferred-decisions) tracks coordination protocol definitions beyond the MVP.
+[CN22](../../authoring_progress.md#completed-construction-decisions) records the accepted Implementation model. It does not constrain other phases or remove ready-task parallelism. [CN20](../../authoring_progress.md#deferred-decisions) defers coordination-protocol definitions that combine execution organization with worker communication.
 
 ## Artifacts and records
 
@@ -171,9 +171,9 @@ These role assignments state accepted responsibilities. They do not create agent
 
 The dedicated [Generation](activities/code-generation.md#roles-and-skills), [Validation](activities/code-validation.md#roles-and-skills), and [Integration](activities/code-integration.md#roles-and-skills) Activity contracts state their accepted role assignments.
 
-The MVP uses one orchestrator-controlled subagent model for Implementation. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts. They do not have to spawn reviewers or call one another.
+Implementation uses one orchestrator-controlled subagent model. The orchestrator dispatches scoped workers and coordinates Activity handoffs. Workers report facts. They do not have to spawn reviewers or call one another.
 
-Generation and independent non-author Validation use separate worker contexts. This model does not select role profiles or add a per-task topology selector. The MVP execution model does not constrain Design, Quality Requirements, Planning, or other phases.
+Generation and independent non-author Validation use separate worker contexts. This model does not select role profiles or add a per-task topology selector. It applies only to Implementation. It does not constrain Design, Quality Requirements, Planning, or other phases.
 
 The requester keeps product and consequential trade-off authority. The shared safeguards govern the orchestrator's revision authority.
 

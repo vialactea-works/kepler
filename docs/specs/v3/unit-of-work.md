@@ -94,11 +94,11 @@ Artifacts can use canonical labels or labels selected by the requester. They mus
 
 ## Decisions still required
 
-- Additional scope and size criteria, and the detailed decomposition questionnaire, stay unresolved beyond the MVP under [SH75/SH76](authoring_progress.md#deferred-decisions).
+- This specification does not define additional scope or size criteria or a detailed decomposition questionnaire. [SH75/SH76](authoring_progress.md#deferred-decisions) track those open decisions.
 
-Use the accepted cohesion, coverage, dependency, verification, and decomposition rules for the Construction MVP. This does not select additional criteria or a questionnaire contract.
+Apply the accepted cohesion, coverage, dependency, verification, and decomposition rules to Construction. Do not infer additional criteria or a questionnaire contract.
 
-The [authoring progress record](authoring_progress.md#mvp-decisions) lists these decisions. Artifact metadata details that stay open are shared decisions. The [CLI infrastructure contract](runtime.md) sets the separation between artifact metadata and execution state.
+The [authoring progress record](authoring_progress.md#deferred-decisions) lists these decisions. Artifact metadata details that stay open are shared decisions. The [CLI infrastructure contract](runtime.md) sets the separation between artifact metadata and execution state.
 
 ## Inspiration
 

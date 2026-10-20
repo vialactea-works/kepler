@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Standard composes the stages below into the complete Construction MVP workflow. It has one Unit of Work per mission. Phases own stage contracts. This workflow owns their selected order and routing.
+Standard composes the Construction stages into a complete sequence. It has one Unit of Work per mission. Phases own stage contracts. This workflow owns their selected order and routing.
 
 The stage sequence and shared execution rules are agreed. The requester accepted all selected Construction stage and Activity contracts under their recorded decision IDs. This workflow does not approve a Unit of Work or prove implemented behavior.
 
@@ -14,7 +14,9 @@ Start with a clear Unit of Work request and relevant available context. Function
 
 Existing application code, tests, and completed Initialization or Inception contracts are not prerequisites. Greenfield work remains in scope. Construction, the first selected phase, owns mission creation and initial workspace facts. Prepare the workspace before Functional Design starts. Startup adds no stage. This workflow adds no Initialization or Inception stages.
 
-Apply the accepted [workflow binding](../../cli.md#workflow-binding). Mission creation records the selected workflow. Construction unit creation records the matching `standard` binding. Later operations and resume use that binding. The `unit show` query exposes it. The MVP adds no per-command workflow selector, switching, or registry. See the [Mission contract](../../mission.md) for identity and startup rules.
+Apply the accepted [workflow binding](../../cli.md#workflow-binding). Mission creation records the selected workflow. Construction unit creation records the matching `standard` binding. Later operations and resume use that binding. The `unit show` query exposes it.
+
+The CLI defines no per-command workflow selector, switching operation, or workflow registry. See the [Mission contract](../../mission.md) for identity and startup rules.
 
 ## Stages
 
@@ -50,7 +52,7 @@ The [authored task DAG](../../phases/construction/task-graph.md) records depende
 
 Code Integration holds the unit lock through reading current state, preparation, typechecking, build, full-suite checks, and acceptance. Accept only a candidate that passed the checks. Other permitted task work and independent units continue.
 
-The fixed Activity procedure and existing tracking mechanics are sufficient for the MVP. [CN20](../../authoring_progress.md#deferred-decisions) defers coordination protocol definitions beyond this MVP. Do not add a protocol registry, arbitrary graph language, general graph interpreter, team engine, or selectable protocol presets.
+The fixed Activity procedure and accepted tracking rules define Standard's execution model. [CN20](../../authoring_progress.md#deferred-decisions) defers coordination-protocol definitions that combine execution organization with worker communication. This workflow does not define a protocol registry, arbitrary graph language or interpreter, team engine, or selectable protocol presets.
 
 ## Revision, Effort, and authority
 

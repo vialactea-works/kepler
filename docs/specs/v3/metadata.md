@@ -184,6 +184,6 @@ Keep execution state out of frontmatter. Record progress, approvals, effort sele
 
 ## Remaining decisions
 
-Add stage-specific fields to their artifact contracts. The migration procedure stays outside the MVP under [DF05](authoring_progress.md#deferred-decisions).
+Add stage-specific fields to their artifact contracts. This specification does not define a migration procedure. [DF05](authoring_progress.md#deferred-decisions) tracks that open question.
 
 The [authoring progress record](authoring_progress.md#completed-shared-decisions) lists the completed metadata decisions separately.

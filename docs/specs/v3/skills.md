@@ -45,7 +45,7 @@ Do not use old map directories, tickets, routes, glossary paths, or their valida
 
 Supporting skills do not introduce additional agent roles. Use CLI-owned operations for execution records. Do not edit journals or projections directly.
 
-The accepted [resource ownership](installation.md#agent-resource-ownership) assigns skill and native agent installation to the host or skill manager. Setup owns Kepler's bundle resources and default settings. Apply the accepted [MVP test scope](installation.md#intended-mvp-targets) without changing these skill responsibilities.
+The accepted [resource ownership](installation.md#agent-resource-ownership) assigns skill and native agent installation to the host or skill manager. Setup owns Kepler's bundle resources and default settings. Apply the accepted [installation targets and behavioral-test rules](installation.md#intended-targets) without changing these skill responsibilities.
 
 ## kepler-design
 

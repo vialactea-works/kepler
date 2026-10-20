@@ -44,7 +44,7 @@ Intent documents belong to Inception. Their structure and organization terms are
 
 ## Workflows
 
-[Standard](workflows/standard/README.md) sets the complete Construction MVP sequence and its stage handoffs. Its stages keep the contracts that their owning phases set.
+[Standard](workflows/standard/README.md) selects the complete Construction stage sequence and its handoffs. Each stage keeps the contract set by its owning phase.
 
 ## Reference organization
 

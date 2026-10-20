@@ -6,7 +6,7 @@
 
 This document gives shared revision rules for the stages of one Unit of Work. These rules apply across stages, not only to Functional Design.
 
-Use the selected workflow's stage order and each owning phase's execution scopes. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP sequence. Construction sets its [task execution structure](phases/construction/README.md#implementation).
+Use the selected workflow's stage order and each owning phase's execution scopes. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction stage sequence. Construction sets its [task execution structure](phases/construction/README.md#implementation).
 
 Apply execution-state changes through the `kepler` CLI. Record reopening, attempts, completion, and approval facts in phase-owned JSON event journals under the shared [execution-state representation](runtime.md#execution-state-representation). Get current execution state from those events, not artifact frontmatter or Markdown status fields.
 

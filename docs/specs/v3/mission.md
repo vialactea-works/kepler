@@ -25,7 +25,7 @@ A mission is one durable execution context for a selected workflow and an identi
 
 A mission does not replace unit, stage, Activity, attempt, or material identities. It is not another verification round or run floor.
 
-Standard remains the Construction MVP workflow. It has one Unit of Work per mission. The container can support other agreed workflows. This MVP adds no Initialization or Inception stages.
+Standard is the selected Construction workflow. It has one Unit of Work per mission. The mission model can support other agreed workflows. Standard includes no Initialization or Inception stages.
 
 ## Identity, membership, and lifecycle
 
@@ -293,7 +293,7 @@ This contract settles policy, not interfaces or mechanisms. This batch selects n
 
 Event payload schemas and journal transactions remain implementation choices. Material references follow SH51 and do not supply repository or checkpoint bindings by themselves. Lock directories, owner-record facts, and cross-workspace coordination follow SH64-SH66. Exact key encodings, claim formats, and finer release protocols remain implementation choices.
 
-SH69 governs selected branch and worktree contexts. SH72 governs handoff preflight and failure. SH85 excludes dedicated checkpoint retention references from the MVP. Retention periods and cleanup remain deferred.
+SH69 governs selected branch and worktree contexts. SH72 governs handoff preflight and failure. SH85's [checkpoint-retention contract](runtime.md#checkpoint-retention) uses existing commit objects and retained repository history. It defines no dedicated checkpoint references or pinning mechanism. Retention periods and cleanup remain deferred.
 
 Unit-based existing operations may resolve a mission from unique recorded membership. Mission-aware queries must handle unbound units explicitly. This Mission contract added no `--mission`, `--repo`, batch, or format selector. SH54 later adds `--mission <mission-id>` only when a mission-scoped operation lacks unit context. Unit-based operations do not need that selector. This extension does not change diff-package signatures or existing audit-list/show signatures.
 

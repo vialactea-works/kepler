@@ -42,9 +42,9 @@ The following decisions are accepted. They do not accept every command detail in
 - Use the shared [failure result fields](#failure-and-recovery-rules) when `status` is `failed`.
 - Use the shared [exit-code contract](#exit-codes) for CLI-controlled results.
 - Use the shared [output stream contract](#output-streams) for default machine-readable output.
-- Use [JSON-only operation results](#human-output) for the MVP.
+- Return [JSON-only operation results](#human-output).
 
-Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction MVP order. Stage-specific policies stay proposals where their owning contracts say so.
+Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction stage sequence. Stage-specific policies stay proposals where their owning contracts say so.
 
 ## Proposed interface rules
 
@@ -135,7 +135,7 @@ These values describe the command operation. A query can succeed and report an i
 
 Use `{}` when the command has no result fields. Put collection results inside `data`. Success fields, error-code values, and `details` schemas stay command-specific.
 
-Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Apply the accepted [exit-code contract](#exit-codes). Apply the accepted [output stream contract](#output-streams). Apply the accepted [MVP result formatting](#human-output). A failed operation still returns a nonzero exit status.
+Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Apply the accepted [exit-code contract](#exit-codes). Apply the accepted [output stream contract](#output-streams). Apply the accepted [JSON-only result format](#human-output). A failed operation still returns a nonzero exit status.
 
 The following example shows proposed unit-creation fields inside `data`. These fields are not an accepted command-specific schema.
 
@@ -147,7 +147,7 @@ The following example shows proposed unit-creation fields inside `data`. These f
 }
 ```
 
-Apply the accepted [MVP result formatting](#human-output). Help must use the same command definitions as the parser. Its layout is an implementation choice.
+Apply the accepted [JSON-only result format](#human-output). Help must use the same command definitions as the parser. Its layout is an implementation choice.
 
 ### Output streams
 
@@ -164,11 +164,11 @@ Keep banners, logs, progress, and child-process output out of `stdout`.
 
 Callers use the JSON result and [exit code](#exit-codes) to identify the outcome. Diagnostic text is not a stable interface.
 
-Forced termination can prevent a complete response. Apply the existing [exit-code and recovery rules](#exit-codes). Apply the accepted [MVP result formatting](#human-output).
+Forced termination can prevent a complete response. Apply the existing [exit-code and recovery rules](#exit-codes). Apply the accepted [JSON-only result format](#human-output).
 
 ### Human output
 
-**Accepted under [SH108](authoring_progress.md#completed-shared-decisions).** The MVP has JSON-only operation results.
+**Accepted under [SH108](authoring_progress.md#completed-shared-decisions).** Operation results are JSON-only.
 
 Use the same JSON result format in terminals, pipes, and agent calls. Do not add `--human`, a result-format selector, or automatic terminal-based switching.
 
@@ -301,7 +301,7 @@ On failure, return a structured error and nonzero status without a package-succe
 kepler lint <path>... [--project <path>]
 ```
 
-For the MVP, require one or more explicit Markdown file paths. Resolve relative paths from the selected project root under the accepted [project selection rules](#project-selection).
+Require one or more explicit Markdown file paths. Resolve relative paths from the selected project root under the accepted [project selection rules](#project-selection).
 
 Do not scan directories implicitly or migrate data. Do not repair content, add fields, generate identifiers, or change workflow state. Do not write events or audit records.
 
@@ -452,7 +452,7 @@ Construction uses the [accepted Unit of Work identity rules](unit-of-work.md#ide
 
 Later operations and resume read that recorded binding. Expose it through `unit show`. Reject unsupported bindings instead of silently selecting another workflow.
 
-The MVP has no per-command workflow selector, workflow switching, or generic workflow registry. Binding Standard does not start a stage, grant execution authority, or approve a Unit of Work.
+The CLI uses the recorded workflow binding and exposes no per-command selector or switching operation. It defines no generic workflow registry. Binding Standard does not start a stage, grant execution authority, or approve a Unit of Work.
 
 Exact event payload and response-field encoding remain implementation details under the existing runtime and query decisions. SH115 accepts the workflow binding; SH59 separately accepts the full unit-creation signature.
 
@@ -506,7 +506,7 @@ Expose the accepted [workflow binding](#workflow-binding). Exact response fields
 kepler workflow construction lint --unit <unit-id> [--project <path>]
 ```
 
-Apply the accepted [project selection rules](#project-selection) and [scope selectors](#scope-and-selectors). Read the explicit unit's `tasks-dag.json` under its mission-owned path from the [Mission contract](mission.md#durable-layout). Resolve membership only from recorded facts. The MVP has no alternate-graph path or per-task lint mode.
+Apply the accepted [project selection rules](#project-selection) and [scope selectors](#scope-and-selectors). Read the explicit unit's `tasks-dag.json` under its mission-owned path from the [Mission contract](mission.md#durable-layout). Resolve membership only from recorded facts. The Construction lint interface accepts no alternate graph path or per-task lint mode.
 
 Apply the [task graph validation rules](phases/construction/task-graph.md#validation-rules) that software can check. Check strict JSON, the unchanged schema, UUIDs, unit identity, dependencies, duplicate edges, and cycles.
 
@@ -677,9 +677,9 @@ Forced termination can produce other exit codes or prevent a JSON response. A mi
 
 ## Open decisions
 
-Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [MVP result formatting](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence), [audit queries](#kepler-audit-list), and [shared lint interface](#kepler-lint) also stay in force. The accepted [Construction lint](#kepler-workflow-construction-lint), [UUID](#kepler-uuid), [setup](#kepler-setup), and [workflow binding](#workflow-binding) interfaces also stay in force.
+Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [JSON-only result format](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence), [audit queries](#kepler-audit-list), and [shared lint interface](#kepler-lint) also stay in force. The accepted [Construction lint](#kepler-workflow-construction-lint), [UUID](#kepler-uuid), [setup](#kepler-setup), and [workflow binding](#workflow-binding) interfaces also stay in force.
 
-Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended MVP targets](installation.md#intended-mvp-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
+Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended targets](installation.md#intended-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
 SH57-SH67 accept their named interfaces and policy boundaries. Exact request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 accept policy guarantees without adding public CLI interfaces. Their exact mechanisms remain implementation work.
 

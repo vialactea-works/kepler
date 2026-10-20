@@ -6,7 +6,7 @@
 
 ## Purpose and boundary
 
-This draft gives observable installation and host-readiness behavior for the Construction MVP. Keep installed software and host resources separate from authored project artifacts, workflow history, and live coordination.
+This draft gives observable installation and host-readiness behavior for the Construction workflow. Keep installed software and host resources separate from authored project artifacts, workflow history, and live coordination.
 
 Installation and setup do not run Initialization, create units, dispatch workers, or apply workflow transitions. Installation grants no implementation or delivery authority. A portable skill file alone does not make a working host integration.
 
@@ -70,7 +70,7 @@ Keep all version domains distinct: CLI release, bundle release, installation for
 
 Record available component facts and software-check results without claiming that unchecked components are ready. Setup success applies only to setup's authorized resources. Native hosts and skill managers report their own installation results. Apply declared compatibility to the actual component versions.
 
-Do not use installation records or skill text as proof of agent behavior. No automated host-certification system is necessary for this MVP. Actual execution still follows the owning stage and Activity contracts.
+Do not use installation records or skill text as proof of agent behavior. This specification defines no automated host-certification system. Actual execution still follows the owning stage and Activity contracts.
 
 ## Inputs and prerequisites
 
@@ -96,7 +96,7 @@ A successful setup result identifies the installed generation and resource-check
 
 On failure, keep the prior usable generation. Report available partial-write facts in `data.details`. Remove only temporary or partial resources that the failed operation can identify as its own. Do not delete uncertain data or perform automatic repair or migration.
 
-CLI results use the accepted [result envelope](cli.md#machine-readable-output). CLI-owned failures use the shared [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes), [output stream contract](cli.md#output-streams), and [MVP result formatting](cli.md#human-output). Host-native installers keep their own failure reporting. This document adds no new Kepler command.
+CLI results use the accepted [result envelope](cli.md#machine-readable-output). CLI-owned failures use the shared [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes), [output stream contract](cli.md#output-streams), and [JSON-only result format](cli.md#human-output). Host-native installers keep their own failure reporting. This document adds no new Kepler command.
 
 ## Host capability contract
 
@@ -117,9 +117,9 @@ This Implementation model does not select execution topology for Design, Quality
 
 If a necessary capability is unsupported, return an explicit unsupported-host result before affected execution. Do not substitute author self-review for independent Validation or silently serialize all ready work. Resume only after the owning recovery checks. Do not treat copied installation records as proof of worker ownership.
 
-Apply the accepted [intended MVP targets](#intended-mvp-targets) and [agent resource ownership](#agent-resource-ownership). Target selection does not certify a named coding-agent host or prove agent behavior. No profile registry, topology selector, or host-discovery system is necessary.
+Apply the accepted [intended targets](#intended-targets) and [agent resource ownership](#agent-resource-ownership). Target selection does not certify a named coding-agent host or prove agent behavior. No profile registry, topology selector, or host-discovery system is necessary.
 
-## Intended MVP targets
+## Intended targets
 
 **Accepted under [SH116](authoring_progress.md#completed-shared-decisions).** Use these intended operating-system and CPU targets:
 
@@ -130,9 +130,9 @@ Apply the accepted [intended MVP targets](#intended-mvp-targets) and [agent reso
 | macOS | `x86_64` |
 | macOS | `arm64` |
 
-These are 64-bit targets only. They are intended MVP targets, not claims of tested or certified agent support.
+These are intended 64-bit targets. They do not claim tested or certified agent support.
 
-Real-agent tests are outside this MVP. Do not add tests that assert skill Markdown wording or structure. Do not substitute those tests for behavioral proof or make them release gates.
+Tests that assert skill Markdown wording or structure do not prove agent behavior.
 
 Keep appropriate tests of executable CLI and Core behavior, including workflow operations, recovery, concurrency, and invalid transitions. The accepted Generation, Validation, Integration, and Review duties still apply during actual work.
 

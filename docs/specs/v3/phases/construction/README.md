@@ -14,7 +14,7 @@ These are specification approvals, not approval of an executing unit or implemen
 
 ## Stage catalog
 
-These stages belong to Construction. The catalog states ownership, not an order for every workflow. See [Standard's selected sequence](../../workflows/standard/README.md#stages) for the Construction MVP.
+These stages belong to Construction. The catalog states ownership, not an order for every workflow. See [Standard's selected sequence](../../workflows/standard/README.md#stages) for its stage order.
 
 | Stage | Contract status |
 | --- | --- |

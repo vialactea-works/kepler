@@ -30,7 +30,7 @@ The stage and each Activity own their named evidence. Shared scope and material 
 
 Use the shared CLI-owned journal and attempt mechanics. Do not add a second lifecycle engine, protocol-run identity, or task-coding attempt identity. Phase-owned Activity event payloads, commands, and projections stay implementation choices under the shared [event envelope](runtime.md#event-envelope-choices). Activity attempt IDs follow the shared [attempt identity rules](runtime.md#attempt-identity-and-active-scope).
 
-## Construction MVP
+## Construction Activities
 
 Within Construction's Implementation stage, run a fixed Activity procedure for each task:
 
@@ -42,7 +42,7 @@ The owning stage controls handoffs. Activity workers report findings. They canno
 
 This fixed procedure does not replace the accepted task dependency graph. The plan sets task dependencies and prerequisite conditions. The orchestrator uses these conditions and current execution facts to select ready tasks. Activity order is separate from task scheduling. Feedback routes are not task dependencies.
 
-No generic Activity registry, arbitrary graph language, interpreter, or Basic/Workshop/Factory preset belongs in this MVP. No team engine, swarm, extra protocol state store, or universal domain graph belongs in it. Keep a general graph engine outside this MVP. Keep the feedback routes necessary for this procedure. Add only behavior necessary to complete an agreed MVP scenario correctly. Do not add machinery only for future execution variants.
+The accepted Activity contract defines one fixed procedure. It does not define an Activity registry, arbitrary graph language or interpreter, or Basic, Workshop, or Factory preset. It does not define a team engine, swarm, extra protocol state store, universal domain graph, or general graph engine. Keep the feedback routes required by this procedure. This specification does not define machinery for other execution variants.
 
 ## Related contracts
 

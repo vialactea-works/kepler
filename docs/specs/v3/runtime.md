@@ -61,7 +61,9 @@ Version-control policy does not authorize publication or other delivery operatio
 
 ### Implementation boundary
 
-The [Mission contract](mission.md#durable-layout) sets mission-history and local-runtime paths. SH43 still permits disposable projections, but selects no persisted views directory. Do not add a substitute cache tree. Journal collection and synchronization mechanics stay implementation choices. SH72 requires the Mission handoff preflight and forbids automatic publication or repair as a response to a failed handoff. SH85 excludes dedicated checkpoint retention references from the MVP.
+The [Mission contract](mission.md#durable-layout) sets mission-history and local-runtime paths. SH43 still permits disposable projections, but selects no persisted views directory. Do not add a substitute cache tree. Journal collection and synchronization mechanics stay implementation choices. SH72 requires the Mission handoff preflight and forbids automatic publication or repair as a response to a failed handoff.
+
+SH85's [checkpoint-retention contract](#checkpoint-retention) uses existing commit objects and retained repository history. It does not define dedicated checkpoint references or pinning.
 
 Apply the accepted [lock requirements](#short-scoped-coordination) and Mission coordination paths. Exact key and owner-record details remain implementation choices. Retention periods and cleanup stay [deferred](authoring_progress.md#deferred-decisions).
 
@@ -444,7 +446,7 @@ The [CLI command reference](cli.md) records accepted command decisions and propo
 
 For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. For mission operations, `--project` selects the record home. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection. Use `--mission <mission-id>` only when a mission-scoped operation has no unit context. Unit-scoped operations resolve mission context only from unique recorded membership.
 
-CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes), [output stream contract](cli.md#output-streams), and [MVP result formatting](cli.md#human-output). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
+CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes), [output stream contract](cli.md#output-streams), and [JSON-only result format](cli.md#human-output). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
 
 Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Use the accepted [audit queries](cli.md#kepler-audit-list) for read-only history inspection. Use the accepted [shared lint interface](cli.md#kepler-lint) for shared metadata checks. Use the accepted approval and interaction interfaces under [SH55](cli.md#kepler-audit-record-approval) and [SH56](cli.md#kepler-audit-record-interaction).
 
@@ -486,7 +488,7 @@ Detailed phase-owned payload schemas remain implementation work. Use the shared 
 
 Keep each necessary checkpoint commit reachable through an existing retained reference in its repository. Existing retained references, including ordinary branches or tags, can satisfy this rule. A commit identifier stored in JSON alone does not keep the commit.
 
-The MVP does not create dedicated checkpoint retention references or reserve a checkpoint-specific Git reference namespace. Use existing commit objects and retained repository history. This policy does not change required checkpoint, evidence, approval, or attempt bindings.
+The current checkpoint-retention contract uses existing commit objects and retained repository history. It does not define dedicated checkpoint-retention references, a checkpoint-specific Git namespace, or pinning. This contract does not change required checkpoint, evidence, approval, or attempt bindings.
 
 Git keeps committed repository material while the necessary objects stay available. External environments, ignored outputs, and separate evidence logs must have their own retention rules.
 
