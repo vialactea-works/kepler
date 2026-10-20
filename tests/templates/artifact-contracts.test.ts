@@ -115,7 +115,6 @@ describe("split execution artifact templates", () => {
     const template = readTemplate("task-progress.md")
 
     expect(template).toContain("# Task Progress: Task N — <exact unescaped plan task title>")
-    expect(template).toContain("exact lane start as `- Start HEAD: <full commit>`")
     expect(template).not.toContain("## Attempt N — <YYYY-MM-DD>")
   })
 
@@ -134,12 +133,11 @@ describe("split execution artifact templates", () => {
       ].join("\n"),
     )
     expect(template).toMatch(
-      /## Pass N — <YYYY-MM-DD>[\s\S]*?^Base: <full immutable Task Base>$[\s\S]*?^Head: <full reviewed integrated HEAD>$[\s\S]*?^Verdict: approved \| changes-requested \| skipped$[\s\S]*?^Coverage: <exact v2 publication commit; omit only for a v1 broad-review publication>$[\s\S]*?^### Blocking$[\s\S]*?^### Suggestions$/m,
+      /## Pass N — <YYYY-MM-DD>[\s\S]*?^Base: <full commit identifier>$[\s\S]*?^Head: <full commit identifier>$[\s\S]*?^Verdict: approved \| changes-requested \| skipped$[\s\S]*?^### Blocking$[\s\S]*?^### Suggestions$/m,
     )
     expect(template.match(/^Base: .+$/gm)).toHaveLength(1)
     expect(template.match(/^Head: .+$/gm)).toHaveLength(1)
     expect(template.match(/^Verdict: .+$/gm)).toHaveLength(1)
-    expect(template.match(/^Coverage: .+$/gm)).toHaveLength(1)
     expect(template.match(/^### .+$/gm)).toEqual(["### Blocking", "### Suggestions"])
     expect(template).not.toContain("### Reviewed range")
   })

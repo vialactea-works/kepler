@@ -23,8 +23,6 @@ export interface TaskStateGit {
   readonly fastForward: (cwd: string, head: string) => Promise<ProcessResult>;
   readonly merge: (cwd: string, head: string) => Promise<ProcessResult>;
   readonly uniqueCommits: (cwd: string, head: string, excluded: string) => Promise<readonly string[]>;
-  readonly firstParent: (cwd: string, commit: string) => Promise<string>;
-  readonly parents: (cwd: string, commit: string) => Promise<readonly string[]>;
   readonly changedPaths: (cwd: string, commit: string) => Promise<readonly string[]>;
   readonly blob: (cwd: string, commit: string, path: string) => Promise<ProcessResult>;
 }
@@ -88,8 +86,6 @@ export const createTaskStateRuntime = (overrides: Partial<TaskStateRuntime> = {}
     fastForward: async (directory, head) => processPort.run("git", ["merge", "--ff-only", head], directory),
     merge: async (directory, head) => processPort.run("git", ["merge", "--no-ff", "--no-edit", head], directory),
     uniqueCommits: async (directory, head, excluded) => (await query(directory, "rev-list", "--reverse", head, "--not", excluded)).split(/\r?\n/).filter(Boolean),
-    firstParent: (directory, commit) => query(directory, "rev-parse", "--verify", `${commit}^1`),
-    parents: async (directory, commit) => (await query(directory, "show", "-s", "--format=%P", commit)).split(/\s+/).filter(Boolean),
     changedPaths: async (directory, commit) => {
       const result = await processPort.run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", "-z", commit], directory);
       if (result.status !== 0) throw new Error(result.stderr || "Changed paths are unavailable");

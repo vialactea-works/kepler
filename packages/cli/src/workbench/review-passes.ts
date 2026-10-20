@@ -33,7 +33,6 @@ type PassFieldName =
   | "Base"
   | "Head"
   | "Verdict"
-  | "Coverage"
   | "Scope"
   | "Target"
   | "Parent pass"
@@ -63,7 +62,6 @@ const clearanceFields = [
   "Delta base",
   "Resolutions",
 ] as const;
-const optionalPassFields = ["Coverage", ...clearanceFields] as const;
 
 const fullCommit = (value: string): boolean => /^[0-9a-f]{40}$/.test(value);
 
@@ -194,7 +192,7 @@ const passHeadings = (
     }));
 };
 
-const fieldPattern = /^[ \t]*(Base|Head|Verdict|Coverage|Scope|Target|Parent pass|Parent commit|Delta base|Resolutions):[ \t]*(.*)$/;
+const fieldPattern = /^[ \t]*(Base|Head|Verdict|Scope|Target|Parent pass|Parent commit|Delta base|Resolutions):[ \t]*(.*)$/;
 
 const fieldOccurrences = (
   lines: readonly string[],
@@ -258,7 +256,7 @@ const fieldDiagnostic = (
     occurrence.line,
     {
       field: occurrence.name,
-      expected: "Base, Head, Verdict, optional Coverage, then optional clearance provenance",
+      expected: "Base, Head, Verdict, then optional clearance provenance",
       actual: occurrence.value,
       actualPresent: true,
     },
@@ -418,7 +416,7 @@ const completePassFields = (occurrences: readonly FieldOccurrence[]): boolean =>
 const orderedPassFields = (occurrences: readonly FieldOccurrence[]): boolean => {
   if (!completePassFields(occurrences)) return false;
   const optional = occurrences.slice(fields.length).map((field) => field.name);
-  const expected = optionalPassFields.filter((field) => optional.includes(field));
+  const expected = clearanceFields.filter((field) => optional.includes(field));
   return optional.length === expected.length && optional.every((field, index) => field === expected[index]);
 };
 
@@ -676,7 +674,7 @@ const parsePass = (
     if (fields.every((name) => (counts.get(name) ?? 0) === 1) && !orderedPassFields(beforeFields))
       for (const occurrence of beforeFields)
         diagnostics.push(fieldDiagnostic(artifact, occurrence));
-    for (const name of optionalPassFields) {
+    for (const name of clearanceFields) {
       if ((counts.get(name) ?? 0) > 1)
         for (const occurrence of beforeFields.filter((field) => field.name === name).slice(1))
           diagnostics.push(fieldDiagnostic(artifact, occurrence));
@@ -745,7 +743,6 @@ const parsePass = (
   let base: string | undefined;
   let head: string | undefined;
   let verdict: ReviewPassVerdict | undefined;
-  let coverage: string | undefined;
   if (mode === "legacy-global") {
     if (globalEvidence === undefined) return { record: structural, diagnostics };
     base = globalEvidence.base;
@@ -758,14 +755,6 @@ const parsePass = (
     const baseValue = valueByName.get("Base");
     const headValue = valueByName.get("Head");
     const verdictValue = valueByName.get("Verdict");
-    const coverageValue = valueByName.get("Coverage");
-    if (coverageValue !== undefined) {
-      if (artifact.metadata.artifact !== "feedback")
-        diagnostics.push(sectionDiagnostic(artifact, "invalid-value", "Coverage is only valid for task feedback", beforeFields.find((field) => field.name === "Coverage")?.line ?? candidate.heading.line, "task feedback only", coverageValue));
-      else if (!fullCommit(coverageValue))
-        diagnostics.push(sectionDiagnostic(artifact, "invalid-value", "Coverage must be a full publication commit identifier", beforeFields.find((field) => field.name === "Coverage")?.line ?? candidate.heading.line, "40 hexadecimal characters", coverageValue));
-      else coverage = coverageValue;
-    }
     if (baseValue !== undefined) {
       if (!fullCommit(baseValue))
         diagnostics.push(
@@ -1019,7 +1008,6 @@ const parsePass = (
       base,
       head,
       verdict,
-      ...(coverage === undefined ? {} : { coverage }),
       findings,
       ...(clearance === undefined ? {} : { clearance }),
     },

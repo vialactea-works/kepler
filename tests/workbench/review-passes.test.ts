@@ -119,27 +119,6 @@ describe("review pass parser", () => {
     expect(result.latest).toBeUndefined();
   });
 
-  it("parses an explicit publication coverage binding", () => {
-    const coverage = "abcdef0123456789abcdef0123456789abcdef01";
-    const result = parseReviewPasses(recognized(
-      { artifact: "feedback" },
-      history(`${pass(1, "2026-09-12", "approved", "- None.").replace("Verdict: approved", `Verdict: approved\nCoverage: ${coverage}`)}`),
-    ));
-
-    expect(result.diagnostics).toEqual([]);
-    expect(result.latest?.coverage).toBe(coverage);
-  });
-
-  it.each(["not-a-commit", "abcdef0123456789abcdef0123456789abcdef01\nCoverage: abcdef0123456789abcdef0123456789abcdef01"])("rejects malformed or duplicate coverage fields: %s", (coverage) => {
-    const result = parseReviewPasses(recognized(
-      { artifact: "feedback" },
-      history(`${pass(1, "2026-09-12", "approved", "- None.").replace("Verdict: approved", `Verdict: approved\nCoverage: ${coverage}`)}`),
-    ));
-
-    expect(result.diagnostics.length).toBeGreaterThan(0);
-    expect(result.latest).toBeUndefined();
-  });
-
   it("parses complete multi-pass history including changes-requested then approved", () => {
     const result = parseReviewPasses(
       recognized(

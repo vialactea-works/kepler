@@ -715,7 +715,6 @@ const readReviewWorkflow = (
         Base: pass.base,
         Head: pass.head,
         Verdict: pass.verdict,
-        ...(pass.coverage === undefined ? {} : { Coverage: pass.coverage }),
         ...(pass.clearance === undefined
           ? {}
           : pass.clearance.scope === "full"

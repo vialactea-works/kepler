@@ -100,7 +100,6 @@ export interface ReviewPassEvidence {
   readonly base: string;
   readonly head: string;
   readonly verdict: ReviewPassVerdict;
-  readonly coverage?: string;
   readonly blocking: readonly string[];
   readonly findings: readonly ReviewFinding[];
   readonly suggestions: readonly string[];
@@ -258,41 +257,13 @@ export interface ScopeExpansion {
   readonly verify: string;
 }
 
-export interface TaskAttemptReviewCoverage {
-  readonly number: number;
-  readonly admissionCommit: string;
-  readonly startHead: string;
-  readonly terminalHead: string;
-  readonly commits: readonly {
-    readonly commit: string;
-    readonly parents: readonly string[];
-    readonly paths: readonly string[];
-  }[];
-}
-
-export interface TaskReviewCoverage {
+export interface TaskPublication {
   readonly version: 1;
-  readonly attempts: readonly TaskAttemptReviewCoverage[];
-  readonly integrationBase: string;
+  readonly taskHead: string;
   readonly integratedHead: string;
+  readonly outcome: "done" | "blocked";
+  readonly verification: { readonly command: string; readonly exitCode: 0 } | null;
 }
-
-export type TaskPublication =
-  | {
-      readonly version: 1;
-      readonly taskHead: string;
-      readonly integratedHead: string;
-      readonly outcome: "done" | "blocked";
-      readonly verification: { readonly command: string; readonly exitCode: 0 } | null;
-    }
-  | {
-      readonly version: 2;
-      readonly taskHead: string;
-      readonly integratedHead: string;
-      readonly outcome: "done" | "blocked";
-      readonly verification: { readonly command: string; readonly exitCode: 0 } | null;
-      readonly reviewCoverage: TaskReviewCoverage;
-    };
 
 export interface RootProgressTaskEntry {
   readonly id: number;

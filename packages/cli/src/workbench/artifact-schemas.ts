@@ -277,86 +277,6 @@ const legacyInputConfirmation: ArtifactMetadataSchema = {
   },
 };
 
-const taskPublicationSchema: ArtifactMetadataSchema = {
-  anyOf: [
-    {
-      type: "object",
-      required: ["version", "taskHead", "integratedHead", "outcome", "verification"],
-      additionalProperties: false,
-      properties: {
-        version: { const: 1 },
-        taskHead: sha,
-        integratedHead: sha,
-        outcome: { enum: ["done", "blocked"] },
-        verification: {
-          anyOf: [{ type: "null" }, {
-            type: "object", required: ["command", "exitCode"], additionalProperties: false,
-            properties: { command: nonEmptyString, exitCode: { const: 0 } },
-          }],
-        },
-      },
-      allOf: [{ if: { properties: { outcome: { const: "done" } } }, then: { properties: { verification: { type: "object" } } }, else: { properties: { verification: { type: "null" } } } }],
-    },
-    {
-      type: "object",
-      required: ["version", "taskHead", "integratedHead", "outcome", "verification", "reviewCoverage"],
-      additionalProperties: false,
-      properties: {
-        version: { const: 2 },
-        taskHead: sha,
-        integratedHead: sha,
-        outcome: { enum: ["done", "blocked"] },
-        verification: {
-          anyOf: [{ type: "null" }, {
-            type: "object", required: ["command", "exitCode"], additionalProperties: false,
-            properties: { command: nonEmptyString, exitCode: { const: 0 } },
-          }],
-        },
-        reviewCoverage: {
-          type: "object",
-          required: ["version", "attempts", "integrationBase", "integratedHead"],
-          additionalProperties: false,
-          properties: {
-            version: { const: 1 },
-            attempts: {
-              type: "array",
-              minItems: 1,
-              items: {
-                type: "object",
-                required: ["number", "admissionCommit", "startHead", "terminalHead", "commits"],
-                additionalProperties: false,
-                properties: {
-                  number: positiveInteger,
-                  admissionCommit: sha,
-                  startHead: sha,
-                  terminalHead: sha,
-                  commits: {
-                    type: "array",
-                    minItems: 1,
-                    items: {
-                      type: "object",
-                      required: ["commit", "parents", "paths"],
-                      additionalProperties: false,
-                      properties: {
-                        commit: sha,
-                        parents: { type: "array", maxItems: 2, items: sha, uniqueItems: true },
-                        paths: { type: "array", minItems: 1, items: nonEmptyString, uniqueItems: true },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            integrationBase: sha,
-            integratedHead: sha,
-          },
-        },
-      },
-      allOf: [{ if: { properties: { outcome: { const: "done" } } }, then: { properties: { verification: { type: "object" } } }, else: { properties: { verification: { type: "null" } } } }],
-    },
-  ],
-};
-
 const taskMetadata: ArtifactMetadataSchema = {
   type: "object",
   required: ["id", "title", "status", "progress"],
@@ -369,7 +289,28 @@ const taskMetadata: ArtifactMetadataSchema = {
     },
     progress: nonEmptyString,
     admission: taskAdmissionSchema,
-    publication: taskPublicationSchema,
+    publication: {
+      type: "object",
+      required: ["version", "taskHead", "integratedHead", "outcome", "verification"],
+      additionalProperties: false,
+      properties: {
+        version: { const: 1 },
+        taskHead: { type: "string", pattern: "^[0-9a-f]{40}$" },
+        integratedHead: { type: "string", pattern: "^[0-9a-f]{40}$" },
+        outcome: { enum: ["done", "blocked"] },
+        verification: {
+          anyOf: [{ type: "null" }, {
+            type: "object", required: ["command", "exitCode"], additionalProperties: false,
+            properties: { command: nonEmptyString, exitCode: { const: 0 } },
+          }],
+        },
+      },
+      allOf: [{
+        if: { properties: { outcome: { const: "done" } } },
+        then: { properties: { verification: { type: "object" } } },
+        else: { properties: { verification: { type: "null" } } },
+      }],
+    },
   },
 };
 

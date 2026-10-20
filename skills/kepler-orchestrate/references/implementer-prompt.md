@@ -20,11 +20,7 @@ Subagent:
     - Task checkpoint: [<change-dir>/tasks/task-N/.base]
     - Canonical repository identity: [repository identity]
     - Latest committed plan revision: [full 40-hex commit]
-    - Immutable Task Base: [TASK_BASE]
-    - Coordinator source HEAD: [COORDINATOR_SOURCE_HEAD]
-    - Admission commit: [ADMISSION_COMMIT]
-    - Attempt start HEAD: [ATTEMPT_START_HEAD]
-    - Next coordinator HEAD: [NEXT_COORDINATOR_HEAD]
+    - Admitted dispatch HEAD: [DISPATCH_HEAD]
     - Admitted full source branch ref: [DISPATCH_BRANCH]
     - Resolved full delivery-target ref: [DISPATCH_TARGET]
     - Route ownership binding, when applicable: [owner, change, canonical route/unit, route-source revision, base/input revision; otherwise none]
@@ -41,9 +37,9 @@ Subagent:
 
     Implement the Goal/Acceptance/Depends on/Steps/Verify/Commit contract with bounded judgment. The Files field provides optional guidance, not an allowlist. Preserve binding intent, design, and standards. Make necessary goal-serving edits, including to unlisted files, without unrelated work. Keep TDD cycles in Red → Green → Refactor order. Do not impose a design absent from binding context or expand approved intent.
 
-    Confirm that the supplied plan commit is current, the task identity/digest and input standing match, and formal intent is authorized. Validate the verified ready projection, coordinator admission, immutable Task Base, coordinator source HEAD, admission commit, attempt start HEAD, observed worker, isolated lane, repository/plan/task/input bindings, and prerequisite approvals. `Attempt start HEAD` is the expected lane HEAD for dispatch identity readback and must be recorded as this attempt's `Start HEAD`; never substitute Task Base or coordinator source HEAD. Readiness alone is not admission. For a legacy current confirmation, inspect only its exact current input scope and do not treat it as historic evidence or authorization.
+    Confirm that the supplied plan commit is current, the task identity/digest and input standing match, and formal intent is authorized. Validate the verified ready projection, coordinator admission, original Base, observed worker, isolated lane, repository/plan/task/input bindings, and prerequisite approvals. Readiness alone is not admission. For a legacy current confirmation, inspect only its exact current input scope and do not treat it as historic evidence or authorization.
 
-    Before checkpoint, status, or code mutation, and on resume, run kepler-code's **Dispatch identity readback** with `Attempt start HEAD`, the admitted lane/target/worktree values, and independently observed current worker identity. The readback proves that the lane remains at the exact attempt start and the named source branch remains distinct from the resolved target by branch identity and configured local/remote mapping, never by tip SHA. Task Base and Coordinator source HEAD are separate provenance values, not readback substitutes.
+    Before checkpoint, status, or code mutation, and on resume, run kepler-code's **Dispatch identity readback** with the admitted values and independently observed current worker identity. The readback proves that the named source branch remains distinct from the resolved target by branch identity and configured local/remote mapping, never by tip SHA.
 
     For a route-bound change, compare the current context's route-unit and route-source revision with the admitted binding, then scan visible claims for the same unit. A competing or ambiguous claim, changed binding, or unavailable independent identity requires owner adjudication. A local scan does not establish distributed exclusivity. A changed full HEAD, branch, target, repository, worktree, route binding, or worker invalidates dispatch even when the plan is unchanged.
 
@@ -68,7 +64,7 @@ Subagent:
 
     ## Required outcome
 
-    Validate coordinator admission and preserve its immutable Task Base across retries, corrections, and cache loss. Record the exact `Attempt start HEAD` as `Start HEAD` in this new task-local attempt; retain every earlier Start HEAD unchanged. Never create, reset, or replace the admitted checkpoint. Commit only this task's isolated original changes. Leave shared root metadata and rows, plan.md, sibling evidence, and feedback untouched. Return truthful done/blocked/interrupted/unavailable evidence.
+    Validate coordinator admission and preserve its original Base across retries, corrections, and cache loss. Never create, reset, or replace the admitted checkpoint. Record task-local attempt evidence and commit only this task's isolated original changes. Leave shared root metadata and rows, plan.md, sibling evidence, and feedback untouched. Return truthful done/blocked/interrupted/unavailable evidence.
 
     The coordinator alone uses guarded publication to integrate original commits, run exact Verify on integrated work, and commit root status. Root publication is separate from independent feedback clearance; aggregate `complete` means only implementation completion. Never fabricate an attempt or terminal outcome from a missing response.
 
@@ -87,11 +83,7 @@ Subagent:
 
 - `[MODEL]` is required for every dispatch.
 - `[<change-dir>]`, `[N]`, and `[TASK_TITLE]` identify one exact active task.
-- `[TASK_BASE]` is the immutable original task Base, unchanged across retries.
-- `[COORDINATOR_SOURCE_HEAD]` and `[ADMISSION_COMMIT]` are the exact root-side event bindings printed by guarded admission.
-- `[ATTEMPT_START_HEAD]` is the lane HEAD after admission synchronization; use it for Dispatch identity readback and this attempt's `Start HEAD`.
-- `[NEXT_COORDINATOR_HEAD]` is the root HEAD after the admission event and may differ from the attempt start HEAD.
-- `[DISPATCH_HEAD]` is no longer used as a substitute for these distinct revisions.
+- `[DISPATCH_HEAD]` is the exact full HEAD at admitted selection, not the latest plan commit.
 - `[DISPATCH_BRANCH]` is its full `refs/heads/...` ref, not an alias or a same-tip substitute.
 - `[DISPATCH_TARGET]` is the fully resolved `refs/heads/...` or `refs/remotes/...` delivery target from the route Shipping rules/map branch or project rules.
 - `[DISPATCH_WORKTREE]` is the canonical absolute `git rev-parse --absolute-git-dir` path.
@@ -103,4 +95,4 @@ Subagent:
 
 ## Admission and scope
 
-Provide the immutable Task Base, coordinator source HEAD, admission commit, attempt start HEAD, next coordinator HEAD, verified ready projection, lane, and target branch as distinct bindings. The worker records the supplied attempt start as `Start HEAD` in its new task-local attempt and records only task-local attempts and commits; it never mutates root status. It may use an already committed scope reservation only within its paths and intent. Missing admission, stale identity, or unavailable evidence requires a hold without a manufactured outcome.
+Provide the coordinator admission binding, original Base, verified ready projection, lane, and target branch. The worker records only task-local attempts and commits; it never mutates root status. It may use an already committed scope reservation only within its paths and intent. Missing admission, stale identity, or unavailable evidence requires a hold without a manufactured outcome.
