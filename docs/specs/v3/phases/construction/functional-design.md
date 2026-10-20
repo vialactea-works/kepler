@@ -208,7 +208,7 @@ The requester must explicitly approve the current functional design. Approval co
 
 Saving a draft, committing it, or receiving a positive review does not grant requester approval. Approval makes progression to Quality Requirements possible. It does not authorize implementation or delivery.
 
-Record approval through CLI-owned JSON journal events, not artifact frontmatter. Derive current approval views from those events. A separate human-authored approval document is not necessary. Apply the shared [evidence and approval bindings](../../runtime.md#evidence-and-approval-bindings) to the reviewed material. Exact projection fields, event formats, and material reference formats are undecided.
+Record approval through CLI-owned JSON journal events, not artifact frontmatter. Derive current approval views from those events. A separate human-authored approval document is not necessary. Apply the shared [evidence and approval bindings](../../runtime.md#evidence-and-approval-bindings) to the reviewed material. Reference strings follow SH51. Exact projection fields and event formats remain implementation details.
 
 ### Reopening questionnaire
 

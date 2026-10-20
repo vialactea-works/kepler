@@ -65,14 +65,16 @@ The task must stay understandable with its referenced inputs, without reconstruc
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `reference` | Non-empty string. | Precise reference to the relevant input material. |
+| `reference` | Non-empty string. | Caller-supplied free-form text for relevant input material, opaque under SH51. |
 | `purpose` | Non-empty string. | Explain what obligation or context this input supplies to the task. |
 
-Local references use repository-relative file paths and optional Markdown fragments. Resolve each path within its declared repository. A reference to another selected repository identifies that repository under SH51. Exact encoding remains open.
+Input references are opaque, caller-supplied strings. Preserve valid text as supplied. Do not impose a grammar, classify a value as a path or URI, trim, normalize, or resolve it. The existing schema and required non-empty text rules still apply.
 
-External references use explicit URIs. Do not store machine-local absolute paths or credentials. Follow the [Mission contract](../../mission.md#multi-repository-checkpoints-and-integration) for repository boundaries.
+Use repository and checkpoint facts from the owning phase's actual work. These include workspace bindings, stage output checkpoints, task admissions, and Integration results. The CLI does not infer bindings by parsing reference strings. Planning assesses input meaning, relevance, coverage, and availability against actual material.
 
-A reference does not prove approval or waive the task's acceptance criteria. Evidence must identify and keep the material actually used under the shared [material rules](../../runtime.md#material-references).
+Keep credentials out of records. This rule does not change safety for actual Markdown links, explicit file or path operands, or repository operations. Resolve those real paths within the selected repository and reject paths that escape its root.
+
+A reference does not prove material identity, version, approval, consent, check success, or retention. Evidence must identify and keep the material actually used under the shared [material rules](../../runtime.md#material-references).
 
 ### Verification object
 
@@ -141,7 +143,8 @@ The orchestrator and workers interpret these instructions. They do not create gr
 - Reject empty or whitespace-only strings. Enforce the stated array cardinalities and unique output names.
 - The graph must use `format: kepler-task-dag`, integer `version: 1`, valid artifact and task UUIDv4 values, and its owning unit identity.
 - Validate dependency references, duplicate edges, and acyclicity across the complete task set.
-- Resolve relevant local input paths and Markdown fragments without escaping the repository.
+- Apply the existing schema and non-empty text rules to input references. Do not parse or resolve them as paths or fragments.
+- Keep actual Markdown links and explicit file or path operands within their known repository roots. Check resolved real paths for containment.
 - Compare the graph with `plan.md` and relevant upstream requirements. Reject inconsistent content. Structural validity alone does not prove coverage or technical correctness.
 - Reject execution-state fields, including task status, completion, attempts, approvals, admission checkpoints, and actual check results.
 
@@ -153,7 +156,7 @@ Use the existing [Planning evidence requirements](implementation-planning.md#evi
 
 ## Example
 
-This example illustrates the format, not a real unit or an approved implementation plan. The second task depends on the first task's integrated contract. Stage-wide checks still apply beyond the task-specific checks shown.
+This example illustrates the format, not a real unit or an approved implementation plan. Input reference strings are illustrative and do not set a required syntax or resolution rule. The second task depends on the first task's integrated contract. Stage-wide checks still apply beyond the task-specific checks shown.
 
 ```json
 {
@@ -240,7 +243,7 @@ This Draft 2020-12 schema specifies the current structural format. It does not i
 
 Configure the validator to assert the `uuid` format. The standard `uuid` format does not restrict the UUID version. A separate validator rule must reject UUIDs whose version is not 4. Apply shared artifact identity rules to the root ID.
 
-The validator must reject non-unique task IDs, shared artifact/task IDs, invalid predecessor references, duplicate edges, and cycles. Validate unit ownership and local paths against the repository and `plan.md`. Report requirement coverage and technical consistency as separate results.
+The validator must reject non-unique task IDs, shared artifact/task IDs, invalid predecessor references, duplicate edges, and cycles. Validate unit ownership against the selected repository and `plan.md`. Limit path checks to actual Markdown links and explicit path operands. Do not interpret task input references as paths. Report requirement coverage and technical consistency as separate results.
 
 Reject duplicate JSON object keys during parsing. Schema validation cannot recover duplicate keys after a parser has discarded them.
 

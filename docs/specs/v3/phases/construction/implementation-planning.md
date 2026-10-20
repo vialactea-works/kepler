@@ -80,7 +80,11 @@ Both planning outputs are required. This stage owns them and consumes upstream a
 
 The accepted task graph specification assigns task definitions, identities, and dependency edges to `tasks-dag.json`. `plan.md` records the technical solution, rationale, and verification strategy. Reference tasks by identity without keeping a second graph in Markdown.
 
-Use the [accepted task graph specification](task-graph.md) under [IP26](../../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format. Repository-local references follow the selected workspace binding and cannot escape their declared repository. IP19 accepts this complete stage contract. IP26 separately accepts the graph format.
+Use the [accepted task graph specification](task-graph.md) under [IP26](../../authoring_progress.md#implementation-planning-decisions). Do not adopt JGF. Task IDs use the agreed UUIDv4 format.
+
+Resolve actual Markdown links and explicit file or path operands against the selected workspace. Check that each resolved path stays within its repository root. Under SH51, task-graph input references are opaque free-form strings. Do not parse or resolve them automatically. Planning assesses their meaning, coverage, and available material.
+
+IP19 accepts this complete stage contract. IP26 separately accepts the graph format.
 
 Keep one authoritative definition for each task and dependency. A diagram or generated view must not become a second authority. Keep references and explanations consistent across both artifacts. Link `tasks-dag.json` from `plan.md`.
 
@@ -312,9 +316,9 @@ This stage states its required evidence coverage. Requester approval is a separa
 
 | Evidence or approval | Material covered | Required result |
 | --- | --- | --- |
-| Artifact validation result | Current `plan.md`, `tasks-dag.json`, and relevant linked supporting Markdown documents. | Required Markdown sections and metadata are valid. The graph conforms to the [JSON format](task-graph.md). Relevant local links and cross-artifact references resolve. |
+| Artifact validation result | Current `plan.md`, `tasks-dag.json`, and relevant linked supporting Markdown documents. | Required Markdown sections and metadata are valid. The graph conforms to the [JSON format](task-graph.md). Actual Markdown links and cross-artifact links resolve within known repository roots. Explicit path operands pass real-path containment checks. Under SH51, task-graph input references remain opaque and unparsed. |
 | Task graph validation result | The complete planned task set and dependency structure in `tasks-dag.json`, including task identities and dependency reasons. | Task UUIDs are valid and unique. Predecessor references resolve, and reasons describe required work. No self-dependencies, duplicate edges, or cycles exist. Task outputs and resource-use instructions are explicit in their owning fields. |
-| Planning self-review result | Both planning outputs and supporting detail against upstream artifacts, project constraints, and relevant context. | Every planning decision has rationale. Obligations are covered, choices are consistent, and verification is feasible. Prerequisite conditions are explicit. There are no unresolved blocking planning decisions or unsupported material assumptions. |
+| Planning self-review result | Both planning outputs and supporting detail against upstream artifacts, project constraints, and relevant context. | Every planning decision has rationale. Obligations are covered, choices are consistent, and verification is feasible. Assess input meaning, relevance, coverage, and availability against actual material. Prerequisite conditions are explicit. No blocking planning decisions or unsupported material assumptions remain. |
 | Requested external review result | Material and scope identified in the request, when external review is requested. | The requested review is complete and its blocking findings are resolved. |
 | Applicable requester approval record | The material and consequential decisions covered by a required approval or explicit plan-approval request. | The requester explicitly approves the identified material for the applicable attempt. No approval is inferred from artifact presence or review success. |
 

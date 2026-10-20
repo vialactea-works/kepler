@@ -133,7 +133,7 @@ A workspace is a set of bindings, not one branch or directory. A new workspace c
 | Intended working contexts and integration targets | Process IDs, worker sessions, locks, and ownership claims |
 | Authorized workspace changes and their material consequences | Local preparation progress and available diagnostic output |
 
-Repository identity must not depend only on an absolute path or mutable remote URL. Exact reference encodings remain under SH51. Keep credentials out of portable references.
+Record repository identity in the portable workspace binding. Do not derive it from free-form material-reference text or rely only on an absolute path or mutable remote URL. Keep credentials out of portable records.
 
 Portable history records intended bindings and observed material facts. A stored branch name does not prove its current target. Validate current paths, branch state, and ownership locally.
 
@@ -207,7 +207,7 @@ Distinct units or missions that contend for an actual checkout or integration ta
 
 A Git checkpoint is a commit in one repository. A multi-repository operation uses a repository-qualified checkpoint set. Include unchanged participating repositories when they are relevant inputs.
 
-Resolve local material references within their declared repository. Cross-repository references identify a selected repository. Keep the task graph's closed schema unchanged. Exact reference encodings remain under SH51.
+Use recorded workspace bindings to identify each selected repository. Do not infer repository membership by parsing free-form task-graph input references. Resolve actual file paths within the selected repository and reject real paths that escape its root. Keep the task graph's closed schema unchanged.
 
 Keep these checkpoint roles separate:
 
@@ -277,9 +277,11 @@ Retention periods, archive operations, and automatic cleanup remain outside this
 
 ## Implementation boundaries
 
-This contract settles policy, not interfaces or mechanisms. Mission creation and selection syntax, and full unit-create syntax, remain under their existing interface decisions. Event payload schemas, reference encodings, and journal transactions remain implementation choices. Lock mechanisms, claim formats, branch allocation, checkpoint reference names, and publication remain under their existing decisions. Retention and cleanup remain separate.
+This contract settles policy, not interfaces or mechanisms. This batch selects no mission-create command. SH54 selects `--mission <mission-id>` when a mission-scoped operation lacks unit context; unit-scoped operations use unique recorded membership. The full unit-create syntax remains under SH59.
 
-Unit-based existing operations may resolve a mission from unique recorded membership. Mission-aware queries must handle unbound units explicitly. This contract adds no `--mission`, `--repo`, batch, or format option and does not change existing diff-package signatures or selectors.
+Event payload schemas and journal transactions remain implementation choices. Material references follow SH51 and do not supply repository or checkpoint bindings by themselves. Lock mechanisms, claim formats, branch allocation, checkpoint reference names, and publication remain under their existing decisions. Retention and cleanup remain separate.
+
+Unit-based existing operations may resolve a mission from unique recorded membership. Mission-aware queries must handle unbound units explicitly. This Mission contract added no `--mission`, `--repo`, batch, or format selector. SH54 later adds `--mission <mission-id>` only when a mission-scoped operation lacks unit context. Unit-based operations do not need that selector. This extension does not change diff-package signatures or existing audit-list/show signatures.
 
 Keep the existing ten-field event envelope, task graph schema, artifact identities, authors, and types. Do not add an authoritative mission registry, mutable mission state, or authored mission, workspace, execution, or review documents. Do not add per-event commits, global serialization gates, unsafe lock takeover, or automatic rollback.
 

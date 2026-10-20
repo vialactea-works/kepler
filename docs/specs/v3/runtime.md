@@ -268,19 +268,17 @@ A commit identifies content. It does not show that checks passed or that the req
 
 ### Material references
 
-Material is anything relevant to a check, review, or approval. Its types are open-ended. The examples below do not restrict the allowed types.
+Material is anything relevant to a check, review, or approval. Its types are open-ended.
 
-Each Git checkpoint identifies material in one repository. A multi-repository operation uses a repository-qualified checkpoint set. An evidence record can reference other material alongside it. See [Mission](mission.md#multi-repository-checkpoints-and-integration) for distinct checkpoint roles.
+Material and decision references are caller-supplied free-form strings. Preserve valid text as supplied. Do not impose a grammar or classify a value as a path or URI. Do not trim, normalize, parse, automatically resolve, or use it as a registry key. Existing field structure and non-empty text rules still apply where defined. This rule adds no second `material` array or structured sidecar.
 
-| Example | Possible reference |
-| --- | --- |
-| Code, tests, configuration, or authored documents | Repository, checkpoint commit, and material covered. |
-| MR or PR | Platform identifier, reviewed commit, and relevant review content. |
-| CI pipeline | Pipeline, job, and execution identifiers, plus the content actually tested. |
-| Container image | Image digest, with its tag as an additional label. |
-| Local or external logs | Retrieval location and a copy that stays available, an object version, or a content digest. |
+Material can include repository content, review results, CI results, container images, or logs. These examples name material types, not reference formats.
 
-A mutable URL or tag alone is not sufficient to identify what you examined. Where necessary, keep the relevant content or reference an immutable version.
+A reference string does not prove material identity, version, check success, approval, consent, or retention. The responsible agent identifies the actual material and its version and applies the owning evidence contract. For repository material, bind the concrete repository-qualified checkpoint set using facts from the owning phase's work. These include workspace bindings, stage output checkpoints, task admissions, and Integration results. The CLI does not infer bindings by parsing reference strings.
+
+Keep necessary evidence content accessible. A mutable location or label alone does not establish the version examined. Keep credentials out of records.
+
+This rule does not change safety for actual Markdown links, explicit file or path operands, or repository operations. Resolve those real paths within the selected repository and reject paths that escape its root.
 
 A [Git diff package](diff-package.md) is a derived inspection input. It does not itself show check success, approval, or workflow authority. It keeps original producer attempt and material bindings. A consuming check or review binds its result to its own current attempt. The package does not change lifecycle state.
 
@@ -290,12 +288,12 @@ Each evidence result uses the shared ten-field event envelope. Its phase-owned `
 
 - An independently generated `evidence_id`, a full lowercase hyphenated UUIDv4 distinct from the event envelope's `id` and attempt IDs. Give each new check or review result a fresh value. Matching material and outcomes do not justify ID reuse.
 - The applicable stage, Activity, unit, task, and attempt bindings. Include only scopes that apply.
-- One `inputs` array for checked material and other relevant inputs. Each entry has `reference` and `purpose`. References identify each repository and exact checkpoint commit, or other material as appropriate.
+- One `inputs` array for checked material and other relevant inputs. Each entry has `reference` and `purpose`. Treat `reference` as opaque caller text under SH51. Bind repository material to the owning phase's actual repository and checkpoint facts. These include workspace bindings, stage output checkpoints, task admissions, and Integration results. The CLI does not infer bindings by parsing reference strings.
 - The check or review performed, the actual executor, its result, retained output references, and relevant conditions.
 
 The owning contracts set evidence scope. Cover relevant material, not only files changed by one worker. Keep workflow progress and audit history separate from checked material unless the check covers them. Record bindings through CLI-owned JSON journal events, not artifact frontmatter. Derive current binding views from recorded events.
 
-Use the envelope's `event_version` to version phase-owned data. Do not add a redundant record-version field. This minimum does not define a closed generic schema, reference encoding, result taxonomy, host qualification, separate evidence file, or evidence registry. Detailed phase-owned payload types and event catalogs remain implementation work.
+Use the envelope's `event_version` to version phase-owned data. Do not add a redundant record-version field. Do not add a closed generic schema, result taxonomy, host qualification, separate evidence file, or evidence registry. SH51 sets no reference encoding. Detailed phase-owned payload types and event catalogs remain implementation work.
 
 A retry of the same journal write keeps the existing evidence ID, event ID, and original bindings. This is not a general idempotency protocol or permission to reinterpret caller retries. Recording evidence does not execute a check, grant approval, or complete workflow work. A recorded failed check remains failed. Keep all named evidence duties and apply the existing applicability and retention rules.
 
@@ -303,7 +301,7 @@ The [evidence recording interface](cli.md#kepler-audit-record-evidence) uses one
 
 An approval uses phase-owned event `data` to identify the requester, scope, attempt, reviewed `inputs`, and a reference to the explicit approval decision. Each input uses the same `reference` and `purpose` shape. Keep recorded approvals immutable. An approval for an earlier attempt cannot approve a later attempt. Git identity, a commit, the event producer, a successful journal write, or an artifact cannot substitute for requester consent.
 
-For repository material, create the output commit before recording approval. Reference encodings remain under SH51. Actor proof and the public approval interface remain under SH55. This record format does not add an approval ID, registry, authentication engine, or transcript requirement.
+For repository material, create the output commit before recording approval. Apply the accepted approval interface and caller trust boundary under SH55. This record format adds no approval ID, registry, authentication engine, or transcript requirement.
 
 ### Repository checkpoint procedure
 
@@ -404,11 +402,11 @@ Keep phase transition rules and event recording in their owning application oper
 
 The [CLI command reference](cli.md) records accepted command decisions and proposed operation contracts. It owns command organization and interface details. This infrastructure contract owns persistence and shared execution rules. Neither document sets CLI behavior.
 
-For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. For mission operations, `--project` selects the record home. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection. Resolve mission context only from unique recorded membership.
+For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. For mission operations, `--project` selects the record home. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection. Use `--mission <mission-id>` only when a mission-scoped operation has no unit context. Unit-scoped operations resolve mission context only from unique recorded membership.
 
 CLI results use the accepted [result envelope](cli.md#machine-readable-output). Errors use the accepted [failure result fields](cli.md#failure-and-recovery-rules). Apply the accepted [exit-code contract](cli.md#exit-codes), [output stream contract](cli.md#output-streams), and [MVP result formatting](cli.md#human-output). Success fields, error-code values, and `details` schemas stay under their own interface decisions.
 
-Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Use the accepted [audit queries](cli.md#kepler-audit-list) for read-only history inspection. Use the accepted [shared lint interface](cli.md#kepler-lint) for shared metadata checks. Approval and interaction interfaces stay under SH55-SH56.
+Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Use the accepted [audit queries](cli.md#kepler-audit-list) for read-only history inspection. Use the accepted [shared lint interface](cli.md#kepler-lint) for shared metadata checks. Use the accepted approval and interaction interfaces under [SH55](cli.md#kepler-audit-record-approval) and [SH56](cli.md#kepler-audit-record-interaction).
 
 Use the accepted [Construction lint interface](cli.md#kepler-workflow-construction-lint) for task graphs and [UUID interface](cli.md#kepler-uuid) for identifier generation. Root metadata lint of explicit files does not require mission adoption. Apply the accepted [setup interface](cli.md#kepler-setup) and [native resource ownership](installation.md#agent-resource-ownership) without adding agent certification.
 
@@ -432,7 +430,7 @@ Create unit IDs in the format `YYYY-MM-DD-<slug>` under the shared [unit identit
 
 Use the exact unit ID as the directory name under its mission. Detect duplicate IDs across the record-home project, including known unbound units. Do not overwrite an existing unit or regenerate its ID during revision or resume. See the [Mission layout](mission.md#durable-layout).
 
-The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement. Full syntax and mission selection remain open under SH59. Do not infer mission input from an earlier proposal.
+The [unit creation command draft](cli.md#kepler-workflow-construction-unit-create) records the selected command placement. SH54 selects `--mission <mission-id>` for mission input. The full command syntax remains open under SH59.
 
 Mission creation records the selected workflow in its owning phase journal. Construction unit creation records the matching `standard` binding in the Construction journal. Later operations and resume use that binding, and `unit show` exposes it. Do not add workflow or mission fields to frontmatter or the authored task graph.
 
@@ -459,7 +457,7 @@ An interrupted attempt may have no output checkpoint. Its record must not claim 
 - Other CLI command contracts, selectors, command-specific response schemas, and validation and authority rules.
 - Consistent event writes, journal reconciliation, admission coordination, concurrent writers, and recovery after an interrupted operation.
 - Integration lock implementation, ownership records, coordination across workspaces, and interrupted-lock recovery.
-- External reference encodings under SH51 and detailed phase-owned evidence and approval payload types beyond the shared record requirements. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
+- Detailed phase-owned evidence and approval payload types beyond the shared record requirements. Material reference strings follow SH51. Stage and Activity evidence coverage is accepted under [SH52](authoring_progress.md#completed-shared-decisions).
 - Traceability relationship formats, checkpoint reference names and publication, external evidence-store locations, retention periods, and cleanup rules.
 - Detailed workspace allocation, branch layouts, and shared test-resource isolation within the accepted [Mission contract](mission.md).
 - Journal collection, transfer, and publication mechanics under the accepted [record-portability policy](#record-portability) and [Mission contract](mission.md).

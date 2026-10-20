@@ -116,7 +116,7 @@ Material types are open-ended. Each Git checkpoint is a commit in one repository
 
 The [run floor](runtime.md#run-floor) uses the applicable attempt identity, without a separate boundary inside the attempt.
 
-The shared runtime defines stage and Activity attempt IDs, revision IDs, and evidence identity separately from event IDs. It also sets the minimum evidence and approval records. Detailed phase-owned payloads and material-reference encodings remain implementation work.
+The shared runtime defines stage and Activity attempt IDs, revision IDs, and evidence identity separately from event IDs. It also sets the required evidence and approval records. Material references use opaque caller-supplied strings under SH51; they have no required grammar and are not automatically resolved. Detailed phase-owned payloads remain implementation work.
 
 Under the [parallel execution rules](runtime.md#parallel-execution), dependency-ready tasks and independent units can progress concurrently. Task admission records the current repository-qualified unit integration set with all required predecessor outputs. The admitted task keeps that fixed baseline. A moving global coordinator `HEAD` or unrelated commit does not automatically invalidate its work.
 

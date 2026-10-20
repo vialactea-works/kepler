@@ -94,7 +94,7 @@ These examples are illustrative. The orchestrator authorizes the boundary from t
 
 ## Decisions still required
 
-Use the shared [evidence and checkpoint contract](runtime.md#evidence-and-content-checkpoints) for checkpoint and material references. The shared runtime sets attempt and revision identities and minimum evidence and approval records. Material reference encodings remain under SH51. Phase-owned payload types and JSON event catalogs remain implementation work under their owning contracts.
+Use the shared [evidence and checkpoint contract](runtime.md#evidence-and-content-checkpoints) for checkpoint and material references. The shared runtime sets attempt and revision identities and required evidence and approval records. SH51 accepts opaque caller-supplied material-reference strings. Bind actual repository checkpoints and evidence through recorded workspace and operation facts, not by parsing those strings. Phase-owned payload types and JSON event catalogs remain implementation work under their owning contracts.
 
 Keep necessary Git checkpoint objects reachable under the [retention rules](runtime.md#checkpoint-retention). Detailed retention stays open. An audit event or fingerprint alone does not keep output contents.
 

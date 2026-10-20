@@ -10,7 +10,7 @@ Construction owns its state model and event catalog under the shared [execution-
 
 This is not a stage, implementation plan, task graph extension, or separate lifecycle engine. It adds no task attempt, protocol identity, agent role, or public audit kind. The accepted [Implementation](implementation.md), [Activities](activities/README.md), [Standard workflow](../../workflows/standard/README.md), and [task graph](task-graph.md) contracts are still binding.
 
-The proposed event names, detailed phase payload schemas, states, and operation details remain implementation choices. Apply the shared identity and record requirements for evidence and approvals. Mission and local-runtime paths are accepted in the [Mission contract](../../mission.md). This draft adds no requester approval gate.
+SH54 accepts the public normal-transition operations and selector rule in the [CLI reference](../../cli.md). It does not accept the proposed state names, event names, phase payload schemas, or additional operation details in this draft. Apply the shared identity and record requirements for evidence and approvals. Mission and local-runtime paths are accepted in the [Mission contract](../../mission.md). This draft adds no requester approval gate.
 
 ## Scope and identity
 
@@ -59,7 +59,7 @@ Readiness, admission, Activity completion, task completion, and unit-stage compl
 
 ## Transition guards and results
 
-These are proposed logical operations, not additional public commands. The [CLI reference](../../cli.md) owns public grammar and the typed-write boundary.
+These are proposed logical operations, not additional public commands. The [CLI reference](../../cli.md) owns public grammar and the typed-write boundary. SH54 accepts only its named normal transitions and existing phase authority, attempt, evidence, and completion rules. It does not accept this draft's state names, event details, or extra transition guards. Pause semantics remain proposals under SH58.
 
 | Scope and operation | Guard | Recorded result |
 | --- | --- | --- |
@@ -78,7 +78,7 @@ These are proposed logical operations, not additional public commands. The [CLI 
 | Task complete | Applicable Validation and Integration evidence show accepted material that passed the checks and all task conditions. | Record task completion without completing Implementation. |
 | Task or Activity return | The orchestrator authorizes correction under the accepted route. | Keep history. Reopened Activities start new attempts only when they execute. |
 
-Pause requests and paused acknowledgments are distinct proposed facts. A request blocks new affected work before worker stopping finishes. Unknown stopping effects prevent a successful paused acknowledgment. Independent unaffected scopes continue. These details are proposals under SH54 and SH58, not previously agreed cancellation semantics.
+Pause requests and paused acknowledgments are distinct proposed facts. A request blocks new affected work before worker stopping finishes. Unknown stopping effects prevent a successful paused acknowledgment. Independent unaffected scopes continue. These details remain proposals under SH58; they do not add accepted cancellation semantics.
 
 Waiting does not imply that all workers stopped. A command failure, unavailable condition, or wait keeps the applicable unended attempt. Do not add public `wait`, cancel, abandon, or force commands.
 
@@ -86,7 +86,7 @@ Waiting does not imply that all workers stopped. A command failure, unavailable 
 
 Use the unchanged [ten-field envelope](../../runtime.md#event-envelope-choices). Its fields are `id`, `phase`, `type`, `envelope_version`, `event_version`, `journal_id`, `recorded_at`, `producer`, `caused_by`, and `data`.
 
-The event names, derived states, operation details, and phase-specific payload schemas below are proposals. Apply the accepted shared identity and record requirements for evidence and approval.
+The event names, derived states, operation details, and phase-specific payload schemas below are proposals. Apply the accepted shared identity and record requirements for evidence and approval. These proposals do not override SH51 or require a second `material` array or structured reference sidecar. Use concrete checkpoint facts from the owning phase's work, including workspace bindings, stage output checkpoints, admissions, and Integration results. The CLI does not infer bindings by parsing reference strings.
 
 | Payload key | Required meaning |
 | --- | --- |
