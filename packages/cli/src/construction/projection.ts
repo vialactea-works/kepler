@@ -46,7 +46,8 @@ export interface ConstructionProjectionIssue {
     | "invalid-revision-authorization"
     | "invalid-revision-transition"
     | "invalid-task-admission"
-    | "invalid-task-completion";
+    | "invalid-task-completion"
+    | "duplicate-unit-baseline";
   readonly message: string;
   readonly scope: HistoryScope;
   readonly eventIds: readonly string[];
@@ -875,12 +876,9 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const baselines = order.uniqueFacts.filter((candidate) =>
       candidate.event.type === "construction.unit-baseline-selected" && factUnitId(candidate) === unitId,
     );
-    const latestBaselines = baselines.filter((candidate) => !baselines.some((other) =>
-      other.event.id !== candidate.event.id && order.hasPath(candidate.event.id, other.event.id),
-    ));
-    const baseline = latestBaselines.length === 1 && latestBaselines[0] && hasDirectCause(fact, latestBaselines[0]) &&
-      checkpointKey(data.admission_baseline) === checkpointKey(latestBaselines[0].event.data.review_baseline)
-      ? latestBaselines[0]
+    const baseline = baselines.length === 1 && baselines[0] && hasDirectCause(fact, baselines[0]) &&
+      checkpointKey(data.admission_baseline) === checkpointKey(baselines[0].event.data.review_baseline)
+      ? baselines[0]
       : undefined;
     if (!baseline) related.push(...baselines);
     const predecessorProvenance = Array.isArray(data.predecessor_provenance) ? data.predecessor_provenance : [];
@@ -957,6 +955,22 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     });
   }
 
+  const integrationAcceptanceFollowsReopen = (
+    acceptance: ConstructionHistoryFact,
+    reopening: ConstructionHistoryFact,
+  ): boolean => {
+    const preparedId = stringField(acceptance.event.data, "prepared_event_id");
+    const prepared = preparedId ? factsById.get(preparedId) : undefined;
+    if (!prepared || prepared.event.type !== "construction.integration-prepared") return false;
+    return order.uniqueFacts.some((candidate) =>
+      candidate.event.type === "construction.activity-attempt-started" &&
+      validActivityStarts.has(candidate.event.id) &&
+      sameActivityScope(candidate, acceptance) &&
+      order.hasPath(reopening.event.id, candidate.event.id) &&
+      hasDirectCause(prepared, candidate),
+    );
+  };
+
   const unitIds = [...new Set(history.events.flatMap((record) =>
     record.missionId === history.missionId && record.scope.unitId ? [record.scope.unitId] : [],
   ))].sort(compareString);
@@ -1003,6 +1017,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           admissions.push(fact);
           if (validTaskAdmissions.has(fact.event.id)) {
             admission = fact;
+            completion = undefined;
             taskStageAttemptId = stringField(data, "stage_attempt_id") as StageAttemptId | undefined;
             taskState = "admitted";
           } else {
@@ -1018,6 +1033,29 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
             stringField(accepted.event.data, "task_id") === taskId &&
             stringField(accepted.event.data, "stage_attempt_id") === stringField(data, "stage_attempt_id") &&
             fact.event.caused_by.includes(accepted.event.id) && order.hasPath(accepted.event.id, fact.event.id);
+          const taskScopeTransitionsBeforeCompletion = directFacts.filter((candidate) =>
+            ["construction.task-scope-ended-by-revision", "construction.task-scope-reopened"].includes(candidate.event.type) &&
+            stringField(candidate.event.data, "stage_attempt_id") === stringField(data, "stage_attempt_id") &&
+            order.hasPath(candidate.event.id, fact.event.id),
+          );
+          const latestTaskScopeTransitions = taskScopeTransitionsBeforeCompletion.filter((candidate) =>
+            !taskScopeTransitionsBeforeCompletion.some((other) =>
+              other.event.id !== candidate.event.id && order.hasPath(candidate.event.id, other.event.id),
+            ),
+          );
+          const currentTaskScopeTransition = latestTaskScopeTransitions.length === 1 ? latestTaskScopeTransitions[0] : undefined;
+          const currentReopening = currentTaskScopeTransition?.event.type === "construction.task-scope-reopened"
+            ? currentTaskScopeTransition
+            : undefined;
+          const affectedActivities = currentReopening && Array.isArray(currentReopening.event.data.affected_activities)
+            ? currentReopening.event.data.affected_activities
+            : [];
+          const staleIntegration = matchingAcceptance && (
+            currentTaskScopeTransition?.event.type === "construction.task-scope-ended-by-revision" ||
+            (currentReopening !== undefined && affectedActivities.includes("code-integration") &&
+              !integrationAcceptanceFollowsReopen(accepted, currentReopening))
+          );
+          if (staleIntegration) continue;
           if (matchingAcceptance && taskStageAttemptId === stringField(data, "stage_attempt_id")) {
             taskState = "complete";
             completion = fact;
@@ -1035,6 +1073,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           const parent = stringField(data, "stage_attempt_id");
           if (taskStageAttemptId !== undefined && parent !== taskStageAttemptId) continue;
           taskStageAttemptId = parent as StageAttemptId | undefined;
+          completion = undefined;
           taskState = fact.event.type === "construction.task-scope-reopened" ? "reopened" : "blocked";
         }
       }
@@ -1179,7 +1218,15 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         transitionGroups.get(baselineKey)?.some((fact) => fact.event.id === id),
       ),
     );
-    const baseline = baselineAmbiguous ? undefined : baselineFacts.at(-1);
+    const baseline = baselineAmbiguous || isHistoryScopeBlocked(history, scope) ? undefined : baselineFacts[0];
+    if (baselineFacts.length > 1) {
+      report({
+        code: "duplicate-unit-baseline",
+        message: "The unit Review baseline was selected more than once; preserve the first selection",
+        scope,
+        eventIds: baselineFacts.map((fact) => fact.event.id),
+      });
+    }
     const historyIssuesForUnit = historyIssues.filter((issue) =>
       issue.scope.missionId === history.missionId && (issue.scope.unitId === undefined || issue.scope.unitId === unitId),
     );
@@ -1207,7 +1254,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       created,
       workflow: created?.event.data.workflow === "standard" ? "standard" : undefined,
       effort: blocked ? undefined : effort,
-      baseline: blocked ? undefined : baseline,
+      baseline,
       stages: finalStages,
       tasks: finalTasks,
       evidence: evidence.sort(compareFacts).map(boundRecord),

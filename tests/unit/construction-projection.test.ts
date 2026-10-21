@@ -441,6 +441,32 @@ describe("Construction history projection", () => {
     expect(projection.units[0]?.stages.find((stage) => stage.stage === "functional-design")?.state).toBe("unknown");
   });
 
+  it("keeps the first unit Review baseline and blocks later baseline selections", () => {
+    const unitCreated = created("event-unit-created", ids.unit, "journal-replaced-baseline");
+    const firstBaseline = event("event-baseline-first", "construction.unit-baseline-selected", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      review_baseline: [{ repository_id: "repo-main", commit: "first-checkpoint" }],
+      integration_targets: [{ repository_id: "repo-main", target: "main" }],
+    }, "journal-replaced-baseline", [unitCreated.id]);
+    const replacementBaseline = event("event-baseline-replacement", "construction.unit-baseline-selected", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      review_baseline: [{ repository_id: "repo-main", commit: "replacement-checkpoint" }],
+      integration_targets: [{ repository_id: "repo-main", target: "main" }],
+    }, "journal-replaced-baseline", [firstBaseline.id]);
+    const projection = projectConstruction(collectHistory(missionId, [source(
+      "origin://replaced-baseline",
+      "journal-replaced-baseline",
+      [unitCreated, firstBaseline, replacementBaseline],
+    )]));
+    const unit = projection.units[0];
+    expect(unit?.blocked).toBe(true);
+    expect(unit?.baseline?.event.id).toBe(firstBaseline.id);
+    expect(unit?.baseline?.event.data.review_baseline).toEqual([{ repository_id: "repo-main", commit: "first-checkpoint" }]);
+    expect(projection.projectionIssues.map((issue) => issue.code)).toContain("duplicate-unit-baseline");
+  });
+
   it("does not expose current state as usable when unsupported history affects the unit", () => {
     const unitCreated = created("event-unit-created", ids.unit, "journal-unsupported");
     const started = stageStart("event-stage-start", ids.stageAttempt, ids.unit, "journal-unsupported", [unitCreated.id]);
@@ -602,7 +628,7 @@ describe("Construction history projection", () => {
       integration_event_id: accepted.id,
       conditions: ["Task conditions hold"],
     }, "journal-integration", [accepted.id, activityCompleted.id]);
-    const sources = [source("origin://integration", "journal-integration", [
+    const records = [
       unitCreated,
       baseline,
       started,
@@ -616,7 +642,8 @@ describe("Construction history projection", () => {
       accepted,
       activityCompleted,
       taskCompleted,
-    ])];
+    ];
+    const sources = [source("origin://integration", "journal-integration", records)];
     const history = collectHistory(missionId, sources);
     const projection = projectConstruction(history);
     const task = projection.units[0]?.tasks[0];
@@ -626,6 +653,79 @@ describe("Construction history projection", () => {
     expect(task?.completion?.event.data.integration_event_id).toBe(accepted.id);
     expect(task?.activities.find((activity) => activity.activity === "code-integration")?.accepted).toHaveLength(1);
     expect(projection.units[0]?.progress).toEqual({ completedStages: 0, totalStages: 6, completedTasks: 1, knownTasks: 1, reliable: true });
+    const revisionInteraction = event("event-task-revision-interaction", "construction.interaction-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      participants: ["orchestrator"],
+      content: "The task needs an authorized revision",
+      references: ["opaque: task revision"],
+    }, "journal-integration", [taskCompleted.id]);
+    const revision = event("event-task-revision", "construction.revision-authorized", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      revision_id: ids.revision,
+      orchestrator_decision: "Reopen the task",
+      reason: "The integrated task result needs correction",
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+    }, "journal-integration", [revisionInteraction.id]);
+    const taskEnded = event("event-task-ended", "construction.task-scope-ended-by-revision", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      revision_id: ids.revision,
+      reason: "End the affected task scope",
+      affected_activities: ["code-generation", "code-validation", "code-integration"],
+    }, "journal-integration", [revision.id, taskCompleted.id]);
+    const taskReopened = event("event-task-reopened", "construction.task-scope-reopened", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      revision_id: ids.revision,
+      reason: "Reopen the affected task scope",
+      affected_activities: ["code-generation", "code-validation", "code-integration"],
+    }, "journal-integration", [taskEnded.id, revision.id]);
+    const lateTaskCompletion = event("event-late-task-completion", "construction.task-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      integration_event_id: accepted.id,
+      conditions: ["A late completion reused stale Integration evidence"],
+    }, "journal-integration", [accepted.id, activityCompleted.id, taskReopened.id]);
+    const revisedProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://integration-after-revision",
+      "journal-integration",
+      [...records, revisionInteraction, revision, taskEnded, taskReopened, lateTaskCompletion],
+    )]));
+    expect(revisedProjection.projectionIssues).toEqual([]);
+    expect(revisedProjection.units[0]?.blocked).toBe(false);
+    expect(revisedProjection.units[0]?.tasks[0]?.state).toBe("reopened");
+    expect(revisedProjection.units[0]?.tasks[0]?.completion).toBeUndefined();
+    const lateCompletionBeforeReopen = event("event-late-completion-before-reopen", "construction.task-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      integration_event_id: accepted.id,
+      conditions: ["A late completion followed an ended task scope"],
+    }, "journal-integration", [accepted.id, activityCompleted.id, taskEnded.id]);
+    const endedProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://ended-task",
+      "journal-integration",
+      [...records, revisionInteraction, revision, taskEnded, lateCompletionBeforeReopen],
+    )]));
+    expect(endedProjection.projectionIssues).toEqual([]);
+    expect(endedProjection.units[0]?.blocked).toBe(false);
+    expect(endedProjection.units[0]?.tasks[0]?.state).toBe("blocked");
+    expect(endedProjection.units[0]?.tasks[0]?.completion).toBeUndefined();
     const incompleteProjection = projectConstruction(collectHistory(missionId, sources, "incomplete"));
     const incompleteUnit = incompleteProjection.units[0];
     const incompleteTask = incompleteUnit?.tasks[0];
