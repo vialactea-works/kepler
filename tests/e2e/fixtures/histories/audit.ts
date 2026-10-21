@@ -30,14 +30,17 @@ const event = (id: string, type: string, data: Record<string, unknown>, causedBy
   data,
 });
 
-export const createAuditHistory = async (repository: string): Promise<string> => {
+export const createAuditHistory = async (
+  repository: string,
+  unitDirectory = `construction/units-of-work/${auditFixture.unitId}`,
+): Promise<string> => {
   const historyDirectory = Path.join(repository, ".kepler", "missions", auditFixture.missionId, "history", CONSTRUCTION_PHASE);
   await Fs.mkdir(historyDirectory, { recursive: true });
   const facts = [
     event(auditFixture.eventIds[0], "construction.unit-created", {
       mission_id: auditFixture.missionId,
       unit_id: auditFixture.unitId,
-      directory: `units-of-work/${auditFixture.unitId}`,
+      directory: unitDirectory,
       workflow: "standard",
       initial_effort: { default: "standard", stage_overrides: {}, selected_by: "Requester" },
     }),

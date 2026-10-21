@@ -7,6 +7,10 @@ import {
 import { createEventJournal } from "../../history/journal.js";
 import { CONSTRUCTION_PHASE } from "../../construction/events.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
+import {
+  createNodeFunctionalDesignStageCompletionRuntime,
+  FunctionalDesignStageCompletion,
+} from "../../construction/stage-completion.js";
 import { MissionHandoffPreflight } from "../../construction/mission-handoff-preflight.js";
 import { AuditContextResolver, createNodeAuditContextRuntime } from "../../audit/context.js";
 import { AuditRecording } from "../../audit/recording.js";
@@ -29,6 +33,8 @@ import {
   AuditListCommand,
   AuditShowCommand,
   ConstructionCommand,
+  ConstructionStageCommand,
+  ConstructionStageCompleteCommand,
   GitAuthorCommand,
   GitCommand,
   MetadataLintCommand,
@@ -62,6 +68,9 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     AuditShowCommand,
     WorkflowCommand,
     ConstructionCommand,
+    ConstructionStageCommand,
+    ConstructionStageCompleteCommand,
+    FunctionalDesignStageCompletion,
     MissionCommand,
     MissionCreateCommand,
     {
@@ -72,6 +81,14 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     {
       provide: AuditQueries,
       useFactory: (contexts: AuditContextResolver) => new AuditQueries(contexts),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: FunctionalDesignStageCompletion,
+      useFactory: (contexts: AuditContextResolver) => new FunctionalDesignStageCompletion(
+        contexts,
+        createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
       inject: [AuditContextResolver],
     },
     {

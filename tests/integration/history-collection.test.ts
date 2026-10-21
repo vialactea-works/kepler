@@ -69,7 +69,7 @@ describe("persisted Construction history integration", () => {
     const started = event("event-stage-started", "construction.stage-attempt-started", {
       mission_id: missionId,
       unit_id: unitId,
-      stage: "functional-design",
+      stage: "implementation",
       stage_attempt_id: "20000000-0000-4000-8000-000000000002",
       inputs: [{ reference: "opaque: source  ", purpose: "Accepted source material" }],
       checkpoints: [{ repository_id: "repository-main", commit: "checkpoint-1" }],
@@ -78,7 +78,7 @@ describe("persisted Construction history integration", () => {
     const evidence = event("event-stage-evidence", "construction.evidence-recorded", {
       mission_id: missionId,
       unit_id: unitId,
-      stage: "functional-design",
+      stage: "implementation",
       stage_attempt_id: "20000000-0000-4000-8000-000000000002",
       evidence_id: "60000000-0000-4000-8000-000000000006",
       artifact_bindings: [],
@@ -93,7 +93,7 @@ describe("persisted Construction history integration", () => {
     const completed = event("event-stage-completed", "construction.stage-attempt-completed", {
       mission_id: missionId,
       unit_id: unitId,
-      stage: "functional-design",
+      stage: "implementation",
       stage_attempt_id: "20000000-0000-4000-8000-000000000002",
       evidence_ids: ["60000000-0000-4000-8000-000000000006"],
       checkpoints: [{ repository_id: "repository-main", commit: "checkpoint-1" }],
@@ -121,8 +121,8 @@ describe("persisted Construction history integration", () => {
       [completed.id, 4, source.sourceId],
     ]);
     expect(projection).toEqual(projectConstruction(rebuilt));
-    expect(projection.units[0]?.stages.find((stage) => stage.stage === "functional-design")?.state).toBe("completed");
-    expect(projection.units[0]?.stages.find((stage) => stage.stage === "functional-design")?.currentAttemptId)
+    expect(projection.units[0]?.stages.find((stage) => stage.stage === "implementation")?.state).toBe("completed");
+    expect(projection.units[0]?.stages.find((stage) => stage.stage === "implementation")?.currentAttemptId)
       .toBe("20000000-0000-4000-8000-000000000002");
     expect(projection.units[0]?.progress).toEqual({
       completedStages: 1,
@@ -135,7 +135,7 @@ describe("persisted Construction history integration", () => {
     const incompleteProjection = projectConstruction(collectHistory(missionId, [source], "incomplete"));
     expect(incompleteProjection.blocked).toBe(true);
     expect(incompleteProjection.units[0]?.blocked).toBe(true);
-    expect(incompleteProjection.units[0]?.stages.find((stage) => stage.stage === "functional-design")?.state)
+    expect(incompleteProjection.units[0]?.stages.find((stage) => stage.stage === "implementation")?.state)
       .toBe("unknown");
     expect(incompleteProjection.units[0]?.progress).toEqual({
       completedStages: 0,
