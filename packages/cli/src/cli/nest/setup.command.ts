@@ -1,5 +1,5 @@
 import { Inject } from "@nestjs/common";
-import { Command, CommandRunner, Option } from "nest-commander";
+import { Command, CommandRunner } from "nest-commander";
 import { SETUP_OPERATION } from "../setup-runtime.js";
 import type { Setup, SetupResult } from "../setup.service.js";
 import { ResultReporter } from "./result-reporter.js";
@@ -14,11 +14,6 @@ export class SetupCommand extends CommandRunner {
     private readonly reporter: ResultReporter,
   ) {
     super();
-  }
-
-  @Option({ flags: "--force", description: "Force setup" })
-  parseForce(): boolean {
-    return true;
   }
 
   async run(

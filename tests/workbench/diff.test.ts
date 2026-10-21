@@ -12,6 +12,7 @@ import {
   type DiffGitPort,
   type DiffRuntime,
 } from "../../packages/cli/src/workbench/diff.js";
+import { parseCliEnvelope } from "../cli/result-envelope.js";
 import {
   cleanupRepos,
   commitAll,
@@ -37,6 +38,23 @@ const sourceDiff = (cwd: string, changeDir: string, task: number) => {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
   };
+};
+
+const expectSourceCliFailure = (
+  result: ReturnType<typeof sourceDiff>,
+  message: string,
+): void => {
+  expect(result.status).toBe(1);
+  expect(parseCliEnvelope(result.stdout)).toMatchObject({
+    status: "failed",
+    data: {
+      code: "operation_failed",
+      message: expect.stringContaining(message),
+      details: {},
+      recovery: expect.any(String),
+    },
+  });
+  expect(result.stderr).toContain(message);
 };
 
 const sourceCliTsconfig = (repository: string) => {
@@ -428,18 +446,14 @@ describe("diff checkpoint recording", () => {
     const fixture = createSerialReservationFixture({ latestChangesRequested: true });
     const result = sourceDiff(fixture.repo, fixture.changeDir, 2);
 
-    expect(result.status, result.stdout + result.stderr).toBe(2);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("reserved path changed before its reservation");
+    expectSourceCliFailure(result, "reserved path changed before its reservation");
   });
 
   it("rejects a source CLI diff when approval omits the latest predecessor implementation", () => {
     const fixture = createSerialReservationFixture({ predecessorAttemptAfterApproval: true });
     const result = sourceDiff(fixture.repo, fixture.changeDir, 2);
 
-    expect(result.status, result.stdout + result.stderr).toBe(2);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("reserved path changed before its reservation");
+    expectSourceCliFailure(result, "reserved path changed before its reservation");
   });
 
   it("rejects a source CLI diff when task production precedes a reservation after task metadata", () => {
@@ -471,9 +485,7 @@ describe("diff checkpoint recording", () => {
 
     const result = sourceDiff(repo, changeDir, 2);
 
-    expect(result.status, result.stdout + result.stderr).toBe(2);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("reserved path changed before its reservation");
+    expectSourceCliFailure(result, "reserved path changed before its reservation");
   });
 
   it("recovers the first task Base with a later legitimate reservation", async () => {

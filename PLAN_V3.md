@@ -239,18 +239,20 @@ Foundation tasks with no dependency links can start together. Skills and prompts
 
 **Sources:** [CLI](docs/specs/v3/cli.md), SH60-SH61, SH102-SH108, SH113.
 
-- [ ] M04.1 Add root `git`, `lint`, `audit`, and `workflow construction` capabilities to the Nest command tree. Make help and parsing use the same framework definitions. Record release treatment of legacy `workbench`. Do not use legacy state as v3 truth or add deferred migration.
-- [ ] M04.2 Use one result-reporting boundary. It has exactly `{status,data}`, `success`/`failed`, exit `0`/`1`, and one JSON object at the end plus newline on stdout. Put diagnostics only on stderr. Do not use an automatic terminal-dependent format. Apply this to argument/parser errors and use-case failures.
-- [ ] M04.3 Use failed-result fields `code`, `message`, `details`, and `recovery`. Keep partial-effect facts in `details`. Do not add scope/effects envelopes or imply recovery permission. Keep command success distinct from workflow completion.
-- [ ] M04.4 Resolve projects from invocation cwd or explicit `--project`. Do not select an ancestor project implicitly. Select a Git working-tree root with an existing local `.kepler/`. Accept linked worktrees. Reject bare repositories and nested paths.
+- [x] M04.1 Add root `git`, `lint`, `audit`, and `workflow construction` capabilities to the Nest command tree. Make help and parsing use the same framework definitions. Record release treatment of legacy `workbench`. Do not use legacy state as v3 truth or add deferred migration.
+
+  Release treatment: retain legacy `kepler workbench` commands and their state effects in this release. Adapt each result to M04.2's single JSON envelope: keep successful legacy text in `data.output` and failed-command stdout in `data.details.output`, with diagnostics on stderr. Do not emit legacy text outside the envelope, interpret its state as v3 truth, or migrate it.
+- [x] M04.2 Use one result-reporting boundary. It has exactly `{status,data}`, `success`/`failed`, exit `0`/`1`, and one JSON object at the end plus newline on stdout. Put diagnostics only on stderr. Do not use an automatic terminal-dependent format. Apply this to argument/parser errors and use-case failures.
+- [x] M04.3 Use failed-result fields `code`, `message`, `details`, and `recovery`. Keep partial-effect facts in `details`. Do not add scope/effects envelopes or imply recovery permission. Keep command success distinct from workflow completion.
+- [x] M04.4 Resolve projects from invocation cwd or explicit `--project`. Do not select an ancestor project implicitly. Select a Git working-tree root with an existing local `.kepler/`. Accept linked worktrees. Reject bare repositories and nested paths.
 
   Use a read-only resolver. Do not use legacy Core helpers that can copy data.
-- [ ] M04.5 Parse selectors and do ownership checks in one place. Use full unit/task/attempt IDs, not prefixes, and allowed stage/Activity values. Reject duplicates. Keep original Implementation-parent binding.
+- [x] M04.5 Parse selectors and do ownership checks in one place. Use full unit/task/attempt IDs, not prefixes, and allowed stage/Activity values. Reject duplicates. Keep original Implementation-parent binding.
 
   Use no implicit active/latest scope. Use `--mission` only for mission-scoped operations without unit context. Do not add `--repo`.
-- [ ] M04.6 Add `kepler uuid` and `kepler git author [--project <path>]`. Keep them read-only except for UUID generation. Use the effective repository Git identity. A missing or blank name or email must cause failure before artifact writes. Do not use fallback, prompts, or Git configuration changes.
-- [ ] M04.7 Add `kepler lint <path>... [--project <path>]` with only M02 shared metadata validation. Use explicit Markdown paths. Keep unbound-artifact lint. Use the accepted finding fields and success/failure placement. Do no scans or repairs. Add no IDs or events.
-- [ ] M04.8 Add Vitest unit tests for result/parser/selector contracts. Add integration tests for real Nest module wiring. Use `execa` CLI tests for success, failure, and stream behavior. Include relative project paths, linked worktrees, invalid roots, duplicate flags, and no-write failures.
+- [x] M04.6 Add `kepler uuid` and `kepler git author [--project <path>]`. Keep them read-only except for UUID generation. Use the effective repository Git identity. A missing or blank name or email must cause failure before artifact writes. Do not use fallback, prompts, or Git configuration changes.
+- [x] M04.7 Add `kepler lint <path>... [--project <path>]` with only M02 shared metadata validation. Use explicit Markdown paths. Keep unbound-artifact lint. Use the accepted finding fields and success/failure placement. Do no scans or repairs. Add no IDs or events.
+- [x] M04.8 Add Vitest unit tests for result/parser/selector contracts. Add integration tests for real Nest module wiring. Use `execa` CLI tests for success, failure, and stream behavior. Include relative project paths, linked worktrees, invalid roots, duplicate flags, and no-write failures.
 
 **Complete when:** Common CLI rules hold on positive and negative paths. Author/UUID/lint commands operate correctly. Later commands use the same parsing, selection, validation, and reporting boundaries.
 

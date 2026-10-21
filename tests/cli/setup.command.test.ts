@@ -1,9 +1,7 @@
 import "reflect-metadata";
-import type { DynamicModule, INestApplicationContext } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { CommandFactory } from "nest-commander";
 import { describe, expect, it } from "vitest";
-import { ResultModule } from "../../packages/cli/src/cli/nest/result.module.js";
+import { unwrapLegacyOutput } from "./result-envelope.js";
 import {
   RESULT_EXIT_SINK,
   RESULT_OUTPUT_SINK,
@@ -22,7 +20,7 @@ import {
 
 type Event =
   | { readonly type: "stdout" | "stderr"; readonly value: string }
-  | { readonly type: "exitCode"; readonly value: 0 | 1 | 2 };
+  | { readonly type: "exitCode"; readonly value: 0 | 1 };
 
 function makeFiles(overrides: Partial<SetupFiles> = {}): SetupFiles {
   return {
@@ -52,12 +50,13 @@ async function createSetupHarness(options?: {
     .useValue(options?.bundleLocator ?? (() => "/bundle"))
     .overrideProvider(RESULT_OUTPUT_SINK)
     .useValue({
-      stdout: (value: string) => events.push({ type: "stdout", value }),
+      stdout: (value: string) =>
+        events.push({ type: "stdout", value: unwrapLegacyOutput(value) }),
       stderr: (value: string) => events.push({ type: "stderr", value }),
     })
     .overrideProvider(RESULT_EXIT_SINK)
     .useValue({
-      setExitCode: (value: 0 | 1 | 2) => events.push({ type: "exitCode", value }),
+      setExitCode: (value: 0 | 1) => events.push({ type: "exitCode", value }),
     })
     .compile();
 
@@ -78,7 +77,7 @@ describe("SetupCommand", () => {
       expect(harness.setup).toBeInstanceOf(SetupService);
       expect(harness.reporter).toBeInstanceOf(ResultReporter);
 
-      await harness.command.run([], { force: true });
+      await harness.command.run([]);
 
       expect(harness.events).toEqual([
         { type: "exitCode", value: 0 },
@@ -87,14 +86,13 @@ describe("SetupCommand", () => {
           value:
             "Kepler set up successfully.\nInstalled 2 templates.\n  nested/requirements.md\n  plan.md\nInstalled guidelines.\n",
         },
-        { type: "stderr", value: "" },
       ]);
     } finally {
       await harness.module.close();
     }
   });
 
-  it("reports a filesystem failure once with exit code 2", async () => {
+  it("reports a filesystem failure once with exit code 1", async () => {
     const harness = await createSetupHarness({
       files: makeFiles({
         ensureHome: () => {
@@ -104,10 +102,10 @@ describe("SetupCommand", () => {
     });
 
     try {
-      await harness.command.run([], { force: true });
+      await harness.command.run([]);
 
       expect(harness.events).toEqual([
-        { type: "exitCode", value: 2 },
+        { type: "exitCode", value: 1 },
         { type: "stdout", value: "" },
         {
           type: "stderr",
@@ -120,7 +118,7 @@ describe("SetupCommand", () => {
     }
   });
 
-  it("reports a bundle failure once with exit code 2", async () => {
+  it("reports a bundle failure once with exit code 1", async () => {
     const harness = await createSetupHarness({
       bundleLocator: () => {
         throw new Error("bundle unavailable");
@@ -128,78 +126,15 @@ describe("SetupCommand", () => {
     });
 
     try {
-      await harness.command.run([], { force: true });
+      await harness.command.run([]);
 
       expect(harness.events).toEqual([
-        { type: "exitCode", value: 2 },
+        { type: "exitCode", value: 1 },
         { type: "stdout", value: "" },
         { type: "stderr", value: "Setup failed: Error: bundle unavailable\n" },
       ]);
     } finally {
       await harness.module.close();
-    }
-  });
-
-  it("accepts --force through nest-commander", async () => {
-    const { SetupCommand } = await import(
-      "../../packages/cli/src/cli/nest/setup.command.js"
-    );
-    const originalArgv = process.argv;
-    const originalExitCode = process.exitCode;
-    const originalStdoutWrite = process.stdout.write;
-    const originalStderrWrite = process.stderr.write;
-    let stdout = "";
-    let stderr = "";
-    let setupCalls = 0;
-    let application: INestApplicationContext | undefined;
-    class SetupCommandHarness {}
-    const rootModule: DynamicModule = {
-      module: SetupCommandHarness,
-      imports: [ResultModule],
-      providers: [
-        SetupCommand,
-        {
-          provide: SETUP_OPERATION,
-          useValue: {
-            setup: () => {
-              setupCalls += 1;
-              return { templates: [] };
-            },
-          },
-        },
-      ],
-    };
-
-    try {
-      process.argv = [...originalArgv.slice(0, 2), "setup", "--force"];
-      process.exitCode = 0;
-      process.stdout.write = ((chunk: string | Uint8Array) => {
-        stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-        return true;
-      }) as typeof process.stdout.write;
-      process.stderr.write = ((chunk: string | Uint8Array) => {
-        stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-        return true;
-      }) as typeof process.stderr.write;
-
-      application = await CommandFactory.runWithoutClosing(rootModule, {
-        serviceErrorHandler: (error) => {
-          throw error;
-        },
-      });
-
-      expect(setupCalls).toBe(1);
-      expect(process.exitCode).toBe(0);
-      expect(stdout).toBe(
-        "Kepler set up successfully.\nInstalled 0 templates.\nInstalled guidelines.\n",
-      );
-      expect(stderr).toBe("");
-    } finally {
-      process.argv = originalArgv;
-      process.exitCode = originalExitCode;
-      process.stdout.write = originalStdoutWrite;
-      process.stderr.write = originalStderrWrite;
-      await application?.close();
     }
   });
 });

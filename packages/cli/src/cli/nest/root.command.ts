@@ -1,12 +1,27 @@
 import type { OnApplicationBootstrap } from "@nestjs/common";
 import { CommandRunner, RootCommand } from "nest-commander";
+import {
+  AuditCommand,
+  GitCommand,
+  MetadataLintCommand,
+  UuidCommand,
+  WorkflowCommand,
+} from "./capability.commands.js";
 import { SetupCommand } from "./setup.command.js";
 import { WorkbenchCommand } from "./workbench.command.js";
 
 @RootCommand({
   name: "kepler",
-  description: "Template setup CLI",
-  subCommands: [SetupCommand, WorkbenchCommand],
+  description: "Kepler workflow CLI",
+  subCommands: [
+    SetupCommand,
+    UuidCommand,
+    WorkbenchCommand,
+    GitCommand,
+    MetadataLintCommand,
+    AuditCommand,
+    WorkflowCommand,
+  ],
 })
 export class KeplerRootCommand
   extends CommandRunner
@@ -31,14 +46,12 @@ export class KeplerRootCommand
     _options?: Record<string, unknown>,
   ): Promise<void> {
     if (passedParams.length > 0) {
-      this.command.error(`error: unknown command '${passedParams[0]}'`, {
+      this.command.error(`unknown command '${passedParams[0]}'`, {
         code: "commander.unknownCommand",
-        exitCode: 2,
+        exitCode: 1,
       });
     }
 
-    process.stdout.write(
-      "Kepler - Template setup CLI\n\nUse --help for available commands\n",
-    );
+    this.command.help();
   }
 }
