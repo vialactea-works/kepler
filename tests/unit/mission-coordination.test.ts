@@ -201,6 +201,70 @@ describe("mission local coordination", () => {
     expect(await coordinator.acquire(request)).toMatchObject({ kind: "failed", code: "resource_contended" });
   });
 
+  it("removes its provisional claim when a release starts after acquisition preflight", async () => {
+    const { root, request } = await setup();
+    const lockPath = Path.join(root, "kepler", "workspaces", resourceKey);
+    const markerPath = `${lockPath}.releasing`;
+    let pauseNextLockCreation = false;
+    let allowAcquisitionMkdir: () => void = () => {};
+    const acquisitionMkdirGate = new Promise<void>((resolve) => {
+      allowAcquisitionMkdir = resolve;
+    });
+    let markAcquisitionMkdirWaiting: () => void = () => {};
+    const acquisitionMkdirWaiting = new Promise<void>((resolve) => {
+      markAcquisitionMkdirWaiting = resolve;
+    });
+    let allowMarkerRename: () => void = () => {};
+    const markerRenameGate = new Promise<void>((resolve) => {
+      allowMarkerRename = resolve;
+    });
+    let markMarkerRenameWaiting: () => void = () => {};
+    const markerRenameWaiting = new Promise<void>((resolve) => {
+      markMarkerRenameWaiting = resolve;
+    });
+    const fileSystem = {
+      ...nodeMissionCoordinationFileSystem,
+      mkdir: async (path: string): Promise<void> => {
+        if (path === lockPath && pauseNextLockCreation) {
+          pauseNextLockCreation = false;
+          markAcquisitionMkdirWaiting();
+          await acquisitionMkdirGate;
+        }
+        await nodeMissionCoordinationFileSystem.mkdir(path);
+      },
+      rename: async (from: string, to: string): Promise<void> => {
+        if (from === markerPath && Path.basename(to).startsWith(`${resourceKey}.releasing-`)) {
+          markMarkerRenameWaiting();
+          await markerRenameGate;
+        }
+        await nodeMissionCoordinationFileSystem.rename(from, to);
+      },
+    };
+    const coordinator = createMissionCoordination(fileSystem, { next: randomUUID });
+    const acquired = await coordinator.acquire(request);
+    expect(acquired.kind).toBe("acquired");
+    if (acquired.kind !== "acquired") return;
+
+    pauseNextLockCreation = true;
+    const nextRequest = { ...request, owner: { ...request.owner, process_id: 124 } };
+    const nextAcquire = coordinator.acquire(nextRequest);
+    await acquisitionMkdirWaiting;
+    const release = acquired.lease.release();
+    await markerRenameWaiting;
+    allowAcquisitionMkdir();
+
+    expect(await nextAcquire).toMatchObject({ kind: "failed", code: "coordination_release_race" });
+    expect(await nodeMissionCoordinationFileSystem.pathKind(lockPath)).toBe("missing");
+    expect((await nodeMissionCoordinationFileSystem.listDirectory(Path.dirname(lockPath)))
+      .some((name) => name.startsWith(`${resourceKey}.owner-moving-`))).toBe(false);
+
+    allowMarkerRename();
+    expect(await release).toEqual({ kind: "released" });
+    const retry = await coordinator.acquire(nextRequest);
+    expect(retry.kind).toBe("acquired");
+    if (retry.kind === "acquired") expect(await retry.lease.release()).toEqual({ kind: "released" });
+  });
+
   it("checks directory identity when a replacement copies the original owner token", async () => {
     const { coordinator, request } = await setup();
     const acquired = await coordinator.acquire(request);

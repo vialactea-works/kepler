@@ -310,11 +310,41 @@ export const createMissionCoordination = (
         return failed("coordination_lock_replaced", "The acquired lock directory changed before ownership was returned.", { resource_key: request.resourceKey, owner_token: token }, "Preserve the replacement and reconcile the resource before retrying.");
       }
       if (postMarkerKind !== "missing" || postPendingReleases.length > 0) {
+        const provisionalLockRemoval = await removeOwnedDirectory(
+          fileSystem,
+          lockPath,
+          Path.join(directory, `${request.resourceKey}.owner-moving-${owner.token}`),
+          lockIdentity,
+          owner,
+        );
+        const provisionalLockDetails = provisionalLockRemoval.kind === "removed"
+          ? { provisional_lock_cleanup: "removed" }
+          : provisionalLockRemoval.kind === "replaced"
+            ? {
+                provisional_lock_cleanup: "replaced",
+                provisional_lock_preserved_at: provisionalLockRemoval.preservedPath,
+                ...(provisionalLockRemoval.observedToken ? { observed_token: provisionalLockRemoval.observedToken } : {}),
+                ...(provisionalLockRemoval.restorationError ? { restoration_error: provisionalLockRemoval.restorationError } : {}),
+              }
+            : {
+                provisional_lock_cleanup: "failed",
+                provisional_lock_cleanup_path: provisionalLockRemoval.path,
+                provisional_lock_cleanup_error: provisionalLockRemoval.message,
+              };
         return failed(
           "coordination_release_race",
-          "A release began while this resource was being acquired; the resource remains unavailable.",
-          { resource_key: request.resourceKey, owner_token: token, pending_releases: postPendingReleases },
-          "Reconcile the lock artifacts before retrying; Kepler will not remove a possibly replaced claim.",
+          provisionalLockRemoval.kind === "removed"
+            ? "A release began while this resource was being acquired; Kepler removed its provisional lock and did not return a lease."
+            : "A release began while this resource was being acquired; the provisional lock could not be safely removed.",
+          {
+            resource_key: request.resourceKey,
+            owner_token: token,
+            pending_releases: postPendingReleases,
+            ...provisionalLockDetails,
+          },
+          provisionalLockRemoval.kind === "removed"
+            ? "Retry after the active release completes."
+            : "Preserve the lock and release artifacts, then reconcile the current owner before retrying.",
         );
       }
 
