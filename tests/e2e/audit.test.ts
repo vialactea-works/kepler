@@ -34,6 +34,6 @@ describe("audit CLI E2E", () => {
     });
 
     await exerciseAuditWorkflow(audit);
-    expect(await Fs.readdir(historyDirectory)).toHaveLength(9);
+    expect(await Fs.readdir(historyDirectory)).toHaveLength(10);
   }, 120_000);
 });

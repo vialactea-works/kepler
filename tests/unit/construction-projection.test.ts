@@ -360,7 +360,7 @@ describe("Construction history projection", () => {
     expect(projection.units[0]?.stages.find((stage) => stage.stage === "functional-design")?.state).toBe("unknown");
   });
 
-  it("keeps a late result bound to its ended attempt instead of completing a newer attempt", () => {
+  it("does not let late evidence from an ended attempt complete its successor", () => {
     const unitCreated = created("event-unit-created", ids.unit, "journal-late");
     const firstStart = stageStart("event-stage-start-one", ids.stageAttempt, ids.unit, "journal-late", [unitCreated.id], "functional-design");
     const interaction = event("event-revision-interaction", "construction.interaction-recorded", {
@@ -396,24 +396,74 @@ describe("Construction history projection", () => {
       reason: "Re-execute under the authorized revision",
     }, "journal-late", [ended.id, authorized.id]);
     const secondStart = stageStart("event-stage-start-two", ids.nextStageAttempt, ids.unit, "journal-late", [reopened.id], "functional-design");
-    const lateCompletion = event("event-late-completion", "construction.stage-attempt-completed", {
+    const lateEvidence = event("event-late-evidence", "construction.evidence-recorded", {
       mission_id: missionId,
       unit_id: ids.unit,
       stage: "functional-design",
       stage_attempt_id: ids.stageAttempt,
-      evidence_ids: [],
-      checkpoints: [],
+      evidence_id: ids.evidence,
+      artifact_bindings: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      inputs: [{ reference: "opaque: late result", purpose: "Evidence from the ended attempt" }],
+      check: "Complete the ended attempt",
+      executor: "agent:reviewer",
+      result: { status: "passed", summary: "The ended attempt passed" },
+      output_refs: [],
+      conditions: [],
     }, "journal-late", [firstStart.id]);
-    const history = collectHistory(missionId, [source("origin://late", "journal-late", [unitCreated, firstStart, interaction, authorized, ended, reopened, secondStart, lateCompletion])]);
+    const lateCompletion = event("event-late-completion", "construction.stage-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "functional-design",
+      stage_attempt_id: ids.nextStageAttempt,
+      evidence_ids: [ids.evidence],
+      checkpoints: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+    }, "journal-late", [secondStart.id, lateEvidence.id]);
+    const history = collectHistory(missionId, [source("origin://late", "journal-late", [unitCreated, firstStart, interaction, authorized, ended, reopened, secondStart, lateEvidence, lateCompletion])]);
     const projection = projectConstruction(history);
     const unit = projection.units[0];
     const stageView = unit?.stages.find((item) => item.stage === "functional-design");
-    expect(projection.projectionIssues).toEqual([]);
-    expect(projection.blocked).toBe(false);
-    expect(stageView?.state).toBe("running");
+    expect(projection.projectionIssues.map((issue) => issue.code)).toContain("invalid-completion-evidence");
+    expect(stageView?.state).not.toBe("completed");
     expect(stageView?.currentAttemptId).toBe(ids.nextStageAttempt);
     expect(stageView?.attempts.find((attempt) => attempt.attemptId === ids.stageAttempt)?.state).toBe("ended_by_revision");
     expect(stageView?.attempts.find((attempt) => attempt.attemptId === ids.nextStageAttempt)?.state).toBe("running");
+  });
+
+  it("does not let failed evidence authorize stage completion", () => {
+    const unitCreated = created("event-unit-created", ids.unit, "journal-failed-evidence");
+    const started = stageStart("event-stage-start", ids.stageAttempt, ids.unit, "journal-failed-evidence", [unitCreated.id], "functional-design");
+    const evidence = event("event-failed-evidence", "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "functional-design",
+      stage_attempt_id: ids.stageAttempt,
+      evidence_id: ids.evidence,
+      artifact_bindings: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      inputs: [{ reference: "opaque: failed result", purpose: "Material checked" }],
+      check: "Inspect the design output",
+      executor: "agent:reviewer",
+      result: { status: "failed", summary: "The design is incomplete" },
+      output_refs: [],
+      conditions: [],
+    }, "journal-failed-evidence", [started.id]);
+    const completed = event("event-stage-completed", "construction.stage-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "functional-design",
+      stage_attempt_id: ids.stageAttempt,
+      evidence_ids: [ids.evidence],
+      checkpoints: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+    }, "journal-failed-evidence", [started.id, evidence.id]);
+    const projection = projectConstruction(collectHistory(missionId, [source(
+      "origin://failed-evidence",
+      "journal-failed-evidence",
+      [unitCreated, started, evidence, completed],
+    )]));
+
+    expect(projection.projectionIssues.map((issue) => issue.code)).toContain("invalid-completion-evidence");
+    expect(projection.units[0]?.stages.find((stage) => stage.stage === "functional-design")?.state).not.toBe("completed");
   });
 
   it("rejects completion evidence bound to a different repository checkpoint", () => {

@@ -27,6 +27,21 @@ export const exerciseAuditWorkflow = async (audit: AuditCliDriver): Promise<void
     });
   }
 
+  const lateEvidence = audit.record("evidence", {
+    unit: auditFixture.unitId,
+    stage: "functional-design",
+    attempt: auditFixture.priorStageAttemptId,
+  }, {
+    inputs: [{ reference: "opaque: prior-attempt-output", purpose: "Output from the ended attempt" }],
+    artifact_bindings: [],
+    checkpoints: [],
+    check: "Review the prior attempt",
+    executor: "E2E runner",
+    result: { status: "passed", summary: "The prior attempt passed" },
+  });
+  expect(lateEvidence.exitCode).toBe(0);
+  expect(lateEvidence.result.status).toBe("success");
+
   const approval = audit.record("approval", scope, {
     requester: "Requester",
     inputs: [{ reference: "opaque:approved-design", purpose: "Reviewed output" }],
@@ -102,6 +117,39 @@ export const exerciseAuditWorkflow = async (audit: AuditCliDriver): Promise<void
   expect(activityInteraction.exitCode).toBe(0);
   expect(activityInteraction.result.status).toBe("success");
 
+  const stageEvidence = audit.list({
+    unit: auditFixture.unitId,
+    stage: "functional-design",
+    attempt: auditFixture.stageAttemptId,
+    type: "construction.evidence-recorded",
+    fields: "data",
+  });
+  const stageEvidenceEvents = stageEvidence.result.data.events as Array<{ data: { result: { status: string } } }>;
+  expect(stageEvidenceEvents).toHaveLength(2);
+  expect(stageEvidenceEvents.map((event) => event.data.result.status)).toEqual(expect.arrayContaining(["failed", "inconclusive"]));
+  const priorEvidence = audit.list({
+    unit: auditFixture.unitId,
+    stage: "functional-design",
+    attempt: auditFixture.priorStageAttemptId,
+    type: "construction.evidence-recorded",
+    fields: "data",
+  });
+  expect(priorEvidence.result.data.events).toHaveLength(1);
+  expect((priorEvidence.result.data.events as Array<{ data: Record<string, unknown> }>)[0]?.data).toMatchObject({
+    stage_attempt_id: auditFixture.priorStageAttemptId,
+    result: { status: "passed" },
+  });
+
+  const beforeCompletionAttempt = await audit.journalSnapshot();
+  const completionAttempt = audit.attemptStageCompletion(
+    auditFixture.unitId,
+    "functional-design",
+    auditFixture.stageAttemptId,
+  );
+  expect(completionAttempt.exitCode).toBe(1);
+  expect(completionAttempt.result).toMatchObject({ status: "failed", data: { code: "invalid_arguments" } });
+  expect(await audit.journalSnapshot()).toBe(beforeCompletionAttempt);
+
   const beforeQueries = await audit.journalSnapshot();
   const effort = audit.list({
     unit: auditFixture.unitId,
@@ -110,12 +158,13 @@ export const exerciseAuditWorkflow = async (audit: AuditCliDriver): Promise<void
     fields: "data",
   });
   expect(effort.result.status, JSON.stringify(effort.result)).toBe("success");
-  const effortEvent = (effort.result.data.events as Array<Record<string, unknown>>)[0]!;
-  expect(effortEvent.data).toMatchObject({
+  const effortEvent = (effort.result.data.events as Array<Record<string, unknown>>)
+    .find((event) => (event.data as Record<string, unknown>).effort_selection !== undefined);
+  expect(effortEvent?.data).toMatchObject({
     stage: "functional-design",
     effort_selection: { target: "stage", stage: "functional-design", action: "set", level: "comprehensive" },
   });
-  const scopedInteraction = audit.show(auditFixture.unitId, String(effortEvent.journal_id), String(effortEvent.id));
+  const scopedInteraction = audit.show(auditFixture.unitId, String(effortEvent?.journal_id), String(effortEvent?.id));
   expect(scopedInteraction.result.data.event).toMatchObject({
     type: "construction.interaction-recorded",
     data: { stage: "functional-design", unit_id: auditFixture.unitId },
@@ -179,7 +228,16 @@ export const exerciseAuditWorkflow = async (audit: AuditCliDriver): Promise<void
     cursor: String(second.result.data.next_cursor),
   });
   expect(third.result.data.events).toHaveLength(1);
-  expect(third.result.data.next_cursor).toBeNull();
+  expect(third.result.data.next_cursor).toEqual(expect.any(String));
+  const fourth = audit.list({
+    unit: auditFixture.unitId,
+    type: "construction.evidence-recorded",
+    fields: "type,recorded_at,data",
+    limit: 1,
+    cursor: String(third.result.data.next_cursor),
+  });
+  expect(fourth.result.data.events).toHaveLength(1);
+  expect(fourth.result.data.next_cursor).toBeNull();
 
   const shown = audit.show(auditFixture.unitId, String(firstEvent.journal_id), String(firstEvent.id));
   expect(shown.exitCode).toBe(0);
