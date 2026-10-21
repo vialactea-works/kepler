@@ -11,6 +11,7 @@ import { MissionHandoffPreflight } from "../../construction/mission-handoff-pref
 import { AuditContextResolver, createNodeAuditContextRuntime } from "../../audit/context.js";
 import { AuditRecording } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
+import { AuditQueries } from "../../audit/queries.js";
 import { createMissionWorkspacePreparation } from "../../construction/mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "../../construction/mission-workspace-runtime.js";
 import { MetadataLinter } from "../metadata-lint.js";
@@ -25,6 +26,8 @@ import {
   AuditRecordEvidenceCommand,
   AuditRecordApprovalCommand,
   AuditRecordInteractionCommand,
+  AuditListCommand,
+  AuditShowCommand,
   ConstructionCommand,
   GitAuthorCommand,
   GitCommand,
@@ -55,6 +58,8 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     AuditRecordApprovalCommand,
     AuditRecordInteractionCommand,
     AuditRequestInput,
+    AuditListCommand,
+    AuditShowCommand,
     WorkflowCommand,
     ConstructionCommand,
     MissionCommand,
@@ -63,6 +68,11 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
       provide: AuditContextResolver,
       useFactory: (projects: ProjectResolver) => new AuditContextResolver(createNodeAuditContextRuntime(projects)),
       inject: [ProjectResolver],
+    },
+    {
+      provide: AuditQueries,
+      useFactory: (contexts: AuditContextResolver) => new AuditQueries(contexts),
+      inject: [AuditContextResolver],
     },
     {
       provide: AuditRecording,
