@@ -2,10 +2,12 @@ import { Command, CommandRunner, Option, SubCommand } from "nest-commander";
 import { GitAuthorLookup } from "../git-author.js";
 import { MetadataLinter } from "../metadata-lint.js";
 import { parseProjectSelector, ProjectResolver } from "../project-selection.js";
-import { appendSelectorValue } from "../scope-selectors.js";
+import { appendSelectorValue, parseScopeSelectors } from "../scope-selectors.js";
 import { generateUuid } from "../uuid.js";
 import { parseStrictJson } from "../../json/strict-json.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
+import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
+import { AuditRequestInput } from "../../audit/request-input.js";
 import { ResultReporter } from "./result-reporter.js";
 
 const missingOperation = (name: string) => ({
@@ -167,15 +169,112 @@ export class MetadataLintCommand extends CommandRunner {
   }
 }
 
-@Command({ name: "audit", description: "Record and query workflow history" })
-export class AuditCommand extends CommandRunner {
-  constructor(private readonly reporter: ResultReporter) {
+abstract class AuditRecordCommand extends CommandRunner {
+  constructor(
+    protected readonly reporter: ResultReporter,
+    private readonly recording: AuditRecording,
+    private readonly input: AuditRequestInput,
+    private readonly kind: AuditRecordKind,
+  ) {
     super();
   }
 
-  async run(): Promise<void> {
-    this.reporter.report(missingOperation("audit"));
+  @Option({ flags: "--unit <unit-id>", description: "Select a Unit of Work" })
+  parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--stage <stage>", description: "Select a Construction stage" })
+  parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--task <task-id>", description: "Select a task" })
+  parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--activity <activity>", description: "Select a Construction Activity" })
+  parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--attempt <attempt-id>", description: "Select the exact attempt" })
+  parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--implementation-attempt <attempt-id>", description: "Select the enclosing Implementation attempt" })
+  parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--project <path>", description: "Select the record-home project" })
+  parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const selected = parseScopeSelectors(options ?? {}, { required: ["unit"] });
+    if (selected.kind === "failed") {
+      reportFailure(this.reporter, {
+        code: selected.code,
+        message: selected.message,
+        details: selected.details,
+        recovery: "Correct the explicit audit scope selectors and retry.",
+      });
+      return;
+    }
+    const project = projectSelector(options);
+    if (project.kind === "failed") {
+      reportFailure(this.reporter, project);
+      return;
+    }
+    const body = await this.input.read();
+    if (body.kind === "failed") {
+      reportFailure(this.reporter, body);
+      return;
+    }
+    const parsed = parseStrictJson(body.value);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_audit_request_json",
+        message: "The audit request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Provide one complete JSON object on stdin and retry.",
+      });
+      return;
+    }
+    const result = await this.recording.execute(this.kind, selected.selectors, parsed.value, project.project);
+    this.reporter.report({ status: result.kind, data: result.data });
   }
+}
+
+@SubCommand({ name: "evidence", description: "Record a check or review result" })
+export class AuditRecordEvidenceCommand extends AuditRecordCommand {
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
+    super(reporter, recording, input, "evidence");
+  }
+}
+
+@SubCommand({ name: "approval", description: "Record an explicit requester decision" })
+export class AuditRecordApprovalCommand extends AuditRecordCommand {
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
+    super(reporter, recording, input, "approval");
+  }
+}
+
+@SubCommand({ name: "interaction", description: "Record an interaction or effort selection" })
+export class AuditRecordInteractionCommand extends AuditRecordCommand {
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
+    super(reporter, recording, input, "interaction");
+  }
+}
+
+@SubCommand({
+  name: "record",
+  description: "Record typed audit facts",
+  subCommands: [AuditRecordEvidenceCommand, AuditRecordApprovalCommand, AuditRecordInteractionCommand],
+})
+export class AuditRecordCommandGroup extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("audit record")); }
+}
+
+@Command({
+  name: "audit",
+  description: "Record and query workflow history",
+  subCommands: [AuditRecordCommandGroup],
+})
+export class AuditCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("audit")); }
 }
 
 @SubCommand({ name: "create", description: "Create a mission and prepare its selected workspaces" })
