@@ -7,7 +7,15 @@ const ids = {
   unit: "2026-10-18-example",
   otherUnit: "2026-10-19-example",
   dependentTask: "30000000-0000-4000-8000-000000000009",
+  thirdTask: "30000000-0000-4000-8000-000000000010",
+  dependentSourceEvidence: "60000000-0000-4000-8000-000000000009",
+  dependentIntegrationEvidence: "60000000-0000-4000-8000-000000000010",
   resumeActivityAttempt: "40000000-0000-4000-8000-000000000006",
+  dependentActivityAttempt: "40000000-0000-4000-8000-000000000007",
+  dependentValidationAttempt: "40000000-0000-4000-8000-000000000008",
+  dependentIntegrationAttempt: "40000000-0000-4000-8000-000000000009",
+  lateActivityAttempt: "40000000-0000-4000-8000-000000000010",
+  lateResumeAttempt: "40000000-0000-4000-8000-000000000011",
   resumeEvidence: "60000000-0000-4000-8000-000000000008",
   stageAttempt: "20000000-0000-4000-8000-000000000002",
   nextStageAttempt: "20000000-0000-4000-8000-000000000003",
@@ -15,6 +23,8 @@ const ids = {
   activityAttempt: "40000000-0000-4000-8000-000000000004",
   validationAttempt: "40000000-0000-4000-8000-000000000005",
   revision: "50000000-0000-4000-8000-000000000005",
+  nextRevision: "50000000-0000-4000-8000-000000000006",
+  lateRevision: "50000000-0000-4000-8000-000000000007",
   evidence: "60000000-0000-4000-8000-000000000006",
   sourceEvidence: "60000000-0000-4000-8000-000000000007",
   artifact: "80000000-0000-4000-8000-000000000008",
@@ -782,13 +792,159 @@ describe("Construction history projection", () => {
     expect(dependentProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-admission");
     expect(dependentProjection.units[0]?.blocked).toBe(true);
     expect(dependentProjection.units[0]?.tasks.find((task) => task.taskId === ids.dependentTask)?.state).toBe("unknown");
+    const dependentAdmissionBeforeRevision = event("event-dependent-admission-before-revision", "construction.task-admitted", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
+      task_definition_ref: { graph_id: ids.graph, task_id: ids.dependentTask, content_version: "dependent-task-version" },
+      admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      predecessor_provenance: [{
+        task_id: ids.task,
+        integration_event_id: accepted.id,
+        checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
+      }],
+      prerequisite_evidence: [],
+    }, "journal-integration", [started.id, baseline.id, accepted.id]);
+    const dependentAfterRevisionProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://dependent-admission-before-revision",
+      "journal-integration",
+      [...records, dependentAdmissionBeforeRevision, revisionInteraction, revision, taskEnded, taskReopened],
+    )]));
+    const dependentAfterRevision = dependentAfterRevisionProjection.units[0]?.tasks.find((task) => task.taskId === ids.dependentTask);
+    expect(dependentAfterRevisionProjection.projectionIssues.map((issue) => issue.code)).not.toContain("invalid-task-admission");
+    expect(dependentAfterRevisionProjection.units[0]?.blocked).toBe(false);
+    expect(dependentAfterRevision?.admission?.event.id).toBe(dependentAdmissionBeforeRevision.id);
+    expect(dependentAfterRevision?.state).toBe("blocked");
+    const dependentActivityStartedAfterRevision = event("event-dependent-activity-after-revision", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      activity: "code-generation",
+      activity_attempt_id: ids.dependentActivityAttempt,
+      inputs: [{ reference: "opaque: stale predecessor input", purpose: "Generated task input" }],
+      checkpoints: [],
+    }, "journal-integration", [dependentAdmissionBeforeRevision.id]);
+    const dependentActivityAfterRevisionProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://dependent-activity-after-revision",
+      "journal-integration",
+      [...records, dependentAdmissionBeforeRevision, revisionInteraction, revision, taskEnded, taskReopened,
+        dependentActivityStartedAfterRevision],
+    )]));
+    const dependentAfterActivityStart = dependentActivityAfterRevisionProjection.units[0]?.tasks.find((task) => task.taskId === ids.dependentTask);
+    expect(dependentActivityAfterRevisionProjection.projectionIssues.map((issue) => issue.code)).not.toContain("invalid-activity-start");
+    expect(dependentActivityAfterRevisionProjection.units[0]?.blocked).toBe(false);
+    expect(dependentAfterActivityStart?.state).toBe("blocked");
+    expect(dependentAfterActivityStart?.activities.find((activity) => activity.activity === "code-generation")?.state).not.toBe("running");
+    const dependentValidationStarted = event("event-dependent-validation-started", "construction.activity-attempt-started", {
+      ...validationStarted.data,
+      task_id: ids.dependentTask,
+      activity_attempt_id: ids.dependentValidationAttempt,
+    }, "journal-integration", [dependentAdmissionBeforeRevision.id]);
+    const dependentValidationEvidence = event("event-dependent-validation-evidence", "construction.evidence-recorded", {
+      ...sourceEvidence.data,
+      task_id: ids.dependentTask,
+      activity_attempt_id: ids.dependentValidationAttempt,
+      evidence_id: ids.dependentSourceEvidence,
+    }, "journal-integration", [dependentValidationStarted.id]);
+    const dependentValidationCompleted = event("event-dependent-validation-completed", "construction.activity-attempt-completed", {
+      ...validationCompleted.data,
+      task_id: ids.dependentTask,
+      activity_attempt_id: ids.dependentValidationAttempt,
+      evidence_ids: [ids.dependentSourceEvidence],
+    }, "journal-integration", [dependentValidationStarted.id, dependentValidationEvidence.id]);
+    const dependentIntegrationStarted = event("event-dependent-integration-started", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      activity: "code-integration",
+      activity_attempt_id: ids.dependentIntegrationAttempt,
+      inputs: [{ reference: "opaque: stale predecessor input", purpose: "Integration input" }],
+      checkpoints: [],
+    }, "journal-integration", [dependentAdmissionBeforeRevision.id]);
+    const dependentIntegrationPrepared = event("event-dependent-integration-prepared", "construction.integration-prepared", {
+      ...prepared.data,
+      task_id: ids.dependentTask,
+      activity_attempt_id: ids.dependentIntegrationAttempt,
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
+      task_output_refs: ["opaque: task output"],
+      source_evidence_ids: [ids.dependentSourceEvidence],
+    }, "journal-integration", [dependentIntegrationStarted.id, dependentAdmissionBeforeRevision.id,
+      dependentValidationCompleted.id, dependentValidationEvidence.id]);
+    const dependentIntegrationEvidence = event("event-dependent-integration-evidence", "construction.evidence-recorded", {
+      ...integrationEvidence.data,
+      task_id: ids.dependentTask,
+      activity_attempt_id: ids.dependentIntegrationAttempt,
+      evidence_id: ids.dependentIntegrationEvidence,
+      checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
+    }, "journal-integration", [dependentIntegrationPrepared.id]);
+    const dependentIntegrationAccepted = event("event-dependent-integration-accepted", "construction.integration-accepted", {
+      ...accepted.data,
+      task_id: ids.dependentTask,
+      activity_attempt_id: ids.dependentIntegrationAttempt,
+      prepared_event_id: dependentIntegrationPrepared.id,
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
+      repository_results: [{ repository_id: "repo-main", evidence_ids: [ids.dependentIntegrationEvidence] }],
+    }, "journal-integration", [dependentIntegrationPrepared.id, dependentIntegrationEvidence.id]);
+    const dependentCompletionAfterRevision = event("event-dependent-completion-after-revision", "construction.task-completed", {
+      ...taskCompleted.data,
+      task_id: ids.dependentTask,
+      integration_event_id: dependentIntegrationAccepted.id,
+    }, "journal-integration", [dependentIntegrationAccepted.id]);
+    const dependentIntegrationAfterRevisionProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://dependent-integration-after-revision",
+      "journal-integration",
+      [...records, dependentAdmissionBeforeRevision, dependentValidationStarted, dependentValidationEvidence,
+        dependentValidationCompleted, revisionInteraction, revision, taskEnded, taskReopened,
+        dependentIntegrationStarted, dependentIntegrationPrepared, dependentIntegrationEvidence,
+        dependentIntegrationAccepted, dependentCompletionAfterRevision],
+    )]));
+    const dependentAfterIntegration = dependentIntegrationAfterRevisionProjection.units[0]?.tasks.find((task) => task.taskId === ids.dependentTask);
+    expect(dependentIntegrationAfterRevisionProjection.projectionIssues).toEqual([]);
+    expect(dependentIntegrationAfterRevisionProjection.units[0]?.blocked).toBe(false);
+    expect(dependentAfterIntegration?.state).toBe("blocked");
+    expect(dependentAfterIntegration?.completion).toBeUndefined();
+    expect(dependentAfterIntegration?.activities.find((activity) => activity.activity === "code-integration")?.state).not.toBe("running");
+    const thirdTaskAdmissionAfterInvalidation = event("event-third-task-admission-after-invalidation", "construction.task-admitted", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.thirdTask,
+      graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
+      task_definition_ref: { graph_id: ids.graph, task_id: ids.thirdTask, content_version: "third-task-version" },
+      admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      predecessor_provenance: [{
+        task_id: ids.dependentTask,
+        integration_event_id: dependentIntegrationAccepted.id,
+        checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
+      }],
+      prerequisite_evidence: [],
+    }, "journal-integration", [started.id, baseline.id, dependentIntegrationAccepted.id]);
+    const transitiveInvalidationProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://transitive-invalidation",
+      "journal-integration",
+      [...records, dependentAdmissionBeforeRevision, dependentValidationStarted, dependentValidationEvidence,
+        dependentValidationCompleted, revisionInteraction, revision, taskEnded, taskReopened,
+        dependentIntegrationStarted, dependentIntegrationPrepared, dependentIntegrationEvidence,
+        dependentIntegrationAccepted, dependentCompletionAfterRevision, thirdTaskAdmissionAfterInvalidation],
+    )]));
+    expect(transitiveInvalidationProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-admission");
+    expect(transitiveInvalidationProjection.units[0]?.blocked).toBe(true);
+    expect(transitiveInvalidationProjection.units[0]?.tasks.find((task) => task.taskId === ids.thirdTask)?.state).toBe("unknown");
     const resumeInteraction = event("event-resume-revision-interaction", "construction.interaction-recorded", {
       mission_id: missionId,
       unit_id: ids.unit,
       participants: ["orchestrator"],
       content: "Reopen Integration for a current attempt",
       references: ["opaque: Integration retry"],
-    }, "journal-integration", [validationCompleted.id]);
+    }, "journal-integration", [taskCompleted.id]);
     const resumeRevision = event("event-resume-revision", "construction.revision-authorized", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -808,7 +964,7 @@ describe("Construction history projection", () => {
       revision_id: ids.revision,
       reason: "End the Integration scope",
       affected_activities: ["code-integration"],
-    }, "journal-integration", [resumeRevision.id, admission.id]);
+    }, "journal-integration", [resumeRevision.id, taskCompleted.id]);
     const resumeTaskReopened = event("event-resume-task-reopened", "construction.task-scope-reopened", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -920,7 +1076,7 @@ describe("Construction history projection", () => {
       "origin://resumed-integration",
       "journal-integration",
       [
-        ...records.slice(0, records.indexOf(integrationStarted)),
+        ...records,
         resumeInteraction,
         resumeRevision,
         resumeTaskEnded,
@@ -939,6 +1095,318 @@ describe("Construction history projection", () => {
     expect(resumedProjection.units[0]?.blocked).toBe(false);
     expect(resumedProjection.units[0]?.tasks[0]?.state).toBe("complete");
     expect(resumedProjection.units[0]?.tasks[0]?.completion?.event.id).toBe(resumeTaskCompleted.id);
+    const resumedIntegration = resumedProjection.units[0]?.tasks[0]?.activities.find((activity) => activity.activity === "code-integration");
+    expect(resumedIntegration?.attempts.find((attempt) => attempt.attemptId === ids.activityAttempt)?.state).toBe("ended_by_revision");
+    expect(resumedIntegration?.attempts.find((attempt) => attempt.attemptId === ids.resumeActivityAttempt)?.state).toBe("completed");
+    const parentRevisionInteraction = event("event-parent-revision-interaction", "construction.interaction-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      participants: ["orchestrator"],
+      content: "Restart Implementation with the completed Integration as an input candidate",
+      references: ["opaque: parent revision"],
+    }, "journal-integration", [taskCompleted.id]);
+    const parentRevision = event("event-parent-revision", "construction.revision-authorized", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      revision_id: ids.nextRevision,
+      orchestrator_decision: "Restart Implementation",
+      reason: "A new Implementation parent is required",
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+    }, "journal-integration", [parentRevisionInteraction.id]);
+    const parentEnded = event("event-parent-ended", "construction.stage-attempt-ended-by-revision", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      revision_id: ids.nextRevision,
+      reason: "End the old Implementation parent",
+    }, "journal-integration", [parentRevision.id, taskCompleted.id]);
+    const parentReopened = event("event-parent-reopened", "construction.stage-reopened", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      revision_id: ids.nextRevision,
+      reason: "Open the new Implementation parent",
+    }, "journal-integration", [parentEnded.id, parentRevision.id]);
+    const nextImplementationStarted = stageStart("event-next-implementation-start", ids.nextStageAttempt, ids.unit,
+      "journal-integration", [parentReopened.id]);
+    const crossParentAdmission = (id: string, causedBy: readonly string[]) => event(id, "construction.task-admitted", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.nextStageAttempt,
+      task_id: ids.dependentTask,
+      graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
+      task_definition_ref: { graph_id: ids.graph, task_id: ids.dependentTask, content_version: "dependent-task-version" },
+      admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      predecessor_provenance: [{
+        task_id: ids.task,
+        integration_event_id: accepted.id,
+        checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
+      }],
+      prerequisite_evidence: [],
+    }, "journal-integration", causedBy);
+    const crossParentAdmissionWithoutRetention = crossParentAdmission("event-cross-parent-admission-without-retention",
+      [nextImplementationStarted.id, baseline.id, accepted.id]);
+    const crossParentWithoutRetentionProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://cross-parent-without-retention",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopened, nextImplementationStarted,
+        crossParentAdmissionWithoutRetention],
+    )]));
+    expect(crossParentWithoutRetentionProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-admission");
+    expect(crossParentWithoutRetentionProjection.units[0]?.blocked).toBe(true);
+    const retainedIntegrationAssessment = event("event-retained-integration-assessment", "construction.retained-scope-assessed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.nextStageAttempt,
+      assessments: [{
+        task_id: ids.task,
+        activity: "code-integration",
+        original_stage_attempt_id: ids.stageAttempt,
+        original_activity_attempt_id: ids.activityAttempt,
+        original_evidence_ids: [ids.evidence],
+        applicable: true,
+        reason: "The predecessor Integration output remains applicable under the new parent",
+        checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
+      }],
+    }, "journal-integration", [nextImplementationStarted.id, accepted.id, integrationEvidence.id]);
+    const crossParentAdmissionWithRetention = crossParentAdmission("event-cross-parent-admission-with-retention",
+      [nextImplementationStarted.id, baseline.id, accepted.id, retainedIntegrationAssessment.id]);
+    const crossParentWithRetentionProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://cross-parent-with-retention",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopened, nextImplementationStarted,
+        retainedIntegrationAssessment, crossParentAdmissionWithRetention],
+    )]));
+    expect(crossParentWithRetentionProjection.projectionIssues).toEqual([]);
+    expect(crossParentWithRetentionProjection.units[0]?.blocked).toBe(false);
+    expect(crossParentWithRetentionProjection.units[0]?.tasks.find((task) => task.taskId === ids.dependentTask)?.admission?.event.id)
+      .toBe(crossParentAdmissionWithRetention.id);
+    const retainedDependentIntegrationOnly = event("event-retained-dependent-integration-only",
+      "construction.retained-scope-assessed", {
+        mission_id: missionId,
+        unit_id: ids.unit,
+        stage: "implementation",
+        stage_attempt_id: ids.nextStageAttempt,
+        assessments: [{
+          task_id: ids.dependentTask,
+          activity: "code-integration",
+          original_stage_attempt_id: ids.stageAttempt,
+          original_activity_attempt_id: ids.dependentIntegrationAttempt,
+          original_evidence_ids: [ids.dependentIntegrationEvidence],
+          applicable: true,
+          reason: "The dependent Integration output remains applicable",
+          checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
+        }],
+      }, "journal-integration", [nextImplementationStarted.id, dependentIntegrationAccepted.id,
+        dependentIntegrationEvidence.id]);
+    const thirdTaskAdmissionAfterRestart = (id: string, retainedAssessment: string) => event(id,
+      "construction.task-admitted", {
+        mission_id: missionId,
+        unit_id: ids.unit,
+        stage: "implementation",
+        stage_attempt_id: ids.nextStageAttempt,
+        task_id: ids.thirdTask,
+        graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
+        task_definition_ref: { graph_id: ids.graph, task_id: ids.thirdTask, content_version: "third-task-version" },
+        admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+        predecessor_provenance: [{
+          task_id: ids.dependentTask,
+          integration_event_id: dependentIntegrationAccepted.id,
+          checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
+        }],
+        prerequisite_evidence: [],
+      }, "journal-integration", [nextImplementationStarted.id, baseline.id,
+        dependentIntegrationAccepted.id, retainedAssessment]);
+    const thirdTaskAdmissionWithoutAncestorRetention = thirdTaskAdmissionAfterRestart(
+      "event-third-task-admission-without-ancestor-retention", retainedDependentIntegrationOnly.id);
+    const transitiveRetentionMissingProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://transitive-retention-missing",
+      "journal-integration",
+      [...records, dependentAdmissionBeforeRevision, dependentValidationStarted, dependentValidationEvidence,
+        dependentValidationCompleted, dependentIntegrationStarted, dependentIntegrationPrepared,
+        dependentIntegrationEvidence, dependentIntegrationAccepted, dependentCompletionAfterRevision,
+        revisionInteraction, revision, taskEnded, taskReopened, parentRevisionInteraction, parentRevision,
+        parentEnded, parentReopened, nextImplementationStarted, retainedDependentIntegrationOnly,
+        thirdTaskAdmissionWithoutAncestorRetention],
+    )]));
+    expect(transitiveRetentionMissingProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-admission");
+    expect(transitiveRetentionMissingProjection.units[0]?.blocked).toBe(true);
+    const retainedDependentAndAncestor = event("event-retained-dependent-and-ancestor", "construction.retained-scope-assessed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.nextStageAttempt,
+      assessments: [
+        {
+          task_id: ids.task,
+          activity: "code-integration",
+          original_stage_attempt_id: ids.stageAttempt,
+          original_activity_attempt_id: ids.activityAttempt,
+          original_evidence_ids: [ids.evidence],
+          applicable: true,
+          reason: "The predecessor Integration output remains applicable",
+          checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
+        },
+        {
+          task_id: ids.dependentTask,
+          activity: "code-integration",
+          original_stage_attempt_id: ids.stageAttempt,
+          original_activity_attempt_id: ids.dependentIntegrationAttempt,
+          original_evidence_ids: [ids.dependentIntegrationEvidence],
+          applicable: true,
+          reason: "The dependent Integration output remains applicable with its retained input",
+          checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
+        },
+      ],
+    }, "journal-integration", [nextImplementationStarted.id, accepted.id, integrationEvidence.id,
+      dependentIntegrationAccepted.id, dependentIntegrationEvidence.id]);
+    const thirdTaskAdmissionWithAncestorRetention = thirdTaskAdmissionAfterRestart(
+      "event-third-task-admission-with-ancestor-retention", retainedDependentAndAncestor.id);
+    const transitiveRetentionCompleteProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://transitive-retention-complete",
+      "journal-integration",
+      [...records, dependentAdmissionBeforeRevision, dependentValidationStarted, dependentValidationEvidence,
+        dependentValidationCompleted, dependentIntegrationStarted, dependentIntegrationPrepared,
+        dependentIntegrationEvidence, dependentIntegrationAccepted, dependentCompletionAfterRevision,
+        revisionInteraction, revision, taskEnded, taskReopened, parentRevisionInteraction, parentRevision,
+        parentEnded, parentReopened, nextImplementationStarted, retainedDependentAndAncestor,
+        thirdTaskAdmissionWithAncestorRetention],
+    )]));
+    expect(transitiveRetentionCompleteProjection.projectionIssues).toEqual([]);
+    expect(transitiveRetentionCompleteProjection.units[0]?.blocked).toBe(false);
+    expect(transitiveRetentionCompleteProjection.units[0]?.tasks.find((task) => task.taskId === ids.thirdTask)?.admission?.event.id)
+      .toBe(thirdTaskAdmissionWithAncestorRetention.id);
+    const newerParentTaskAdmission = event("event-newer-parent-task-admission", "construction.task-admitted", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.nextStageAttempt,
+      task_id: ids.task,
+      graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
+      task_definition_ref: { graph_id: ids.graph, task_id: ids.task, content_version: "task-version-1" },
+      admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      predecessor_provenance: [],
+      prerequisite_evidence: [],
+    }, "journal-integration", [nextImplementationStarted.id, baseline.id]);
+    const newerParentIntegrationStart = event("event-newer-parent-integration-start", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.nextStageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.resumeActivityAttempt,
+      inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
+      checkpoints: [],
+    }, "journal-integration", [newerParentTaskAdmission.id, nextImplementationStarted.id]);
+    const lateParentScopeProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://late-parent-scope-transition",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopened, nextImplementationStarted,
+        newerParentTaskAdmission, newerParentIntegrationStart,
+        resumeInteraction, resumeRevision, resumeTaskEnded, resumeTaskReopened],
+    )]));
+    const lateParentIntegration = lateParentScopeProjection.units[0]?.tasks.find((task) => task.taskId === ids.task)
+      ?.activities.find((activity) => activity.activity === "code-integration");
+    expect(lateParentScopeProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-revision-transition");
+    expect(lateParentScopeProjection.units[0]?.blocked).toBe(true);
+    expect(lateParentIntegration?.currentAttemptId).toBe(ids.resumeActivityAttempt);
+    expect(lateParentIntegration?.attempts.find((attempt) => attempt.attemptId === ids.resumeActivityAttempt)?.state).toBe("running");
+    const lateActivityStart = event("event-late-activity-start", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.lateActivityAttempt,
+      inputs: [{ reference: "opaque: delayed input", purpose: "Integration input" }],
+      checkpoints: [],
+    }, "journal-integration", [admission.id]);
+    const lateActivityStartProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://late-activity-start",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopened,
+        nextImplementationStarted, lateActivityStart],
+    )]));
+    const lateStartTask = lateActivityStartProjection.units[0]?.tasks.find((task) => task.taskId === ids.task);
+    const lateStartIntegration = lateStartTask?.activities.find((activity) => activity.activity === "code-integration");
+    expect(lateActivityStartProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-revision-transition");
+    expect(lateActivityStartProjection.units[0]?.blocked).toBe(true);
+    expect(lateStartTask?.state).not.toBe("generating");
+    expect(lateStartIntegration?.attempts.find((attempt) => attempt.attemptId === ids.lateActivityAttempt)).toBeUndefined();
+    const lateActivityBeforeReplacement = event("event-late-activity-before-replacement", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.lateActivityAttempt,
+      inputs: [{ reference: "opaque: delayed input", purpose: "Integration input" }],
+      checkpoints: [],
+    }, "journal-integration", [admission.id]);
+    const lateActivityBeforeReplacementProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://late-activity-before-replacement",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopened,
+        lateActivityBeforeReplacement],
+    )]));
+    expect(lateActivityBeforeReplacementProjection.projectionIssues.map((issue) => issue.code))
+      .toContain("invalid-revision-transition");
+    expect(lateActivityBeforeReplacementProjection.units[0]?.blocked).toBe(true);
+    expect(lateActivityBeforeReplacementProjection.units[0]?.tasks[0]?.activities
+      .find((activity) => activity.activity === "code-integration")?.attempts
+      .find((attempt) => attempt.attemptId === ids.lateActivityAttempt)).toBeUndefined();
+    const pausedBeforeParentReopen = event("event-paused-before-parent-reopen", "construction.activity-paused", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-generation",
+      activity_attempt_id: ids.lateResumeAttempt,
+      reason: "Pause generated work before revising the parent",
+    }, "journal-integration", ["event-generation-before-parent-reopen"]);
+    const generationStartedBeforeParentReopen = event("event-generation-before-parent-reopen",
+      "construction.activity-attempt-started", {
+        mission_id: missionId,
+        unit_id: ids.unit,
+        stage: "implementation",
+        stage_attempt_id: ids.stageAttempt,
+        task_id: ids.task,
+        activity: "code-generation",
+        activity_attempt_id: ids.lateResumeAttempt,
+        inputs: [{ reference: "opaque: generation input", purpose: "Task input" }],
+        checkpoints: [],
+      }, "journal-integration", [admission.id]);
+    const lateActivityResume = event("event-late-activity-resume", "construction.activity-resumed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-generation",
+      activity_attempt_id: ids.lateResumeAttempt,
+      inputs: [{ reference: "opaque: generation input", purpose: "Task input" }],
+      checkpoints: [],
+    }, "journal-integration", [pausedBeforeParentReopen.id, parentReopened.id]);
+    const lateActivityResumeProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://late-activity-resume",
+      "journal-integration",
+      [...records, generationStartedBeforeParentReopen, pausedBeforeParentReopen,
+        parentRevisionInteraction, parentRevision, parentEnded, parentReopened, lateActivityResume],
+    )]));
+    expect(lateActivityResumeProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-revision-transition");
+    expect(lateActivityResumeProjection.units[0]?.blocked).toBe(true);
+    expect(lateActivityResumeProjection.units[0]?.tasks[0]?.activities
+      .find((activity) => activity.activity === "code-generation")?.attempts
+      .find((attempt) => attempt.attemptId === ids.lateResumeAttempt)?.state).toBe("ended_by_revision");
     const incompleteProjection = projectConstruction(collectHistory(missionId, sources, "incomplete"));
     const incompleteUnit = incompleteProjection.units[0];
     const incompleteTask = incompleteUnit?.tasks[0];

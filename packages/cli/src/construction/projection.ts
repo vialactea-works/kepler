@@ -159,7 +159,7 @@ interface AttemptScopeResult {
 }
 
 interface Transition {
-  readonly action: "start" | "resume" | "update" | "reopen";
+  readonly action: "start" | "resume" | "update" | "reopen" | "end_scope" | "parent_start" | "parent_reopen";
   readonly state: ConstructionStageActivityState;
   readonly attemptId?: string;
   readonly stageAttemptId?: StageAttemptId;
@@ -290,7 +290,7 @@ const eventOrder = (facts: readonly ConstructionHistoryFact[]) => {
   return { ordered, uniqueFacts: [...byId.values()], cyclic, hasPath };
 };
 
-const transitionFor = (fact: ConstructionHistoryFact, scope: "stage" | "activity"): Transition | undefined => {
+const transitionFor = (fact: ConstructionHistoryFact, scope: "stage" | "activity", activity?: ConstructionActivity): Transition | undefined => {
   const data = fact.event.data;
   const type = fact.event.type;
   const attemptId = stringField(data, scope === "stage" ? "stage_attempt_id" : "activity_attempt_id");
@@ -307,6 +307,20 @@ const transitionFor = (fact: ConstructionHistoryFact, scope: "stage" | "activity
     return undefined;
   }
   if (type === "construction.activity-reopened") return { action: "reopen", state: "reopened", attemptId, stageAttemptId };
+  if (activity && data.stage === "implementation" &&
+      ["construction.stage-attempt-started", "construction.stage-resumed"].includes(type)) {
+    return { action: "parent_start", state: "running", stageAttemptId };
+  }
+  if (activity && data.stage === "implementation" && type === "construction.stage-attempt-ended-by-revision") {
+    return { action: "end_scope", state: "ended_by_revision", stageAttemptId };
+  }
+  if (activity && data.stage === "implementation" && type === "construction.stage-reopened") {
+    return { action: "parent_reopen", state: "reopened", stageAttemptId };
+  }
+  if (activity && Array.isArray(data.affected_activities) && data.affected_activities.includes(activity)) {
+    if (type === "construction.task-scope-ended-by-revision") return { action: "end_scope", state: "ended_by_revision", stageAttemptId };
+    if (type === "construction.task-scope-reopened") return { action: "reopen", state: "reopened", stageAttemptId };
+  }
   if (type === "construction.activity-attempt-started") return { action: "start", state: "running", attemptId, stageAttemptId };
   if (type === "construction.activity-resumed") return { action: "resume", state: "running", attemptId, stageAttemptId };
   if (type === "construction.activity-waiting") return { action: "update", state: "waiting", attemptId, stageAttemptId };
@@ -322,6 +336,7 @@ const reduceAttemptScope = (
   scope: "stage" | "activity",
   unitId: string,
   report: (issue: ConstructionProjectionIssue) => void,
+  activity?: ConstructionActivity,
 ): AttemptScopeResult => {
   let state: ConstructionProjectedStageState = "not_started";
   let currentAttemptId: string | undefined;
@@ -339,10 +354,53 @@ const reduceAttemptScope = (
     eventIds: related ? [fact.event.id, related.event.id] : [fact.event.id],
   });
   for (const fact of facts) {
-    const transition = transitionFor(fact, scope);
+    const transition = transitionFor(fact, scope, activity);
     if (!transition) continue;
-    if (transition.action === "reopen") {
+    if (transition.action === "parent_start") {
+      const current = currentAttemptId ? attempts.get(currentAttemptId) : undefined;
+      const currentParent = current?.stageAttemptId ?? currentStageAttemptId;
+      if (currentParent !== undefined && currentParent !== transition.stageAttemptId && state !== "reopened") {
+        addIssue("invalid-attempt-transition", "Implementation parent changed without reopening the Activity scope", fact, current?.facts[0]);
+        continue;
+      }
+      currentStageAttemptId = transition.stageAttemptId;
+      continue;
+    }
+    if (transition.action === "end_scope") {
+      const current = currentAttemptId ? attempts.get(currentAttemptId) : undefined;
+      const currentParent = current?.stageAttemptId ?? currentStageAttemptId;
+      const target = current?.stageAttemptId === transition.stageAttemptId
+        ? current
+        : [...attempts.values()].filter((attempt) => attempt.stageAttemptId === transition.stageAttemptId).at(-1);
+      if (!target && currentParent !== undefined && currentParent !== transition.stageAttemptId) {
+        addIssue("invalid-revision-transition", "Revision scope targets an older parent than the current Activity attempt", fact,
+          current?.facts[0]);
+        continue;
+      }
+      if (target) {
+        target.facts.push(fact);
+        target.state = "ended_by_revision";
+      }
+      if (currentParent !== undefined && currentParent !== transition.stageAttemptId) {
+        addIssue("invalid-revision-transition", "Revision scope targets an older parent than the current Activity attempt", fact,
+          current?.facts[0]);
+        continue;
+      }
+      state = "ended_by_revision";
+      currentStageAttemptId = transition.stageAttemptId;
+      continue;
+    }
+    if (transition.action === "parent_reopen") {
       const active = currentAttemptId ? attempts.get(currentAttemptId) : undefined;
+      const currentParent = active?.stageAttemptId ?? currentStageAttemptId;
+      if (currentParent !== undefined &&
+          (transition.stageAttemptId === undefined
+            ? state !== "ended_by_revision"
+            : currentParent !== transition.stageAttemptId)) {
+        addIssue("invalid-revision-transition", "Stage reopen does not target the ended current Activity parent", fact,
+          active?.facts[0]);
+        continue;
+      }
       if (active && activeStates.has(active.state as ConstructionStageActivityState)) {
         addIssue("invalid-attempt-transition", "A scope reopened while its current attempt remained unended", fact, active.facts[0]);
       }
@@ -350,6 +408,34 @@ const reduceAttemptScope = (
       currentAttemptId = undefined;
       currentStageAttemptId = undefined;
       continue;
+    }
+    if (transition.action === "reopen") {
+      const active = currentAttemptId ? attempts.get(currentAttemptId) : undefined;
+      const currentParent = active?.stageAttemptId ?? currentStageAttemptId;
+      if (scope === "activity" && currentParent !== undefined &&
+          (transition.stageAttemptId === undefined
+            ? state !== "ended_by_revision"
+            : currentParent !== transition.stageAttemptId)) {
+        addIssue("invalid-revision-transition", "Revision reopen does not target the ended current Activity parent", fact,
+          active?.facts[0]);
+        continue;
+      }
+      if (active && activeStates.has(active.state as ConstructionStageActivityState)) {
+        addIssue("invalid-attempt-transition", "A scope reopened while its current attempt remained unended", fact, active.facts[0]);
+      }
+      state = "reopened";
+      currentAttemptId = undefined;
+      currentStageAttemptId = scope === "activity" ? currentParent : undefined;
+      continue;
+    }
+    if (scope === "activity" && ["start", "resume"].includes(transition.action)) {
+      const current = currentAttemptId ? attempts.get(currentAttemptId) : undefined;
+      const currentParent = current?.stageAttemptId ?? currentStageAttemptId;
+      if (currentParent === undefined || currentParent !== transition.stageAttemptId) {
+        addIssue("invalid-revision-transition", "Activity transition targets an Implementation parent that is not open", fact,
+          current?.facts[0]);
+        continue;
+      }
     }
     const attemptId = transition.attemptId;
     if (!attemptId) {
@@ -371,8 +457,8 @@ const reduceAttemptScope = (
         addIssue("multiple-active-attempts", "A second attempt started while another attempt remained active", fact, current.facts[0]);
         current.state = "unknown";
         state = "unknown";
-      } else if (current && terminalStates.has(current.state as ConstructionStageActivityState) && state !== "reopened") {
-        addIssue("invalid-attempt-transition", "A replacement attempt started without a recorded reopen", fact, current.facts[0]);
+      } else if ((current && terminalStates.has(current.state as ConstructionStageActivityState) || !current && terminalStates.has(state as ConstructionStageActivityState)) && state !== "reopened") {
+        addIssue("invalid-attempt-transition", "A replacement attempt started without a recorded reopen", fact, current?.facts[0]);
         state = "unknown";
       }
       const attempt: MutableAttempt = {
@@ -720,6 +806,36 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     Array.isArray(fact.event.data.affected_activities)
       ? fact.event.data.affected_activities.filter((activity): activity is string => typeof activity === "string")
       : [];
+  for (const fact of order.uniqueFacts) {
+    if (!validRevisionTransitions.has(fact.event.id) ||
+        !["construction.task-scope-ended-by-revision", "construction.task-scope-reopened"].includes(fact.event.type)) continue;
+    const taskId = stringField(fact.event.data, "task_id");
+    const stageAttemptId = stringField(fact.event.data, "stage_attempt_id");
+    for (const activity of affectedActivitiesFor(fact)) {
+      const activityTargets = order.uniqueFacts.filter((candidate) =>
+        factUnitId(candidate) === factUnitId(fact) && stringField(candidate.event.data, "task_id") === taskId &&
+        stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+        stringField(candidate.event.data, "activity") === activity,
+      );
+      const causallyTargeted = activityTargets.some((candidate) => order.hasPath(candidate.event.id, fact.event.id));
+      const admissionTargets = order.uniqueFacts.filter((candidate) =>
+        candidate.event.type === "construction.task-admitted" && factUnitId(candidate) === factUnitId(fact) &&
+        stringField(candidate.event.data, "task_id") === taskId &&
+        stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+        order.hasPath(candidate.event.id, fact.event.id),
+      );
+      if (!causallyTargeted && (activityTargets.length > 0 || admissionTargets.length === 0)) {
+        const unitId = factUnitId(fact);
+        addIssue({
+          code: "invalid-revision-transition",
+          message: `Task-scope revision does not causally target the affected ${activity} scope`,
+          scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId },
+          eventIds: [fact.event.id, ...activityTargets.map((candidate) => candidate.event.id),
+            ...admissionTargets.map((candidate) => candidate.event.id)],
+        });
+      }
+    }
+  }
   const taskScopeRevisionGroups = new Map<string, ConstructionHistoryFact[]>();
   for (const fact of order.uniqueFacts) {
     if (!validRevisionTransitions.has(fact.event.id) ||
@@ -753,9 +869,13 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     }
   }
   for (const fact of order.uniqueFacts) {
-    if (validRevisionTransitions.has(fact.event.id) &&
-        ["construction.activity-attempt-ended-by-revision", "construction.activity-reopened"].includes(fact.event.type) &&
+    if (!validRevisionTransitions.has(fact.event.id)) continue;
+    if (["construction.activity-attempt-ended-by-revision", "construction.activity-reopened"].includes(fact.event.type) &&
         fact.event.data.activity === "code-integration") {
+      integrationInvalidationFacts.push(fact);
+    }
+    if (["construction.stage-attempt-ended-by-revision", "construction.stage-reopened"].includes(fact.event.type) &&
+        fact.event.data.stage === "implementation") {
       integrationInvalidationFacts.push(fact);
     }
   }
@@ -923,27 +1043,83 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       hasDirectCause(prepared, candidate),
     );
   };
-  const currentIntegrationAcceptances = new Set<string>();
-  for (const acceptanceId of validIntegrationAcceptances) {
-    const acceptance = factsById.get(acceptanceId);
-    if (!acceptance) continue;
+  const integrationAcceptanceIsCurrentAt = (
+    acceptance: ConstructionHistoryFact,
+    boundary?: ConstructionHistoryFact,
+    includeLaterInvalidations = false,
+  ): boolean => {
+    if (!validIntegrationAcceptances.has(acceptance.event.id)) return false;
     const invalidations = integrationInvalidationFacts.filter((fact) =>
       factUnitId(fact) === factUnitId(acceptance) &&
-      stringField(fact.event.data, "task_id") === stringField(acceptance.event.data, "task_id") &&
-      stringField(fact.event.data, "stage_attempt_id") === stringField(acceptance.event.data, "stage_attempt_id"),
+      (stringField(fact.event.data, "task_id") === undefined ||
+        stringField(fact.event.data, "task_id") === stringField(acceptance.event.data, "task_id")) &&
+      stringField(fact.event.data, "stage_attempt_id") === stringField(acceptance.event.data, "stage_attempt_id") &&
+      (includeLaterInvalidations || boundary === undefined || order.hasPath(fact.event.id, boundary.event.id)),
     );
-    if (invalidations.length === 0) {
-      currentIntegrationAcceptances.add(acceptanceId);
-      continue;
-    }
     const latestInvalidations = invalidations.filter((candidate) =>
       !invalidations.some((other) => other.event.id !== candidate.event.id && order.hasPath(candidate.event.id, other.event.id)),
     );
-    if (latestInvalidations.length === 1 &&
-        ["construction.task-scope-reopened", "construction.activity-reopened"].includes(latestInvalidations[0]?.event.type ?? "") &&
-        integrationAcceptanceFollowsReopen(acceptance, latestInvalidations[0])) {
-      currentIntegrationAcceptances.add(acceptanceId);
-    }
+    if (latestInvalidations.length === 0) return true;
+    return latestInvalidations.length === 1 &&
+      ["construction.task-scope-reopened", "construction.activity-reopened"].includes(latestInvalidations[0]?.event.type ?? "") &&
+      integrationAcceptanceFollowsReopen(acceptance, latestInvalidations[0]);
+  };
+  const retainedIntegrationAssessmentApplies = (
+    acceptance: ConstructionHistoryFact,
+    predecessor: Record<string, unknown>,
+    consumerStageAttemptId: string,
+    boundary: ConstructionHistoryFact,
+    includeLaterInvalidations = false,
+  ): boolean => {
+    if (!validIntegrationAcceptances.has(acceptance.event.id) ||
+        stringField(acceptance.event.data, "task_id") !== predecessor.task_id) return false;
+    const repositoryResults = Array.isArray(acceptance.event.data.repository_results) ? acceptance.event.data.repository_results : [];
+    const requiredEvidenceIds = repositoryResults.flatMap((result) =>
+      isRecord(result) && Array.isArray(result.evidence_ids)
+        ? result.evidence_ids.filter((evidenceId): evidenceId is string => typeof evidenceId === "string")
+        : [],
+    );
+    if (requiredEvidenceIds.length === 0) return false;
+    const invalidations = integrationInvalidationFacts.filter((fact) =>
+      factUnitId(fact) === factUnitId(acceptance) &&
+      (stringField(fact.event.data, "task_id") === undefined ||
+        stringField(fact.event.data, "task_id") === stringField(acceptance.event.data, "task_id")) &&
+      stringField(fact.event.data, "stage_attempt_id") === stringField(acceptance.event.data, "stage_attempt_id") &&
+      (includeLaterInvalidations || order.hasPath(fact.event.id, boundary.event.id)),
+    );
+    return order.uniqueFacts.some((assessmentFact) => {
+      if (assessmentFact.event.type !== "construction.retained-scope-assessed" ||
+          factUnitId(assessmentFact) !== factUnitId(acceptance) ||
+          stringField(assessmentFact.event.data, "stage_attempt_id") !== consumerStageAttemptId ||
+          !order.hasPath(assessmentFact.event.id, boundary.event.id) ||
+          !hasDirectCause(assessmentFact, acceptance) ||
+          invalidations.some((fact) => !order.hasPath(fact.event.id, assessmentFact.event.id))) return false;
+      if (boundary.event.type === "construction.task-admitted" && !hasDirectCause(boundary, assessmentFact)) return false;
+      const currentImplementationStart = order.uniqueFacts.some((fact) =>
+        ["construction.stage-attempt-started", "construction.stage-resumed"].includes(fact.event.type) &&
+        factUnitId(fact) === factUnitId(acceptance) && stringField(fact.event.data, "stage") === "implementation" &&
+        stringField(fact.event.data, "stage_attempt_id") === consumerStageAttemptId &&
+        hasDirectCause(assessmentFact, fact),
+      );
+      if (!currentImplementationStart) return false;
+      const assessments = Array.isArray(assessmentFact.event.data.assessments) ? assessmentFact.event.data.assessments : [];
+      return assessments.some((assessment) => {
+        if (!isRecord(assessment) || assessment.applicable !== true || assessment.task_id !== predecessor.task_id ||
+            assessment.activity !== "code-integration" ||
+            assessment.original_stage_attempt_id !== stringField(acceptance.event.data, "stage_attempt_id") ||
+            assessment.original_activity_attempt_id !== stringField(acceptance.event.data, "activity_attempt_id") ||
+            !Array.isArray(assessment.original_evidence_ids) ||
+            checkpointKey(assessment.checkpoints) !== checkpointKey(acceptance.event.data.candidate_checkpoints) ||
+            checkpointKey(predecessor.checkpoints) !== checkpointKey(acceptance.event.data.candidate_checkpoints)) return false;
+        const originalEvidenceIds = assessment.original_evidence_ids.filter((evidenceId): evidenceId is string => typeof evidenceId === "string");
+        return requiredEvidenceIds.every((evidenceId) => originalEvidenceIds.includes(evidenceId));
+      });
+    });
+  };
+  const currentIntegrationAcceptances = new Set<string>();
+  for (const acceptanceId of validIntegrationAcceptances) {
+    const acceptance = factsById.get(acceptanceId);
+    if (acceptance && integrationAcceptanceIsCurrentAt(acceptance)) currentIntegrationAcceptances.add(acceptanceId);
   }
 
   const validTaskAdmissions = new Set<string>();
@@ -976,7 +1152,11 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         continue;
       }
       const accepted = factsById.get(predecessor.integration_event_id);
-      if (!accepted || !currentIntegrationAcceptances.has(accepted.event.id) ||
+      const currentParentAcceptance = accepted !== undefined && accepted.event.type === "construction.integration-accepted" &&
+        stringField(accepted.event.data, "stage_attempt_id") === stageAttemptId && integrationAcceptanceIsCurrentAt(accepted, fact);
+      const retainedAcceptance = accepted !== undefined && accepted.event.type === "construction.integration-accepted" &&
+        stageAttemptId !== undefined && retainedIntegrationAssessmentApplies(accepted, predecessor, stageAttemptId, fact);
+      if (!accepted || (!currentParentAcceptance && !retainedAcceptance) ||
           accepted.event.type !== "construction.integration-accepted" || factUnitId(accepted) !== unitId ||
           stringField(accepted.event.data, "task_id") !== predecessor.task_id ||
           checkpointKey(predecessor.checkpoints) !== checkpointKey(accepted.event.data.candidate_checkpoints) ||
@@ -1008,9 +1188,128 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     });
   }
 
+  const candidateTaskAdmissions = new Set(validTaskAdmissions);
+  const integrationAcceptanceUsableAt = (
+    acceptance: ConstructionHistoryFact,
+    predecessor: Record<string, unknown>,
+    consumerStageAttemptId: string,
+    boundary: ConstructionHistoryFact,
+    includeLaterInvalidations = false,
+    visited: ReadonlySet<string> = new Set(),
+  ): boolean => {
+    if (visited.has(acceptance.event.id)) return false;
+    const nextVisited = new Set(visited);
+    nextVisited.add(acceptance.event.id);
+    const parentAcceptance = stringField(acceptance.event.data, "stage_attempt_id") === consumerStageAttemptId &&
+      integrationAcceptanceIsCurrentAt(acceptance, boundary, includeLaterInvalidations);
+    if (parentAcceptance) {
+      const preparedId = stringField(acceptance.event.data, "prepared_event_id");
+      const prepared = preparedId ? factsById.get(preparedId) : undefined;
+      const relatedAdmissions = prepared ? order.uniqueFacts.filter((candidate) =>
+        candidate.event.type === "construction.task-admitted" && factUnitId(candidate) === factUnitId(acceptance) &&
+        stringField(candidate.event.data, "task_id") === stringField(acceptance.event.data, "task_id") &&
+        stringField(candidate.event.data, "stage_attempt_id") === stringField(acceptance.event.data, "stage_attempt_id") &&
+        hasDirectCause(prepared, candidate),
+      ) : [];
+      if (relatedAdmissions.length === 0) return true;
+      if (relatedAdmissions.some((candidate) => candidateTaskAdmissions.has(candidate.event.id) &&
+          taskAdmissionDependenciesCurrentAt(candidate, boundary, includeLaterInvalidations, nextVisited))) return true;
+    }
+    const retained = retainedIntegrationAssessmentApplies(acceptance, predecessor, consumerStageAttemptId, boundary,
+      includeLaterInvalidations);
+    if (!retained) return false;
+    const preparedId = stringField(acceptance.event.data, "prepared_event_id");
+    const prepared = preparedId ? factsById.get(preparedId) : undefined;
+    const relatedAdmissions = prepared ? order.uniqueFacts.filter((candidate) =>
+      candidate.event.type === "construction.task-admitted" && factUnitId(candidate) === factUnitId(acceptance) &&
+      stringField(candidate.event.data, "task_id") === stringField(acceptance.event.data, "task_id") &&
+      stringField(candidate.event.data, "stage_attempt_id") === stringField(acceptance.event.data, "stage_attempt_id") &&
+      hasDirectCause(prepared, candidate),
+    ) : [];
+    return relatedAdmissions.length === 0 || relatedAdmissions.some((candidate) => candidateTaskAdmissions.has(candidate.event.id) &&
+      taskAdmissionDependenciesCurrentAt(candidate, boundary, includeLaterInvalidations, nextVisited));
+  };
+  const taskAdmissionDependenciesCurrentAt = (
+    admission: ConstructionHistoryFact,
+    boundary: ConstructionHistoryFact,
+    includeLaterInvalidations = false,
+    visited: ReadonlySet<string> = new Set(),
+  ): boolean => {
+    const boundaryStageAttemptId = stringField(boundary.event.data, "stage_attempt_id");
+    const predecessorProvenance = Array.isArray(admission.event.data.predecessor_provenance)
+      ? admission.event.data.predecessor_provenance
+      : [];
+    return predecessorProvenance.every((predecessor) => {
+      if (!isRecord(predecessor) || typeof predecessor.integration_event_id !== "string" ||
+          boundaryStageAttemptId === undefined) return false;
+      const accepted = factsById.get(predecessor.integration_event_id);
+      if (!accepted || accepted.event.type !== "construction.integration-accepted" ||
+          factUnitId(accepted) !== factUnitId(admission) || stringField(accepted.event.data, "task_id") !== predecessor.task_id ||
+          checkpointKey(predecessor.checkpoints) !== checkpointKey(accepted.event.data.candidate_checkpoints) ||
+          !hasDirectCause(admission, accepted)) return false;
+      return integrationAcceptanceUsableAt(accepted, predecessor, boundaryStageAttemptId, boundary,
+        includeLaterInvalidations, visited);
+    });
+  };
+  for (const admissionId of candidateTaskAdmissions) {
+    const admission = factsById.get(admissionId);
+    if (admission && !taskAdmissionDependenciesCurrentAt(admission, admission)) {
+      validTaskAdmissions.delete(admissionId);
+      const unitId = factUnitId(admission);
+      addIssue({
+        code: "invalid-task-admission",
+        message: "Task admission uses a predecessor whose accepted Integration is invalid for its admission boundary",
+        scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId },
+        eventIds: [admission.event.id, ...(Array.isArray(admission.event.data.predecessor_provenance)
+          ? admission.event.data.predecessor_provenance.flatMap((predecessor) =>
+            isRecord(predecessor) && typeof predecessor.integration_event_id === "string"
+              ? [predecessor.integration_event_id]
+              : [],
+          )
+          : [])],
+      });
+    }
+  }
+  const implementationParentCurrentAt = (boundary: ConstructionHistoryFact): boolean => {
+    const unitId = factUnitId(boundary);
+    const boundaryStageAttemptId = stringField(boundary.event.data, "stage_attempt_id");
+    if (!unitId || !boundaryStageAttemptId) return false;
+    let activeParent: string | undefined;
+    for (const fact of order.ordered) {
+      if (factUnitId(fact) !== unitId || stringField(fact.event.data, "stage") !== "implementation" ||
+          !order.hasPath(fact.event.id, boundary.event.id)) continue;
+      const stageAttemptId = stringField(fact.event.data, "stage_attempt_id");
+      if (["construction.stage-attempt-started", "construction.stage-resumed"].includes(fact.event.type)) {
+        activeParent = stageAttemptId;
+      } else if (["construction.stage-attempt-ended-by-revision", "construction.stage-attempt-completed"].includes(fact.event.type) &&
+          activeParent === stageAttemptId || fact.event.type === "construction.stage-reopened" &&
+          (stageAttemptId === undefined || activeParent === stageAttemptId)) {
+        activeParent = undefined;
+      }
+    }
+    return activeParent === boundaryStageAttemptId;
+  };
   const validActivityStarts = new Set<string>();
+  const staleActivityStarts = new Set<string>();
+  const invalidActivityParentTransitions = new Set<string>();
   for (const fact of order.uniqueFacts) {
-    if (fact.event.type !== "construction.activity-attempt-started") continue;
+    if (!["construction.activity-attempt-started", "construction.activity-resumed"].includes(fact.event.type) ||
+        implementationParentCurrentAt(fact)) continue;
+    invalidActivityParentTransitions.add(fact.event.id);
+    if (fact.event.type === "construction.activity-attempt-started") staleActivityStarts.add(fact.event.id);
+    const unitId = factUnitId(fact);
+    addIssue({
+      code: "invalid-revision-transition",
+      message: "Activity start or resume targets an Implementation parent that is no longer open",
+      scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId },
+      eventIds: [fact.event.id, ...order.uniqueFacts.filter((candidate) => factUnitId(candidate) === unitId &&
+        stringField(candidate.event.data, "stage_attempt_id") === stringField(fact.event.data, "stage_attempt_id") &&
+        ["construction.stage-attempt-ended-by-revision", "construction.stage-attempt-completed",
+          "construction.stage-reopened"].includes(candidate.event.type)).map((candidate) => candidate.event.id)],
+    });
+  }
+  for (const fact of order.uniqueFacts) {
+    if (fact.event.type !== "construction.activity-attempt-started" || invalidActivityParentTransitions.has(fact.event.id)) continue;
     const data = fact.event.data;
     const unitId = factUnitId(fact);
     const taskId = stringField(data, "task_id");
@@ -1021,7 +1320,8 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       factUnitId(candidate) === unitId && stringField(candidate.event.data, "task_id") === taskId &&
       stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId,
     );
-    const admitted = admissions.some((candidate) => hasDirectCause(fact, candidate));
+    const admissionCauses = admissions.filter((candidate) => hasDirectCause(fact, candidate));
+    const admitted = admissionCauses.some((candidate) => taskAdmissionDependenciesCurrentAt(candidate, fact));
     const retainedAssessments = order.uniqueFacts.filter((candidate) => {
       if (candidate.event.type !== "construction.retained-scope-assessed" || factUnitId(candidate) !== unitId ||
           stringField(candidate.event.data, "stage_attempt_id") !== stageAttemptId) return false;
@@ -1030,8 +1330,12 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         assessment.task_id === taskId && (assessment.activity === undefined || assessment.activity === activity));
     });
     const retained = retainedAssessments.some((candidate) => hasDirectCause(fact, candidate));
-    if (admitted || retained) {
+    if (admitted || (admissionCauses.length === 0 && retained)) {
       validActivityStarts.add(fact.event.id);
+      continue;
+    }
+    if (admissionCauses.length > 0) {
+      staleActivityStarts.add(fact.event.id);
       continue;
     }
     addIssue({
@@ -1041,6 +1345,57 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       eventIds: [fact.event.id, ...admissions.map((cause) => cause.event.id), ...retainedAssessments.map((cause) => cause.event.id)],
     });
   }
+
+  const activityWorkCurrentAt = (boundary: ConstructionHistoryFact): boolean => {
+    if (!implementationParentCurrentAt(boundary)) return false;
+    const starts = order.uniqueFacts.filter((fact) =>
+      fact.event.type === "construction.activity-attempt-started" && validActivityStarts.has(fact.event.id) &&
+      sameActivityScope(fact, boundary) && (fact.event.id === boundary.event.id || order.hasPath(fact.event.id, boundary.event.id)),
+    );
+    return starts.some((start) => {
+      const admissions = order.uniqueFacts.filter((fact) =>
+        fact.event.type === "construction.task-admitted" && validTaskAdmissions.has(fact.event.id) &&
+        factUnitId(fact) === factUnitId(boundary) &&
+        stringField(fact.event.data, "task_id") === stringField(boundary.event.data, "task_id") &&
+        order.hasPath(fact.event.id, start.event.id),
+      );
+      return admissions.length === 0 || admissions.some((admission) => taskAdmissionDependenciesCurrentAt(admission, boundary));
+    });
+  };
+
+  const currentIntegrationPreparations = new Set<string>();
+  for (const preparationId of validIntegrationPreparations) {
+    const preparation = factsById.get(preparationId);
+    if (!preparation) continue;
+    const taskId = stringField(preparation.event.data, "task_id");
+    const admissions = order.uniqueFacts.filter((candidate) =>
+      candidate.event.type === "construction.task-admitted" && validTaskAdmissions.has(candidate.event.id) &&
+      factUnitId(candidate) === factUnitId(preparation) && stringField(candidate.event.data, "task_id") === taskId &&
+      hasDirectCause(preparation, candidate) && order.hasPath(candidate.event.id, preparation.event.id),
+    );
+    if (activityWorkCurrentAt(preparation) &&
+        admissions.some((admission) => taskAdmissionDependenciesCurrentAt(admission, preparation))) {
+      currentIntegrationPreparations.add(preparationId);
+    }
+  }
+  for (const acceptanceId of [...currentIntegrationAcceptances]) {
+    const acceptance = factsById.get(acceptanceId);
+    const preparationId = acceptance ? stringField(acceptance.event.data, "prepared_event_id") : undefined;
+    const preparation = preparationId ? factsById.get(preparationId) : undefined;
+    const admissionCurrent = acceptance !== undefined && preparation !== undefined && order.uniqueFacts.some((candidate) =>
+      candidate.event.type === "construction.task-admitted" && validTaskAdmissions.has(candidate.event.id) &&
+      factUnitId(candidate) === factUnitId(acceptance) &&
+      stringField(candidate.event.data, "task_id") === stringField(acceptance.event.data, "task_id") &&
+      hasDirectCause(preparation, candidate) && order.hasPath(candidate.event.id, acceptance.event.id) &&
+      activityWorkCurrentAt(acceptance) && taskAdmissionDependenciesCurrentAt(candidate, acceptance, true),
+    );
+    if (!acceptance || !preparation || !currentIntegrationPreparations.has(preparation.event.id) || !admissionCurrent) {
+      currentIntegrationAcceptances.delete(acceptanceId);
+    }
+  }
+
+  const taskAdmissionDependenciesCurrentNow = (admission: ConstructionHistoryFact): boolean =>
+    taskAdmissionDependenciesCurrentAt(admission, admission, true);
 
   const unitIds = [...new Set(history.events.flatMap((record) =>
     record.missionId === history.missionId && record.scope.unitId ? [record.scope.unitId] : [],
@@ -1128,16 +1483,39 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           taskState = fact.event.type === "construction.task-scope-reopened" ? "reopened" : "blocked";
         }
       }
+      const invalidatedPredecessor = admission !== undefined && !taskAdmissionDependenciesCurrentNow(admission);
+      if (admission && invalidatedPredecessor) {
+        taskState = "blocked";
+        completion = undefined;
+      }
       const activityProjections: ConstructionActivityProjection[] = [];
       for (const activity of CONSTRUCTION_ACTIVITIES) {
-        const activityFacts = taskFacts.filter((fact) => stringField(fact.event.data, "activity") === activity);
+        const activityFacts = orderedUnitFacts.filter((fact) =>
+          stringField(fact.event.data, "task_id") === taskId && stringField(fact.event.data, "activity") === activity ||
+          ["construction.task-scope-ended-by-revision", "construction.task-scope-reopened"].includes(fact.event.type) &&
+            stringField(fact.event.data, "task_id") === taskId && Array.isArray(fact.event.data.affected_activities) &&
+            fact.event.data.affected_activities.includes(activity) ||
+          ["construction.stage-attempt-started", "construction.stage-resumed", "construction.stage-attempt-ended-by-revision",
+            "construction.stage-reopened"].includes(fact.event.type) && fact.event.data.stage === "implementation",
+        );
         const activityTransitions = activityFacts.filter((fact) => {
-          if (transitionFor(fact, "activity") === undefined) return false;
+          if (transitionFor(fact, "activity", activity) === undefined) return false;
+          if (invalidActivityParentTransitions.has(fact.event.id)) return false;
           if (fact.event.type === "construction.activity-attempt-started" && !validActivityStarts.has(fact.event.id)) return false;
+          const staleStart = [...staleActivityStarts].some((startId) => {
+            const start = factsById.get(startId);
+            return start !== undefined && sameActivityScope(start, fact) &&
+              (start.event.id === fact.event.id || order.hasPath(start.event.id, fact.event.id));
+          });
+          if (staleStart) return false;
+          if (!["construction.stage-attempt-started", "construction.stage-resumed", "construction.stage-attempt-ended-by-revision",
+            "construction.stage-reopened", "construction.task-scope-ended-by-revision",
+            "construction.task-scope-reopened", "construction.activity-attempt-ended-by-revision", "construction.activity-reopened"].includes(fact.event.type) &&
+              fact.event.data.activity === activity && !activityWorkCurrentAt(fact)) return false;
           if (revisionTransitionTypes.has(fact.event.type) && !validRevisionTransitions.has(fact.event.id)) return false;
           return fact.event.type !== "construction.activity-attempt-completed" || validCompletionEvents.has(fact.event.id);
         });
-        const reduced = reduceAttemptScope(activityTransitions, "activity", unitId, report);
+        const reduced = reduceAttemptScope(activityTransitions, "activity", unitId, report, activity);
         const currentAttempt = reduced.currentAttemptId
           ? reduced.attempts.find((attempt) => attempt.attemptId === reduced.currentAttemptId)
           : undefined;
