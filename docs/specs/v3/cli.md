@@ -17,7 +17,8 @@ The current CLI does not have this v3 command tree. Its root has `setup` and `wo
 The following decisions are part of this approved contract.
 
 - Use `kepler workflow <phase>` for phase-owned workflow operations. Construction commands belong under `kepler workflow construction`.
-- Use descriptive root capabilities, such as `git`, `lint`, and `audit`. Do not add generic `util` or `commons` groups.
+- Use descriptive root capabilities, such as `git`, `lint`, `audit`, and `mission`. Do not add generic `util` or `commons` groups.
+- Use the requester-approved root `kepler mission create` operation for mission creation and selected workspace preparation. This operation does not start a stage.
 - Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted.
 - Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Use the accepted [Construction lint interface](#kepler-workflow-construction-lint) for task-graph checks.
 - Use the accepted [setup interface](#kepler-setup) for Kepler's bundled resources and default settings. Native hosts or skill managers own [agent resource installation](installation.md#agent-resource-ownership).
@@ -184,6 +185,7 @@ Any later human result mode must be opt-in.
 | --- | --- | --- |
 | `kepler setup` | Accepted root interface | Install compatible bundled resources and missing default settings. |
 | `kepler uuid` | Accepted root interface | Return one UUIDv4 in `data.uuid`. |
+| `kepler mission create` | Accepted root interface | Record a mission and prepare its explicitly selected workspaces without starting a stage. |
 | `kepler git author` | Accepted under SH60 | Return effective repository Git values in `data.name` and `data.email`. |
 | `kepler git diff-package validation` | Accepted under `git` | Package a task's generated output for Code Validation. |
 | `kepler git diff-package integration` | Accepted under `git` | Package a prepared combined candidate for Code Integration inspection. |
@@ -250,6 +252,26 @@ Use no generation or batch options. This global command does not use `--project`
 Use the value for artifact or task fields whose contracts specify UUIDv4. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions) and [task identity rules](phases/construction/task-graph.md#task-identity). Generation does not create an artifact, task, unit, or journal record.
 
 Do not use a UUID as the readable unit ID. Attempt and event IDs follow their own contracts.
+
+### `kepler mission create`
+
+Use this root capability to create a mission and prepare only the selected record home and workspace resources:
+
+```text
+kepler mission create --request <json> [--project <path>]
+```
+
+`--project` selects the record-home Git working-tree root under the shared [project selection rules](#project-selection). Prepare its `.kepler/` directory explicitly before resolution. Do not create the marker during project resolution. Participating secondary repositories do not need their own marker.
+
+Pass one strict JSON object through `--request`. It has `title`, `request`, `workflow`, `recordHomeRepositoryId`, `contexts`, and `repositories`. Set `workflow` to `standard`. Each context has an opaque `reference` and a `purpose`. Each repository has a caller-supplied `repositoryId`, an explicit `workspace`, an explicit `branch`, and an `integrationTarget`.
+
+Select an existing checkout with `{ "kind": "existing", "path": "<repository-root>" }`, a new worktree with `{ "kind": "new", "path": "<new-worktree-path>", "source": "<source-repository-root>" }`, or a saved previous binding with its `workspace_id`, `mission_id`, `record_home_repository_id`, and `record_home_path`. A new worktree requires an existing parent and an unused destination; the command does not reuse or overwrite a path.
+
+Select a branch as `{ "kind": "current" }`, `{ "kind": "default" }`, `{ "kind": "existing", "name": "<branch>" }`, or `{ "kind": "new", "name": "<branch>", "base": "<ref>" }`. A default selection requires a resolvable local `origin/HEAD` branch. Integration targets must identify local branch refs. Do not guess a default branch, move dirty work, or change an unselected resource.
+
+Record mission creation before workspace effects. Success returns `data.mission_id`, `data.record_home`, `data.workspaces`, and `data.execution_started: false`. Each workspace result identifies its repository, context, local workspace ID and path, branch, Integration target, and starting commit or explicit `no-commit` condition. The command creates no stage attempt and does not start Functional Design.
+
+Preparation failures keep the creation fact and report known partial effects in the common failure `details`. Do not claim readiness, delete or roll back prepared resources, or repair/publish Git state automatically. Keep the mission unstarted until its required workspace binding is recorded. Do not add a mission registry, Initialization stage, workflow engine, raw journal operation, or generic execution-start command.
 
 ### `kepler git author`
 

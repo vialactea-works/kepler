@@ -21,12 +21,42 @@ const identities = {
 };
 
 const base = { mission_id: identities.mission, unit_id: "2026-10-18-example" };
+const workspace = {
+  repository_id: "repository-main",
+  context: { kind: "existing" },
+  branch: { kind: "current" },
+  integration_target: "refs/heads/main",
+  starting_checkpoint: { kind: "commit", commit: "a".repeat(40) },
+};
 const stage = { ...base, stage: "implementation", stage_attempt_id: identities.stageAttempt };
 const task = { ...stage, task_id: identities.task };
 const activity = { ...task, activity: "code-generation", activity_attempt_id: identities.activityAttempt };
 const graphReference = { graph_id: identities.graph, content_version: "graph-revision-1" };
 
 const payload = (type: (typeof CONSTRUCTION_EVENT_TYPES)[number]): Record<string, unknown> => {
+  if (type === "construction.mission-created") {
+    return {
+      mission_id: identities.mission,
+      title: "Prepare selected repositories",
+      request: "Implement the requested workflow",
+      workflow: "standard",
+      record_home: { repository_id: "record-home" },
+      contexts: [{ reference: "opaque: selected context", purpose: "Request context" }],
+      repositories: [workspace],
+    };
+  }
+  if (type === "construction.mission-workspaces-prepared") {
+    return {
+      mission_id: identities.mission,
+      repositories: [{
+        repository_id: workspace.repository_id,
+        context: workspace.context,
+        branch: "main",
+        integration_target: workspace.integration_target,
+        starting_checkpoint: workspace.starting_checkpoint,
+      }],
+    };
+  }
   if (type === "construction.unit-created") {
     return { ...base, directory: "construction/units-of-work/2026-10-18-example", workflow: "standard", initial_effort: { default: "standard", stage_overrides: {}, selected_by: "requester" } };
   }
@@ -164,6 +194,59 @@ describe("Construction event contracts", () => {
     expect(validateConstructionEvent({ ...source, type: "future-phase.event", phase: "future-phase" }).status).toBe("unsupported");
     expect(validateConstructionEvent({ ...envelope("construction.unit-created", payload("construction.unit-created")), event_version: 2 }).status).toBe("unsupported");
     expect(validateConstructionEvent({ ...source, envelope_version: 2 }).status).toBe("unsupported");
+  });
+
+  it("accepts mission-scoped facts before a unit exists and validates their repository bindings", () => {
+    const created = payload("construction.mission-created");
+    expect("unit_id" in created).toBe(false);
+    expect(validateConstructionEvent(envelope("construction.mission-created", created)).status).toBe("valid");
+
+    const duplicateRepository = {
+      ...created,
+      repositories: [workspace, { ...workspace, branch: { kind: "default" } }],
+    };
+    expect(validateConstructionEvent(envelope("construction.mission-created", duplicateRepository)).status).toBe("invalid");
+
+    const invalidCheckpoint = {
+      ...created,
+      repositories: [{ ...workspace, starting_checkpoint: { kind: "commit", commit: "" } }],
+    };
+    expect(validateConstructionEvent(envelope("construction.mission-created", invalidCheckpoint)).status).toBe("invalid");
+
+    const prepared = payload("construction.mission-workspaces-prepared");
+    expect("unit_id" in prepared).toBe(false);
+    expect(validateConstructionEvent(envelope("construction.mission-workspaces-prepared", prepared)).status).toBe("valid");
+  });
+
+  it("keeps mission, original Review, task-admission, and lock-captured Integration checkpoints in separate event roles", () => {
+    const mission = payload("construction.mission-created");
+    expect(mission.repositories).toEqual([workspace]);
+    expect(mission).not.toHaveProperty("review_baseline");
+    expect(mission).not.toHaveProperty("admission_baseline");
+
+    const review = payload("construction.unit-baseline-selected");
+    expect(review).toHaveProperty("review_baseline");
+    expect(review).not.toHaveProperty("starting_checkpoint");
+    expect(review).not.toHaveProperty("admission_baseline");
+
+    const admission = payload("construction.task-admitted");
+    expect(admission).toHaveProperty("admission_baseline");
+    expect(admission).not.toHaveProperty("review_baseline");
+    expect(admission).not.toHaveProperty("captured_inputs");
+
+    const integration = payload("construction.integration-prepared");
+    expect(integration).toHaveProperty("captured_inputs");
+    expect(integration).toHaveProperty("candidate_checkpoints");
+    expect(integration).not.toHaveProperty("review_baseline");
+    expect(integration).not.toHaveProperty("admission_baseline");
+    for (const [type, data] of [
+      ["construction.mission-created", mission],
+      ["construction.unit-baseline-selected", review],
+      ["construction.task-admitted", admission],
+      ["construction.integration-prepared", integration],
+    ] as const) {
+      expect(validateConstructionEvent(envelope(type, data)).status, type).toBe("valid");
+    }
   });
 
   it("requires evidence and approval to keep their applicable attempt scope", () => {

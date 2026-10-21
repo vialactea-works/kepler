@@ -38,6 +38,8 @@ export const CONSTRUCTION_ACTIVITIES = [
 ] as const;
 
 export const CONSTRUCTION_EVENT_TYPES = [
+  "construction.mission-created",
+  "construction.mission-workspaces-prepared",
   "construction.unit-created",
   "construction.unit-baseline-selected",
   "construction.stage-attempt-started",
@@ -133,6 +135,55 @@ export interface TaskDefinitionReference {
   readonly task_id: TaskId;
   readonly content_version: string;
   readonly checkpoint?: RepositoryCheckpoint;
+}
+
+export type MissionWorkspaceContext =
+  | { readonly kind: "existing" }
+  | { readonly kind: "new" }
+  | {
+      readonly kind: "previous";
+      readonly workspace_id: string;
+      readonly mission_id: MissionId;
+      readonly record_home_repository_id: string;
+    };
+
+export type MissionBranchSelection =
+  | { readonly kind: "current" }
+  | { readonly kind: "default" }
+  | { readonly kind: "existing"; readonly name: string }
+  | { readonly kind: "new"; readonly name: string; readonly base: string };
+
+export type MissionStartingCheckpoint =
+  | { readonly kind: "commit"; readonly commit: string }
+  | { readonly kind: "no-commit" };
+
+export interface MissionWorkspaceSelection {
+  readonly repository_id: string;
+  readonly context: MissionWorkspaceContext;
+  readonly branch: MissionBranchSelection;
+  readonly integration_target: string;
+  readonly starting_checkpoint: MissionStartingCheckpoint;
+}
+
+export interface MissionCreatedData {
+  readonly mission_id: MissionId;
+  readonly title: string;
+  readonly request: string;
+  readonly workflow: "standard";
+  readonly record_home: { readonly repository_id: string };
+  readonly contexts: readonly MaterialInput[];
+  readonly repositories: readonly MissionWorkspaceSelection[];
+}
+
+export interface MissionWorkspacePreparedData {
+  readonly mission_id: MissionId;
+  readonly repositories: readonly {
+    readonly repository_id: string;
+    readonly context: MissionWorkspaceContext;
+    readonly branch: string;
+    readonly integration_target: string;
+    readonly starting_checkpoint: MissionStartingCheckpoint;
+  }[];
 }
 
 export interface UnitCreatedData extends ConstructionBaseData {
@@ -354,6 +405,8 @@ export interface ImplementationCompletionAssessedData extends StageAttemptData {
 }
 
 export interface ConstructionEventDataMap {
+  "construction.mission-created": MissionCreatedData;
+  "construction.mission-workspaces-prepared": MissionWorkspacePreparedData;
   "construction.unit-created": UnitCreatedData;
   "construction.unit-baseline-selected": UnitBaselineSelectedData;
   "construction.stage-attempt-started": StageAttemptStartedData;
@@ -472,6 +525,34 @@ const isEventIdArray = (value: unknown): boolean =>
 const isBaseData = (data: Record<string, unknown>): boolean =>
   isUuidV4(data.mission_id) && isNonEmptyString(data.unit_id);
 
+const isMissionContext = (value: unknown): value is MissionWorkspaceContext =>
+  isRecord(value) && (
+    value.kind === "existing" ||
+    value.kind === "new" ||
+    (value.kind === "previous" && isNonEmptyString(value.workspace_id) &&
+      isUuidV4(value.mission_id) && isNonEmptyString(value.record_home_repository_id))
+  );
+
+const isMissionBranchSelection = (value: unknown): value is MissionBranchSelection =>
+  isRecord(value) && (
+    value.kind === "current" ||
+    value.kind === "default" ||
+    ((value.kind === "existing") && isNonEmptyString(value.name)) ||
+    (value.kind === "new" && isNonEmptyString(value.name) && isNonEmptyString(value.base))
+  );
+
+const isMissionStartingCheckpoint = (value: unknown): value is MissionStartingCheckpoint =>
+  isRecord(value) && (
+    (value.kind === "commit" && isNonEmptyString(value.commit)) ||
+    value.kind === "no-commit"
+  );
+
+const isMissionWorkspaceSelection = (value: unknown): value is MissionWorkspaceSelection =>
+  isRecord(value) && isNonEmptyString(value.repository_id) &&
+  isMissionContext(value.context) && isMissionBranchSelection(value.branch) &&
+  isNonEmptyString(value.integration_target) &&
+  isMissionStartingCheckpoint(value.starting_checkpoint);
+
 const hasNoIdentityReuse = (event: EventEnvelope, data: Record<string, unknown>): boolean => {
   const domainIds = [
     data.mission_id,
@@ -505,6 +586,8 @@ const isEffortSelection = (value: unknown): boolean => {
 };
 
 export const CONSTRUCTION_EVENT_REQUIRED_FIELDS: Readonly<Record<ConstructionEventType, readonly string[]>> = {
+  "construction.mission-created": ["mission_id", "title", "request", "workflow", "record_home", "contexts", "repositories"],
+  "construction.mission-workspaces-prepared": ["mission_id", "repositories"],
   "construction.unit-created": ["directory", "workflow", "initial_effort"],
   "construction.unit-baseline-selected": ["review_baseline", "integration_targets"],
   "construction.stage-attempt-started": ["stage", "stage_attempt_id", "inputs", "checkpoints", "authority_event_ids"],
@@ -548,7 +631,10 @@ const validatePayload = (
       issues.push({ path: `/data/${field}`, message: "Required Construction payload field is missing" });
     }
   }
-  if (!isBaseData(data)) issues.push({ path: "/data", message: "Expected a mission UUID and unit identity" });
+  const missionScoped = type === "construction.mission-created" || type === "construction.mission-workspaces-prepared";
+  if (missionScoped ? !isUuidV4(data.mission_id) : !isBaseData(data)) {
+    issues.push({ path: "/data", message: missionScoped ? "Expected a mission UUID" : "Expected a mission UUID and unit identity" });
+  }
   if (!hasNoIdentityReuse(event, data)) issues.push({ path: "/data", message: "Distinct event and domain identities must not be reused" });
   const invalid = (field: string, valid: boolean, message = "Invalid Construction payload value") => {
     if (!valid) issues.push({ path: `/data/${field}`, message });
@@ -570,6 +656,26 @@ const validatePayload = (
   if (task) invalid("stage_attempt_id", isUuidV4(data.stage_attempt_id));
   if (activity && !["construction.activity-reopened"].includes(type)) {
     invalid("activity_attempt_id", isUuidV4(data.activity_attempt_id));
+  }
+  if (type === "construction.mission-created") {
+    invalid("mission_id", isUuidV4(data.mission_id));
+    invalid("title", isNonEmptyString(data.title));
+    invalid("request", isNonEmptyString(data.request));
+    invalid("workflow", data.workflow === "standard");
+    invalid("record_home", isRecord(data.record_home) && isNonEmptyString(data.record_home.repository_id));
+    invalid("contexts", isInputs(data.contexts));
+    invalid("repositories", Array.isArray(data.repositories) && data.repositories.length > 0 &&
+      data.repositories.every(isMissionWorkspaceSelection) &&
+      new Set(data.repositories.map((repository) => isRecord(repository) ? repository.repository_id : undefined)).size === data.repositories.length);
+  }
+  if (type === "construction.mission-workspaces-prepared") {
+    invalid("mission_id", isUuidV4(data.mission_id));
+    invalid("repositories", Array.isArray(data.repositories) && data.repositories.length > 0 && data.repositories.every((repository) =>
+      isRecord(repository) && isNonEmptyString(repository.repository_id) &&
+      isMissionContext(repository.context) && isNonEmptyString(repository.branch) &&
+      isNonEmptyString(repository.integration_target) &&
+      isMissionStartingCheckpoint(repository.starting_checkpoint),
+    ) && new Set(data.repositories.map((repository) => isRecord(repository) ? repository.repository_id : undefined)).size === data.repositories.length);
   }
   if (type === "construction.unit-created") {
     invalid("directory", isNonEmptyString(data.directory));
