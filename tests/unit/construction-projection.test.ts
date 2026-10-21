@@ -6,6 +6,9 @@ const missionId = "10000000-0000-4000-8000-000000000001";
 const ids = {
   unit: "2026-10-18-example",
   otherUnit: "2026-10-19-example",
+  dependentTask: "30000000-0000-4000-8000-000000000009",
+  resumeActivityAttempt: "40000000-0000-4000-8000-000000000006",
+  resumeEvidence: "60000000-0000-4000-8000-000000000008",
   stageAttempt: "20000000-0000-4000-8000-000000000002",
   nextStageAttempt: "20000000-0000-4000-8000-000000000003",
   task: "30000000-0000-4000-8000-000000000003",
@@ -726,6 +729,216 @@ describe("Construction history projection", () => {
     expect(endedProjection.units[0]?.blocked).toBe(false);
     expect(endedProjection.units[0]?.tasks[0]?.state).toBe("blocked");
     expect(endedProjection.units[0]?.tasks[0]?.completion).toBeUndefined();
+    const mismatchedReopen = event("event-task-reopened-mismatched", "construction.task-scope-reopened", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      revision_id: ids.revision,
+      reason: "Reopen with a different affected scope",
+      affected_activities: ["code-generation"],
+    }, "journal-integration", [taskEnded.id, revision.id]);
+    const mismatchedLateCompletion = event("event-mismatched-late-completion", "construction.task-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      integration_event_id: accepted.id,
+      conditions: ["A late completion followed a mismatched reopen"],
+    }, "journal-integration", [accepted.id, activityCompleted.id, mismatchedReopen.id]);
+    const mismatchedProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://mismatched-task-reopen",
+      "journal-integration",
+      [...records, revisionInteraction, revision, taskEnded, mismatchedReopen, mismatchedLateCompletion],
+    )]));
+    expect(mismatchedProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-revision-transition");
+    expect(mismatchedProjection.units[0]?.blocked).toBe(true);
+    expect(mismatchedProjection.units[0]?.tasks[0]?.completion).toBeUndefined();
+    const lateAcceptance = event("event-late-integration-acceptance", "construction.integration-accepted", accepted.data,
+      "journal-integration", [taskEnded.id, prepared.id, integrationEvidence.id]);
+    const dependentAdmission = event("event-dependent-task-admitted", "construction.task-admitted", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
+      task_definition_ref: { graph_id: ids.graph, task_id: ids.dependentTask, content_version: "dependent-task-version" },
+      admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      predecessor_provenance: [{
+        task_id: ids.task,
+        integration_event_id: lateAcceptance.id,
+        checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
+      }],
+      prerequisite_evidence: [],
+    }, "journal-integration", [started.id, baseline.id, lateAcceptance.id]);
+    const dependentProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://stale-predecessor-acceptance",
+      "journal-integration",
+      [...records, revisionInteraction, revision, taskEnded, lateAcceptance, dependentAdmission],
+    )]));
+    expect(dependentProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-admission");
+    expect(dependentProjection.units[0]?.blocked).toBe(true);
+    expect(dependentProjection.units[0]?.tasks.find((task) => task.taskId === ids.dependentTask)?.state).toBe("unknown");
+    const resumeInteraction = event("event-resume-revision-interaction", "construction.interaction-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      participants: ["orchestrator"],
+      content: "Reopen Integration for a current attempt",
+      references: ["opaque: Integration retry"],
+    }, "journal-integration", [validationCompleted.id]);
+    const resumeRevision = event("event-resume-revision", "construction.revision-authorized", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      revision_id: ids.revision,
+      orchestrator_decision: "Reopen Integration",
+      reason: "Integration must run on the reopened scope",
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+    }, "journal-integration", [resumeInteraction.id]);
+    const resumeTaskEnded = event("event-resume-task-ended", "construction.task-scope-ended-by-revision", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      revision_id: ids.revision,
+      reason: "End the Integration scope",
+      affected_activities: ["code-integration"],
+    }, "journal-integration", [resumeRevision.id, admission.id]);
+    const resumeTaskReopened = event("event-resume-task-reopened", "construction.task-scope-reopened", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      revision_id: ids.revision,
+      reason: "Reopen the Integration scope",
+      affected_activities: ["code-integration"],
+    }, "journal-integration", [resumeTaskEnded.id, resumeRevision.id]);
+    const resumeIntegrationStarted = event("event-resume-integration-start", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.resumeActivityAttempt,
+      inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
+      checkpoints: [],
+    }, "journal-integration", [admission.id, resumeTaskReopened.id]);
+    const resumeIntegrationWaiting = event("event-resume-integration-waiting", "construction.activity-waiting", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.resumeActivityAttempt,
+      reason: "Wait for the integration runner",
+    }, "journal-integration", [resumeIntegrationStarted.id]);
+    const resumeIntegration = event("event-resume-integration", "construction.activity-resumed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.resumeActivityAttempt,
+      inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
+      checkpoints: [],
+    }, "journal-integration", [resumeIntegrationWaiting.id]);
+    const resumePrepared = event("event-resume-integration-prepared", "construction.integration-prepared", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.resumeActivityAttempt,
+      captured_inputs: [],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: "resumed-candidate" }],
+      task_output_refs: ["opaque: task output"],
+      source_evidence_ids: [ids.sourceEvidence],
+      inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
+    }, "journal-integration", [resumeIntegration.id, admission.id, validationCompleted.id, sourceEvidence.id]);
+    const resumeEvidence = event("event-resume-integration-evidence", "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.resumeActivityAttempt,
+      evidence_id: ids.resumeEvidence,
+      artifact_bindings: [{ artifact_id: ids.artifact, content_version: "resumed-candidate-version" }],
+      checkpoints: [{ repository_id: "repo-main", commit: "resumed-candidate" }],
+      inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
+      check: "Run checks after resuming Integration",
+      executor: "agent:integrator",
+      result: { status: "passed", summary: "The resumed candidate passed" },
+      output_refs: ["opaque: resumed integration output"],
+      conditions: [],
+    }, "journal-integration", [resumePrepared.id]);
+    const resumeAccepted = event("event-resume-integration-accepted", "construction.integration-accepted", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.resumeActivityAttempt,
+      prepared_event_id: resumePrepared.id,
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: "resumed-candidate" }],
+      repository_results: [{ repository_id: "repo-main", evidence_ids: [ids.resumeEvidence] }],
+      authority_event_ids: [],
+    }, "journal-integration", [resumePrepared.id, resumeEvidence.id]);
+    const resumeCompleted = event("event-resume-integration-completed", "construction.activity-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      activity_attempt_id: ids.resumeActivityAttempt,
+      evidence_ids: [ids.resumeEvidence],
+      checkpoints: [{ repository_id: "repo-main", commit: "resumed-candidate" }],
+    }, "journal-integration", [resumeIntegration.id, resumeAccepted.id, resumeEvidence.id]);
+    const resumeTaskCompleted = event("event-resume-task-completed", "construction.task-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      integration_event_id: resumeAccepted.id,
+      conditions: ["The resumed Integration attempt is current"],
+    }, "journal-integration", [resumeAccepted.id, resumeCompleted.id]);
+    const resumedProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://resumed-integration",
+      "journal-integration",
+      [
+        ...records.slice(0, records.indexOf(integrationStarted)),
+        resumeInteraction,
+        resumeRevision,
+        resumeTaskEnded,
+        resumeTaskReopened,
+        resumeIntegrationStarted,
+        resumeIntegrationWaiting,
+        resumeIntegration,
+        resumePrepared,
+        resumeEvidence,
+        resumeAccepted,
+        resumeCompleted,
+        resumeTaskCompleted,
+      ],
+    )]));
+    expect(resumedProjection.projectionIssues).toEqual([]);
+    expect(resumedProjection.units[0]?.blocked).toBe(false);
+    expect(resumedProjection.units[0]?.tasks[0]?.state).toBe("complete");
+    expect(resumedProjection.units[0]?.tasks[0]?.completion?.event.id).toBe(resumeTaskCompleted.id);
     const incompleteProjection = projectConstruction(collectHistory(missionId, sources, "incomplete"));
     const incompleteUnit = incompleteProjection.units[0];
     const incompleteTask = incompleteUnit?.tasks[0];
