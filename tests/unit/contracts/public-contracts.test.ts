@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  markdownArtifactReader,
+  markdownArtifactWriter,
   parseKeplerSettings,
+  type ArtifactReader,
+  type ArtifactWriter,
   type KeplerEnvironment,
   type KeplerGlobalPaths,
   type KeplerServiceOptions,
@@ -26,6 +30,8 @@ const globalPaths: KeplerGlobalPaths = {
   settings: "/temporary/home/.config/vialactea-works/kepler/settings.yaml",
 };
 const settings: KeplerSettings = parseKeplerSettings("enabled: true");
+const artifactReader: ArtifactReader = markdownArtifactReader;
+const artifactWriter: ArtifactWriter = markdownArtifactWriter;
 const setupFiles: SetupFiles = {
   ensureHome: () => {},
   copyTemplates: () => ["plan.md"],
@@ -41,6 +47,8 @@ describe("public Core and setup contracts", () => {
     expect(serviceOptions.environment).toBe(environment);
     expect(globalPaths.templates).toContain("/templates");
     expect(settings.enabled).toBe(true);
+    expect(artifactReader).toBe(markdownArtifactReader);
+    expect(artifactWriter).toBe(markdownArtifactWriter);
   });
 
   it("runs a use case through its narrow in-memory adapter contract", () => {

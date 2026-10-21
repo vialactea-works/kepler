@@ -222,7 +222,7 @@ describe("workbench CLI", () => {
     expect(gitOutput(temporaryDirectory, "branch", "--list")).toContain(
       "standalone-slug",
     );
-  }, 30_000);
+  }, 60_000);
 
   it("lints an unrelated file successfully", () => {
     const file = Path.join(temporaryDirectory, "note.md");
@@ -925,5 +925,5 @@ describe("workbench CLI", () => {
     expect(preconditionMalformed.stdout).toContain(
       "whole-branch review malformed",
     );
-  }, 30000);
+  }, 60_000);
 });

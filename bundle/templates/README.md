@@ -40,7 +40,26 @@ New designs explain sourced goals, the relevant domain model, current and propos
 
 Canonical specs preserve durable model contracts, ownership and boundary policies in their existing five sections. Private wiring, package inventories and source-code attribution remain in design rather than becoming canonical requirements.
 
+## V3 Construction templates
+
+The v3 Construction templates live under `v3/construction/` and remain separate from the existing templates above. Use them for the mission-owned Unit of Work directory:
+
+| Template | Artifact type | Unit-root path |
+| --- | --- | --- |
+| `unit-of-work.md` | `unit-of-work` | `unit-of-work.md` |
+| `design.md` | `functional-design` | `design.md` |
+| `quality.md` | `non-functional-requirements` | `quality.md` |
+| `plan.md` | `implementation-plan` | `plan.md` |
+| `delivery.md` | `delivery-plan` | `delivery.md` |
+| `supporting-document.md` | `supporting-document` | A useful linked file under `details/<stage-or-activity>/` |
+
+The unit root is `.kepler/missions/<mission-id>/construction/units-of-work/<unit-id>/`. Add linked detail only when its content is useful. Place it under the owning stage or Activity, such as `details/functional-design/`, `details/quality-requirements/`, `details/implementation-planning/`, or `details/deliver/`.
+
+These files are authoring templates, not created artifacts. Replace the identity, unit, and author placeholders with valid values during the owning work, then write actual content. Keep the artifact ID and original author during later edits. Unit creation does not create placeholder documents. Mission, execution, review, and per-Activity Markdown records are not required.
+
 ## Required vs optional
+
+The following sections describe the existing change-level and Wayfinder templates. They do not change the v3 Construction paths above.
 
 `plan.md` is the only required declarative input to execution. `proposal.md`, `design.md`, and
 `requirements/` are optional: small or mechanical changes may start directly at kepler-plan.

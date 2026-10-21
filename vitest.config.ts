@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 
 const unitTests = [
   "tests/unit/**/*.test.ts",
+  "packages/core/tests/unit/**/*.test.ts",
   "tests/workbench/artifact-reader.test.ts",
   "tests/workbench/artifact-contracts.test.ts",
   "tests/workbench/artifact-schemas.test.ts",

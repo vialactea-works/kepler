@@ -29,5 +29,8 @@
     "remark": "15.0.1",
     "remark-frontmatter": "5.0.0",
     "yaml": "2.4.5"
+  },
+  "devDependencies": {
+    "@types/mdast": "4.0.4"
   }
 }

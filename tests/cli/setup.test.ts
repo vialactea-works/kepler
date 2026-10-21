@@ -19,6 +19,12 @@ const TEMPLATE_FILES = [
   "requirements-spec.md",
   "review.md",
   "task-progress.md",
+  "v3/construction/unit-of-work.md",
+  "v3/construction/design.md",
+  "v3/construction/quality.md",
+  "v3/construction/plan.md",
+  "v3/construction/delivery.md",
+  "v3/construction/supporting-document.md",
 ];
 
 const WAYFINDER_TEMPLATE_FILES = [
@@ -85,6 +91,21 @@ describe("SetupService filesystem integration", () => {
     }
     runSetup();
     for (const file of ["design.md", "requirements-spec.md"]) {
+      expect(Fs.readFileSync(Path.join(templatesBase, file))).toEqual(
+        Fs.readFileSync(Path.join(process.cwd(), "bundle", "templates", file)),
+      );
+    }
+  });
+
+  it("copies the v3 Construction templates byte-for-byte", () => {
+    runSetup();
+
+    const templatesBase = Path.join(
+      tmpHome,
+      ".config/vialactea-works/kepler",
+      "templates",
+    );
+    for (const file of TEMPLATE_FILES.filter((path) => path.startsWith("v3/"))) {
       expect(Fs.readFileSync(Path.join(templatesBase, file))).toEqual(
         Fs.readFileSync(Path.join(process.cwd(), "bundle", "templates", file)),
       );
