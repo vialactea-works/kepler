@@ -9,6 +9,7 @@ import {
   type EventEnvelope,
   type EventEnvelopeIssue,
 } from "@vialactea-works/kepler-core";
+import { parseStrictJson } from "../json/strict-json.js";
 
 export type JournalPathKind = "missing" | "directory" | "file" | "symlink" | "other";
 
@@ -152,96 +153,6 @@ const canonicalValue = (value: unknown): CanonicalJson => {
   throw new Error("Event contains a non-JSON value");
 };
 
-const hasDuplicateJsonKeys = (json: string): boolean => {
-  let index = 0;
-  const skipWhitespace = (): void => {
-    while ([" ", "\t", "\r", "\n"].includes(json[index] ?? "")) index += 1;
-  };
-  const parseString = (): string | undefined => {
-    if (json[index] !== '"') return undefined;
-    const start = index;
-    index += 1;
-    while (index < json.length) {
-      const character = json[index];
-      if (character === "\\") {
-        index += 2;
-      } else if (character === '"') {
-        index += 1;
-        try {
-          const value: unknown = JSON.parse(json.slice(start, index));
-          return typeof value === "string" ? value : undefined;
-        } catch {
-          return undefined;
-        }
-      } else {
-        index += 1;
-      }
-    }
-    return undefined;
-  };
-  const parseValue = (): boolean => {
-    skipWhitespace();
-    if (json[index] === "{") return parseObject();
-    if (json[index] === "[") return parseArray();
-    if (json[index] === '"') {
-      parseString();
-      return false;
-    }
-    while (index < json.length && ![",", "]", "}", " ", "\t", "\r", "\n"].includes(json[index] ?? "")) {
-      index += 1;
-    }
-    return false;
-  };
-  const parseObject = (): boolean => {
-    index += 1;
-    skipWhitespace();
-    if (json[index] === "}") {
-      index += 1;
-      return false;
-    }
-    const keys = new Set<string>();
-    while (index < json.length) {
-      skipWhitespace();
-      const key = parseString();
-      if (key === undefined) return false;
-      if (keys.has(key)) return true;
-      keys.add(key);
-      skipWhitespace();
-      if (json[index] !== ":") return false;
-      index += 1;
-      if (parseValue()) return true;
-      skipWhitespace();
-      if (json[index] === "}") {
-        index += 1;
-        return false;
-      }
-      if (json[index] !== ",") return false;
-      index += 1;
-    }
-    return false;
-  };
-  const parseArray = (): boolean => {
-    index += 1;
-    skipWhitespace();
-    if (json[index] === "]") {
-      index += 1;
-      return false;
-    }
-    while (index < json.length) {
-      if (parseValue()) return true;
-      skipWhitespace();
-      if (json[index] === "]") {
-        index += 1;
-        return false;
-      }
-      if (json[index] !== ",") return false;
-      index += 1;
-    }
-    return false;
-  };
-  return parseValue();
-};
-
 export const serializeJournalEvent = (event: EventEnvelope): string => {
   const encoded = JSON.stringify({
     id: event.id,
@@ -285,25 +196,23 @@ const scanLine = (
     const problem: JournalProblem = { code: "blank-line", line, byteOffset, message: "Journal contains a blank record" };
     return { record: { line, byteOffset, byteLength: bytes.length, terminated, raw, issues: [] }, problems: withTermination(problem) };
   }
-  let duplicateKeys: boolean;
-  try {
-    duplicateKeys = hasDuplicateJsonKeys(raw);
-  } catch {
-    const problem: JournalProblem = { code: "invalid-json", line, byteOffset, message: "Journal JSON could not be inspected safely" };
-    return { record: { line, byteOffset, byteLength: bytes.length, terminated, raw, issues: [] }, problems: withTermination(problem) };
+  const parsedJson = parseStrictJson(raw);
+  if (parsedJson.kind === "invalid") {
+    const duplicate = parsedJson.code === "duplicate-json-key";
+    const problem: JournalProblem = {
+      code: duplicate ? "duplicate-json-key" : "invalid-json",
+      line,
+      byteOffset,
+      message: duplicate
+        ? "Journal JSON contains a duplicate object key"
+        : "Journal line is not valid JSON",
+    };
+    return {
+      record: { line, byteOffset, byteLength: bytes.length, terminated, raw, issues: [] },
+      problems: withTermination(problem),
+    };
   }
-  if (duplicateKeys) {
-    const problem: JournalProblem = { code: "duplicate-json-key", line, byteOffset, message: "Journal JSON contains a duplicate object key" };
-    return { record: { line, byteOffset, byteLength: bytes.length, terminated, raw, issues: [] }, problems: withTermination(problem) };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    const problem: JournalProblem = { code: "invalid-json", line, byteOffset, message: "Journal line is not valid JSON" };
-    return { record: { line, byteOffset, byteLength: bytes.length, terminated, raw, issues: [] }, problems: withTermination(problem) };
-  }
-  const validation = validateEventEnvelope(parsed);
+  const validation = validateEventEnvelope(parsedJson.value);
   if (validation.status === "invalid") {
     const problem: JournalProblem = { code: "invalid-envelope", line, byteOffset, message: "Journal line does not contain a valid event envelope" };
     return { record: { line, byteOffset, byteLength: bytes.length, terminated, raw, issues: validation.issues }, problems: withTermination(problem) };
