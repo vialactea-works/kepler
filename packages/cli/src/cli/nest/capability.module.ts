@@ -7,7 +7,15 @@ import {
 import { createEventJournal } from "../../history/journal.js";
 import { CONSTRUCTION_PHASE } from "../../construction/events.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
+import {
+  createNodeFunctionalDesignStageCompletionRuntime,
+  FunctionalDesignStageCompletion,
+} from "../../construction/stage-completion.js";
 import { MissionHandoffPreflight } from "../../construction/mission-handoff-preflight.js";
+import { AuditContextResolver, createNodeAuditContextRuntime } from "../../audit/context.js";
+import { AuditRecording } from "../../audit/recording.js";
+import { AuditRequestInput } from "../../audit/request-input.js";
+import { AuditQueries } from "../../audit/queries.js";
 import { createMissionWorkspacePreparation } from "../../construction/mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "../../construction/mission-workspace-runtime.js";
 import { MetadataLinter } from "../metadata-lint.js";
@@ -18,7 +26,15 @@ import {
 } from "../project-selection.js";
 import {
   AuditCommand,
+  AuditRecordCommandGroup,
+  AuditRecordEvidenceCommand,
+  AuditRecordApprovalCommand,
+  AuditRecordInteractionCommand,
+  AuditListCommand,
+  AuditShowCommand,
   ConstructionCommand,
+  ConstructionStageCommand,
+  ConstructionStageCompleteCommand,
   GitAuthorCommand,
   GitCommand,
   MetadataLintCommand,
@@ -43,10 +59,47 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     UuidCommand,
     MetadataLintCommand,
     AuditCommand,
+    AuditRecordCommandGroup,
+    AuditRecordEvidenceCommand,
+    AuditRecordApprovalCommand,
+    AuditRecordInteractionCommand,
+    AuditRequestInput,
+    AuditListCommand,
+    AuditShowCommand,
     WorkflowCommand,
     ConstructionCommand,
+    ConstructionStageCommand,
+    ConstructionStageCompleteCommand,
+    FunctionalDesignStageCompletion,
     MissionCommand,
     MissionCreateCommand,
+    {
+      provide: AuditContextResolver,
+      useFactory: (projects: ProjectResolver) => new AuditContextResolver(createNodeAuditContextRuntime(projects)),
+      inject: [ProjectResolver],
+    },
+    {
+      provide: AuditQueries,
+      useFactory: (contexts: AuditContextResolver) => new AuditQueries(contexts),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: FunctionalDesignStageCompletion,
+      useFactory: (contexts: AuditContextResolver) => new FunctionalDesignStageCompletion(
+        contexts,
+        createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: AuditRecording,
+      useFactory: (contexts: AuditContextResolver) => new AuditRecording(contexts, {
+        identities: { next: randomUUID },
+        now: () => new Date().toISOString(),
+        producer: { name: "kepler", version: cliVersion },
+      }),
+      inject: [AuditContextResolver],
+    },
     {
       provide: MissionHandoffPreflight,
       useFactory: () => new MissionHandoffPreflight(createNodeMissionWorkspaceRuntime()),

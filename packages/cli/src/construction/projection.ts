@@ -12,6 +12,11 @@ import {
   type TaskId,
 } from "./events.js";
 import {
+  functionalDesignEvidenceIds,
+  isFunctionalDesignCompletionRecord,
+  sameArtifactBindings,
+} from "./functional-design-completion.js";
+import {
   isHistoryScopeBlocked,
   type CollectedHistoryEvent,
   type HistoryCollection,
@@ -677,6 +682,43 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     ));
     return latest.length === 1 && latest[0] !== undefined && hasDirectCause(completion, latest[0]);
   };
+  const functionalDesignCompletionValid = (
+    completion: ConstructionHistoryFact,
+    evidenceIds: readonly unknown[],
+  ): boolean => {
+    const record = completion.event.data.functional_design_assessment;
+    if (!isFunctionalDesignCompletionRecord(record)) return false;
+    const expectedIds = functionalDesignEvidenceIds(record.assessments).slice().sort();
+    const actualIds = evidenceIds.filter((id): id is string => typeof id === "string").sort();
+    if (actualIds.length !== evidenceIds.length || JSON.stringify(actualIds) !== JSON.stringify(expectedIds)) return false;
+    const approval = factsById.get(record.approval_event_id);
+    if (!approval || approval.event.type !== "construction.approval-recorded" ||
+        factUnitId(approval) !== factUnitId(completion) || approval.event.data.stage !== "functional-design" ||
+        approval.event.data.stage_attempt_id !== completion.event.data.stage_attempt_id ||
+        !sameArtifactBindings(approval.event.data.artifact_bindings, record.artifact_bindings) ||
+        checkpointKey(approval.event.data.checkpoints) === "[]" ||
+        checkpointKey(approval.event.data.checkpoints) !== checkpointKey(completion.event.data.checkpoints) ||
+        !hasDirectCause(completion, approval)) return false;
+    const expectedChecks = new Map([
+      [record.assessments.self_review.evidence_id, "functional-design-self-review"],
+      [record.assessments.decision_resolution.evidence_id, "functional-design-decision-resolution"],
+      [record.assessments.handoff.evidence_id, "functional-design-quality-handoff"],
+    ]);
+    for (const [evidenceId, check] of expectedChecks) {
+      const matches = evidenceById.get(evidenceId) ?? [];
+      const evidence = matches.length === 1 ? matches[0] : undefined;
+      if (!evidence || evidence.event.type !== "construction.evidence-recorded" ||
+          factUnitId(evidence) !== factUnitId(completion) || evidence.event.data.stage !== "functional-design" ||
+          evidence.event.data.stage_attempt_id !== completion.event.data.stage_attempt_id ||
+          evidence.event.data.check !== check || !isRecord(evidence.event.data.result) ||
+          evidence.event.data.result.status !== "passed" ||
+          !sameArtifactBindings(evidence.event.data.artifact_bindings, record.artifact_bindings) ||
+          checkpointKey(evidence.event.data.checkpoints) === "[]" ||
+          checkpointKey(evidence.event.data.checkpoints) !== checkpointKey(completion.event.data.checkpoints) ||
+          !hasDirectCause(completion, evidence)) return false;
+    }
+    return true;
+  };
   const validCompletionEvents = new Set<string>();
   for (const fact of order.uniqueFacts) {
     const stageCompletion = fact.event.type === "construction.stage-attempt-completed";
@@ -705,6 +747,8 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       ),
     ));
     if (!checkpointCoverage) evidenceValid = false;
+    if (stageCompletion && fact.event.data.stage === "functional-design" &&
+        !functionalDesignCompletionValid(fact, evidenceIds)) evidenceValid = false;
     if (evidenceValid) {
       validCompletionEvents.add(fact.event.id);
       continue;

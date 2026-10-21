@@ -14,6 +14,7 @@ export interface CliRunOptions {
   readonly cwd?: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly timeoutMs?: number;
+  readonly stdin?: string;
 }
 
 export class KeplerCliDriver {
@@ -43,6 +44,7 @@ export class KeplerCliDriver {
       cwd: Path.resolve(options.cwd ?? this.resources.repositoryDirectory),
       env,
       timeoutMs: options.timeoutMs ?? 30_000,
+      ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
       resources: this.resources,
     };
     return this.connector.invoke(invocation);

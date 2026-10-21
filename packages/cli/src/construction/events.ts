@@ -4,6 +4,10 @@ import {
   type EventEnvelopeIssue,
 } from "@vialactea-works/kepler-core";
 import type { EventId } from "@vialactea-works/kepler-core";
+import {
+  functionalDesignEvidenceIds,
+  isFunctionalDesignCompletionRecord,
+} from "./functional-design-completion.js";
 
 const identityBrand: unique symbol = Symbol("ConstructionIdentity");
 
@@ -220,9 +224,73 @@ export interface StagePauseData extends StageAttemptData {
   readonly reason: string;
 }
 
+export interface FunctionalDesignSelfReviewAssessment {
+  readonly status: "passed";
+  readonly evidence_id: EvidenceId;
+  readonly reviewer: string;
+  readonly summary: string;
+  readonly checks: readonly ["required-content", "observable-acceptance", "consistency", "blocking-questions", "downstream-handoff"];
+  readonly findings: readonly string[];
+}
+
+export interface FunctionalDesignResolvedChoice {
+  readonly choice: string;
+  readonly owner: string;
+  readonly resolution: string;
+}
+
+export interface FunctionalDesignQualityConcern {
+  readonly concern: string;
+  readonly responsible_stage: "quality-requirements";
+  readonly owner: string;
+}
+
+export interface FunctionalDesignTechnicalQuestion {
+  readonly question: string;
+  readonly responsible_stage: "implementation-planning";
+  readonly owner: string;
+}
+
+export interface FunctionalDesignDecisionResolutionAssessment {
+  readonly status: "resolved";
+  readonly evidence_id: EvidenceId;
+  readonly summary: string;
+  readonly resolved_material_choices: readonly FunctionalDesignResolvedChoice[];
+  readonly unresolved_material_choices: readonly string[];
+  readonly unsupported_assumptions: readonly string[];
+  readonly quality_concerns: readonly FunctionalDesignQualityConcern[];
+  readonly technical_questions: readonly FunctionalDesignTechnicalQuestion[];
+}
+
+export interface FunctionalDesignHandoffAssessment {
+  readonly status: "ready";
+  readonly evidence_id: EvidenceId;
+  readonly summary: string;
+  readonly recipient: "quality-requirements";
+  readonly unit_directory: string;
+  readonly artifacts: readonly string[];
+  readonly project_references: readonly string[];
+  readonly known_constraints: readonly string[];
+  readonly quality_concerns: readonly FunctionalDesignQualityConcern[];
+  readonly technical_questions: readonly FunctionalDesignTechnicalQuestion[];
+}
+
+export interface FunctionalDesignCompletionAssessments {
+  readonly self_review: FunctionalDesignSelfReviewAssessment;
+  readonly decision_resolution: FunctionalDesignDecisionResolutionAssessment;
+  readonly handoff: FunctionalDesignHandoffAssessment;
+}
+
+export interface FunctionalDesignCompletionRecord {
+  readonly approval_event_id: EventId;
+  readonly artifact_bindings: readonly ArtifactBinding[];
+  readonly assessments: FunctionalDesignCompletionAssessments;
+}
+
 export interface StageAttemptCompletedData extends StageAttemptData {
   readonly evidence_ids: readonly EvidenceId[];
   readonly checkpoints: readonly RepositoryCheckpoint[];
+  readonly functional_design_assessment?: FunctionalDesignCompletionRecord;
 }
 
 export interface StageAttemptEndedData extends StageAttemptData {
@@ -342,6 +410,11 @@ export type EffortSelection =
   | { readonly target: "stage"; readonly stage: ConstructionStage; readonly action: "inherit"; readonly selected_by: string };
 
 export interface InteractionRecordedData extends ConstructionBaseData {
+  readonly stage?: ConstructionStage;
+  readonly stage_attempt_id?: StageAttemptId;
+  readonly task_id?: TaskId;
+  readonly activity?: ConstructionActivity;
+  readonly activity_attempt_id?: ActivityAttemptId;
   readonly participants: readonly string[];
   readonly content: string;
   readonly references: readonly string[];
@@ -698,6 +771,21 @@ const validatePayload = (
     invalid("evidence_ids", isEvidenceIdArray(data.evidence_ids));
     invalid("checkpoints", isCheckpointSet(data.checkpoints));
   }
+  if (type === "construction.stage-attempt-completed" && data.stage === "functional-design") {
+    const assessment = data.functional_design_assessment;
+    const assessmentValid = isFunctionalDesignCompletionRecord(assessment);
+    invalid("functional_design_assessment", assessmentValid);
+    invalid("checkpoints", Array.isArray(data.checkpoints) && data.checkpoints.length > 0,
+      "Functional Design completion requires a non-empty repository output checkpoint set");
+    if (assessmentValid) {
+      const expectedEvidenceIds = functionalDesignEvidenceIds(assessment.assessments).slice().sort();
+      const actualEvidenceIds = data.evidence_ids;
+      const evidenceIdsMatch = Array.isArray(actualEvidenceIds) && actualEvidenceIds.every((id) => typeof id === "string") &&
+        actualEvidenceIds.length === expectedEvidenceIds.length &&
+        JSON.stringify([...actualEvidenceIds].sort()) === JSON.stringify(expectedEvidenceIds);
+      invalid("evidence_ids", evidenceIdsMatch, "Functional Design evidence IDs must exactly match its typed assessments");
+    }
+  }
   if (type === "construction.stage-attempt-ended-by-revision" || type === "construction.stage-reopened" || type.includes("scope-ended-by-revision") || type.includes("scope-reopened") || type === "construction.activity-attempt-ended-by-revision" || type === "construction.activity-reopened" || type === "construction.revision-authorized") {
     invalid("revision_id", isUuidV4(data.revision_id));
   }
@@ -742,6 +830,15 @@ const validatePayload = (
     invalid("decision_reference", isNonEmptyString(data.decision_reference));
   }
   if (type === "construction.interaction-recorded") {
+    const hasAttemptScope = data.stage_attempt_id !== undefined || data.task_id !== undefined ||
+      data.activity !== undefined || data.activity_attempt_id !== undefined;
+    const activityWithoutAttempt = data.activity !== undefined && data.activity_attempt_id === undefined;
+    const scopeBindingValid = activityWithoutAttempt
+      ? data.stage === "implementation" && isUuidV4(data.stage_attempt_id) && isUuidV4(data.task_id) &&
+        isOneOf(data.activity, activityStates)
+      : isExecutionBinding(data);
+    invalid("scope_binding", (data.stage === undefined || isOneOf(data.stage, stageStates)) &&
+      (!hasAttemptScope || scopeBindingValid));
     invalid("participants", isStringArray(data.participants, true));
     invalid("content", isNonEmptyString(data.content));
     invalid("references", isStringArray(data.references));

@@ -264,6 +264,28 @@ describe("Construction event contracts", () => {
     expect(validateConstructionEvent(envelope("construction.approval-recorded", approval)).status).toBe("invalid");
   });
 
+  it("validates optional interaction scope bindings", () => {
+    const stageScoped = payload("construction.interaction-recorded");
+    stageScoped.stage = "functional-design";
+    expect(validateConstructionEvent(envelope("construction.interaction-recorded", stageScoped)).status).toBe("valid");
+
+    const activityScoped = payload("construction.interaction-recorded");
+    activityScoped.stage = "implementation";
+    activityScoped.stage_attempt_id = identities.stageAttempt;
+    activityScoped.task_id = identities.task;
+    activityScoped.activity = "code-generation";
+    activityScoped.activity_attempt_id = identities.activityAttempt;
+    expect(validateConstructionEvent(envelope("construction.interaction-recorded", activityScoped)).status).toBe("valid");
+
+    const activityContext = { ...activityScoped };
+    delete activityContext.activity_attempt_id;
+    expect(validateConstructionEvent(envelope("construction.interaction-recorded", activityContext)).status).toBe("valid");
+
+    const incompleteActivity = { ...activityContext };
+    delete incompleteActivity.stage_attempt_id;
+    expect(validateConstructionEvent(envelope("construction.interaction-recorded", incompleteActivity)).status).toBe("invalid");
+  });
+
   it("rejects invalid domain identities and keeps material references opaque", () => {
     const evidence = payload("construction.evidence-recorded");
     evidence.evidence_id = "not-a-uuid";
@@ -273,5 +295,82 @@ describe("Construction event contracts", () => {
     expect(result.status).toBe("valid");
     if (result.status !== "valid") throw new Error("Expected valid evidence event");
     expect(result.event.data.inputs).toEqual([{ reference: "opaque: source material ", purpose: "Reviewed input" }]);
+  });
+
+  it("requires a typed Functional Design assessment and matching named evidence", () => {
+    const assessments = {
+      self_review: {
+        status: "passed",
+        evidence_id: "60000000-0000-4000-8000-000000000006",
+        reviewer: "Functional Design owner",
+        summary: "All required content is present and coherent.",
+        checks: ["required-content", "observable-acceptance", "consistency", "blocking-questions", "downstream-handoff"],
+        findings: [],
+      },
+      decision_resolution: {
+        status: "resolved",
+        evidence_id: "61000000-0000-4000-8000-000000000006",
+        summary: "Material choices and assumptions are resolved.",
+        resolved_material_choices: [{ choice: "Preserve existing behavior", owner: "Requester", resolution: "Keep the current contract." }],
+        unresolved_material_choices: [],
+        unsupported_assumptions: [],
+        quality_concerns: [{ concern: "Define applicable observability targets.", responsible_stage: "quality-requirements", owner: "Quality Requirements owner" }],
+        technical_questions: [{ question: "Select the implementation strategy.", responsible_stage: "implementation-planning", owner: "Implementation Planning owner" }],
+      },
+      handoff: {
+        status: "ready",
+        evidence_id: "62000000-0000-4000-8000-000000000006",
+        summary: "The documents and concerns are ready for Quality Requirements.",
+        recipient: "quality-requirements",
+        unit_directory: ".kepler/missions/10000000-0000-4000-8000-000000000001/construction/units-of-work/2026-10-18-example",
+        artifacts: ["unit-of-work.md", "design.md"],
+        project_references: [],
+        known_constraints: ["Keep the current public contract."],
+        quality_concerns: [{ concern: "Define applicable observability targets.", responsible_stage: "quality-requirements", owner: "Quality Requirements owner" }],
+        technical_questions: [{ question: "Select the implementation strategy.", responsible_stage: "implementation-planning", owner: "Implementation Planning owner" }],
+      },
+    };
+    const assessmentRecord = {
+      approval_event_id: "63000000-0000-4000-8000-000000000006",
+      artifact_bindings: [
+        { artifact_id: "80000000-0000-4000-8000-000000000008", content_version: "sha256:unit" },
+        { artifact_id: "90000000-0000-4000-8000-000000000009", content_version: "sha256:design" },
+      ],
+      assessments,
+    };
+    const data = {
+      ...base,
+      stage: "functional-design",
+      stage_attempt_id: identities.stageAttempt,
+      evidence_ids: [assessments.self_review.evidence_id, assessments.decision_resolution.evidence_id, assessments.handoff.evidence_id],
+      checkpoints: [{ repository_id: "repo-main", commit: "output-checkpoint" }],
+      functional_design_assessment: assessmentRecord,
+    };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", data)).status).toBe("valid");
+
+    const missing = Object.fromEntries(Object.entries(data).filter(([key]) => key !== "functional_design_assessment"));
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", missing)).status).toBe("invalid");
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", { ...data, checkpoints: [] })).status).toBe("invalid");
+
+    const incompleteChecks = {
+      ...data,
+      functional_design_assessment: {
+        ...assessmentRecord,
+        assessments: { ...assessments, self_review: { ...assessments.self_review, checks: ["required-content"] } },
+      },
+    };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", incompleteChecks)).status).toBe("invalid");
+
+    const repeatedAssessmentEvidence = {
+      ...data,
+      functional_design_assessment: {
+        ...assessmentRecord,
+        assessments: { ...assessments, decision_resolution: { ...assessments.decision_resolution, evidence_id: assessments.self_review.evidence_id } },
+      },
+    };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", repeatedAssessmentEvidence)).status).toBe("invalid");
+
+    const mismatchedEvidence = { ...data, evidence_ids: [assessments.self_review.evidence_id] };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", mismatchedEvidence)).status).toBe("invalid");
   });
 });
