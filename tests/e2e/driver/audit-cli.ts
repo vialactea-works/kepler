@@ -75,21 +75,6 @@ export class AuditCliDriver {
     return parse(this.cli.run(["audit", "show", "--unit", unit, "--journal", journal, "--id", id]));
   }
 
-  attemptStageCompletion(unit: string, stage: string, attempt: string): AuditCommandResult {
-    return parse(this.cli.run([
-      "workflow",
-      "construction",
-      "stage",
-      "complete",
-      "--unit",
-      unit,
-      "--stage",
-      stage,
-      "--attempt",
-      attempt,
-    ]));
-  }
-
   journalSnapshot(): Promise<string> {
     return this.observation.journals();
   }

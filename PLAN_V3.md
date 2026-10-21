@@ -316,7 +316,9 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 - [x] M07.5 Use limit checks with default 20 and maximum 1000. Keep each cursor bound to the original query view/filters. Reject invalid/expired cursors. Keep journal-local order. Do not give cross-journal display order causal meaning. Return success for empty matches.
 - [x] M07.6 Use the accepted `audit show --unit ... --journal ... --id ... [--project ...]` signature and validate ownership. Return the complete original event from the source record in `data.event`. Fail when the event is absent. Keep list/show read-only. Do not add mission/repository selectors to their signatures.
 - [x] M07.7 Recording evidence does not run checks, grant requester consent, complete stages, or authorize unrelated work. No CLI operation grants requester consent. A recorded failed check stays failed. Lifecycle operations add their own facts without a second audit call.
-- [x] M07.8 Add unit tests for all five operations and invalid payloads/scopes. Add integration tests with actual journals and stable pagination views. Add `execa` E2E cases for recording, listing, filtering, pagination, and full-event lookup. Include structured effort changes and failed/late evidence that cannot authorize completion.
+- [ ] M07.8 Add unit tests for all five operations and invalid payloads/scopes. Add integration tests with actual journals and stable pagination views. Add `execa` E2E cases for recording, listing, filtering, pagination, and full-event lookup. Include structured effort changes and failed/late evidence that cannot authorize completion.
+
+**M07.8 status:** Unit projection tests reject failed evidence and cross-attempt late evidence. The E2E suite proves audit recording and queries are read-only. A public stage-completion denial E2E remains pending because the `stage complete` command is delivered by M09.
 
 **Complete when:** All accepted audit operations have end-to-end behavior. Each operation keeps the original records. Recording/query success stays distinct from the meaning of the recorded outcome.
 

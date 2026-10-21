@@ -140,16 +140,6 @@ export const exerciseAuditWorkflow = async (audit: AuditCliDriver): Promise<void
     result: { status: "passed" },
   });
 
-  const beforeCompletionAttempt = await audit.journalSnapshot();
-  const completionAttempt = audit.attemptStageCompletion(
-    auditFixture.unitId,
-    "functional-design",
-    auditFixture.stageAttemptId,
-  );
-  expect(completionAttempt.exitCode).toBe(1);
-  expect(completionAttempt.result).toMatchObject({ status: "failed", data: { code: "invalid_arguments" } });
-  expect(await audit.journalSnapshot()).toBe(beforeCompletionAttempt);
-
   const beforeQueries = await audit.journalSnapshot();
   const effort = audit.list({
     unit: auditFixture.unitId,
