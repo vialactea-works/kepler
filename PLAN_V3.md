@@ -225,13 +225,13 @@ Foundation tasks with no dependency links can start together. Skills and prompts
 
 **Sources:** [task graph](docs/specs/v3/phases/construction/task-graph.md), [Implementation Planning](docs/specs/v3/phases/construction/implementation-planning.md), IP05, IP26, DF14.
 
-- [ ] M03.1 Parse strict JSON. Reject duplicate object keys before parsing discards them. Reject comments, trailing commas, malformed JSON, unknown fields, incorrect types, nulls, and unsupported formats or versions.
-- [ ] M03.2 Keep the accepted closed `kepler-task-dag` version `1` schema unchanged. Validate all tasks, inputs, outputs, acceptance criteria, guidance entries, verification objects, dependency reasons, and external prerequisites.
-- [ ] M03.3 Use lowercase UUIDv4 identities. Keep graph, plan artifact, task, and execution identities distinct. Do checks for unit ownership and unique task IDs/output names. Also do checks for correct predecessors, no self/duplicate edges, and acyclicity independent of array order.
-- [ ] M03.4 Write authored graphs through a typed interface. Keep identities of surviving graphs and tasks during reorder and revision. Do not give a retired ID to unrelated work. Keep status, attempts, baselines, approvals, check results, extra edge arrays, and new resource fields out of the graph.
-- [ ] M03.5 Keep `inputs.reference` unchanged. Do checks for Markdown links and explicit path operands against declared repositories. Do not parse references into inferred paths, dependencies, or repository membership.
-- [ ] M03.6 Use structural validation only for graph structure. Use Planning's semantic comparison with `plan.md` for functional/quality obligations, actual material, justified dependencies, and verification feasibility. Put resource instructions only in accepted guidance/method/prerequisite fields.
-- [ ] M03.7 Add comprehensive Vitest unit fixtures for the accepted example and malformed/boundary graphs. Add real parser/schema integration tests and graph write/read identity-continuity tests. Give precise JSON-Pointer diagnostics without changing input.
+- [x] M03.1 Parse strict JSON. Reject duplicate object keys before parsing discards them. Reject comments, trailing commas, malformed JSON, unknown fields, incorrect types, nulls, and unsupported formats or versions.
+- [x] M03.2 Keep the accepted closed `kepler-task-dag` version `1` schema unchanged. Validate all tasks, inputs, outputs, acceptance criteria, guidance entries, verification objects, dependency reasons, and external prerequisites.
+- [x] M03.3 Use lowercase UUIDv4 identities. Keep graph, plan artifact, task, and execution identities distinct. Do checks for unit ownership and unique task IDs/output names. Also do checks for correct predecessors, no self/duplicate edges, and acyclicity independent of array order.
+- [x] M03.4 Write authored graphs through a typed interface. Keep identities of surviving graphs and tasks during reorder and revision. Do not give a retired ID to unrelated work. Keep status, attempts, baselines, approvals, check results, extra edge arrays, and new resource fields out of the graph.
+- [x] M03.5 Keep `inputs.reference` unchanged. Do checks for Markdown links and explicit path operands against declared repositories. Do not parse references into inferred paths, dependencies, or repository membership.
+- [x] M03.6 Use structural validation only for graph structure. Use Planning's semantic comparison with `plan.md` for functional/quality obligations, actual material, justified dependencies, and verification feasibility. Put resource instructions only in accepted guidance/method/prerequisite fields.
+- [x] M03.7 Add comprehensive Vitest unit fixtures for the accepted example and malformed/boundary graphs. Add real parser/schema integration tests and graph write/read identity-continuity tests. Give precise JSON-Pointer diagnostics without changing input.
 
 **Complete when:** Use the writer and validator for the full accepted graph contract. Reject runtime-state extensions. Do not add a graph-engine abstraction or alternate format.
 
