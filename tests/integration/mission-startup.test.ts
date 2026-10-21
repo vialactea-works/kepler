@@ -110,7 +110,7 @@ const createRepository = async (
   return root;
 };
 
-const createStartup = (cwd: string): MissionStartup => {
+const createStartup = (cwd: string, nextIdentity: () => string = randomUUID): MissionStartup => {
   const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => cwd }));
   const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd });
   return new MissionStartup({
@@ -124,7 +124,7 @@ const createStartup = (cwd: string): MissionStartup => {
         journalId,
       }),
     },
-    identities: { next: randomUUID },
+    identities: { next: nextIdentity },
     now: () => "2026-10-21T14:00:00.000Z",
     producer: { name: "kepler-cli", version: "0.10.3" },
   });
@@ -252,6 +252,61 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       "construction.mission-created",
       "construction.mission-workspaces-prepared",
     ]);
+  });
+
+  it.each([
+    {
+      selectedBranch: "feature/ignored-journal",
+      branchSelection: { kind: "existing" as const, name: "feature/ignored-journal" },
+    },
+    {
+      selectedBranch: "feature/new-ignored-journal",
+      branchSelection: { kind: "new" as const, name: "feature/new-ignored-journal", base: "feature/ignored-journal" },
+    },
+  ])("preserves an ignored mission journal if $selectedBranch would overwrite it", async ({ selectedBranch, branchSelection }) => {
+    const environment = await createEnvironment("ignored-journal-branch");
+    const repository = await createRepository(environment, "record-home");
+    const missionId = "11111111-1111-4111-8111-111111111111";
+    const journalId = "22222222-2222-4222-8222-222222222222";
+    const createdEventId = "33333333-3333-4333-8333-333333333333";
+    const identities = [missionId, journalId, createdEventId, "44444444-4444-4444-8444-444444444444"];
+    const ignoredRecords = Path.join(".kepler", "missions");
+    await Fs.writeFile(Path.join(repository, ".gitignore"), `${ignoredRecords}/\n`);
+    git(repository, environment, "add", ".gitignore");
+    git(repository, environment, "commit", "-q", "-m", "Ignore mission records");
+
+    const conflictingBranch = "feature/ignored-journal";
+    git(repository, environment, "branch", conflictingBranch);
+    git(repository, environment, "switch", conflictingBranch);
+    const journalPath = Path.join(repository, ignoredRecords, missionId, "history", "construction", `${journalId}.jsonl`);
+    await Fs.mkdir(Path.dirname(journalPath), { recursive: true });
+    await Fs.writeFile(journalPath, "tracked branch version\n");
+    git(repository, environment, "add", "-f", "--", Path.relative(repository, journalPath));
+    git(repository, environment, "commit", "-q", "-m", "Track conflicting record path");
+    git(repository, environment, "switch", "main");
+
+    let identityIndex = 0;
+    const startup = createStartup(repository, () => {
+      const identity = identities[identityIndex];
+      if (identity === undefined) throw new Error("No test identities remain.");
+      identityIndex += 1;
+      return identity;
+    });
+    const result = await withGitEnvironment(environment, () => startup.execute(undefined, makeRequest("application", repository, {
+      branch: branchSelection,
+    })));
+
+    expect(result).toMatchObject({
+      kind: "failed",
+      code: branchSelection.kind === "new" ? "branch_creation_failed" : "branch_switch_failed",
+    });
+    expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+    expect(await Fs.readFile(journalPath, "utf8")).not.toContain("tracked branch version");
+    const events = await readEvents(repository, missionId);
+    expect(events.map((event) => event.type)).toEqual(["construction.mission-created"]);
+    expect(events[0]).toMatchObject({ id: createdEventId });
+    expect(git(repository, environment, "branch", "--list", selectedBranch))
+      .toBe(branchSelection.kind === "existing" ? selectedBranch : "");
   });
 
   it("ignores only the operation journal while preserving other work added during preparation", async () => {

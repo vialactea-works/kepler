@@ -608,7 +608,7 @@ const runBranchPreparation = async (
           state: "uncertain",
         };
         const changed = await runtime.git.run(current.root, [
-          "switch", "--quiet", "--no-track", "--create", inspected.resolvedBranch, inspected.baseCommit ?? "",
+          "switch", "--quiet", "--no-overwrite-ignore", "--no-track", "--create", inspected.resolvedBranch, inspected.baseCommit ?? "",
         ]);
         if (changed.status !== 0) {
           return withEffects(failure("branch_creation_failed", "Git could not create the explicitly selected branch; no cleanup was attempted.", {
@@ -634,7 +634,7 @@ const runBranchPreparation = async (
           effect: "branch-switched",
           state: "uncertain",
         };
-        const changed = await runtime.git.run(current.root, ["switch", "--quiet", "--", inspected.resolvedBranch]);
+        const changed = await runtime.git.run(current.root, ["switch", "--quiet", "--no-overwrite-ignore", "--", inspected.resolvedBranch]);
         if (changed.status !== 0) {
           return withEffects(failure("branch_switch_failed", "Git could not switch to the explicitly selected branch; no cleanup was attempted.", {
             repository_id: inspected.repositoryId,

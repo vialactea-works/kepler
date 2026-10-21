@@ -303,7 +303,7 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 **Complete when:** A real caller can make and prepare a mission without starting a stage. All supported writers use the correct coordination domain. Startup/handoff failures keep known and uncertain work.
 
-**Verified:** `bun run build`, `bun run typecheck`, and `bun --bun vitest run` passed (75 files, 1263 tests).
+**Verified:** `bun run build`, `bun run typecheck`, and `bun --bun vitest run` passed (75 files, 1265 tests).
 
 ## M07: Add the full audit CLI interface
 
