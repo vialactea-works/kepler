@@ -238,10 +238,14 @@ describe("v3 root command tree", () => {
     const events = (await Fs.readFile(Path.join(historyPath, files[0]!), "utf8"))
       .trimEnd()
       .split("\n")
-      .map((line) => JSON.parse(line) as { type: string });
+      .map((line) => JSON.parse(line) as { type: string; producer: { name: string; version: string } });
     expect(events.map((event) => event.type)).toEqual([
       "construction.mission-created",
       "construction.mission-workspaces-prepared",
+    ]);
+    expect(events.map((event) => event.producer)).toEqual([
+      { name: "kepler", version: "0.10.3" },
+      { name: "kepler", version: "0.10.3" },
     ]);
   });
 

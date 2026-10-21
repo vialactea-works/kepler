@@ -66,7 +66,7 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
         },
         identities: { next: randomUUID },
         now: () => new Date().toISOString(),
-        producer: { name: "kepler-cli", version: cliVersion },
+        producer: { name: "kepler", version: cliVersion },
       }),
       inject: [ProjectResolver],
     },
