@@ -412,7 +412,7 @@ const reduceAttemptScope = (
     if (transition.action === "reopen") {
       const active = currentAttemptId ? attempts.get(currentAttemptId) : undefined;
       const currentParent = active?.stageAttemptId ?? currentStageAttemptId;
-      if (scope === "activity" && currentParent !== undefined &&
+      if ((scope === "activity" || scope === "stage") && currentParent !== undefined &&
           (transition.stageAttemptId === undefined
             ? state !== "ended_by_revision"
             : currentParent !== transition.stageAttemptId)) {
@@ -490,6 +490,10 @@ const reduceAttemptScope = (
       addIssue("invalid-attempt-transition", "Activity event changed its original parent stage attempt", fact, attempt.facts[0]);
       attempt.state = "unknown";
       if (attemptId === currentAttemptId) state = "unknown";
+      continue;
+    }
+    if (transition.action === "resume" && attemptId !== currentAttemptId) {
+      addIssue("invalid-attempt-transition", "Resume targeted an attempt that is not current", fact, attempt.facts[0]);
       continue;
     }
     if (attemptId !== currentAttemptId) {
@@ -1275,19 +1279,42 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const boundaryStageAttemptId = stringField(boundary.event.data, "stage_attempt_id");
     if (!unitId || !boundaryStageAttemptId) return false;
     let activeParent: string | undefined;
+    let parentState: ConstructionProjectedStageState = "not_started";
+    const seenParentIds = new Set<string>();
     for (const fact of order.ordered) {
       if (factUnitId(fact) !== unitId || stringField(fact.event.data, "stage") !== "implementation" ||
           !order.hasPath(fact.event.id, boundary.event.id)) continue;
       const stageAttemptId = stringField(fact.event.data, "stage_attempt_id");
-      if (["construction.stage-attempt-started", "construction.stage-resumed"].includes(fact.event.type)) {
-        activeParent = stageAttemptId;
-      } else if (["construction.stage-attempt-ended-by-revision", "construction.stage-attempt-completed"].includes(fact.event.type) &&
-          activeParent === stageAttemptId || fact.event.type === "construction.stage-reopened" &&
-          (stageAttemptId === undefined || activeParent === stageAttemptId)) {
+      if (fact.event.type === "construction.stage-attempt-started") {
+        if (stageAttemptId && activeParent === undefined && ["not_started", "reopened"].includes(parentState) &&
+            !seenParentIds.has(stageAttemptId)) {
+          activeParent = stageAttemptId;
+          seenParentIds.add(stageAttemptId);
+          parentState = "running";
+        }
+      } else if (fact.event.type === "construction.stage-resumed") {
+        if (stageAttemptId === activeParent && ["paused", "waiting"].includes(parentState)) parentState = "running";
+      } else if (fact.event.type === "construction.stage-waiting" && stageAttemptId === activeParent &&
+          activeStates.has(parentState as ConstructionStageActivityState)) {
+        parentState = "waiting";
+      } else if (fact.event.type === "construction.stage-pause-requested" && stageAttemptId === activeParent &&
+          activeStates.has(parentState as ConstructionStageActivityState)) {
+        parentState = "pausing";
+      } else if (fact.event.type === "construction.stage-paused" && stageAttemptId === activeParent && parentState === "pausing") {
+        parentState = "paused";
+      } else if (fact.event.type === "construction.stage-attempt-ended-by-revision" &&
+          validRevisionTransitions.has(fact.event.id) && stageAttemptId === activeParent) {
+        parentState = "ended_by_revision";
+      } else if (fact.event.type === "construction.stage-attempt-completed" &&
+          validCompletionEvents.has(fact.event.id) && stageAttemptId === activeParent) {
+        parentState = "completed";
+      } else if (fact.event.type === "construction.stage-reopened" && validRevisionTransitions.has(fact.event.id) &&
+          (stageAttemptId === undefined ? parentState === "ended_by_revision" : stageAttemptId === activeParent)) {
         activeParent = undefined;
+        parentState = "reopened";
       }
     }
-    return activeParent === boundaryStageAttemptId;
+    return activeParent === boundaryStageAttemptId && parentState === "running";
   };
   const validActivityStarts = new Set<string>();
   const staleActivityStarts = new Set<string>();

@@ -1340,6 +1340,15 @@ describe("Construction history projection", () => {
     expect(lateActivityStartProjection.units[0]?.blocked).toBe(true);
     expect(lateStartTask?.state).not.toBe("generating");
     expect(lateStartIntegration?.attempts.find((attempt) => attempt.attemptId === ids.lateActivityAttempt)).toBeUndefined();
+    const invalidStageResumeBeforeReplacement = event("event-invalid-stage-resume-before-replacement", "construction.stage-resumed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      inputs: [],
+      checkpoints: [],
+      authority_event_ids: [],
+    }, "journal-integration", [parentReopened.id]);
     const lateActivityBeforeReplacement = event("event-late-activity-before-replacement", "construction.activity-attempt-started", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -1355,10 +1364,12 @@ describe("Construction history projection", () => {
       "origin://late-activity-before-replacement",
       "journal-integration",
       [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopened,
-        lateActivityBeforeReplacement],
+        invalidStageResumeBeforeReplacement, lateActivityBeforeReplacement],
     )]));
     expect(lateActivityBeforeReplacementProjection.projectionIssues.map((issue) => issue.code))
       .toContain("invalid-revision-transition");
+    expect(lateActivityBeforeReplacementProjection.projectionIssues.map((issue) => issue.code))
+      .toContain("invalid-attempt-transition");
     expect(lateActivityBeforeReplacementProjection.units[0]?.blocked).toBe(true);
     expect(lateActivityBeforeReplacementProjection.units[0]?.tasks[0]?.activities
       .find((activity) => activity.activity === "code-integration")?.attempts
