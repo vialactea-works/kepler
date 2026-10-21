@@ -39,6 +39,8 @@ A new commit is not necessary solely for an event append, worker dispatch, or se
 
 A system may use separate worker or workspace journals. Keep event and journal identities, local event order, causal references, original attempts, and evidence bindings. Do not flatten or reorder history by timestamps. Git merge success alone does not validate workflow history.
 
+The M05 journal adapter serializes cooperating Kepler writers per journal for the current host user. Linux child-path operations are anchored to opened directory descriptors. macOS uses verified pathname checks, which are best-effort against a same-user process racing filesystem changes and are not a security boundary against that process.
+
 Git can transfer a committed history snapshot made available to the receiver. It does not synchronize ongoing events or show live worker or lock ownership.
 
 ### Handoff and recovery

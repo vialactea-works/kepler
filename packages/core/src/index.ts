@@ -1,4 +1,17 @@
 export {
+  EVENT_ENVELOPE_VERSION,
+  isUtcZTimestamp,
+  validateEventEnvelope,
+} from "./event-envelope.js";
+export type {
+  EventEnvelope,
+  EventEnvelopeIssue,
+  EventEnvelopeValidation,
+  EventId,
+  EventProducer,
+  JournalId,
+} from "./event-envelope.js";
+export {
   KeplerConfigError,
   loadKeplerSettings,
   parseKeplerSettings,
