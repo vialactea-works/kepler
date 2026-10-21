@@ -187,10 +187,80 @@ describe("v3 root command tree", () => {
     expect(result.stdout).toContain("workbench");
     expect(result.stdout).toContain("git");
     expect(result.stdout).toContain("uuid");
+    expect(result.stdout).toContain("mission");
     expect(result.stdout).toContain("lint");
     expect(result.stdout).toContain("audit");
     expect(result.stdout).toContain("workflow");
     expect(result.stderr).toBe("");
+  });
+
+  it("creates a mission and prepares its selected workspace through the root CLI", async () => {
+    const fixture = await createProject("mission-startup");
+    const request = JSON.stringify({
+      title: "Prepare the selected capability",
+      request: "Implement the requested change in the selected workspace.",
+      workflow: "standard",
+      recordHomeRepositoryId: "project",
+      contexts: [{ reference: "opaque:request", purpose: "Accepted request" }],
+      repositories: [{
+        repositoryId: "application",
+        workspace: { kind: "existing", path: fixture.root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      }],
+    });
+
+    const result = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["mission", "create", "--project", fixture.root, "--request", request]),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    const response = JSON.parse(result.stdout);
+    expect(response).toMatchObject({
+      status: "success",
+      data: {
+        workflow: "standard",
+        record_home: fixture.root,
+        execution_started: false,
+        workspaces: [{
+          repository_id: "application",
+          context: { kind: "existing" },
+          branch: "main",
+          integration_target: "refs/heads/main",
+          starting_checkpoint: { kind: "commit" },
+        }],
+      },
+    });
+    const missionId = response.data.mission_id as string;
+    const historyPath = Path.join(fixture.root, ".kepler", "missions", missionId, "history", "construction");
+    const files = await Fs.readdir(historyPath);
+    const events = (await Fs.readFile(Path.join(historyPath, files[0]!), "utf8"))
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type: string; producer: { name: string; version: string } });
+    expect(events.map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
+    expect(events.map((event) => event.producer)).toEqual([
+      { name: "kepler", version: "0.10.3" },
+      { name: "kepler", version: "0.10.3" },
+    ]);
+  });
+
+  it("names the mission capability when its subcommand is missing", async () => {
+    const result = await runCli(["mission"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "failed",
+      data: {
+        code: "invalid_arguments",
+        message: "mission requires a subcommand.",
+      },
+    });
   });
 
   it("includes Construction in generated workflow help", async () => {

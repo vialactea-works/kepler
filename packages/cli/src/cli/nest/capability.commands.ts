@@ -4,6 +4,8 @@ import { MetadataLinter } from "../metadata-lint.js";
 import { parseProjectSelector, ProjectResolver } from "../project-selection.js";
 import { appendSelectorValue } from "../scope-selectors.js";
 import { generateUuid } from "../uuid.js";
+import { parseStrictJson } from "../../json/strict-json.js";
+import { MissionStartup } from "../../construction/mission-startup.js";
 import { ResultReporter } from "./result-reporter.js";
 
 const missingOperation = (name: string) => ({
@@ -173,6 +175,92 @@ export class AuditCommand extends CommandRunner {
 
   async run(): Promise<void> {
     this.reporter.report(missingOperation("audit"));
+  }
+}
+
+@SubCommand({ name: "create", description: "Create a mission and prepare its selected workspaces" })
+export class MissionCreateCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly startup: MissionStartup,
+  ) {
+    super();
+  }
+
+  @Option({ flags: "--project <path>", description: "Select the mission record home" })
+  parseProject(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  @Option({ flags: "--request <json>", description: "Provide the typed mission startup request as JSON" })
+  parseRequest(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const selected = projectSelector(options);
+    if (selected.kind === "failed") {
+      reportFailure(this.reporter, selected);
+      return;
+    }
+    const requestValues = options?.request;
+    if (!Array.isArray(requestValues) || requestValues.length !== 1 || typeof requestValues[0] !== "string") {
+      reportFailure(this.reporter, {
+        code: "invalid_arguments",
+        message: "Mission creation requires exactly one --request JSON value.",
+        details: {},
+        recovery: "Provide one complete typed mission startup request with --request.",
+      });
+      return;
+    }
+    const parsed = parseStrictJson(requestValues[0]);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_mission_request_json",
+        message: "The mission startup request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Correct the JSON request and retry before preparing workspaces.",
+      });
+      return;
+    }
+    const result = await this.startup.execute(selected.project, parsed.value);
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    this.reporter.report({
+      status: "success",
+      data: {
+        mission_id: result.missionId,
+        workflow: "standard",
+        record_home: result.recordHome,
+        workspaces: result.repositories.map((repository) => ({
+          repository_id: repository.repositoryId,
+          context: repository.context,
+          workspace_id: repository.localWorkspaceKey,
+          workspace_path: repository.workspacePath,
+          branch: repository.branch,
+          integration_target: repository.integrationTarget,
+          starting_checkpoint: repository.startingCheckpoint,
+        })),
+        execution_started: false,
+      },
+    });
+  }
+}
+
+@Command({
+  name: "mission",
+  description: "Create and prepare a mission",
+  subCommands: [MissionCreateCommand],
+})
+export class MissionCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) {
+    super();
+  }
+
+  async run(): Promise<void> {
+    this.reporter.report(missingOperation("mission"));
   }
 }
 

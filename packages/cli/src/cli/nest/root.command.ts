@@ -4,6 +4,7 @@ import {
   AuditCommand,
   GitCommand,
   MetadataLintCommand,
+  MissionCommand,
   UuidCommand,
   WorkflowCommand,
 } from "./capability.commands.js";
@@ -20,6 +21,7 @@ import { WorkbenchCommand } from "./workbench.command.js";
     GitCommand,
     MetadataLintCommand,
     AuditCommand,
+    MissionCommand,
     WorkflowCommand,
   ],
 })

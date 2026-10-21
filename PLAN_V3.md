@@ -192,6 +192,10 @@ Each milestone has deliverables, tests, and a completion gate. All tasks start u
 
 Foundation tasks with no dependency links can start together. Skills and prompts can start from accepted contracts while runtime work continues. Their completion waits for available CLI interfaces. Keep one writer per checkout. Use different worktrees for concurrent writers. Keep all tests, even when they make the dependency chain longer.
 
+### Milestone worktree procedure
+
+Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` integration commit. Use `/home/caio/.local/share/pi-worktrees/20261020141603/feat-kepler-v3-worktree-20261020-<Mnn>` for the worktree and `wt/feat-kepler-v3-worktree-20261020-<Mnn>` for its branch. In the active Herdr workspace, create a tab labeled `<Mnn>` with its root pane's working directory set to the worktree, without changing focus. Preserve untracked `.pi/` data and other user state. Remove a worktree only when requested; keep its branch unless branch removal is requested separately.
+
 ## M01: Set TypeScript architecture and test infrastructure
 
 **Sources:** [runtime](docs/specs/v3/runtime.md), [installation](docs/specs/v3/installation.md), existing package and test configuration.
@@ -275,29 +279,31 @@ Foundation tasks with no dependency links can start together. Skills and prompts
 
 **Sources:** [Mission](docs/specs/v3/mission.md), [coordination](docs/specs/v3/runtime.md#short-scoped-coordination), SH64-SH72, SH118-SH121.
 
-- [ ] M06.1 Use typed interfaces for mission creation and workspace preparation. Record the mission UUIDv4, title, and request. Record the selected workflow, repository identities, and selected contexts. Record integration targets, starting commits or explicit no-commit conditions, and the single logical record home.
-- [ ] M06.2 Add the smallest callable CLI-owned startup entry needed for first use. Define its request/result contract within the Mission and CLI requirements. Connect skills to it. Do not make the creator internal-only.
+- [x] M06.1 Use typed interfaces for mission creation and workspace preparation. Record the mission UUIDv4, title, and request. Record the selected workflow, repository identities, and selected contexts. Record integration targets, starting commits or explicit no-commit conditions, and the single logical record home.
+- [x] M06.2 Add the smallest callable CLI-owned startup entry needed for first use. Define its request/result contract within the Mission and CLI requirements. Connect skills to it. Do not make the creator internal-only.
 
   Do not give agents instructions to edit journals by hand. Add no generic mission registry or workflow engine.
-- [ ] M06.3 Prepare only selected existing, new, or previous workspaces and selected current/default/other/new branches. Write instructions for explicit preparation of the record home's `.kepler/` marker before project resolution. Do not add an Initialization stage or implicit resolver writes.
+- [x] M06.3 Prepare only selected existing, new, or previous workspaces and selected current/default/other/new branches. Write instructions for explicit preparation of the record home's `.kepler/` marker before project resolution. Do not add an Initialization stage or implicit resolver writes.
 
   Keep the selected workspaces and contexts. Use existing operation authority without a separate request for each preparation step. Keep dirty work, existing paths, and explicit choices. Do not silently stash, reset, switch, move, or make resources again.
-- [ ] M06.4 Keep machine-local attachments under the record repository's Git common directory at `kepler/missions/<mission-id>/workspaces/`. Put mission coordination in its sibling `coordination/`. Keep code-repository checkout/shared-resource claims at `<code-git-common-directory>/kepler/workspaces/<local-workspace-key>/`.
-- [ ] M06.5 Use one dedicated coordination component with atomic lock-directory creation. Include acquisition token, machine/process-incarnation identity, resource scope, and applicable attempt context. A missing/partial owner record still makes the resource unavailable to others. Do tests for replacement-safe release. Read-token-then-delete alone is not sufficient.
-- [ ] M06.6 Identify checkout and shared Integration-target identity across symlinks, worktree aliases, missions, and record homes. Use coordination locks only for resources with contention. Keep short control locks for control actions. Use the long unit Integration lock for unit Integration. Do not block writers or checks for other resources.
-- [ ] M06.7 Keep these checkpoint roles distinct:
+- [x] M06.4 Keep machine-local attachments under the record repository's Git common directory at `kepler/missions/<mission-id>/workspaces/`. Put mission coordination in its sibling `coordination/`. Keep code-repository checkout/shared-resource claims at `<code-git-common-directory>/kepler/workspaces/<local-workspace-key>/`.
+- [x] M06.5 Use one dedicated coordination component with atomic lock-directory creation. Include acquisition token, machine/process-incarnation identity, resource scope, and applicable attempt context. A missing/partial owner record still makes the resource unavailable to others. Do tests for replacement-safe release. Read-token-then-delete alone is not sufficient.
+- [x] M06.6 Identify checkout and shared Integration-target identity across symlinks, worktree aliases, missions, and record homes. Use coordination locks only for resources with contention. Keep short control locks for control actions. Use the long unit Integration lock for unit Integration. Do not block writers or checks for other resources.
+- [x] M06.7 Keep these checkpoint roles distinct:
   - The mission starting set.
   - The original unit Review baseline.
   - The fixed task admission baseline.
   - The actual lock-captured Integration inputs/candidates.
 
   Capture each at the time set by its contract. Keep repository qualification, including unchanged repositories when their material affects the operation. Do not claim atomic cross-repository commits.
-- [ ] M06.8 Do a handoff preflight for necessary commit/object reachability before history transfer and safe resume. If a necessary object is missing or unreachable, return a failed result for the affected handoff. Do not resume affected work without its material. Do not automatically fetch, copy, pin, or publish objects to repair a failed handoff. Do not automatically make refs/commits or repair Git for that purpose. Keep separately authorized transfers and ordinary operations under existing authority.
+- [x] M06.8 Do a handoff preflight for necessary commit/object reachability before history transfer and safe resume. If a necessary object is missing or unreachable, return a failed result for the affected handoff. Do not resume affected work without its material. Do not automatically fetch, copy, pin, or publish objects to repair a failed handoff. Do not automatically make refs/commits or repair Git for that purpose. Keep separately authorized transfers and ordinary operations under existing authority.
 
   Make local attachments and ownership current again. Do not restore copied locks.
-- [ ] M06.9 Add unit tests for preparation/ownership policies. Add integration tests with real repositories, linked worktrees, Git common directories, aliases, and multiple record homes. Include explicit greenfield/no-commit state, ownership contention, replacement races, partial preparation, and missing handoff objects. Show that unrelated scopes can continue.
+- [x] M06.9 Add unit tests for preparation/ownership policies. Add integration tests with real repositories, linked worktrees, Git common directories, aliases, and multiple record homes. Include explicit greenfield/no-commit state, ownership contention, replacement races, partial preparation, and missing handoff objects. Show that unrelated scopes can continue.
 
 **Complete when:** A real caller can make and prepare a mission without starting a stage. All supported writers use the correct coordination domain. Startup/handoff failures keep known and uncertain work.
+
+**Verified:** `bun run build`, `bun run typecheck`, and `bun --bun vitest run` passed (75 files, 1269 tests).
 
 ## M07: Add the full audit CLI interface
 
