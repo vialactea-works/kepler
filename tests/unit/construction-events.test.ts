@@ -264,6 +264,28 @@ describe("Construction event contracts", () => {
     expect(validateConstructionEvent(envelope("construction.approval-recorded", approval)).status).toBe("invalid");
   });
 
+  it("validates optional interaction scope bindings", () => {
+    const stageScoped = payload("construction.interaction-recorded");
+    stageScoped.stage = "functional-design";
+    expect(validateConstructionEvent(envelope("construction.interaction-recorded", stageScoped)).status).toBe("valid");
+
+    const activityScoped = payload("construction.interaction-recorded");
+    activityScoped.stage = "implementation";
+    activityScoped.stage_attempt_id = identities.stageAttempt;
+    activityScoped.task_id = identities.task;
+    activityScoped.activity = "code-generation";
+    activityScoped.activity_attempt_id = identities.activityAttempt;
+    expect(validateConstructionEvent(envelope("construction.interaction-recorded", activityScoped)).status).toBe("valid");
+
+    const activityContext = { ...activityScoped };
+    delete activityContext.activity_attempt_id;
+    expect(validateConstructionEvent(envelope("construction.interaction-recorded", activityContext)).status).toBe("valid");
+
+    const incompleteActivity = { ...activityContext };
+    delete incompleteActivity.stage_attempt_id;
+    expect(validateConstructionEvent(envelope("construction.interaction-recorded", incompleteActivity)).status).toBe("invalid");
+  });
+
   it("rejects invalid domain identities and keeps material references opaque", () => {
     const evidence = payload("construction.evidence-recorded");
     evidence.evidence_id = "not-a-uuid";

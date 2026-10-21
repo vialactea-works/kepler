@@ -186,7 +186,7 @@ describe("audit recording with real journals", () => {
     }, {
       inputs: [{ reference: "opaque:design-check", purpose: "Design review" }],
       artifact_bindings: [],
-      checkpoints: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "design-checkpoint" }],
       check: "Design review",
       executor: "Reviewer",
       result: { status: "failed", summary: "Blocking issue remains" },
@@ -200,7 +200,12 @@ describe("audit recording with real journals", () => {
     expect(scan.lines).toHaveLength(1);
     expect(scan.lines[0]?.event).toMatchObject({
       type: "construction.evidence-recorded",
-      data: { result: { status: "failed" }, stage_attempt_id: stageAttemptId, unit_id: unitId },
+      data: {
+        result: { status: "failed" },
+        stage_attempt_id: stageAttemptId,
+        unit_id: unitId,
+        checkpoints: [{ repository_id: "repo-main", commit: "design-checkpoint" }],
+      },
     });
   });
 
@@ -214,7 +219,7 @@ describe("audit recording with real journals", () => {
     }, {
       inputs: [{ reference: "opaque:task-output", purpose: "Task output" }],
       artifact_bindings: [],
-      checkpoints: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "task-output" }],
       check: "Task review",
       executor: "Reviewer",
       result: { status: "passed", summary: "Task output is valid" },
@@ -229,12 +234,37 @@ describe("audit recording with real journals", () => {
       requester: "Requester",
       inputs: [{ reference: "opaque:activity-output", purpose: "Reviewed Activity output" }],
       artifact_bindings: [],
-      checkpoints: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "activity-output" }],
       decision_reference: "opaque:activity-decision",
+    });
+
+    const beforeInvalidScopes = await Fs.readdir(Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE));
+    const missingTaskAttempt = await recorder.execute("evidence", { unit: unitId, task: taskId }, {
+      inputs: [],
+      artifact_bindings: [],
+      checkpoints: [],
+      check: "Task review",
+      executor: "Reviewer",
+      result: { status: "passed", summary: "Passed" },
+    });
+    const missingActivityAttempt = await recorder.execute("approval", {
+      unit: unitId,
+      task: taskId,
+      activity: "code-generation",
+      implementationAttempt: implementationAttemptId,
+    }, {
+      requester: "Requester",
+      inputs: [],
+      artifact_bindings: [],
+      checkpoints: [],
+      decision_reference: "opaque:decision",
     });
 
     expect(taskEvidence).toMatchObject({ kind: "success", data: { id: expect.any(String) } });
     expect(activityApproval).toMatchObject({ kind: "success", data: { id: expect.any(String) } });
+    expect(missingTaskAttempt.kind).toBe("failed");
+    expect(missingActivityAttempt.kind).toBe("failed");
+    expect(await Fs.readdir(Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE))).toEqual(beforeInvalidScopes);
   });
 
   it("rejects a nonexistent attempt without creating a journal", async () => {

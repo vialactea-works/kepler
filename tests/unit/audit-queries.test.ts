@@ -37,9 +37,9 @@ const records = () => [
   })),
 ];
 
-const history = (events = records()) => collectHistory(missionId, [{
-  sourceId: `${missionId}/${CONSTRUCTION_PHASE}/${journalId}`,
-  missionId,
+const history = (events = records(), selectedMissionId = missionId) => collectHistory(selectedMissionId, [{
+  sourceId: `${selectedMissionId}/${CONSTRUCTION_PHASE}/${journalId}`,
+  missionId: selectedMissionId,
   phase: CONSTRUCTION_PHASE,
   journalId,
   bytes: new TextEncoder().encode(`${events.map((value) => JSON.stringify(value)).join("\n")}\n`),
@@ -107,6 +107,9 @@ describe("audit list projections", () => {
     expect(listAuditEvents(history(), { selectors, limit: 1, cursor: `${cursor}x` }).kind).toBe("failed");
     expect(listAuditEvents(history(), { selectors, type: "construction.evidence-recorded", limit: 1, cursor }).kind).toBe("failed");
     expect(listAuditEvents(history(records().slice(0, 2)), { selectors, limit: 1, cursor }).data.code).toBe("expired_audit_cursor");
+    const otherMissionId = "90000000-0000-4000-8000-000000000009";
+    const copiedRecords = records().map((record) => ({ ...record, data: { ...record.data, mission_id: otherMissionId } }));
+    expect(listAuditEvents(history(copiedRecords, otherMissionId), { selectors, limit: 1, cursor }).data.code).toBe("invalid_audit_cursor");
   });
 
   it("validates limits, field names, and exact scope ownership", () => {

@@ -17,6 +17,7 @@ export interface CliInvocation {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
   readonly timeoutMs: number;
+  readonly stdin?: string;
   readonly resources: E2EResources;
 }
 
@@ -38,6 +39,7 @@ const execute = (
   cwd: string,
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
+  input?: string,
 ): CommandResult => {
   const label = `${file} ${args.join(" ")}`.slice(0, 1024);
   let result;
@@ -51,6 +53,7 @@ const execute = (
       reject: false,
       stripFinalNewline: false,
       timeout: timeoutMs,
+      ...(input === undefined ? {} : { input }),
     });
   } catch (error) {
     const failure = error as {
@@ -110,6 +113,7 @@ export class NativeApplicationConnector implements ApplicationConnector {
       invocation.cwd,
       invocation.env,
       invocation.timeoutMs,
+      invocation.stdin,
     );
   }
 }
@@ -210,6 +214,7 @@ export class DockerApplicationConnector implements ApplicationConnector {
       if (value === undefined || key === "PATH") continue;
       args.push("--env", `${key}=${toContainerPath(value)}`);
     }
+    if (invocation.stdin !== undefined) args.push("--interactive");
     args.push(
       this.image,
       toContainerPath(invocation.cliPath),
@@ -225,6 +230,7 @@ export class DockerApplicationConnector implements ApplicationConnector {
         invocation.projectRoot,
         invocation.resources.dockerEnvironment(),
         invocation.timeoutMs,
+        invocation.stdin,
       );
     } catch (error) {
       executionFailure = error;

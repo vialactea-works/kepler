@@ -342,6 +342,11 @@ export type EffortSelection =
   | { readonly target: "stage"; readonly stage: ConstructionStage; readonly action: "inherit"; readonly selected_by: string };
 
 export interface InteractionRecordedData extends ConstructionBaseData {
+  readonly stage?: ConstructionStage;
+  readonly stage_attempt_id?: StageAttemptId;
+  readonly task_id?: TaskId;
+  readonly activity?: ConstructionActivity;
+  readonly activity_attempt_id?: ActivityAttemptId;
   readonly participants: readonly string[];
   readonly content: string;
   readonly references: readonly string[];
@@ -742,6 +747,15 @@ const validatePayload = (
     invalid("decision_reference", isNonEmptyString(data.decision_reference));
   }
   if (type === "construction.interaction-recorded") {
+    const hasAttemptScope = data.stage_attempt_id !== undefined || data.task_id !== undefined ||
+      data.activity !== undefined || data.activity_attempt_id !== undefined;
+    const activityWithoutAttempt = data.activity !== undefined && data.activity_attempt_id === undefined;
+    const scopeBindingValid = activityWithoutAttempt
+      ? data.stage === "implementation" && isUuidV4(data.stage_attempt_id) && isUuidV4(data.task_id) &&
+        isOneOf(data.activity, activityStates)
+      : isExecutionBinding(data);
+    invalid("scope_binding", (data.stage === undefined || isOneOf(data.stage, stageStates)) &&
+      (!hasAttemptScope || scopeBindingValid));
     invalid("participants", isStringArray(data.participants, true));
     invalid("content", isNonEmptyString(data.content));
     invalid("references", isStringArray(data.references));

@@ -248,8 +248,7 @@ export const createAuditRecord = (
           decision_reference: request.decision_reference,
         }
       : {
-          mission_id: scope.missionId,
-          unit_id: scope.unitId,
+          ...common,
           participants: request.participants,
           content: request.content,
           references: request.references ?? [],

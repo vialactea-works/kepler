@@ -148,9 +148,23 @@ const attemptContext = (
   if (selectors.activity) {
     const activityAttemptId = selectors.attempt;
     const task = unit.tasks.find((candidate) => candidate.taskId === selectors.task);
-    const activity = task?.activities.find((candidate) => candidate.activity === selectors.activity);
-    if (!activityAttemptId || !activity || activity.stageAttemptId !== selectors.implementationAttempt ||
-        !activity.attempts.some((candidate) => candidate.attemptId === activityAttemptId)) {
+    if (!task) return { ok: false, message: "The selected Activity task does not belong to this unit." };
+    const activity = task.activities.find((candidate) => candidate.activity === selectors.activity);
+    if (!activity || activity.stageAttemptId !== selectors.implementationAttempt) {
+      return { ok: false, message: "The Activity does not belong to the selected task and Implementation parent." };
+    }
+    if (!activityAttemptId) {
+      if (kind !== "interaction") return { ok: false, message: "Evidence and approval for an Activity require an explicit Activity attempt." };
+      return {
+        ok: true,
+        stage: "implementation",
+        stageAttemptId: selectors.implementationAttempt!,
+        taskId: selectors.task,
+        activity: selectors.activity,
+        causedBy: task.admission ? [task.admission.event.id] : [],
+      };
+    }
+    if (!activity.attempts.some((candidate) => candidate.attemptId === activityAttemptId)) {
       return { ok: false, message: "The Activity attempt does not belong to the selected task and Implementation parent." };
     }
     const selectedAttempt = activity.attempts.find((candidate) => candidate.attemptId === activityAttemptId);

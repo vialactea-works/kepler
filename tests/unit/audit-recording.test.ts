@@ -66,12 +66,25 @@ describe("audit record creation", () => {
     if (result.kind === "invalid") expect(result.issues.map((issue) => issue.pointer)).toEqual(expect.arrayContaining(["/extra", "/inputs"]));
   });
 
+  it("rejects evidence payloads without valid check outcomes", () => {
+    const result = createAuditRecord("evidence", {
+      inputs: [],
+      artifact_bindings: [],
+      checkpoints: [],
+      check: "",
+      executor: "Reviewer",
+      result: { status: "passed", summary: "Passed" },
+    }, scope, journalId, runtime());
+
+    expect(result.kind).toBe("invalid");
+  });
+
   it("records approval against explicit material and decision references", () => {
     const result = createAuditRecord("approval", {
       requester: "Requester",
       inputs: [{ reference: "opaque:checkpoint", purpose: "Reviewed output" }],
       artifact_bindings: [],
-      checkpoints: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "reviewed-output" }],
       decision_reference: "opaque:approval-message",
     }, scope, journalId, runtime());
 
@@ -79,8 +92,50 @@ describe("audit record creation", () => {
     if (result.kind === "valid") expect(result.event.data).toMatchObject({
       requester: "Requester",
       decision_reference: "opaque:approval-message",
-      checkpoints: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "reviewed-output" }],
     });
+  });
+
+  it("preserves stage, Task, and Activity scope bindings on interactions", () => {
+    const executionScope: AuditRecordScope = {
+      ...scope,
+      stage: "implementation",
+      stageAttemptId: "70000000-0000-4000-8000-000000000007",
+      taskId: "80000000-0000-4000-8000-000000000008",
+      activity: "code-generation",
+      activityAttemptId: "90000000-0000-4000-8000-000000000009",
+    };
+    const result = createAuditRecord("interaction", {
+      participants: ["Requester"],
+      content: "Clarify task output",
+      references: ["opaque:source"],
+      reply_reference: "opaque:reply",
+    }, executionScope, journalId, runtime());
+
+    expect(result.kind).toBe("valid");
+    if (result.kind === "valid") expect(result.event.data).toMatchObject({
+      stage: "implementation",
+      stage_attempt_id: executionScope.stageAttemptId,
+      task_id: executionScope.taskId,
+      activity: "code-generation",
+      activity_attempt_id: executionScope.activityAttemptId,
+      references: ["opaque:source"],
+      reply_reference: "opaque:reply",
+    });
+
+    const activityScopeWithoutAttempt = { ...executionScope, activityAttemptId: undefined };
+    const contextualInteraction = createAuditRecord("interaction", {
+      participants: ["Requester"],
+      content: "Clarify an Activity without targeting an attempt.",
+    }, activityScopeWithoutAttempt, journalId, runtime());
+    expect(contextualInteraction.kind).toBe("valid");
+    if (contextualInteraction.kind === "valid") {
+      expect(contextualInteraction.event.data).toMatchObject({
+        task_id: executionScope.taskId,
+        activity: "code-generation",
+      });
+      expect(contextualInteraction.event.data).not.toHaveProperty("activity_attempt_id");
+    }
   });
 
   it("records structured effort changes only on an interaction field", () => {
@@ -98,6 +153,16 @@ describe("audit record creation", () => {
 
     expect(result.kind, JSON.stringify(result)).toBe("valid");
     if (result.kind === "valid") expect(result.event.data).toHaveProperty("effort_selection");
+  });
+
+  it("rejects interactions without required participants and content", () => {
+    const result = createAuditRecord("interaction", {
+      participants: [],
+      content: "",
+      references: [],
+    }, scope, journalId, runtime());
+
+    expect(result.kind).toBe("invalid");
   });
 
   it("records unit effort changes and stage override removal as structured selections", () => {
