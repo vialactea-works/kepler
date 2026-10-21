@@ -195,7 +195,10 @@ export class MissionHandoffPreflight {
           continue;
         }
 
-        const reachableResult = await this.runtime.git.run(canonicalPath, ["rev-list", "--objects", "--all"]);
+        const reachableResult = await this.runtime.git.findReachableObjects(
+          canonicalPath,
+          repositoryRequirements.map((requirement) => requirement.object_id),
+        );
         if (reachableResult.status !== 0) {
           failures.push({
             repository_id: repositoryId,
@@ -205,12 +208,7 @@ export class MissionHandoffPreflight {
           });
           continue;
         }
-        const reachableObjects = new Set<string>();
-        for (const line of reachableResult.stdout.split(/\r?\n/)) {
-          if (line.length === 0) continue;
-          const objectId = line.split(" ", 1)[0];
-          if (objectId) reachableObjects.add(objectId);
-        }
+        const reachableObjects = new Set(reachableResult.objectIds);
 
         for (const requirement of repositoryRequirements) {
           const objectType = await this.runtime.git.run(canonicalPath, ["cat-file", "-t", requirement.object_id]);

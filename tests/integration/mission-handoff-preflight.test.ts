@@ -97,6 +97,10 @@ describe("mission handoff Git object preflight", () => {
           calls.push(["git", ...args]);
           return runtime.git.run(cwd, args);
         },
+        findReachableObjects: async (cwd, objectIds) => {
+          calls.push(["git", "rev-list", "--objects", "--all"]);
+          return runtime.git.findReachableObjects(cwd, objectIds);
+        },
       },
     });
 
@@ -120,6 +124,56 @@ describe("mission handoff Git object preflight", () => {
     });
     expect(calls.every((args) => !["fetch", "push", "commit", "update-ref", "checkout", "reset"].includes(args[1]!))).toBe(true);
     expect(runGit(repository, globalConfig, "show-ref")).toBe(refsBefore);
+  });
+
+  it("streams reachability when a real repository listing exceeds execFile's default buffer", async () => {
+    const parent = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-handoff-large-listing-"));
+    roots.push(parent);
+    const globalConfig = Path.join(parent, "empty-global-config");
+    await Fs.writeFile(globalConfig, "");
+    const repository = await createRepository(parent, globalConfig, "application");
+    const objectsDirectory = Path.join(repository, "objects");
+    await Fs.mkdir(objectsDirectory);
+    const objectFiles = Array.from({ length: 8000 }, (_, index) => Path.join(
+      objectsDirectory,
+      `blob-${String(index).padStart(5, "0")}-${"x".repeat(100)}`,
+    ));
+    for (let offset = 0; offset < objectFiles.length; offset += 128) {
+      await Promise.all(objectFiles.slice(offset, offset + 128).map(async (path, index) => {
+        await Fs.writeFile(path, `object ${offset + index}\n`);
+      }));
+    }
+    runGit(repository, globalConfig, "add", "--", "objects");
+    runGit(repository, globalConfig, "commit", "-q", "-m", "Add many reachable objects");
+    const listing = execFileSync("git", ["rev-list", "--objects", "--all"], {
+      cwd: repository,
+      encoding: "utf8",
+      env: environmentFor(globalConfig),
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    expect(Buffer.byteLength(listing, "utf8")).toBeGreaterThan(1024 * 1024);
+    const commit = runGit(repository, globalConfig, "rev-parse", "HEAD");
+    const objectPath = Path.relative(repository, objectFiles[0]!).split(Path.sep).join("/");
+    const blob = runGit(repository, globalConfig, "rev-parse", `HEAD:${objectPath}`);
+    const preflight = new MissionHandoffPreflight(createNodeMissionWorkspaceRuntime({ cwd: parent }));
+
+    const result = await withGitEnvironment(globalConfig, () => preflight.execute({
+      mission_id: missionId,
+      handoff_id: "large-listing-handoff",
+      required_objects: [
+        { repository_id: "application", repository_path: repository, object_id: commit, object_kind: "commit" },
+        { repository_id: "application", repository_path: repository, object_id: blob, object_kind: "object" },
+      ],
+    }));
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      handoff_id: "large-listing-handoff",
+      verified_objects: [
+        { object_id: commit, object_kind: "commit", resolved_kind: "commit" },
+        { object_id: blob, object_kind: "object", resolved_kind: "blob" },
+      ],
+    });
   });
 
   it("fails only the affected handoff for missing or unreachable material and leaves Git state untouched", async () => {

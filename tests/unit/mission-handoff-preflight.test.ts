@@ -9,6 +9,7 @@ const createPreflight = (options: {
   readonly reachable?: readonly string[];
   readonly objectTypes?: Readonly<Record<string, string>>;
   readonly missing?: readonly string[];
+  readonly reachabilityFailure?: { readonly status: number; readonly stderr: string };
   readonly commonDirectories?: Readonly<Record<string, string>>;
   readonly realpath?: (path: string) => Promise<string>;
 } = {}) => {
@@ -28,9 +29,6 @@ const createPreflight = (options: {
           const common = options.commonDirectories?.[cwd] ?? ".git";
           return { status: 0, stdout: `${common}\n`, stderr: "" };
         }
-        if (args[0] === "rev-list") {
-          return { status: 0, stdout: reachable.join("\n"), stderr: "" };
-        }
         if (args[0] === "cat-file" && args[1] === "-t") {
           const objectId = args[2]!;
           if (missing.has(objectId) || objectTypes[objectId] === undefined) {
@@ -39,6 +37,16 @@ const createPreflight = (options: {
           return { status: 0, stdout: `${objectTypes[objectId]}\n`, stderr: "" };
         }
         return { status: 2, stdout: "", stderr: "unexpected command" };
+      },
+      findReachableObjects: async (cwd, objectIds) => {
+        calls.push({ cwd, args: ["rev-list", "--objects", "--all"] });
+        return options.reachabilityFailure
+          ? { ...options.reachabilityFailure, objectIds: [] }
+          : {
+            status: 0,
+            objectIds: reachable.filter((objectId) => objectIds.includes(objectId)),
+            stderr: "",
+          };
       },
     },
   });
@@ -76,6 +84,21 @@ describe("mission handoff preflight", () => {
       "cat-file",
     ]);
     expect(calls.every((call) => !["fetch", "push", "commit", "update-ref", "checkout", "reset"].includes(call.args[0]!))).toBe(true);
+  });
+
+  it("reports a reachability scanner failure without treating objects as unreachable", async () => {
+    const { preflight } = createPreflight({
+      reachabilityFailure: { status: -1, stderr: "scanner failed" },
+    });
+    const result = await preflight.execute(request("scanner-failure"));
+
+    expect(result).toMatchObject({
+      kind: "failed",
+      code: "handoff_material_unavailable",
+      details: {
+        failures: [{ repository_id: "application", reason: "reachability_check_failed", stderr: "scanner failed" }],
+      },
+    });
   });
 
   it("fails only the selected handoff when an object is missing, unreachable, or has the wrong kind", async () => {

@@ -639,6 +639,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
           }
           return actualRuntime.git.run(cwd, args);
         },
+        findReachableObjects: actualRuntime.git.findReachableObjects,
       },
     });
     const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));

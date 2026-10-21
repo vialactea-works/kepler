@@ -20,8 +20,15 @@ export interface MissionWorkspaceCommandResult {
   readonly stderr: string;
 }
 
+export interface MissionWorkspaceReachabilityResult {
+  readonly status: number;
+  readonly objectIds: readonly string[];
+  readonly stderr: string;
+}
+
 export interface MissionWorkspaceGit {
   readonly run: (cwd: string, args: readonly string[]) => Promise<MissionWorkspaceCommandResult>;
+  readonly findReachableObjects: (cwd: string, objectIds: readonly string[]) => Promise<MissionWorkspaceReachabilityResult>;
 }
 
 export interface MissionWorkspaceFileSystem {
