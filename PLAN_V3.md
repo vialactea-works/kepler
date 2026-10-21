@@ -289,20 +289,21 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 - [x] M06.4 Keep machine-local attachments under the record repository's Git common directory at `kepler/missions/<mission-id>/workspaces/`. Put mission coordination in its sibling `coordination/`. Keep code-repository checkout/shared-resource claims at `<code-git-common-directory>/kepler/workspaces/<local-workspace-key>/`.
 - [x] M06.5 Use one dedicated coordination component with atomic lock-directory creation. Include acquisition token, machine/process-incarnation identity, resource scope, and applicable attempt context. A missing/partial owner record still makes the resource unavailable to others. Do tests for replacement-safe release. Read-token-then-delete alone is not sufficient.
 - [x] M06.6 Identify checkout and shared Integration-target identity across symlinks, worktree aliases, missions, and record homes. Use coordination locks only for resources with contention. Keep short control locks for control actions. Use the long unit Integration lock for unit Integration. Do not block writers or checks for other resources.
-- [ ] M06.7 Keep these checkpoint roles distinct:
+- [x] M06.7 Keep these checkpoint roles distinct:
   - The mission starting set.
   - The original unit Review baseline.
   - The fixed task admission baseline.
   - The actual lock-captured Integration inputs/candidates.
 
   Capture each at the time set by its contract. Keep repository qualification, including unchanged repositories when their material affects the operation. Do not claim atomic cross-repository commits.
-- [ ] M06.8 Do a handoff preflight for necessary commit/object reachability before history transfer and safe resume. If a necessary object is missing or unreachable, return a failed result for the affected handoff. Do not resume affected work without its material. Do not automatically fetch, copy, pin, or publish objects to repair a failed handoff. Do not automatically make refs/commits or repair Git for that purpose. Keep separately authorized transfers and ordinary operations under existing authority.
+- [x] M06.8 Do a handoff preflight for necessary commit/object reachability before history transfer and safe resume. If a necessary object is missing or unreachable, return a failed result for the affected handoff. Do not resume affected work without its material. Do not automatically fetch, copy, pin, or publish objects to repair a failed handoff. Do not automatically make refs/commits or repair Git for that purpose. Keep separately authorized transfers and ordinary operations under existing authority.
 
   Make local attachments and ownership current again. Do not restore copied locks.
-- [ ] M06.9 Add unit tests for preparation/ownership policies. Add integration tests with real repositories, linked worktrees, Git common directories, aliases, and multiple record homes. Include explicit greenfield/no-commit state, ownership contention, replacement races, partial preparation, and missing handoff objects. Show that unrelated scopes can continue.
+- [x] M06.9 Add unit tests for preparation/ownership policies. Add integration tests with real repositories, linked worktrees, Git common directories, aliases, and multiple record homes. Include explicit greenfield/no-commit state, ownership contention, replacement races, partial preparation, and missing handoff objects. Show that unrelated scopes can continue.
 
 **Complete when:** A real caller can make and prepare a mission without starting a stage. All supported writers use the correct coordination domain. Startup/handoff failures keep known and uncertain work.
 
+**Verified:** `bun run build`, `bun run typecheck`, and `bun --bun vitest run` passed (75 files, 1263 tests).
 
 ## M07: Add the full audit CLI interface
 

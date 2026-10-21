@@ -7,6 +7,7 @@ import {
 import { createEventJournal } from "../../history/journal.js";
 import { CONSTRUCTION_PHASE } from "../../construction/events.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
+import { MissionHandoffPreflight } from "../../construction/mission-handoff-preflight.js";
 import { createMissionWorkspacePreparation } from "../../construction/mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "../../construction/mission-workspace-runtime.js";
 import { MetadataLinter } from "../metadata-lint.js";
@@ -46,6 +47,10 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionCommand,
     MissionCommand,
     MissionCreateCommand,
+    {
+      provide: MissionHandoffPreflight,
+      useFactory: () => new MissionHandoffPreflight(createNodeMissionWorkspaceRuntime()),
+    },
     {
       provide: MissionStartup,
       useFactory: (projects: ProjectResolver) => new MissionStartup({
