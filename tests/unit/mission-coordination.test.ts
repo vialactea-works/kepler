@@ -119,7 +119,7 @@ describe("mission local coordination", () => {
     expect(await nodeMissionCoordinationFileSystem.pathKind(Path.join(lockPath, "owner.json"))).toBe("missing");
   });
 
-  it("preserves a replacement owner during release and leaves unrelated scopes usable", async () => {
+  it("leaves a replacement claim canonical and lets its holder release it", async () => {
     const { coordinator, request } = await setup();
     const acquired = await coordinator.acquire(request);
     expect(acquired.kind).toBe("acquired");
@@ -127,27 +127,81 @@ describe("mission local coordination", () => {
 
     const lockPath = acquired.lease.lockPath;
     await rm(lockPath, { recursive: true });
-    await mkdir(lockPath);
-    const replacement = { ...acquired.lease.owner, token: randomUUID(), resource_scope: "replacement-owner" };
-    await writeFile(Path.join(lockPath, "owner.json"), `${JSON.stringify(replacement)}\n`);
+    const replacement = await coordinator.acquire({
+      ...request,
+      owner: { ...request.owner, process_id: 124, resource_scope: "replacement-owner" },
+    });
+    expect(replacement.kind).toBe("acquired");
+    if (replacement.kind !== "acquired") return;
 
     const released = await acquired.lease.release();
 
     expect(released).toMatchObject({ kind: "failed", code: "coordination_owner_replaced" });
+    expect(JSON.parse(await readFile(Path.join(lockPath, "owner.json"), "utf8"))).toEqual(replacement.lease.owner);
+    expect(await nodeMissionCoordinationFileSystem.pathKind(`${lockPath}.releasing`)).toBe("missing");
     const directory = Path.dirname(lockPath);
-    const preservedName = (await nodeMissionCoordinationFileSystem.listDirectory(directory))
-      .find((name) => name.startsWith(`${resourceKey}.owner-moving-`));
-    expect(preservedName).toBeDefined();
-    expect(JSON.parse(await readFile(Path.join(directory, preservedName!, "owner.json"), "utf8"))).toEqual(replacement);
-    expect(await nodeMissionCoordinationFileSystem.pathKind(`${lockPath}.releasing`)).toBe("directory");
-    expect(await coordinator.acquire(request)).toMatchObject({ kind: "failed", code: "coordination_release_in_progress" });
+    expect((await nodeMissionCoordinationFileSystem.listDirectory(directory))
+      .some((name) => name.startsWith(`${resourceKey}.owner-moving-`))).toBe(false);
+    expect(await coordinator.acquire(request)).toMatchObject({ kind: "failed", code: "resource_contended" });
+    expect(await replacement.lease.release()).toEqual({ kind: "released" });
 
     const unrelated = await coordinator.acquire({ ...request, resourceKey: "b".repeat(64) });
     expect(unrelated.kind).toBe("acquired");
     if (unrelated.kind === "acquired") expect(await unrelated.lease.release()).toEqual({ kind: "released" });
   });
 
-  it("checks directory identity even when a replacement copies the original owner token", async () => {
+  it("restores a replacement claim created during the release rename", async () => {
+    const root = await mkdtemp(Path.join(tmpdir(), "kepler-coordination-release-race-"));
+    roots.push(root);
+    const lockPath = Path.join(root, "kepler", "workspaces", resourceKey);
+    const replacement = {
+      token: randomUUID(),
+      machine_id: "replacement-host",
+      process_id: 124,
+      process_incarnation_id: "30000000-0000-4000-8000-000000000003",
+      mission_id: missionId,
+      resource_scope: "replacement-owner",
+    };
+    let replaceDuringRename = false;
+    const fileSystem = {
+      ...nodeMissionCoordinationFileSystem,
+      rename: async (from: string, to: string): Promise<void> => {
+        if (from === lockPath && replaceDuringRename) {
+          replaceDuringRename = false;
+          await rm(from, { recursive: true });
+          await mkdir(from);
+          await writeFile(Path.join(from, "owner.json"), `${JSON.stringify(replacement)}\n`);
+        }
+        await nodeMissionCoordinationFileSystem.rename(from, to);
+      },
+    };
+    const coordinator = createMissionCoordination(fileSystem, { next: randomUUID });
+    const request: MissionCoordinationRequest = {
+      commonDirectory: root,
+      location: { kind: "code-workspace" },
+      resourceKey,
+      owner: {
+        machine_id: "test-host",
+        process_id: 123,
+        process_incarnation_id: "20000000-0000-4000-8000-000000000002",
+        mission_id: missionId,
+        resource_scope: `code-workspace:${resourceKey}`,
+      },
+    };
+    const acquired = await coordinator.acquire(request);
+    expect(acquired.kind).toBe("acquired");
+    if (acquired.kind !== "acquired") return;
+    replaceDuringRename = true;
+
+    const released = await acquired.lease.release();
+
+    expect(released).toMatchObject({ kind: "failed", code: "coordination_owner_replaced" });
+    expect(JSON.parse(await readFile(Path.join(lockPath, "owner.json"), "utf8"))).toEqual(replacement);
+    expect(await nodeMissionCoordinationFileSystem.pathKind(`${lockPath}.releasing`)).toBe("missing");
+    expect(await coordinator.acquire(request)).toMatchObject({ kind: "failed", code: "resource_contended" });
+  });
+
+  it("checks directory identity when a replacement copies the original owner token", async () => {
     const { coordinator, request } = await setup();
     const acquired = await coordinator.acquire(request);
     expect(acquired.kind).toBe("acquired");
@@ -162,10 +216,9 @@ describe("mission local coordination", () => {
     const released = await acquired.lease.release();
 
     expect(released).toMatchObject({ kind: "failed", code: "coordination_owner_replaced" });
-    const directory = Path.dirname(lockPath);
-    const preservedName = (await nodeMissionCoordinationFileSystem.listDirectory(directory))
-      .find((name) => name.startsWith(`${resourceKey}.owner-moving-`));
-    expect(preservedName).toBeDefined();
-    expect(JSON.parse(await readFile(Path.join(directory, preservedName!, "owner.json"), "utf8"))).toEqual(acquired.lease.owner);
+    expect(JSON.parse(await readFile(Path.join(lockPath, "owner.json"), "utf8"))).toEqual(acquired.lease.owner);
+    expect(await nodeMissionCoordinationFileSystem.pathKind(`${lockPath}.releasing`)).toBe("missing");
+    expect((await nodeMissionCoordinationFileSystem.listDirectory(Path.dirname(lockPath)))
+      .some((name) => name.startsWith(`${resourceKey}.owner-moving-`))).toBe(false);
   });
 });

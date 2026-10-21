@@ -129,6 +129,78 @@ const matchesOwner = (
 const releaseNames = (names: readonly string[], prefix: string): readonly string[] =>
   names.filter((name) => name.startsWith(prefix));
 
+type OwnedDirectoryRemovalResult =
+  | { readonly kind: "removed" }
+  | { readonly kind: "replaced"; readonly observedToken?: string; readonly preservedPath: string; readonly restorationError?: string }
+  | { readonly kind: "failed"; readonly path: string; readonly message: string };
+
+const removeOwnedDirectory = async (
+  fileSystem: MissionCoordinationFileSystem,
+  path: string,
+  releasePath: string,
+  expectedIdentity: MissionCoordinationPathIdentity,
+  expectedOwner: MissionCoordinationOwner,
+): Promise<OwnedDirectoryRemovalResult> => {
+  let currentOwner: MissionCoordinationOwner | undefined;
+  let currentIdentity: MissionCoordinationPathIdentity | undefined;
+  try {
+    currentOwner = await readOwner(fileSystem, path);
+    currentIdentity = await fileSystem.pathIdentity(path);
+    if (!samePathIdentity(currentIdentity, expectedIdentity) || !matchesOwner(currentOwner, expectedOwner)) {
+      return {
+        kind: "replaced",
+        ...(currentOwner ? { observedToken: currentOwner.token } : {}),
+        preservedPath: path,
+      };
+    }
+    await fileSystem.rename(path, releasePath);
+  } catch (error) {
+    return { kind: "failed", path, message: error instanceof Error ? error.message : String(error) };
+  }
+
+  let movedOwner: MissionCoordinationOwner | undefined;
+  let movedIdentity: MissionCoordinationPathIdentity | undefined;
+  try {
+    movedOwner = await readOwner(fileSystem, releasePath);
+    movedIdentity = await fileSystem.pathIdentity(releasePath);
+  } catch (error) {
+    return { kind: "failed", path: releasePath, message: error instanceof Error ? error.message : String(error) };
+  }
+  if (!samePathIdentity(movedIdentity, expectedIdentity) || !matchesOwner(movedOwner, expectedOwner)) {
+    let restorationError: string | undefined;
+    if (movedIdentity) {
+      try {
+        if (await fileSystem.pathKind(path) === "missing" &&
+          samePathIdentity(await fileSystem.pathIdentity(releasePath), movedIdentity)) {
+          await fileSystem.rename(releasePath, path);
+          if (samePathIdentity(await fileSystem.pathIdentity(path), movedIdentity)) {
+            return {
+              kind: "replaced",
+              ...(movedOwner ? { observedToken: movedOwner.token } : {}),
+              preservedPath: path,
+            };
+          }
+        }
+      } catch (error) {
+        restorationError = error instanceof Error ? error.message : String(error);
+      }
+    }
+    return {
+      kind: "replaced",
+      ...(movedOwner ? { observedToken: movedOwner.token } : {}),
+      preservedPath: releasePath,
+      ...(restorationError ? { restorationError } : {}),
+    };
+  }
+
+  try {
+    await fileSystem.removeTree(releasePath);
+    return { kind: "removed" };
+  } catch (error) {
+    return { kind: "failed", path: releasePath, message: error instanceof Error ? error.message : String(error) };
+  }
+};
+
 export const createMissionCoordination = (
   fileSystem: MissionCoordinationFileSystem,
   identities: MissionCoordinationIdentitySource,
@@ -247,6 +319,21 @@ export const createMissionCoordination = (
       }
 
       const release = async (): Promise<MissionCoordinationReleaseResult> => {
+        const currentOwner = await readOwner(fileSystem, lockPath);
+        const currentIdentity = await fileSystem.pathIdentity(lockPath);
+        if (!samePathIdentity(currentIdentity, lockIdentity) || !matchesOwner(currentOwner, owner)) {
+          return failed(
+            "coordination_owner_replaced",
+            "The canonical lock path no longer contains this operation's owner; the replacement remains available to its holder.",
+            {
+              resource_key: request.resourceKey,
+              expected_token: owner.token,
+              ...(currentOwner ? { observed_token: currentOwner.token } : {}),
+              lock_path: lockPath,
+            },
+            "Preserve the current owner record and release only through the matching holder.",
+          );
+        }
         let releaseToken: string;
         try {
           releaseToken = identities.next();
@@ -276,66 +363,61 @@ export const createMissionCoordination = (
         }
 
         const releasePath = Path.join(directory, `${request.resourceKey}.owner-moving-${markerOwner.token}`);
-        try {
-          await fileSystem.rename(lockPath, releasePath);
-        } catch (error) {
-          return failed(
-            "coordination_lock_lost",
-            "Kepler could not move the held lock into its release boundary.",
-            { resource_key: request.resourceKey, message: error instanceof Error ? error.message : String(error) },
-            "Keep the resource unavailable and inspect its current owner record before retrying.",
-          );
-        }
-
-        const movedOwner = await readOwner(fileSystem, releasePath);
-        const movedIdentity = await fileSystem.pathIdentity(releasePath);
-        if (!samePathIdentity(movedIdentity, lockIdentity) || !matchesOwner(movedOwner, owner)) {
+        const markerReleasePath = Path.join(directory, `${request.resourceKey}.releasing-${markerOwner.token}`);
+        const lockRemoval = await removeOwnedDirectory(fileSystem, lockPath, releasePath, lockIdentity, owner);
+        if (lockRemoval.kind === "replaced") {
+          const markerRemoval = await removeOwnedDirectory(fileSystem, markerPath, markerReleasePath, markerIdentity, markerOwner);
+          if (markerRemoval.kind !== "removed") {
+            return failed(
+              "coordination_release_incomplete",
+              "A replacement claim remains preserved, but Kepler could not clear its own release marker.",
+              {
+                resource_key: request.resourceKey,
+                preserved_at: lockRemoval.preservedPath,
+                release_marker: markerRemoval.kind === "failed" ? markerRemoval.path : markerRemoval.preservedPath,
+                ...(lockRemoval.restorationError ? { restoration_error: lockRemoval.restorationError } : {}),
+                ...(markerRemoval.kind === "failed" ? { message: markerRemoval.message } : {}),
+              },
+              "Keep the resource unavailable and reconcile the replacement and release marker before retrying.",
+            );
+          }
           return failed(
             "coordination_owner_replaced",
-            "The lock path no longer contains this operation's owner; the replacement claim was preserved.",
-            { resource_key: request.resourceKey, expected_token: owner.token, observed_token: movedOwner?.token, preserved_at: releasePath },
-            "Reconcile the preserved owner and release marker before any operation uses this resource.",
+            "The replacement claim remains at its canonical path and was not released by the stale holder.",
+            {
+              resource_key: request.resourceKey,
+              expected_token: owner.token,
+              ...(lockRemoval.observedToken ? { observed_token: lockRemoval.observedToken } : {}),
+              preserved_at: lockRemoval.preservedPath,
+              ...(lockRemoval.restorationError ? { restoration_error: lockRemoval.restorationError } : {}),
+            },
+            "Preserve the current owner record and release only through the matching holder.",
           );
         }
-
-        try {
-          await fileSystem.removeTree(releasePath);
-        } catch (error) {
+        if (lockRemoval.kind === "failed") {
           return failed(
             "coordination_release_incomplete",
-            "The owned lock was moved, but its release artifact could not be removed.",
-            { resource_key: request.resourceKey, release_path: releasePath, message: error instanceof Error ? error.message : String(error) },
+            "Kepler could not safely remove the owned lock directory.",
+            { resource_key: request.resourceKey, release_path: lockRemoval.path, message: lockRemoval.message },
             "Keep the resource unavailable and reconcile the release artifact before retrying.",
           );
         }
 
-        const markerReleasePath = Path.join(directory, `${request.resourceKey}.releasing-${markerOwner.token}`);
-        try {
-          await fileSystem.rename(markerPath, markerReleasePath);
-        } catch (error) {
+        const markerRemoval = await removeOwnedDirectory(fileSystem, markerPath, markerReleasePath, markerIdentity, markerOwner);
+        if (markerRemoval.kind !== "removed") {
           return failed(
-            "coordination_release_incomplete",
-            "The owned lock was removed, but its release boundary remains unresolved.",
-            { resource_key: request.resourceKey, marker_path: markerPath, message: error instanceof Error ? error.message : String(error) },
-            "Keep the resource unavailable and reconcile the release marker before retrying.",
-          );
-        }
-        if (!samePathIdentity(await fileSystem.pathIdentity(markerReleasePath), markerIdentity) ||
-          !matchesOwner(await readOwner(fileSystem, markerReleasePath), markerOwner)) {
-          return failed(
-            "coordination_release_marker_replaced",
-            "The release boundary changed owner and was preserved.",
-            { resource_key: request.resourceKey, release_marker: markerReleasePath },
-            "Reconcile the preserved marker before any operation uses this resource.",
-          );
-        }
-        try {
-          await fileSystem.removeTree(markerReleasePath);
-        } catch (error) {
-          return failed(
-            "coordination_release_incomplete",
-            "The resource lock was removed, but its release marker could not be cleared.",
-            { resource_key: request.resourceKey, release_marker: markerReleasePath, message: error instanceof Error ? error.message : String(error) },
+            markerRemoval.kind === "replaced" ? "coordination_release_marker_replaced" : "coordination_release_incomplete",
+            markerRemoval.kind === "replaced"
+              ? "The release boundary changed owner and was preserved."
+              : "The resource lock was removed, but its release marker could not be cleared.",
+            {
+              resource_key: request.resourceKey,
+              release_marker: markerRemoval.kind === "failed" ? markerRemoval.path : markerRemoval.preservedPath,
+              ...(markerRemoval.kind === "failed" ? { message: markerRemoval.message } : {}),
+              ...(markerRemoval.kind === "replaced" && markerRemoval.restorationError
+                ? { restoration_error: markerRemoval.restorationError }
+                : {}),
+            },
             "Keep the resource unavailable and reconcile the release marker before retrying.",
           );
         }
