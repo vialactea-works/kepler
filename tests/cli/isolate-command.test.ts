@@ -3,6 +3,7 @@ import type { DynamicModule, INestApplicationContext } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { CommandFactory } from "nest-commander";
 import { describe, expect, it } from "vitest";
+import { unwrapLegacyOutput } from "./result-envelope.js";
 import { RESULT_EXIT_SINK, RESULT_OUTPUT_SINK } from "../../packages/cli/src/cli/nest/result-reporter.js";
 import { ResultModule } from "../../packages/cli/src/cli/nest/result.module.js";
 import { WorkbenchCommand } from "../../packages/cli/src/cli/nest/workbench.command.js";
@@ -15,7 +16,7 @@ import {
 
 type Event =
   | { readonly type: "stdout" | "stderr"; readonly value: string }
-  | { readonly type: "exitCode"; readonly value: 0 | 1 | 2 };
+  | { readonly type: "exitCode"; readonly value: 0 | 1 };
 
 const result = (
   overrides: Partial<IsolationResult> = {},
@@ -96,7 +97,7 @@ async function runCli(
     await application?.close();
   }
 
-  return { calls, exitCode, stderr, stdout };
+  return { calls, exitCode, stderr, stdout: unwrapLegacyOutput(stdout) };
 }
 
 async function createHarness(isolationResult: IsolationResult) {
@@ -117,12 +118,13 @@ async function createHarness(isolationResult: IsolationResult) {
     })
     .overrideProvider(RESULT_OUTPUT_SINK)
     .useValue({
-      stdout: (value: string) => events.push({ type: "stdout", value }),
+      stdout: (value: string) =>
+        events.push({ type: "stdout", value: unwrapLegacyOutput(value) }),
       stderr: (value: string) => events.push({ type: "stderr", value }),
     })
     .overrideProvider(RESULT_EXIT_SINK)
     .useValue({
-      setExitCode: (value: 0 | 1 | 2) => events.push({ type: "exitCode", value }),
+      setExitCode: (value: 0 | 1) => events.push({ type: "exitCode", value }),
     })
     .compile();
 
@@ -239,7 +241,6 @@ describe("IsolateCommand", () => {
       expect(harness.events).toEqual([
         { type: "exitCode", value: 1 },
         { type: "stdout", value: "isolated: no\n" },
-        { type: "stderr", value: "" },
       ]);
     } finally {
       await harness.module.close();
@@ -297,7 +298,6 @@ describe("IsolateCommand", () => {
           type: "stdout",
           value: "verified: /repo/.worktrees/new-worktree\n",
         },
-        { type: "stderr", value: "" },
       ]);
     } finally {
       await harness.module.close();
@@ -343,7 +343,7 @@ describe("IsolateCommand", () => {
       for (const [index, invalid] of invalidCalls.entries()) {
         await harness.command.run(invalid.params, invalid.options);
         expect(harness.events.slice(index * 3, index * 3 + 3)).toEqual([
-          { type: "exitCode", value: 2 },
+          { type: "exitCode", value: 1 },
           { type: "stdout", value: "" },
           { type: "stderr", value: `error: ${invalid.message}\n` },
         ]);

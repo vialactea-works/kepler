@@ -6,7 +6,7 @@ import {
 
 type Event =
   | { readonly type: "stdout" | "stderr"; readonly value: string }
-  | { readonly type: "exitCode"; readonly value: 0 | 1 | 2 };
+  | { readonly type: "exitCode"; readonly value: 0 | 1 };
 
 const createReporter = () => {
   const events: Event[] = [];
@@ -21,57 +21,114 @@ const createReporter = () => {
   return { reporter, events };
 };
 
+const failure = {
+  status: "failed" as const,
+  data: {
+    code: "invalid_arguments",
+    message: "A required argument is missing.",
+    details: {},
+    recovery: "Provide the required argument and retry.",
+  },
+};
+
 describe("ResultReporter", () => {
-  it.each([
-    {
-      name: "success",
-      result: {
-        stdout: "success output\n",
-        stderr: "success warning\n",
-        exitCode: 0,
-      },
-    },
-    {
-      name: "negative result",
-      result: {
-        stdout: "negative output\n",
-        stderr: "negative diagnostic\n",
-        exitCode: 1,
-      },
-    },
-    {
-      name: "error result",
-      result: {
-        stdout: "error output\n",
-        stderr: "error diagnostic\n",
-        exitCode: 2,
-      },
-    },
-  ] satisfies ReadonlyArray<{ readonly name: string; readonly result: CliResult }>)(
-    "reports a $name without changing either stream or its status",
-    ({ result }) => {
-      const { reporter, events } = createReporter();
-
-      reporter.report(result);
-
-      expect(events).toEqual([
-        { type: "exitCode", value: result.exitCode },
-        { type: "stdout", value: result.stdout },
-        { type: "stderr", value: result.stderr },
-      ]);
-    },
-  );
-
-  it("reports an already-rendered lint string without transforming it", () => {
+  it("writes the exact success envelope and exit code", () => {
     const { reporter, events } = createReporter();
-    const lintOutput = "lint: findings\nfile.md: invalid metadata\n";
 
-    reporter.report({ stdout: lintOutput, stderr: "", exitCode: 1 });
+    reporter.report({ status: "success", data: { id: "artifact-id" } });
+
+    expect(events).toEqual([
+      { type: "exitCode", value: 0 },
+      {
+        type: "stdout",
+        value: '{"status":"success","data":{"id":"artifact-id"}}\n',
+      },
+    ]);
+  });
+
+  it("writes the required failure fields and sends diagnostics only to stderr", () => {
+    const { reporter, events } = createReporter();
+
+    reporter.report(failure, "Parser diagnostic\n");
 
     expect(events).toEqual([
       { type: "exitCode", value: 1 },
-      { type: "stdout", value: lintOutput },
-      { type: "stderr", value: "" },
+      {
+        type: "stdout",
+        value: `${JSON.stringify(failure)}\n`,
+      },
+      { type: "stderr", value: "Parser diagnostic\n" },
     ]);
+  });
+
+  it("converts existing successful operation output into structured data", () => {
+    const { reporter, events } = createReporter();
+    const result: CliResult = {
+      stdout: "legacy operation result\n",
+      stderr: "",
+      exitCode: 0,
+    };
+
+    reporter.report(result);
+
+    expect(events).toEqual([
+      { type: "exitCode", value: 0 },
+      {
+        type: "stdout",
+        value: '{"status":"success","data":{"output":"legacy operation result\\n"}}\n',
+      },
+    ]);
+  });
+
+  it("uses the final output line as the concise failure message when stderr is empty", () => {
+    const { reporter, events } = createReporter();
+
+    reporter.report({
+      stdout: "[PASS] Checks\n[FAIL] Review\ngate: closed (1 failing)\n",
+      stderr: "",
+      exitCode: 1,
+    });
+
+    const output = events.find((event) => event.type === "stdout");
+    expect(output?.type).toBe("stdout");
+    if (output?.type !== "stdout") throw new Error("Expected stdout result");
+    expect(JSON.parse(output.value)).toEqual({
+      status: "failed",
+      data: {
+        code: "operation_failed",
+        message: "gate: closed (1 failing)",
+        details: {
+          output: "[PASS] Checks\n[FAIL] Review\ngate: closed (1 failing)\n",
+        },
+        recovery: "Review the reported details and resolve the failure before retrying.",
+      },
+    });
+    expect(events).toContainEqual({ type: "exitCode", value: 1 });
+  });
+
+  it("converts failed operations without losing known output or diagnostics", () => {
+    const { reporter, events } = createReporter();
+
+    reporter.report({
+      stdout: "partial result\n",
+      stderr: "operation failed\n",
+      exitCode: 2,
+    });
+
+    const output = events.find((event) => event.type === "stdout");
+    expect(output?.type).toBe("stdout");
+    if (output?.type !== "stdout") throw new Error("Expected stdout result");
+    expect(JSON.parse(output.value)).toEqual({
+      status: "failed",
+      data: {
+        code: "operation_failed",
+        message: "operation failed",
+        details: { output: "partial result\n" },
+        recovery: "Review the reported details and resolve the failure before retrying.",
+      },
+    });
+    expect(output.value.endsWith("\n")).toBe(true);
+    expect(events).toContainEqual({ type: "exitCode", value: 1 });
+    expect(events).toContainEqual({ type: "stderr", value: "operation failed\n" });
   });
 });
