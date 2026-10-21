@@ -90,10 +90,17 @@ describe("packed Core package", () => {
     await Fs.writeFile(
       Path.join(consumer, "index.ts"),
       [
-        'import { KeplerService, parseKeplerSettings, type KeplerServiceOptions, type KeplerSettings } from "@vialactea-works/kepler-core";',
+        'import { KeplerService, parseKeplerSettings, parseMarkdownArtifact, validateArtifact, type KeplerServiceOptions, type KeplerSettings } from "@vialactea-works/kepler-core";',
+        'import type { ArtifactOwnership } from "@vialactea-works/kepler-core";',
         `const options: KeplerServiceOptions = { homeDirectory: ${JSON.stringify(home)}, xdgConfigHome: ${JSON.stringify(config)} };`,
         'const settings: KeplerSettings = parseKeplerSettings("enabled: true");',
         "const paths = new KeplerService(options).globalPaths();",
+        'const ownership: ArtifactOwnership = { scope: "unit", unitId: "2026-10-20-packed-package" };',
+        'const source = "---\\nid: 11111111-1111-4111-8111-111111111111\\ntype: unit-of-work\\nschema_version: 3\\nunit_id: 2026-10-20-packed-package\\nauthor: Ada Lovelace <ada@example.com>\\n---\\n# Unit\\n";',
+        'const parsed = parseMarkdownArtifact("unit-of-work.md", source);',
+        'if (parsed.kind !== "parsed") throw new Error("Packed Markdown parser failed");',
+        'const validation = validateArtifact(parsed, ownership);',
+        'if (validation.kind !== "valid" || validation.artifact.metadata.type !== "unit-of-work") throw new Error("Packed artifact validation failed");',
         `if (paths.home !== ${JSON.stringify(expectedHome)} || settings.enabled !== true) throw new Error("Packed Core contract failed");`,
         "",
       ].join("\n"),

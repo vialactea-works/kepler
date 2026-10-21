@@ -1,3 +1,4 @@
+import { parseMarkdownFrontmatter } from "@vialactea-works/kepler-core";
 import * as Fs from "node:fs/promises";
 import * as Yaml from "yaml";
 
@@ -108,44 +109,12 @@ const errorLocation = (
   };
 };
 
-interface ParsedFrontmatter {
-  readonly _tag: "parsed";
-  readonly opening: string;
-  readonly closing: RegExpExecArray;
-  readonly yaml: string;
-  readonly body: string;
-}
-
-type Frontmatter =
-  | { readonly _tag: "absent" }
-  | { readonly _tag: "unterminated"; readonly opening: string }
-  | ParsedFrontmatter;
-
-const readFrontmatter = (source: string): Frontmatter => {
-  const opening = source.match(/^(?:\uFEFF)?---[ \t]*(?:\r\n|\n|\r|$)/);
-  if (opening === null) return { _tag: "absent" };
-
-  const closingPattern = /^(?:---|\.\.\.)[ \t]*(?:\r\n|\n|\r|$)/gm;
-  closingPattern.lastIndex = opening[0].length;
-  const closing = closingPattern.exec(source);
-  if (closing === null)
-    return { _tag: "unterminated", opening: opening[0] };
-
-  return {
-    _tag: "parsed",
-    opening: opening[0],
-    closing,
-    yaml: source.slice(opening[0].length, closing.index),
-    body: source.slice(closing.index + closing[0].length),
-  };
-};
-
 const parseArtifact = (
   sourcePath: string,
   source: string,
 ): ArtifactReadResult => {
-  const frontmatter = readFrontmatter(source);
-  if (frontmatter._tag === "absent") {
+  const frontmatter = parseMarkdownFrontmatter(source);
+  if (frontmatter.kind === "absent") {
     return {
       _tag: "unrelated",
       sourcePath,
@@ -155,7 +124,7 @@ const parseArtifact = (
     };
   }
 
-  if (frontmatter._tag === "unterminated") {
+  if (frontmatter.kind === "unterminated") {
     return diagnostic(
       sourcePath,
       "unterminated-frontmatter",
@@ -175,7 +144,7 @@ const parseArtifact = (
       "invalid-yaml",
       `Unable to parse YAML: ${String(error)}`,
       {
-        line: lineAt(source, frontmatter.opening.length),
+        line: lineAt(source, frontmatter.yamlStartOffset),
       },
     );
   }
@@ -188,7 +157,7 @@ const parseArtifact = (
       sourcePath,
       code,
       yamlError.message,
-      errorLocation(source, frontmatter.opening.length, yamlError),
+      errorLocation(source, frontmatter.yamlStartOffset, yamlError),
     );
   }
 
@@ -209,7 +178,7 @@ const parseArtifact = (
       "invalid-metadata",
       "Frontmatter must contain a YAML mapping",
       {
-        line: lineAt(source, frontmatter.opening.length),
+        line: lineAt(source, frontmatter.yamlStartOffset),
       },
     );
   }
@@ -220,27 +189,27 @@ const parseArtifact = (
       "missing-artifact",
       "Frontmatter is missing the artifact field",
       {
-        line: lineAt(source, frontmatter.opening.length),
+        line: lineAt(source, frontmatter.yamlStartOffset),
       },
     );
   }
 
-  const closingLine = lineAt(source, frontmatter.closing.index);
-  const bodyStartOffset =
-    frontmatter.closing.index + frontmatter.closing[0].length;
   return {
     _tag: "recognized",
     sourcePath,
     metadata,
     body: frontmatter.body,
     locations: {
-      frontmatter: { startLine: 1, endLine: closingLine },
+      frontmatter: {
+        startLine: frontmatter.startLine,
+        endLine: frontmatter.endLine,
+      },
       metadata: {
-        startLine: lineAt(source, frontmatter.opening.length),
-        endLine: Math.max(lineAt(source, frontmatter.closing.index) - 1, 1),
+        startLine: lineAt(source, frontmatter.yamlStartOffset),
+        endLine: Math.max(frontmatter.endLine - 1, 1),
       },
       body: {
-        startLine: lineAt(source, bodyStartOffset),
+        startLine: lineAt(source, frontmatter.bodyStartOffset),
         endLine: endLine(source),
       },
     },

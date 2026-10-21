@@ -1,4 +1,39 @@
 export {
+  artifactTypes,
+  validateArtifactMetadata,
+  validateMarkdownArtifact,
+} from "./artifact.js";
+export type {
+  ArtifactDiagnostic,
+  ArtifactDiagnosticCode,
+  ArtifactHeading,
+  ArtifactLink,
+  ArtifactMetadata,
+  ArtifactOwnership,
+  ArtifactParseResult,
+  ArtifactSourceLocation,
+  ArtifactType,
+  ArtifactValidationResult,
+  MarkdownArtifact,
+} from "./artifact.js";
+export {
+  markdownArtifactReader,
+  markdownArtifactWriter,
+  parseMarkdownArtifact,
+  parseMarkdownFrontmatter,
+  validateArtifact,
+  writeMarkdownArtifact,
+} from "./artifact-markdown.js";
+export type {
+  ArtifactMetadataUpdate,
+  ArtifactReader,
+  ArtifactWriteRequest,
+  ArtifactWriteResult,
+  ArtifactWriter,
+  MarkdownFrontmatterParseResult,
+  MarkdownSectionUpdate,
+} from "./artifact-markdown.js";
+export {
   KeplerConfigError,
   loadKeplerSettings,
   parseKeplerSettings,
