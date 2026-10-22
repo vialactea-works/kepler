@@ -107,12 +107,8 @@ const selectedValue = (
   value: unknown,
   name: string,
   issues: UnitCreateRequestIssue[],
-  required = false,
 ): string | undefined => {
-  if (value === undefined) {
-    if (required) issues.push(issue(`/${name}`, `--${name} is required.`));
-    return undefined;
-  }
+  if (value === undefined) return undefined;
   const values = Array.isArray(value) ? value : [value];
   if (values.length > 1) {
     issues.push(issue(`/${name}`, `--${name} may be specified only once.`));
@@ -123,6 +119,16 @@ const selectedValue = (
     issues.push(issue(`/${name}`, `--${name} requires one non-empty exact value.`));
     return undefined;
   }
+  return selected;
+};
+
+const requiredSelectedValue = (
+  value: unknown,
+  name: string,
+  issues: UnitCreateRequestIssue[],
+): string | undefined => {
+  const selected = selectedValue(value, name, issues);
+  if (value === undefined) issues.push(issue(`/${name}`, `--${name} is required.`));
   return selected;
 };
 
@@ -153,7 +159,7 @@ export const validateUnitCreateRequest = (value: unknown): UnitCreateRequestVali
   if (typeof slug !== "string" || !slugPattern.test(slug)) {
     issues.push(issue("/slug", "Slug must contain lowercase words separated by single hyphens."));
   }
-  const selectedMission = selectedValue(value.mission, "mission", issues, true);
+  const selectedMission = requiredSelectedValue(value.mission, "mission", issues);
   if (selectedMission !== undefined && !uuidV4.test(selectedMission)) {
     issues.push(issue("/mission", "--mission requires one full lowercase UUIDv4."));
   }
@@ -165,22 +171,20 @@ export const validateUnitCreateRequest = (value: unknown): UnitCreateRequestVali
   }
 
   const rawStageEffort = value.stageEffort;
-  const stageOptions = rawStageEffort === undefined
-    ? []
-    : Array.isArray(rawStageEffort) ? rawStageEffort : [rawStageEffort];
+  let stageOptions: unknown[] = [];
+  if (Array.isArray(rawStageEffort)) stageOptions = rawStageEffort;
+  else if (rawStageEffort !== undefined) stageOptions = [rawStageEffort];
   const stageEffort: Partial<Record<ConstructionStage, EffortLevel>> = {};
   for (const [index, option] of stageOptions.entries()) {
     if (typeof option !== "string") {
       issues.push(issue(`/stageEffort/${index}`, "Stage effort must use <stage>=<level>."));
       continue;
     }
-    const parts = option.split("=");
-    if (parts.length !== 2 || parts[0] === "" || parts[1] === "") {
+    const [stage, level, ...extra] = option.split("=");
+    if (!stage || !level || extra.length > 0) {
       issues.push(issue(`/stageEffort/${index}`, "Stage effort must use exactly <stage>=<level>."));
       continue;
     }
-    const stage = parts[0]!;
-    const level = parts[1]!;
     if (!stages.has(stage)) {
       issues.push(issue(`/stageEffort/${index}`, `Unsupported Construction stage '${stage}'.`));
       continue;
