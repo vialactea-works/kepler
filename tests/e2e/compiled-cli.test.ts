@@ -202,6 +202,36 @@ describe("compiled CLI E2E", () => {
     expect(removedOption.stderr).toContain("--force");
   }, 120_000);
 
+  it("lists and shows known unbound units through the compiled CLI without writing state", async () => {
+    const e2e = await createHarness("native");
+    const repository = e2e.resources.repositoryDirectory;
+    await addProjectMarker(repository);
+    await Fs.mkdir(Path.join(repository, ".kepler", "units-of-work", "unbound-unit"), { recursive: true });
+    const before = await snapshot(repository);
+
+    const listed = e2e.cli.run(["workflow", "construction", "unit", "list", "--project", repository]);
+    const shown = e2e.cli.run(["workflow", "construction", "unit", "show", "--unit", "unbound-unit", "--project", repository]);
+    const missing = e2e.cli.run(["workflow", "construction", "unit", "show", "--unit", "unknown-unit", "--project", repository]);
+    const after = await snapshot(repository);
+
+    expect(listed.exitCode).toBe(0);
+    expect(envelope(listed.stdout)).toMatchObject({
+      status: "success",
+      data: { units: [{ unit_id: "unbound-unit", membership: { status: "missing" } }] },
+    });
+    expect(shown.exitCode).toBe(0);
+    expect(envelope(shown.stdout)).toMatchObject({
+      status: "success",
+      data: { unit: { unit_id: "unbound-unit", membership: { status: "missing" } } },
+    });
+    expect(missing.exitCode).toBe(1);
+    expect(envelope(missing.stdout)).toMatchObject({
+      status: "failed",
+      data: { code: "unit_not_found" },
+    });
+    expect(after).toBe(before);
+  }, 120_000);
+
   it("returns one UUIDv4 in the compiled CLI result", async () => {
     const e2e = await createHarness();
     const result = e2e.cli.run(["uuid"]);

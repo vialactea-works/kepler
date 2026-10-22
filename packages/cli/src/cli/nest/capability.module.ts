@@ -8,6 +8,8 @@ import { createEventJournal } from "../../history/journal.js";
 import { CONSTRUCTION_PHASE } from "../../construction/events.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
+import { UnitQueries } from "../../construction/unit-queries.js";
+import { createNodeUnitQueryFileSystem } from "../../construction/unit-queries-runtime.js";
 import { createNodeUnitCreateRecords, machineLocalDate } from "../../construction/unit-create-runtime.js";
 import {
   createNodeFunctionalDesignStageCompletionRuntime,
@@ -38,6 +40,8 @@ import {
   ConstructionStageCommand,
   ConstructionUnitCommand,
   ConstructionUnitCreateCommand,
+  ConstructionUnitListCommand,
+  ConstructionUnitShowCommand,
   ConstructionStageCompleteCommand,
   GitAuthorCommand,
   GitCommand,
@@ -75,6 +79,8 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionStageCommand,
     ConstructionUnitCommand,
     ConstructionUnitCreateCommand,
+    ConstructionUnitListCommand,
+    ConstructionUnitShowCommand,
     ConstructionStageCompleteCommand,
     FunctionalDesignStageCompletion,
     MissionCommand,
@@ -129,6 +135,11 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
         now: () => new Date().toISOString(),
         producer: { name: "kepler", version: cliVersion },
       }),
+      inject: [ProjectResolver],
+    },
+    {
+      provide: UnitQueries,
+      useFactory: (projects: ProjectResolver) => new UnitQueries(projects, createNodeUnitQueryFileSystem()),
       inject: [ProjectResolver],
     },
     {
