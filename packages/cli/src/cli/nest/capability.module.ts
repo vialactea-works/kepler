@@ -7,6 +7,12 @@ import {
 import { createEventJournal } from "../../history/journal.js";
 import { CONSTRUCTION_PHASE } from "../../construction/events.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
+import { UnitCreate } from "../../construction/unit-create.js";
+import { UnitQueries } from "../../construction/unit-queries.js";
+import { ConstructionQueries } from "../../construction/scoped-queries.js";
+import { ConstructionLint } from "../../construction/construction-lint.js";
+import { createNodeUnitQueryFileSystem } from "../../construction/unit-queries-runtime.js";
+import { createNodeUnitCreateRecords, machineLocalDate } from "../../construction/unit-create-runtime.js";
 import {
   createNodeFunctionalDesignStageCompletionRuntime,
   FunctionalDesignStageCompletion,
@@ -34,6 +40,18 @@ import {
   AuditShowCommand,
   ConstructionCommand,
   ConstructionStageCommand,
+  ConstructionStageShowCommand,
+  ConstructionTaskCommand,
+  ConstructionTaskListCommand,
+  ConstructionTaskShowCommand,
+  ConstructionTaskReadyCommand,
+  ConstructionActivityCommand,
+  ConstructionActivityShowCommand,
+  ConstructionLintCommand,
+  ConstructionUnitCommand,
+  ConstructionUnitCreateCommand,
+  ConstructionUnitListCommand,
+  ConstructionUnitShowCommand,
   ConstructionStageCompleteCommand,
   GitAuthorCommand,
   GitCommand,
@@ -69,6 +87,18 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     WorkflowCommand,
     ConstructionCommand,
     ConstructionStageCommand,
+    ConstructionStageShowCommand,
+    ConstructionTaskCommand,
+    ConstructionTaskListCommand,
+    ConstructionTaskShowCommand,
+    ConstructionTaskReadyCommand,
+    ConstructionActivityCommand,
+    ConstructionActivityShowCommand,
+    ConstructionLintCommand,
+    ConstructionUnitCommand,
+    ConstructionUnitCreateCommand,
+    ConstructionUnitListCommand,
+    ConstructionUnitShowCommand,
     ConstructionStageCompleteCommand,
     FunctionalDesignStageCompletion,
     MissionCommand,
@@ -103,6 +133,42 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     {
       provide: MissionHandoffPreflight,
       useFactory: () => new MissionHandoffPreflight(createNodeMissionWorkspaceRuntime()),
+    },
+    {
+      provide: UnitCreate,
+      useFactory: (projects: ProjectResolver) => new UnitCreate({
+        projects: { resolve: (project) => projects.resolve(project) },
+        workspace: createNodeMissionWorkspaceRuntime(),
+        records: createNodeUnitCreateRecords(),
+        journals: {
+          create: (recordHome, missionId, journalId) => createEventJournal({
+            recordHome,
+            missionId,
+            journalId,
+            phase: CONSTRUCTION_PHASE,
+          }),
+        },
+        identities: { next: randomUUID },
+        today: machineLocalDate,
+        now: () => new Date().toISOString(),
+        producer: { name: "kepler", version: cliVersion },
+      }),
+      inject: [ProjectResolver],
+    },
+    {
+      provide: UnitQueries,
+      useFactory: (projects: ProjectResolver) => new UnitQueries(projects, createNodeUnitQueryFileSystem()),
+      inject: [ProjectResolver],
+    },
+    {
+      provide: ConstructionQueries,
+      useFactory: (units: UnitQueries) => new ConstructionQueries(units, createNodeUnitQueryFileSystem()),
+      inject: [UnitQueries],
+    },
+    {
+      provide: ConstructionLint,
+      useFactory: (units: UnitQueries) => new ConstructionLint(units, createNodeUnitQueryFileSystem()),
+      inject: [UnitQueries],
     },
     {
       provide: MissionStartup,

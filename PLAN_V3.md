@@ -328,15 +328,21 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 **Sources:** [Construction commands](docs/specs/v3/cli.md#construction-commands), [unit identity](docs/specs/v3/unit-of-work.md#identity-and-directory), [effort](docs/specs/v3/effort.md), SH53, SH59, SH62-SH63, SH115, SH121.
 
-- [ ] M08.1 Use the accepted `unit create <slug> --mission ... [--effort ...] [--stage-effort ...]... [--project ...]` contract. Do input checks before writes. Use the machine-local creation date and a mission stored in the record home. Use a matching `standard` binding. IDs must be unique across that project, including unbound units.
-- [ ] M08.2 Make only the unit directory and creation facts: identity, membership, workflow, and initial effort. Reject existing paths/IDs and duplicate stage overrides. For concurrent same-ID requests, let no more than one succeed. Reconcile partial directory/journal effects before retries.
-- [ ] M08.3 Add `unit list/show` with workflow binding, membership, derived progress, effort defaults/overrides, stage levels after overrides, blockers, and unknowns. Do not store a current-unit setting. Do not silently add unbound `.kepler/units-of-work/` data to managed work.
-- [ ] M08.4 Add scoped `stage show`, `task list/show/ready`, and `activity show`. Give compact projections with original attempt links and supporting evidence. A readiness query shows integrated predecessor facts and unknown prerequisites. It does not record admission or send work to a worker. It does not make external availability certain.
-- [ ] M08.5 Add `kepler workflow construction lint --unit ... [--project ...]` for the canonical mission-owned graph. Use M02/M03 context and accepted findings. Do not accept another graph path or task mode. Use this command for graph structure, not semantic Planning assessment.
-- [ ] M08.6 Use Standard's one-unit-per-mission rule and unique recorded membership. Reject unsupported/mismatched workflows. Make known unbound IDs unavailable across the project. Queries must show missing binding. Do not hide or change work.
-- [ ] M08.7 Add unit tests for identity, effort, and lookup rules. Add integration tests for directory/history coordination and task graphs. Use the CLI executable for creation tests. Include duplicate/invalid creation, query purity, missing binding, inherited effort, and Construction lint diagnostics.
+- [x] M08.1 Use the accepted `unit create <slug> --mission ... [--effort ...] [--stage-effort ...]... [--project ...]` contract. Do input checks before writes. Use the machine-local creation date and a mission stored in the record home. Use a matching `standard` binding. IDs must be unique across that project, including unbound units.
+- [x] M08.2 Make only the unit directory and creation facts: identity, membership, workflow, and initial effort. Reject existing paths/IDs and duplicate stage overrides. For concurrent same-ID requests, let no more than one succeed. Reconcile partial directory/journal effects before retries.
+- [x] M08.3 Add `unit list/show` with workflow binding, membership, derived progress, effort defaults/overrides, stage levels after overrides, blockers, and unknowns. Do not store a current-unit setting. Do not silently add unbound `.kepler/units-of-work/` data to managed work.
+- [x] M08.4 Add scoped `stage show`, `task list/show/ready`, and `activity show`. Give compact projections with original attempt links and supporting evidence. A readiness query shows integrated predecessor facts and unknown prerequisites. It does not record admission or send work to a worker. It does not make external availability certain.
+- [x] M08.5 Add `kepler workflow construction lint --unit ... [--project ...]` for the canonical mission-owned graph. Use M02/M03 context and accepted findings. Do not accept another graph path or task mode. Use this command for graph structure, not semantic Planning assessment.
+- [x] M08.6 Use Standard's one-unit-per-mission rule and unique recorded membership. Reject unsupported/mismatched workflows. Make known unbound IDs unavailable across the project. Queries must show missing binding. Do not hide or change work.
+- [x] M08.7 Add unit tests for identity, effort, and lookup rules. Add integration tests for directory/history coordination and task graphs. Use the CLI executable for creation tests. Include duplicate/invalid creation, query purity, missing binding, inherited effort, and Construction lint diagnostics.
+
+**M08.7 status:** Unit and real-filesystem integration tests cover creation identities, effort, lookups, coordination/retry, read-only projections, task graphs, and lint findings. Compiled-CLI E2E creates a prepared mission and Unit of Work, verifies effort and no authored artifacts, then checks duplicate mission and invalid override failures.
 
 **Complete when:** A prepared mission can receive its one unit. All accepted queries and lint stay read-only. Unit creation does not start execution or generate authored artifacts.
+
+**Verified:** `bun run check:typescript-sources`, `bun run typecheck`, `bun run build`, `bun run test:unit` (43 files, 687 tests), `bun run test:integration` (41 files, 614 tests), `bun run test:package` (1 test), and `bun --bun vitest run --project e2e` (6 files, 66 tests) passed against revision `29dfea6`. See the [M08 verification evidence](docs/specs/v3/m08-verification.md) for captured command output.
+
+**Post-merge verification:** The same checks passed on the integration merge candidate based on `5f0181d` and M08 `4baba6c`, including the packed-Core test (1/1).
 
 ## M09: Add Standard stage lifecycle and completion rules
 
