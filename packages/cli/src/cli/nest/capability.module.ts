@@ -7,6 +7,8 @@ import {
 import { createEventJournal } from "../../history/journal.js";
 import { CONSTRUCTION_PHASE } from "../../construction/events.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
+import { UnitCreate } from "../../construction/unit-create.js";
+import { createNodeUnitCreateRecords, machineLocalDate } from "../../construction/unit-create-runtime.js";
 import {
   createNodeFunctionalDesignStageCompletionRuntime,
   FunctionalDesignStageCompletion,
@@ -34,6 +36,8 @@ import {
   AuditShowCommand,
   ConstructionCommand,
   ConstructionStageCommand,
+  ConstructionUnitCommand,
+  ConstructionUnitCreateCommand,
   ConstructionStageCompleteCommand,
   GitAuthorCommand,
   GitCommand,
@@ -69,6 +73,8 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     WorkflowCommand,
     ConstructionCommand,
     ConstructionStageCommand,
+    ConstructionUnitCommand,
+    ConstructionUnitCreateCommand,
     ConstructionStageCompleteCommand,
     FunctionalDesignStageCompletion,
     MissionCommand,
@@ -103,6 +109,26 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     {
       provide: MissionHandoffPreflight,
       useFactory: () => new MissionHandoffPreflight(createNodeMissionWorkspaceRuntime()),
+    },
+    {
+      provide: UnitCreate,
+      useFactory: (projects: ProjectResolver) => new UnitCreate({
+        projects: { resolve: (project) => projects.resolve(project) },
+        records: createNodeUnitCreateRecords(),
+        journals: {
+          create: (recordHome, missionId, journalId) => createEventJournal({
+            recordHome,
+            missionId,
+            journalId,
+            phase: CONSTRUCTION_PHASE,
+          }),
+        },
+        identities: { next: randomUUID },
+        today: machineLocalDate,
+        now: () => new Date().toISOString(),
+        producer: { name: "kepler", version: cliVersion },
+      }),
+      inject: [ProjectResolver],
     },
     {
       provide: MissionStartup,

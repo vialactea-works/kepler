@@ -6,6 +6,7 @@ import { appendSelectorValue, parseScopeSelectors } from "../scope-selectors.js"
 import { generateUuid } from "../uuid.js";
 import { parseStrictJson } from "../../json/strict-json.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
+import { UnitCreate } from "../../construction/unit-create.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
@@ -527,10 +528,64 @@ export class ConstructionStageCommand extends CommandRunner {
   async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction stage")); }
 }
 
+@SubCommand({ name: "create", arguments: "<slug>", description: "Create one Unit of Work" })
+export class ConstructionUnitCreateCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly unitCreate: UnitCreate) {
+    super();
+  }
+
+  @Option({ flags: "--mission <mission-id>" })
+  parseMission(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--effort <level>" })
+  parseEffort(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--stage-effort <stage=level>" })
+  parseStageEffort(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--project <path>" })
+  parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const result = await this.unitCreate.execute({
+      slug: passedParams[0],
+      mission: values.mission,
+      effort: values.effort,
+      stageEffort: values.stageEffort,
+      project: values.project,
+    });
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    this.reporter.report({
+      status: "success",
+      data: {
+        unit_id: result.unitId,
+        mission_id: result.missionId,
+        record_home: result.recordHome,
+        directory: result.directory,
+        workflow: result.workflow,
+        effort: { default: result.effort.default, stage_overrides: result.effort.stageOverrides },
+        journal_id: result.journalId,
+        id: result.eventId,
+        execution_started: false,
+      },
+    });
+  }
+}
+
+@SubCommand({ name: "unit", description: "Create or query Units of Work", subCommands: [ConstructionUnitCreateCommand] })
+export class ConstructionUnitCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction unit")); }
+}
+
 @SubCommand({
   name: "construction",
   description: "Run Construction workflow operations",
-  subCommands: [ConstructionStageCommand],
+  subCommands: [ConstructionUnitCommand, ConstructionStageCommand],
 })
 export class ConstructionCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) {
