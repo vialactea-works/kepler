@@ -249,6 +249,51 @@ describe("v3 root command tree", () => {
     ]);
   });
 
+  it("starts a Construction stage through the root CLI without dispatching work", async () => {
+    const fixture = await createProject("stage-start");
+    const missionRequest = JSON.stringify({
+      title: "Prepare the selected capability",
+      request: "Implement the requested change in the selected workspace.",
+      workflow: "standard",
+      recordHomeRepositoryId: "project",
+      contexts: [{ reference: "request:scope", purpose: "Accepted request" }],
+      repositories: [{
+        repositoryId: "application",
+        workspace: { kind: "existing", path: fixture.root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      }],
+    });
+    const missionResult = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["mission", "create", "--project", fixture.root, "--request", missionRequest]),
+    );
+    expect(missionResult.exitCode).toBe(0);
+    const missionResponse = JSON.parse(missionResult.stdout);
+    expect(missionResponse.status).toBe("success");
+    const missionId = missionResponse.data.mission_id as string;
+    const unitResult = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["workflow", "construction", "unit", "create", "stage-start", "--mission", missionId, "--project", fixture.root]),
+    );
+    expect(unitResult.exitCode).toBe(0);
+    const unitResponse = JSON.parse(unitResult.stdout);
+    expect(unitResponse.status).toBe("success");
+    const unitId = unitResponse.data.unit_id as string;
+    const request = JSON.stringify({
+      inputs: [{ reference: "request:scope", purpose: "Requester scope for Functional Design" }],
+    });
+
+    const result = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design", "--request", request, "--project", fixture.root]),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "success",
+      data: { unit_id: unitId, stage: "functional-design", worker_dispatched: false },
+    });
+  });
+
   it("names the mission capability when its subcommand is missing", async () => {
     const result = await runCli(["mission"]);
 

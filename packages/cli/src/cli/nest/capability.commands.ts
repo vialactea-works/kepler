@@ -11,6 +11,7 @@ import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
 import { ConstructionLint } from "../../construction/construction-lint.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
+import { StageStart } from "../../construction/stage-start.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
 import { AuditQueries } from "../../audit/queries.js";
@@ -532,6 +533,49 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
   }
 }
 
+@SubCommand({ name: "start", description: "Start a new Construction stage attempt" })
+export class ConstructionStageStartCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly start: StageStart) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--request <json>" }) parseRequest(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "stage"] });
+    if (selectors.kind === "failed") {
+      reportSelectorFailure(this.reporter, selectors, "Provide one exact --unit and supported --stage selector.");
+      return;
+    }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    const request = optionValue(values, "request");
+    if (typeof request !== "string") {
+      reportFailure(this.reporter, typeof request === "object" ? request : {
+        code: "required_selector_missing",
+        message: "Stage start requires one typed --request JSON value.",
+        details: { required: ["request"] },
+        recovery: "Provide the applicable stage input references with --request.",
+      });
+      return;
+    }
+    const parsed = parseStrictJson(request);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_stage_start_request_json",
+        message: "The stage-start request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Correct the JSON request and retry without changing the selected scope.",
+      });
+      return;
+    }
+    const result = await this.start.execute(selectors.selectors, parsed.value, selectedProject.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
 @SubCommand({ name: "show", description: "Show a Construction stage projection" })
 export class ConstructionStageShowCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
@@ -559,7 +603,7 @@ export class ConstructionStageShowCommand extends CommandRunner {
 @SubCommand({
   name: "stage",
   description: "Read or change one Construction stage attempt",
-  subCommands: [ConstructionStageShowCommand, ConstructionStageCompleteCommand],
+  subCommands: [ConstructionStageShowCommand, ConstructionStageStartCommand, ConstructionStageCompleteCommand],
 })
 export class ConstructionStageCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) { super(); }

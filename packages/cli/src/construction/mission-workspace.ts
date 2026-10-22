@@ -36,6 +36,7 @@ export interface MissionWorkspaceFileSystem {
   readonly realpath: (path: string) => Promise<string>;
   readonly mkdir: (path: string) => Promise<void>;
   readonly readFile: (path: string) => Promise<string>;
+  readonly readDirectory?: (path: string) => Promise<readonly string[]>;
   readonly writeFileExclusive: (path: string, content: string) => Promise<void>;
 }
 
@@ -63,7 +64,7 @@ interface GitRepository {
   readonly statusPaths: readonly string[];
 }
 
-interface LocalWorkspaceAttachment {
+export interface LocalWorkspaceAttachment {
   readonly format: "kepler.mission-workspace.v1";
   readonly mission_id: string;
   readonly record_home_repository_id: string;
@@ -331,7 +332,7 @@ const resolveBranch = async (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const parseAttachment = (input: unknown): LocalWorkspaceAttachment | undefined => {
+export const parseAttachment = (input: unknown): LocalWorkspaceAttachment | undefined => {
   if (!isRecord(input) || input.format !== "kepler.mission-workspace.v1" ||
     typeof input.mission_id !== "string" || !uuidV4.test(input.mission_id) ||
     typeof input.record_home_repository_id !== "string" || typeof input.repository_id !== "string" ||
