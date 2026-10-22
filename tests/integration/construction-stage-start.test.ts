@@ -20,6 +20,7 @@ const temporaryRoots: string[] = [];
 
 interface Fixture {
   readonly root: string;
+  readonly secondaryRoot?: string;
   readonly missionId: string;
   readonly unitId: string;
   readonly contexts: AuditContextResolver;
@@ -33,7 +34,7 @@ const git = (cwd: string, ...args: string[]): string => execFileSync("git", args
   env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_COUNT: "0" },
 }).trim();
 
-const createFixture = async (withCommit = true): Promise<Fixture> => {
+const createFixture = async (withCommit = true, withSecondaryRepository = false): Promise<Fixture> => {
   const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-stage-start-"));
   temporaryRoots.push(root);
   await Fs.mkdir(Path.join(root, ".kepler"));
@@ -45,6 +46,16 @@ const createFixture = async (withCommit = true): Promise<Fixture> => {
   if (withCommit) {
     git(root, "add", ".");
     git(root, "commit", "-q", "-m", "Initialize stage-start fixture");
+  }
+  const secondaryRoot = withSecondaryRepository ? Path.join(root, "secondary") : undefined;
+  if (secondaryRoot) {
+    await Fs.mkdir(secondaryRoot);
+    git(secondaryRoot, "init", "-q", "-b", "main");
+    git(secondaryRoot, "config", "user.name", "Kepler stage-start test");
+    git(secondaryRoot, "config", "user.email", "stage-start@example.invalid");
+    await Fs.writeFile(Path.join(secondaryRoot, "README.md"), "Secondary stage-start fixture\n", "utf8");
+    git(secondaryRoot, "add", ".");
+    git(secondaryRoot, "commit", "-q", "-m", "Initialize secondary stage-start fixture");
   }
   const workspace = createNodeMissionWorkspaceRuntime({ cwd: root });
   const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => root }));
@@ -68,12 +79,20 @@ const createFixture = async (withCommit = true): Promise<Fixture> => {
     workflow: "standard",
     recordHomeRepositoryId: "repo-main",
     contexts: [{ reference: "request:scope", purpose: "Requester scope" }],
-    repositories: [{
-      repositoryId: "repo-main",
-      workspace: { kind: "existing", path: root },
-      branch: { kind: "current" },
-      integrationTarget: "main",
-    }],
+    repositories: [
+      {
+        repositoryId: "repo-main",
+        workspace: { kind: "existing", path: root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      },
+      ...(secondaryRoot ? [{
+        repositoryId: "repo-secondary",
+        workspace: { kind: "existing" as const, path: secondaryRoot },
+        branch: { kind: "current" as const },
+        integrationTarget: "main",
+      }] : []),
+    ],
   });
   if (mission.kind !== "prepared") throw new Error(`Mission startup failed: ${JSON.stringify(mission)}`);
   const unit = await new UnitCreate({
@@ -97,6 +116,7 @@ const createFixture = async (withCommit = true): Promise<Fixture> => {
   const contexts = new AuditContextResolver(createNodeAuditContextRuntime(projects));
   return {
     root,
+    ...(secondaryRoot ? { secondaryRoot } : {}),
     missionId: mission.missionId,
     unitId: unit.unitId,
     contexts,
@@ -150,6 +170,46 @@ describe("Construction stage start", () => {
     const loaded = await fixture.contexts.readUnit(fixture.unitId);
     expect(loaded.kind).toBe("loaded");
     if (loaded.kind === "loaded") expect(loaded.unit.stages[1]?.attempts).toHaveLength(0);
+  });
+
+  it("captures checkpoints from separate repository common directories", async () => {
+    const fixture = await createFixture(true, true);
+    const expected = [
+      { repository_id: "repo-main", commit: git(fixture.root, "rev-parse", "HEAD") },
+      { repository_id: "repo-secondary", commit: git(fixture.secondaryRoot!, "rev-parse", "HEAD") },
+    ];
+
+    const result = await fixture.start.execute({ unit: fixture.unitId, stage: "functional-design" }, {
+      inputs: [{ reference: "request:scope", purpose: "Requester scope for Functional Design" }],
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind === "success") expect(result.data.checkpoints).toEqual(expected);
+  });
+
+  it("rejects a prepared workspace switched to an unselected branch", async () => {
+    const fixture = await createFixture();
+    git(fixture.root, "switch", "-c", "unintended");
+    await Fs.writeFile(Path.join(fixture.root, "unintended.md"), "Unselected branch material\n", "utf8");
+    git(fixture.root, "add", "unintended.md");
+    git(fixture.root, "commit", "-q", "-m", "Commit on unintended branch");
+
+    const result = await fixture.start.execute({ unit: fixture.unitId, stage: "functional-design" }, {
+      inputs: [{ reference: "request:scope", purpose: "Requester scope for Functional Design" }],
+    });
+
+    expect(result).toMatchObject({ kind: "failed", data: { code: "stage_workspace_branch_changed" } });
+  });
+
+  it("rejects a prepared workspace in detached HEAD state", async () => {
+    const fixture = await createFixture();
+    git(fixture.root, "switch", "--detach", "HEAD");
+
+    const result = await fixture.start.execute({ unit: fixture.unitId, stage: "functional-design" }, {
+      inputs: [{ reference: "request:scope", purpose: "Requester scope for Functional Design" }],
+    });
+
+    expect(result).toMatchObject({ kind: "failed", data: { code: "stage_workspace_branch_changed" } });
   });
 
   it("captures an empty checkpoint set from a real unborn branch", async () => {

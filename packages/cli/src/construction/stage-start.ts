@@ -208,7 +208,7 @@ const captureStageCheckpoints = async (
     if (!attachment || attachment.mission_id !== loaded.missionId ||
         attachment.record_home_repository_id !== recordHome ||
         attachment.workspace_id.length === 0 || name !== `${attachment.workspace_id}.json` ||
-        attachment.common_directory !== commonDir || attachment.repository_path !== attachment.workspace_path ||
+        attachment.repository_path !== attachment.workspace_path ||
         !preparedById.has(attachment.repository_id) || seenRepositories.has(attachment.repository_id)) {
       return fail("stage_workspace_attachment_invalid", "A local workspace attachment does not match this mission's prepared repository binding.", {
         attachment_path: attachmentPath,
@@ -259,11 +259,20 @@ const captureStageCheckpoints = async (
     const actualCommon = await commonDirectory(runtime, actualRoot);
     const gitDirectory = await runtime.workspace.git.run(actualRoot, ["rev-parse", "--absolute-git-dir"]);
     if (topLevel.status !== 0 || await runtime.workspace.fileSystem.realpath(topLevel.stdout.trim()) !== actualRoot ||
-        actualCommon !== commonDir || gitDirectory.status !== 0 ||
+        actualCommon !== attachment.common_directory || gitDirectory.status !== 0 ||
         await runtime.workspace.fileSystem.realpath(gitDirectory.stdout.trim()) !== attachment.git_directory) {
       return fail("stage_workspace_identity_changed", "A prepared workspace no longer resolves to its recorded Git repository identity.", {
         repository_id: attachment.repository_id,
         workspace_path: workspacePath,
+      });
+    }
+    const symbolicHead = await runtime.workspace.git.run(actualRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+    const branch = symbolicHead.stdout.trim();
+    if (symbolicHead.status !== 0 || branch !== attachment.branch) {
+      return fail("stage_workspace_branch_changed", "A prepared workspace must remain attached to its selected branch before a stage can start.", {
+        repository_id: attachment.repository_id,
+        expected_branch: attachment.branch,
+        current_branch: branch || undefined,
       });
     }
     const head = await runtime.workspace.git.run(actualRoot, ["rev-parse", "--verify", "HEAD^{commit}"]);
@@ -277,12 +286,8 @@ const captureStageCheckpoints = async (
         stderr: head.stderr.trim(),
       });
     }
-    const symbolicHead = await runtime.workspace.git.run(actualRoot, ["symbolic-ref", "--quiet", "HEAD"]);
-    const branch = symbolicHead.stdout.trim();
-    const branchExists = nonEmpty(branch)
-      ? await runtime.workspace.git.run(actualRoot, ["show-ref", "--verify", "--quiet", branch])
-      : undefined;
-    if (symbolicHead.status !== 0 || !branch.startsWith("refs/heads/") || branchExists?.status !== 1) {
+    const branchExists = await runtime.workspace.git.run(actualRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]);
+    if (branchExists.status !== 1) {
       return fail("stage_workspace_head_unavailable", "Kepler could not verify that a commitless prepared repository still has an unborn branch.", {
         repository_id: attachment.repository_id,
         stderr: head.stderr.trim(),
