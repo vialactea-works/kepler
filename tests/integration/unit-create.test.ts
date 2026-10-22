@@ -211,6 +211,39 @@ describe("unit creation with real mission journals and filesystem", () => {
     });
   });
 
+  it("enforces one Unit of Work per Standard mission without changing an existing unit", async () => {
+    const root = await createRecordHome();
+    await recordMission(root);
+    const create = () => new UnitCreate(createRuntime(root));
+    const first = await create().execute({ slug: "order-cancellation", mission: missionId });
+    expect(first).toMatchObject({ kind: "created", unitId: "2026-10-21-order-cancellation" });
+
+    const unitsRoot = Path.join(root, ".kepler", "missions", missionId, "construction", "units-of-work");
+    const unitJournalPath = Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE, `${unitJournalId}.jsonl`);
+    const unitsBefore = await Fs.readdir(unitsRoot);
+    const journalBefore = await Fs.readFile(unitJournalPath, "utf8");
+    const second = await create().execute({ slug: "different-work", mission: missionId });
+
+    expect(second).toMatchObject({ kind: "failed", code: "mission_unit_exists", details: { mission_id: missionId, unit_ids: ["2026-10-21-order-cancellation"] } });
+    expect(await Fs.readdir(unitsRoot)).toEqual(unitsBefore);
+    expect(await Fs.readFile(unitJournalPath, "utf8")).toBe(journalBefore);
+  });
+
+  it("rejects an orphan unit directory under the mission without adopting it", async () => {
+    const root = await createRecordHome();
+    await recordMission(root);
+    const orphan = Path.join(root, ".kepler", "missions", missionId, "construction", "units-of-work", "2026-10-20-orphan");
+    await Fs.mkdir(orphan, { recursive: true });
+    const historyRoot = Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const historyBefore = await Fs.readdir(historyRoot);
+
+    const result = await new UnitCreate(createRuntime(root)).execute({ slug: "order-cancellation", mission: missionId });
+
+    expect(result).toMatchObject({ kind: "failed", code: "mission_unit_exists", details: { unit_ids: ["2026-10-20-orphan"] } });
+    expect(await Fs.readdir(Path.dirname(orphan))).toEqual(["2026-10-20-orphan"]);
+    expect(await Fs.readdir(historyRoot)).toEqual(historyBefore);
+  });
+
   it("rejects an unprepared mission without creating unit paths or appending history", async () => {
     const root = await createRecordHome();
     await recordMission(root, false);
@@ -267,6 +300,71 @@ describe("unit creation with real mission journals and filesystem", () => {
     expect(result).toMatchObject({ kind: "failed", code: "unit_id_conflict" });
     expect(await Fs.readdir(existingUnit)).toEqual([]);
     expect(await Fs.readdir(Path.join(selectedRoot, ".kepler", "missions", missionId, "construction")).catch(() => [])).toEqual([]);
+  });
+
+  it("allows at most one concurrent unit creation for one Standard mission", async () => {
+    const root = await createRecordHome();
+    await recordMission(root);
+    const requests = [
+      { slug: "first-outcome", mission: missionId },
+      { slug: "second-outcome", mission: missionId },
+    ];
+    const results = await Promise.all(requests.map((request) => new UnitCreate(createRuntime(root)).execute(request)));
+
+    expect(results.filter((result) => result.kind === "created")).toHaveLength(1);
+    const failedIndex = results.findIndex((result) => result.kind === "failed");
+    expect(failedIndex).toBeGreaterThanOrEqual(0);
+    const retry = await new UnitCreate(createRuntime(root)).execute(requests[failedIndex]!);
+    expect(retry).toMatchObject({ kind: "failed", code: "mission_unit_exists" });
+    expect(await Fs.readdir(Path.join(root, ".kepler", "missions", missionId, "construction", "units-of-work"))).toHaveLength(1);
+  });
+
+  it("coordinates the same generated ID across different missions", async () => {
+    const root = await createRecordHome();
+    await recordMission(root);
+    const otherMissionId = "10000000-0000-4000-8000-000000000010";
+    const otherCreationJournalId = randomUUID();
+    const otherPreparationJournalId = randomUUID();
+    const repository = {
+      repository_id: "record-home",
+      context: { kind: "existing" },
+      branch: { kind: "current" },
+      integration_target: "refs/heads/main",
+      starting_checkpoint: { kind: "no-commit" },
+    };
+    const otherCreation = createEventJournal({ recordHome: root, missionId: otherMissionId, journalId: otherCreationJournalId, phase: CONSTRUCTION_PHASE });
+    await otherCreation.append(event(randomUUID(), otherCreationJournalId, "construction.mission-created", {
+      mission_id: otherMissionId,
+      title: "Prepare a second unit-create mission",
+      request: "Exercise project-wide identity coordination.",
+      workflow: "standard",
+      record_home: { repository_id: "record-home" },
+      contexts: [],
+      repositories: [repository],
+    }));
+    const otherPreparation = createEventJournal({ recordHome: root, missionId: otherMissionId, journalId: otherPreparationJournalId, phase: CONSTRUCTION_PHASE });
+    await otherPreparation.append(event(randomUUID(), otherPreparationJournalId, "construction.mission-workspaces-prepared", {
+      mission_id: otherMissionId,
+      repositories: [{
+        repository_id: "record-home",
+        context: { kind: "existing" },
+        branch: "main",
+        integration_target: "refs/heads/main",
+        starting_checkpoint: { kind: "no-commit" },
+      }],
+    }));
+
+    const requests = [
+      { slug: "same-outcome", mission: missionId },
+      { slug: "same-outcome", mission: otherMissionId },
+    ];
+    const results = await Promise.all(requests.map((request) => new UnitCreate(createRuntime(root)).execute(request)));
+
+    expect(results.filter((result) => result.kind === "created")).toHaveLength(1);
+    const failedIndex = results.findIndex((result) => result.kind === "failed");
+    expect(failedIndex).toBeGreaterThanOrEqual(0);
+    const retry = await new UnitCreate(createRuntime(root)).execute(requests[failedIndex]!);
+    expect(retry).toMatchObject({ kind: "failed", code: "unit_id_conflict" });
   });
 
   it("allows at most one concurrent creation for the same project-wide unit ID", async () => {

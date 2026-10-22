@@ -19,6 +19,7 @@ import {
   type UnitId,
 } from "./events.js";
 import type { EventJournal } from "../history/journal.js";
+import type { MissionCoordinationLease } from "./mission-coordination.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 
 export interface UnitCreateRequest {
@@ -383,27 +384,52 @@ export class UnitCreate {
     }
     if ("kind" in scope) return scope;
 
-    let acquired: Awaited<ReturnType<MissionWorkspaceRuntime["coordination"]["acquire"]>>;
-    try {
-      acquired = await this.runtime.workspace.coordination.acquire({
-        commonDirectory: scope.commonDirectory,
-        location: { kind: "code-workspace" },
+    const resources = [
+      {
         resourceKey: createHash("sha256").update(JSON.stringify(["construction-unit-create", unitId])).digest("hex"),
-        owner: {
-          machine_id: this.runtime.workspace.identity.machine_id,
-          process_id: this.runtime.workspace.identity.process_id,
-          process_incarnation_id: this.runtime.workspace.identity.process_incarnation_id,
-          mission_id: request.missionId,
-          resource_scope: `construction/unit-create/${unitId}`,
-        },
-      });
-    } catch (error) {
-      return failure("unit_coordination_failed", "Kepler could not acquire project-wide unit creation coordination.", {
-        unit_id: unitId,
-        message: error instanceof Error ? error.message : String(error),
-      });
+        resourceScope: `construction/unit-create/${unitId}`,
+      },
+      {
+        resourceKey: createHash("sha256").update(JSON.stringify(["construction-unit-create-mission", request.missionId])).digest("hex"),
+        resourceScope: `construction/unit-create-mission/${request.missionId}`,
+      },
+    ].sort((left, right) => left.resourceKey.localeCompare(right.resourceKey));
+    const leases: MissionCoordinationLease[] = [];
+    for (const resource of resources) {
+      let acquired: Awaited<ReturnType<MissionWorkspaceRuntime["coordination"]["acquire"]>>;
+      try {
+        acquired = await this.runtime.workspace.coordination.acquire({
+          commonDirectory: scope.commonDirectory,
+          location: { kind: "code-workspace" },
+          resourceKey: resource.resourceKey,
+          owner: {
+            machine_id: this.runtime.workspace.identity.machine_id,
+            process_id: this.runtime.workspace.identity.process_id,
+            process_incarnation_id: this.runtime.workspace.identity.process_incarnation_id,
+            mission_id: request.missionId,
+            resource_scope: resource.resourceScope,
+          },
+        });
+      } catch (error) {
+        const acquireFailure = failure("unit_coordination_failed", "Kepler could not acquire project-wide unit creation coordination.", {
+          unit_id: unitId,
+          resource_scope: resource.resourceScope,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return await this.releaseLeases(leases, unitId, acquireFailure) ?? acquireFailure;
+      }
+      if (acquired.kind === "failed") {
+        const acquireFailure: UnitCreateFailure = {
+          kind: "failed",
+          code: acquired.code,
+          message: acquired.message,
+          details: { ...acquired.details, unit_id: unitId, resource_scope: resource.resourceScope },
+          recovery: acquired.recovery,
+        };
+        return await this.releaseLeases(leases, unitId, acquireFailure) ?? acquireFailure;
+      }
+      leases.push(acquired.lease);
     }
-    if (acquired.kind === "failed") return acquired;
 
     let result: UnitCreateResult;
     try {
@@ -414,26 +440,35 @@ export class UnitCreate {
         message: error instanceof Error ? error.message : String(error),
       }, "Preserve all unit paths and journal bytes, then reconcile them before retrying.");
     }
+    return await this.releaseLeases(leases, unitId, result) ?? result;
+  }
 
-    try {
-      const released = await acquired.lease.release();
-      if (released.kind === "failed") {
-        return failure("unit_coordination_release_failed", "Unit creation finished, but project-wide coordination could not be released safely.", {
-          unit_id: unitId,
-          creation_result: result.kind,
-          ...(result.kind === "failed" ? { creation_failure: result.code } : { event_id: result.eventId }),
-          release_failure: released.code,
-          release_details: released.details,
-        }, "Preserve the coordination artifacts and reconcile their current owner before retrying.");
+  private async releaseLeases(
+    leases: readonly MissionCoordinationLease[],
+    unitId: string,
+    result: UnitCreateResult,
+  ): Promise<UnitCreateFailure | undefined> {
+    const failures: { readonly lock_path: string; readonly code?: string; readonly message?: string; readonly details?: Readonly<Record<string, unknown>> }[] = [];
+    for (const lease of [...leases].reverse()) {
+      try {
+        const released = await lease.release();
+        if (released.kind === "failed") {
+          failures.push({ lock_path: lease.lockPath, code: released.code, message: released.message, details: released.details });
+        }
+      } catch (error) {
+        failures.push({
+          lock_path: lease.lockPath,
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
-    } catch (error) {
-      return failure("unit_coordination_release_failed", "Unit creation finished, but project-wide coordination could not be released safely.", {
-        unit_id: unitId,
-        creation_result: result.kind,
-        message: error instanceof Error ? error.message : String(error),
-      }, "Preserve the coordination artifacts and reconcile their current owner before retrying.");
     }
-    return result;
+    if (failures.length === 0) return undefined;
+    return failure("unit_coordination_release_failed", "Unit creation ended, but project-wide coordination could not be released safely.", {
+      unit_id: unitId,
+      creation_result: result.kind,
+      ...(result.kind === "failed" ? { creation_failure: result.code } : { event_id: result.eventId }),
+      release_failures: failures,
+    }, "Preserve the coordination artifacts and reconcile their current owners before retrying.");
   }
 
   private async createUnderLease(
@@ -501,6 +536,17 @@ export class UnitCreate {
         matching_creation_facts: facts.length,
         known_paths: paths.map((path) => ({ record_home: path.recordHome, mission_id: path.missionId, directory: path.directory, path_kind: path.pathKind })),
       }, "Preserve the existing paths and history. Reconcile them explicitly or choose a different slug.");
+    }
+
+    const missionUnitIds = [...new Set([
+      ...inspected.unitFacts.filter((fact) => fact.missionId === request.missionId).map((fact) => fact.unitId),
+      ...inspected.unitPaths.filter((path) => path.missionId === request.missionId).map((path) => path.unitId),
+    ])].sort((left, right) => left.localeCompare(right));
+    if (missionUnitIds.length > 0) {
+      return failure("mission_unit_exists", "The Standard mission already has a Unit of Work and cannot accept another.", {
+        mission_id: request.missionId,
+        unit_ids: missionUnitIds,
+      }, "Preserve the existing unit and history. Create a separate mission for separate work or reconcile its recorded binding.");
     }
 
     let journalId: string;

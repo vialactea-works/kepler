@@ -170,6 +170,74 @@ describe("unit queries against real Construction history", () => {
     expect(after).toEqual(before);
   });
 
+  it("keeps mismatched unit and mission workflow bindings visible without changing records", async () => {
+    const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-unit-query-workflows-"));
+    temporaryRoots.push(root);
+    await Fs.mkdir(Path.join(root, ".kepler", "missions"), { recursive: true });
+    await Fs.mkdir(Path.join(root, ".git"));
+    const cases = [
+      {
+        missionId,
+        unitId: "2026-10-21-unit-workflow-mismatch",
+        missionWorkflow: "standard",
+        unitWorkflow: "experimental",
+      },
+      {
+        missionId: "10000000-0000-4000-8000-000000000011",
+        unitId: "2026-10-21-mission-workflow-mismatch",
+        missionWorkflow: "experimental",
+        unitWorkflow: "standard",
+      },
+    ] as const;
+    for (const item of cases) {
+      const missionJournalId = randomUUID();
+      const unitJournalId = randomUUID();
+      const repository = {
+        repository_id: "record-home",
+        context: { kind: "existing" },
+        branch: { kind: "current" },
+        integration_target: "refs/heads/main",
+        starting_checkpoint: { kind: "no-commit" },
+      };
+      const missionJournal = createEventJournal({ recordHome: root, missionId: item.missionId, journalId: missionJournalId, phase: CONSTRUCTION_PHASE });
+      await missionJournal.append(event(randomUUID(), missionJournalId, "construction.mission-created", {
+        mission_id: item.missionId,
+        title: "Inspect workflow binding",
+        request: "Keep mismatched workflow records visible.",
+        workflow: item.missionWorkflow,
+        record_home: { repository_id: "record-home" },
+        contexts: [],
+        repositories: [repository],
+      }));
+      const unitJournal = createEventJournal({ recordHome: root, missionId: item.missionId, journalId: unitJournalId, phase: CONSTRUCTION_PHASE });
+      await unitJournal.append(event(randomUUID(), unitJournalId, "construction.unit-created", {
+        mission_id: item.missionId,
+        unit_id: item.unitId,
+        directory: `construction/units-of-work/${item.unitId}`,
+        workflow: item.unitWorkflow,
+        initial_effort: { default: "standard", stage_overrides: {}, selected_by: "requester" },
+      }));
+      await Fs.mkdir(Path.join(root, ".kepler", "missions", item.missionId, "construction", "units-of-work", item.unitId), { recursive: true });
+    }
+    const queries = new UnitQueries({ resolve: async () => ({ kind: "resolved", root }) }, createNodeUnitQueryFileSystem());
+    const before = await snapshot(root);
+    const listed = await queries.list();
+    const unitBinding = await queries.show(cases[0].unitId);
+    const missionBinding = await queries.show(cases[1].unitId);
+    const after = await snapshot(root);
+
+    expect(listed).toMatchObject({
+      kind: "listed",
+      units: expect.arrayContaining([
+        expect.objectContaining({ unit_id: cases[0].unitId, workflow: { status: "mismatched", value: "experimental" } }),
+        expect.objectContaining({ unit_id: cases[1].unitId, workflow: { status: "mismatched", value: "standard" } }),
+      ]),
+    });
+    expect(unitBinding).toMatchObject({ kind: "shown", unit: { membership: { status: "bound", mission_id: missionId }, workflow: { status: "mismatched" } } });
+    expect(missionBinding).toMatchObject({ kind: "shown", unit: { membership: { status: "bound", mission_id: cases[1].missionId }, workflow: { status: "mismatched" } } });
+    expect(after).toEqual(before);
+  });
+
   it("returns explicit selector and missing-unit failures", async () => {
     const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-unit-queries-empty-"));
     temporaryRoots.push(root);

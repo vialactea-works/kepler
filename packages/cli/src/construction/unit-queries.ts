@@ -136,9 +136,24 @@ const unitView = (entry: UnitInventoryEntry): UnitQueryUnit => {
   } else if (facts.length === 0) membership = { status: "missing", candidates: [] };
   else membership = { status: "conflicting", candidates: candidateMissions };
   const selectedFact = facts.length === 1 ? facts[0] : undefined;
+  const boundMission = membership.status === "bound"
+    ? entry.missionContexts.find((context) => context.missionId === membership.mission_id)
+    : undefined;
+  const missionWorkflows = boundMission?.history.events.flatMap((record) => {
+    const data = record.event?.data;
+    return record.event?.type === "construction.mission-created" && isRecord(data) &&
+      data.mission_id === membership.mission_id && typeof data.workflow === "string"
+      ? [data.workflow]
+      : [];
+  }) ?? [];
   let workflow: UnitQueryUnit["workflow"] = { status: "unknown" };
-  if (selectedFact?.workflow === "standard") workflow = { status: "standard", value: selectedFact.workflow };
-  else if (selectedFact?.workflow) workflow = { status: "mismatched", value: selectedFact.workflow };
+  if (selectedFact?.workflow && selectedFact.workflow !== "standard") {
+    workflow = { status: "mismatched", value: selectedFact.workflow };
+  } else if (selectedFact?.workflow === "standard" && missionWorkflows.length === 1 && missionWorkflows[0] === "standard") {
+    workflow = { status: "standard", value: selectedFact.workflow };
+  } else if (selectedFact?.workflow === "standard" && missionWorkflows.length > 0) {
+    workflow = { status: "mismatched", value: selectedFact.workflow };
+  }
   const selectedProjection = membership.status === "bound"
     ? entry.projections.filter((item) => item.missionId === membership.mission_id)
     : entry.projections;

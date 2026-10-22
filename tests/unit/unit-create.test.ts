@@ -205,7 +205,7 @@ describe("UnitCreate", () => {
         stageOverrides: { implementation: "minimal", deliver: "standard" },
       },
     });
-    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "inspect", "journal", "append", "directory", "release"]);
+    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "acquire", "inspect", "journal", "append", "directory", "release", "release"]);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       id: eventId,
@@ -255,6 +255,7 @@ describe("UnitCreate", () => {
     { name: "missing mission", inspection: { kind: "inspected", unitIds: [], unitPaths: [], unitFacts: [] }, code: "mission_not_found" },
     { name: "mismatched workflow", inspection: { kind: "inspected", mission: { id: missionId, workflow: "experimental", prepared: true }, unitIds: [], unitPaths: [], unitFacts: [] }, code: "mission_workflow_mismatch" },
     { name: "unprepared mission", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: false }, unitIds: [], unitPaths: [], unitFacts: [] }, code: "mission_not_prepared" },
+    { name: "mission already has another unit", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: true }, unitIds: ["2026-10-20-existing"], unitPaths: [], unitFacts: [{ unitId: "2026-10-20-existing", missionId, recordHome: "/record", directory: "construction/units-of-work/2026-10-20-existing", workflow: "standard", effort: { default: "standard", stageOverrides: {}, selectedBy: "requester" }, journalId, eventId }] }, code: "mission_unit_exists" },
     { name: "directory identity", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: true }, unitIds: [unitId], unitPaths: [], unitFacts: [] }, code: "unit_id_conflict" },
     { name: "history identity", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: true }, unitIds: [unitId], unitPaths: [], unitFacts: [] }, code: "unit_id_conflict" },
   ])("does not write when $name prevents creation", async ({ inspection, code }) => {
@@ -264,7 +265,7 @@ describe("UnitCreate", () => {
 
     expect(result).toMatchObject({ kind: "failed", code });
     expect(events).toHaveLength(0);
-    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "inspect", "release"]);
+    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "acquire", "inspect", "release", "release"]);
   });
 
   it("does not write when project selection fails", async () => {
@@ -288,7 +289,7 @@ describe("UnitCreate", () => {
 
     expect(result).toMatchObject({ kind: "failed", code: "unit_directory_exists" });
     expect(events).toHaveLength(1);
-    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "inspect", "journal", "append", "directory", "release"]);
+    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "acquire", "inspect", "journal", "append", "directory", "release", "release"]);
   });
 
   it("reports a journal failure before creating the unit directory", async () => {
@@ -304,6 +305,6 @@ describe("UnitCreate", () => {
       details: { unit_id: unitId, journal_path: `/record/.kepler/missions/${missionId}/history/construction/${journalId}.jsonl` },
     });
     expect(events).toHaveLength(1);
-    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "inspect", "journal", "append", "release"]);
+    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "acquire", "inspect", "journal", "append", "release", "release"]);
   });
 });
