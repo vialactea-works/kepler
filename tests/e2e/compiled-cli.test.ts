@@ -253,6 +253,101 @@ describe("compiled CLI E2E", () => {
     expect(after).toBe(before);
   }, 120_000);
 
+  it("creates a Unit of Work through the compiled CLI and rejects invalid or duplicate creation", async () => {
+    const e2e = await createHarness("native");
+    const repository = e2e.resources.repositoryDirectory;
+    await addProjectMarker(repository);
+    const missionRequest = {
+      title: "Create a unit through the compiled CLI",
+      request: "Verify unit creation and its structured output.",
+      workflow: "standard",
+      recordHomeRepositoryId: "record-home",
+      contexts: [],
+      repositories: [{
+        repositoryId: "record-home",
+        workspace: { kind: "existing", path: repository },
+        branch: { kind: "current" },
+        integrationTarget: "refs/heads/main",
+      }],
+    };
+    const mission = e2e.cli.run([
+      "mission",
+      "create",
+      "--project",
+      repository,
+      "--request",
+      JSON.stringify(missionRequest),
+    ]);
+    expect(mission.exitCode).toBe(0);
+    const missionData = envelope(mission.stdout).data;
+    const missionId = missionData.mission_id as string;
+    expect(missionData).toMatchObject({ workflow: "standard", execution_started: false });
+
+    const created = e2e.cli.run([
+      "workflow", "construction", "unit", "create", "compiled-unit",
+      "--mission", missionId,
+      "--effort", "comprehensive",
+      "--stage-effort", "implementation=minimal",
+      "--project", repository,
+    ]);
+    expect(created.exitCode).toBe(0);
+    expect(created.stderr).toBe("");
+    const createdEnvelope = envelope(created.stdout);
+    expect(createdEnvelope).toMatchObject({
+      status: "success",
+      data: {
+        mission_id: missionId,
+        unit_id: expect.stringMatching(/^\d{4}-\d{2}-\d{2}-compiled-unit$/),
+        workflow: "standard",
+        effort: { default: "comprehensive", stage_overrides: { implementation: "minimal" } },
+        execution_started: false,
+      },
+    });
+    const unitId = createdEnvelope.data.unit_id as string;
+    const unitPath = Path.join(repository, ".kepler", "missions", missionId, "construction", "units-of-work", unitId);
+    expect(await exists(unitPath)).toBe(true);
+    expect(await exists(Path.join(unitPath, "unit-of-work.md"))).toBe(false);
+    expect(await exists(Path.join(unitPath, "tasks-dag.json"))).toBe(false);
+
+    const duplicateMission = e2e.cli.run([
+      "workflow", "construction", "unit", "create", "another-unit",
+      "--mission", missionId,
+      "--project", repository,
+    ]);
+    expect(duplicateMission.exitCode).toBe(1);
+    expect(envelope(duplicateMission.stdout)).toMatchObject({ status: "failed", data: { code: "mission_unit_exists" } });
+
+    const beforeInvalid = await snapshot(repository);
+    const duplicateOverride = e2e.cli.run([
+      "workflow", "construction", "unit", "create", "invalid-unit",
+      "--mission", missionId,
+      "--stage-effort", "implementation=minimal",
+      "--stage-effort", "implementation=standard",
+      "--project", repository,
+    ]);
+    expect(duplicateOverride.exitCode).toBe(1);
+    expect(envelope(duplicateOverride.stdout)).toMatchObject({ status: "failed", data: { code: "invalid_unit_request" } });
+    expect(await snapshot(repository)).toBe(beforeInvalid);
+
+    const shown = e2e.cli.run([
+      "workflow", "construction", "unit", "show", "--unit", unitId, "--project", repository,
+    ]);
+    expect(shown.exitCode).toBe(0);
+    expect(envelope(shown.stdout)).toMatchObject({
+      status: "success",
+      data: {
+        unit: {
+          unit_id: unitId,
+          membership: { status: "bound", mission_id: missionId },
+          effort: {
+            default: { level: "comprehensive", selected_by: "requester" },
+            stage_overrides: { implementation: { level: "minimal", selected_by: "requester" } },
+          },
+        },
+      },
+    });
+  }, 120_000);
+
   it("returns one UUIDv4 in the compiled CLI result", async () => {
     const e2e = await createHarness();
     const result = e2e.cli.run(["uuid"]);
