@@ -13,6 +13,10 @@ import { ConstructionLint } from "../../construction/construction-lint.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
 import { QualityRequirementsStageCompletion } from "../../construction/quality-stage-completion.js";
 import { ImplementationPlanningStageCompletion } from "../../construction/planning-stage-completion.js";
+import { ImplementationStageCompletion } from "../../construction/implementation-stage-completion.js";
+import { ImplementationRetainedScopeAssessment } from "../../construction/implementation-retained-scope-assessment.js";
+import { UnitOfWorkReviewStageCompletion } from "../../construction/unit-of-work-review-completion.js";
+import { DeliverStageCompletion } from "../../construction/deliver-stage-completion.js";
 import { StageStart } from "../../construction/stage-start.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
@@ -488,6 +492,9 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
     private readonly functionalDesignCompletion: FunctionalDesignStageCompletion,
     private readonly qualityRequirementsCompletion: QualityRequirementsStageCompletion,
     private readonly implementationPlanningCompletion: ImplementationPlanningStageCompletion,
+    private readonly implementationCompletion: ImplementationStageCompletion,
+    private readonly unitOfWorkReviewCompletion: UnitOfWorkReviewStageCompletion,
+    private readonly deliverCompletion: DeliverStageCompletion,
   ) {
     super();
   }
@@ -532,12 +539,73 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
       });
       return;
     }
-    const completion = selectors.selectors.stage === "quality-requirements"
-      ? this.qualityRequirementsCompletion
-      : selectors.selectors.stage === "implementation-planning"
-        ? this.implementationPlanningCompletion
-        : this.functionalDesignCompletion;
+    const completion = selectors.selectors.stage === "functional-design"
+      ? this.functionalDesignCompletion
+      : selectors.selectors.stage === "quality-requirements"
+        ? this.qualityRequirementsCompletion
+        : selectors.selectors.stage === "implementation-planning"
+          ? this.implementationPlanningCompletion
+          : selectors.selectors.stage === "implementation"
+            ? this.implementationCompletion
+            : selectors.selectors.stage === "unit-of-work-review"
+              ? this.unitOfWorkReviewCompletion
+              : selectors.selectors.stage === "deliver"
+                ? this.deliverCompletion
+                : undefined;
+    if (!completion) {
+      reportFailure(this.reporter, {
+        code: "stage_completion_not_implemented",
+        message: "The selected Construction stage does not have a completion operation yet.",
+        details: { stage: selectors.selectors.stage },
+        recovery: "Select a stage with a typed completion operation.",
+      });
+      return;
+    }
     const result = await completion.execute(selectors.selectors, parsed.value, selectedProject.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
+@SubCommand({ name: "assess-retained-scopes", description: "Assess completed Activities retained from an earlier Implementation attempt" })
+export class ConstructionStageAssessRetainedScopesCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly assessment: ImplementationRetainedScopeAssessment) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--request <json>" }) parseRequest(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "stage", "attempt"] });
+    if (selectors.kind === "failed") {
+      reportSelectorFailure(this.reporter, selectors, "Provide the exact Unit of Work, Implementation stage, and attempt selectors.");
+      return;
+    }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    const request = optionValue(values, "request");
+    if (typeof request !== "string") {
+      reportFailure(this.reporter, typeof request === "object" ? request : {
+        code: "required_selector_missing",
+        message: "Retained-scope assessment requires one typed --request JSON value.",
+        details: { required: ["request"] },
+        recovery: "Provide the completed Activities, original evidence, and checkpoints to assess with --request.",
+      });
+      return;
+    }
+    const parsed = parseStrictJson(request);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_retained_scope_assessment_request_json",
+        message: "The retained-scope assessment request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Correct the JSON request and retry without changing the selected scope.",
+      });
+      return;
+    }
+    const result = await this.assessment.execute(selectors.selectors, parsed.value, selectedProject.project);
     this.reporter.report({ status: result.kind, data: result.data });
   }
 }
@@ -612,7 +680,7 @@ export class ConstructionStageShowCommand extends CommandRunner {
 @SubCommand({
   name: "stage",
   description: "Read or change one Construction stage attempt",
-  subCommands: [ConstructionStageShowCommand, ConstructionStageStartCommand, ConstructionStageCompleteCommand],
+  subCommands: [ConstructionStageShowCommand, ConstructionStageStartCommand, ConstructionStageAssessRetainedScopesCommand, ConstructionStageCompleteCommand],
 })
 export class ConstructionStageCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) { super(); }

@@ -294,6 +294,76 @@ describe("v3 root command tree", () => {
     });
   });
 
+  it("routes Review and Deliver completion requests through their typed providers without appending on stale attempts", async () => {
+    const fixture = await createProject("later-stage-completion");
+    const missionRequest = JSON.stringify({
+      title: "Prepare the selected capability",
+      request: "Implement the requested change in the selected workspace.",
+      workflow: "standard",
+      recordHomeRepositoryId: "project",
+      contexts: [{ reference: "request:scope", purpose: "Accepted request" }],
+      repositories: [{
+        repositoryId: "application",
+        workspace: { kind: "existing", path: fixture.root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      }],
+    });
+    const mission = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["mission", "create", "--project", fixture.root, "--request", missionRequest]),
+    );
+    expect(mission.exitCode).toBe(0);
+    const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const createdUnit = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["workflow", "construction", "unit", "create", "later-stage", "--mission", missionId, "--project", fixture.root]),
+    );
+    expect(createdUnit.exitCode).toBe(0);
+    const unitId = JSON.parse(createdUnit.stdout).data.unit_id as string;
+    const reviewRequest = {
+      implementation_completion_event_id: "10000000-0000-4000-8000-000000000001",
+      reviewed_material_bindings: [],
+      final_checkpoints: [],
+      reviewer: "agent:reviewer",
+      implementation_authors: ["agent:builder"],
+      implementation_evidence_assessment_id: "60000000-0000-4000-8000-000000000001",
+      review_evidence_id: "60000000-0000-4000-8000-000000000002",
+      self_review_evidence_id: "60000000-0000-4000-8000-000000000003",
+      findings: { blocking: [], limitations: [] },
+      additional_review: { requested: false },
+      acceptance_required: false,
+      handoff: { status: "ready", recipient: "deliver", summary: "Ready for delivery" },
+    };
+    const deliverRequest = {
+      review_completion_event_id: "10000000-0000-4000-8000-000000000002",
+      outcome: "repository-handoff",
+      requested_outcome: "Hand the reviewed repository to the recipient",
+      destination: "repository:main",
+      recipient: "requester",
+      artifact_bindings: [],
+      reviewed_checkpoints: [],
+      preparation_evidence_id: "60000000-0000-4000-8000-000000000004",
+      self_review_evidence_id: "60000000-0000-4000-8000-000000000005",
+      operation_results: [],
+      verification_evidence_ids: [],
+      handoff_evidence_id: "60000000-0000-4000-8000-000000000006",
+      additional_review: { requested: false },
+      approval_required: false,
+      handoff: { status: "ready", summary: "Repository handoff is ready" },
+    };
+    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", missionId, "history");
+    for (const [stage, request] of [["unit-of-work-review", reviewRequest], ["deliver", deliverRequest]] as const) {
+      const before = await snapshot(historyDirectory);
+      const result = await withGitEnvironment(fixture.globalConfig, () => runCli([
+        "workflow", "construction", "stage", "complete", "--unit", unitId, "--stage", stage,
+        "--attempt", "20000000-0000-4000-8000-000000000099", "--request", JSON.stringify(request), "--project", fixture.root,
+      ]));
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({ status: "failed", data: { code: "stage_attempt_not_current" } });
+      expect(await snapshot(historyDirectory)).toBe(before);
+    }
+  });
+
   it("names the mission capability when its subcommand is missing", async () => {
     const result = await runCli(["mission"]);
 

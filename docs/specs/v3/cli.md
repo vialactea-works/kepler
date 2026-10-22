@@ -385,7 +385,7 @@ This fragment shows only the accepted `inputs` structure, not a complete evidenc
 }
 ```
 
-The operation records an existing check or review result. It does not run checks, grant approval, or complete workflow work. Keep the actual executor and supporting evidence under the existing binding rules. When evidence fulfills an explicit requester request, `related_request_event_id` may identify that exact requester interaction. The recorder validates its unit, stage, attempt, and requester attribution, then records it as a direct cause of the evidence event; the reference does not grant authority.
+The operation records an existing check or review result. It does not run checks, grant approval, or complete workflow work. Keep the actual executor and supporting evidence under the existing binding rules. When evidence fulfills an explicit requester request, `related_request_event_id` may identify that exact requester interaction. The recorder validates its unit, stage, attempt, and requester attribution, then records it as a direct cause; the reference does not grant authority. When a check depends on earlier same-attempt evidence, `related_event_ids` may identify those evidence events. The recorder validates their current stage-attempt bindings and records them as direct causes of the new evidence event.
 
 On successful recording, return `success` and exit `0`. Include the following required fields inside `data`:
 
@@ -554,11 +554,12 @@ Use `--unit <unit-id>` and `--stage <stage>` under the accepted [scope selectors
 | --- | --- |
 | `stage start` | **Accepted under SH54.** Start the authorized stage in its unit scope. Create a distinct stage attempt only when execution starts. Enforce the one-active-attempt limit for that fixed scope. |
 | `stage show` | **Accepted under SH53.** Read the selected stage's derived state, attempt, effort, and relevant evidence. Do not write or advance state. |
+| `stage assess-retained-scopes` | **M09 implementation.** For a returned Implementation attempt, record applicability assessments for completed Activities from an ended earlier parent before downstream work uses them. Bind each assessment to its original attempt, evidence, and checkpoints. |
 | `stage complete` | **Accepted under SH54.** Record completion only when the owning phase's completion conditions hold for the current attempt and material. Completing one stage does not complete the workflow. |
 | `stage pause` | **Accepted under SH58.** Block new affected work. Keep the attempt identity, history, and active-scope reservation. Acknowledge a completed pause only after workers stop and locks reconcile. |
 | `stage resume` | **Accepted under SH58.** Verify inputs and ownership, then resume the same attempt. Keep its active-scope reservation. Unrelated work continues. |
 
-Each mutation records its own typed lifecycle event and uses accepted short scoped coordination. Do not ask callers to write a duplicate event. Mutations of an existing attempt name its exact ID. A start creates its UUIDv4 only when execution starts.
+Each mutation records its own typed lifecycle event and uses accepted short scoped coordination. Do not ask callers to write a duplicate event. Mutations of an existing attempt name its exact ID. A start creates its UUIDv4 only when execution starts. Retained-scope assessments name the current Implementation attempt and must be recorded before task admission or Integration relies on them; `stage complete` references those assessment event IDs. Only a completed Activity from an ended older parent can be retained. A reopened Activity under the same parent requires a new attempt and cannot be retained.
 
 Starting a stage does not launch an agent. A failed or partial transition returns a nonzero operation result. Do not mark a stage complete from a successful process exit alone.
 

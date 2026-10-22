@@ -209,6 +209,34 @@ describe("audit recording with real journals", () => {
     });
   });
 
+  it("records a verification event with direct provenance to prior same-attempt evidence", async () => {
+    const root = await createProject();
+    const recorder = createRecorder(root);
+    const selectors = { unit: unitId, stage: "functional-design", attempt: stageAttemptId } as const;
+    const evidenceRequest = {
+      inputs: [{ reference: "check:design", purpose: "Current design check" }],
+      artifact_bindings: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "design-checkpoint" }],
+      check: "Design operation result",
+      executor: "Reviewer",
+      result: { status: "passed", summary: "The prior result was recorded." },
+    };
+    const operation = await recorder.execute("evidence", selectors, evidenceRequest);
+    expect(operation).toMatchObject({ kind: "success", data: { id: expect.any(String) } });
+    if (operation.kind !== "success") return;
+    const verification = await recorder.execute("evidence", selectors, {
+      ...evidenceRequest,
+      check: "Outcome verification",
+      related_event_ids: [String(operation.data.id)],
+    });
+    expect(verification).toMatchObject({ kind: "success", data: { id: expect.any(String) } });
+    if (verification.kind !== "success") return;
+    const journal = createEventJournal({ recordHome: root, missionId, journalId: String(verification.data.journal_id), phase: CONSTRUCTION_PHASE });
+    const scan = await journal.read();
+    expect(scan.problems).toEqual([]);
+    expect(scan.lines[0]?.event?.caused_by).toContain(operation.data.id);
+  });
+
   it("records task and Activity events through their phase-owned selectors without requiring --stage", async () => {
     const root = await createProject();
     const recorder = createRecorder(root);

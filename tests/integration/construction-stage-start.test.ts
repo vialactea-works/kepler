@@ -172,6 +172,24 @@ describe("Construction stage start", () => {
     if (loaded.kind === "loaded") expect(loaded.unit.stages[1]?.attempts).toHaveLength(0);
   });
 
+  it.each(["quality-requirements", "implementation-planning", "implementation", "unit-of-work-review", "deliver"] as const)(
+    "recognizes %s but rejects starting it before its predecessors complete",
+    async (stage) => {
+      const fixture = await createFixture();
+
+      const result = await fixture.start.execute({ unit: fixture.unitId, stage }, {
+        inputs: [{ reference: "request:scope", purpose: `Requester scope for ${stage}` }],
+      });
+
+      expect(result).toMatchObject({ kind: "failed", data: { code: "standard_stage_order_blocked" } });
+      const loaded = await fixture.contexts.readUnit(fixture.unitId);
+      expect(loaded.kind).toBe("loaded");
+      if (loaded.kind === "loaded") {
+        expect(loaded.unit.stages.find((candidate) => candidate.stage === stage)?.attempts).toHaveLength(0);
+      }
+    },
+  );
+
   it("captures checkpoints from separate repository common directories", async () => {
     const fixture = await createFixture(true, true);
     const expected = [

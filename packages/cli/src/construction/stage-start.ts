@@ -103,8 +103,8 @@ const commonDirectory = async (
   }
 };
 
-type CapturedCheckpoints =
-  | { readonly kind: "valid"; readonly checkpoints: readonly { readonly repository_id: string; readonly commit: string }[] }
+export type CapturedCheckpoints =
+  | { readonly kind: "valid"; readonly checkpoints: readonly { readonly repository_id: string; readonly commit: string }[]; readonly repositoryRoots: readonly { readonly repository_id: string; readonly repositoryRoot: string }[] }
   | { readonly kind: "failed"; readonly code: string; readonly message: string; readonly details: Readonly<Record<string, unknown>> };
 
 const pathContains = (parent: string, child: string): boolean => {
@@ -118,7 +118,7 @@ const sameStartingCheckpoint = (
 ): boolean => isRecord(expected) && expected.kind === actual.kind &&
   (actual.kind === "no-commit" || expected.commit === actual.commit);
 
-const captureStageCheckpoints = async (
+export const captureStageCheckpoints = async (
   runtime: StageStartRuntime,
   loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
   commonDir: string,
@@ -194,6 +194,7 @@ const captureStageCheckpoints = async (
   }
   const seenRepositories = new Set<string>();
   const checkpoints: { repository_id: string; commit: string }[] = [];
+  const repositoryRoots: { repository_id: string; repositoryRoot: string }[] = [];
   for (const name of names) {
     const attachmentPath = Path.join(canonicalDirectory, name);
     if (await runtime.workspace.fileSystem.pathKind(attachmentPath) !== "file") {
@@ -275,6 +276,7 @@ const captureStageCheckpoints = async (
         current_branch: branch || undefined,
       });
     }
+    repositoryRoots.push({ repository_id: attachment.repository_id, repositoryRoot: actualRoot });
     const head = await runtime.workspace.git.run(actualRoot, ["rev-parse", "--verify", "HEAD^{commit}"]);
     if (head.status === 0 && commitId(head.stdout.trim())) {
       checkpoints.push({ repository_id: attachment.repository_id, commit: head.stdout.trim() });
@@ -300,7 +302,11 @@ const captureStageCheckpoints = async (
       attached_repository_ids: [...seenRepositories],
     });
   }
-  return { kind: "valid", checkpoints: checkpoints.sort((left, right) => left.repository_id.localeCompare(right.repository_id)) };
+  return {
+    kind: "valid",
+    checkpoints: checkpoints.sort((left, right) => left.repository_id.localeCompare(right.repository_id)),
+    repositoryRoots: repositoryRoots.sort((left, right) => left.repository_id.localeCompare(right.repository_id)),
+  };
 };
 
 const currentAuthority = (

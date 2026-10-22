@@ -240,6 +240,78 @@ describe("Construction history projection", () => {
     }));
   });
 
+  it("does not project a generic Implementation completion as complete", () => {
+    const journalId = "73000000-0000-4000-8000-000000000001";
+    const unitCreated = created("73000000-0000-4000-8000-000000000002", ids.unit, journalId);
+    const started = stageStart("73000000-0000-4000-8000-000000000003", ids.stageAttempt, ids.unit, journalId, [unitCreated.id]);
+    const history = collectHistory(missionId, [source("origin://implementation", journalId, [unitCreated, started])]);
+    const unguardedCompletion = event("73000000-0000-4000-8000-000000000004", "construction.stage-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      evidence_ids: [],
+      checkpoints: [],
+    }, journalId, [started.id]);
+    const forgedRecord = {
+      sourceId: "origin://implementation-forged",
+      scope: { missionId, unitId: ids.unit },
+      missionId,
+      phase: "construction",
+      journalId,
+      line: 3,
+      byteOffset: 0,
+      status: "valid",
+      constructionEvent: unguardedCompletion as unknown as ConstructionEventRecord,
+      validationIssues: [],
+      issueCodes: [],
+    } as unknown as CollectedHistoryEvent;
+    const projection = projectConstruction({ ...history, events: [...history.events, forgedRecord] });
+
+    expect(projection.units[0]?.stages.find((stage) => stage.stage === "implementation")?.state).toBe("unknown");
+    expect(projection.units[0]?.blocked).toBe(true);
+    expect(projection.projectionIssues).toContainEqual(expect.objectContaining({
+      code: "invalid-completion-evidence",
+      eventIds: [unguardedCompletion.id],
+    }));
+  });
+
+  it.each(["unit-of-work-review", "deliver"] as const)("does not project a generic %s completion as complete", (stage) => {
+    const journalId = `74000000-0000-4000-8000-00000000000${stage === "deliver" ? "1" : "2"}`;
+    const unitCreated = created(`74000000-0000-4000-8000-00000000000${stage === "deliver" ? "3" : "4"}`, ids.unit, journalId);
+    const started = stageStart(`74000000-0000-4000-8000-00000000000${stage === "deliver" ? "5" : "6"}`, ids.stageAttempt, ids.unit, journalId, [unitCreated.id], stage);
+    const history = collectHistory(missionId, [source(`origin://${stage}`, journalId, [unitCreated, started])]);
+    const unguardedCompletion = event(`74000000-0000-4000-8000-00000000000${stage === "deliver" ? "7" : "8"}`, "construction.stage-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage,
+      stage_attempt_id: ids.stageAttempt,
+      evidence_ids: [],
+      checkpoints: [],
+    }, journalId, [started.id]);
+    const forgedRecord = {
+      sourceId: `origin://${stage}-forged`,
+      scope: { missionId, unitId: ids.unit },
+      missionId,
+      phase: "construction",
+      journalId,
+      line: 3,
+      byteOffset: 0,
+      status: "valid",
+      constructionEvent: unguardedCompletion as unknown as ConstructionEventRecord,
+      validationIssues: [],
+      issueCodes: [],
+    } as unknown as CollectedHistoryEvent;
+    const projection = projectConstruction({ ...history, events: [...history.events, forgedRecord] });
+
+    expect(projection.units[0]?.stages.find((item) => item.stage === stage)?.state).toBe("unknown");
+    expect(projection.units[0]?.blocked).toBe(true);
+    expect(projection.projectionIssues).toContainEqual(expect.objectContaining({
+      code: "invalid-completion-evidence",
+      eventIds: [unguardedCompletion.id],
+    }));
+  });
+
   it("rebuilds deterministically and preserves scope, attempt, artifact, checkpoint, and input bindings", () => {
     const unitCreated = created("event-unit-created", ids.unit, "journal-unit");
     const baseline = event("event-baseline", "construction.unit-baseline-selected", {
@@ -505,6 +577,7 @@ describe("Construction history projection", () => {
       stage_attempt_id: ids.nextStageAttempt,
       evidence_ids: [ids.evidence],
       checkpoints: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      implementation_assessment: { assessment_event_id: ids.revision },
     }, "journal-late", [secondStart.id, lateEvidence.id]);
     const history = collectHistory(missionId, [source("origin://late", "journal-late", [unitCreated, firstStart, interaction, authorized, ended, reopened, secondStart, lateEvidence, lateCompletion])]);
     const projection = projectConstruction(history);
@@ -542,6 +615,7 @@ describe("Construction history projection", () => {
       stage_attempt_id: ids.stageAttempt,
       evidence_ids: [ids.evidence],
       checkpoints: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      implementation_assessment: { assessment_event_id: ids.revision },
     }, "journal-failed-evidence", [started.id, evidence.id]);
     const projection = projectConstruction(collectHistory(missionId, [source(
       "origin://failed-evidence",
@@ -578,6 +652,7 @@ describe("Construction history projection", () => {
       stage_attempt_id: ids.stageAttempt,
       evidence_ids: [ids.evidence],
       checkpoints: [{ repository_id: "repo-main", commit: "different-checkpoint" }],
+      implementation_assessment: { assessment_event_id: ids.revision },
     }, "journal-checkpoint-mismatch", [started.id, evidence.id]);
     const history = collectHistory(missionId, [source("origin://checkpoint-mismatch", "journal-checkpoint-mismatch", [
       unitCreated,
@@ -803,6 +878,42 @@ describe("Construction history projection", () => {
     expect(task?.completion?.event.data.integration_event_id).toBe(accepted.id);
     expect(task?.activities.find((activity) => activity.activity === "code-integration")?.accepted).toHaveLength(1);
     expect(projection.units[0]?.progress).toEqual({ completedStages: 0, totalStages: 6, completedTasks: 1, knownTasks: 1, reliable: true });
+    const activityRevisionInteraction = event("event-activity-revision-interaction", "construction.interaction-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      participants: ["orchestrator"],
+      content: "Reopen the completed Integration scope within the same parent",
+      references: ["opaque: Activity revision"],
+    }, "journal-integration", [activityCompleted.id]);
+    const activityRevision = event("event-activity-revision", "construction.revision-authorized", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      revision_id: ids.nextRevision,
+      orchestrator_decision: "Reopen Code Integration",
+      reason: "The completed Activity needs correction",
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+    }, "journal-integration", [activityRevisionInteraction.id]);
+    const activityReopened = event("event-activity-reopened", "construction.activity-reopened", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-integration",
+      revision_id: ids.nextRevision,
+      reason: "Open a replacement Integration attempt",
+    }, "journal-integration", [activityRevision.id]);
+    const sameParentReopenProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://same-parent-activity-reopen",
+      "journal-integration",
+      [...records.slice(0, -1), activityRevisionInteraction, activityRevision, activityReopened],
+    )]));
+    const reopenedActivity = sameParentReopenProjection.units[0]?.tasks[0]?.activities.find((item) => item.activity === "code-integration");
+    expect(reopenedActivity?.state).toBe("reopened");
+    expect(reopenedActivity?.attempts.find((attempt) => attempt.attemptId === ids.activityAttempt)?.state).toBe("ended_by_revision");
     const revisionInteraction = event("event-task-revision-interaction", "construction.interaction-recorded", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -1310,9 +1421,21 @@ describe("Construction history projection", () => {
         reason: "The predecessor Integration output remains applicable under the new parent",
         checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
       }],
-    }, "journal-integration", [nextImplementationStarted.id, accepted.id, integrationEvidence.id]);
+    }, "journal-integration", [nextImplementationStarted.id, accepted.id, integrationEvidence.id, activityCompleted.id]);
     const crossParentAdmissionWithRetention = crossParentAdmission("event-cross-parent-admission-with-retention",
       [nextImplementationStarted.id, baseline.id, accepted.id, retainedIntegrationAssessment.id]);
+    const retainedActivityProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://retained-completed-activity",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopened, nextImplementationStarted,
+        retainedIntegrationAssessment],
+    )]));
+    expect(retainedActivityProjection.projectionIssues).toEqual([]);
+    const retainedActivity = retainedActivityProjection.units[0]?.tasks.find((task) => task.taskId === ids.task)
+      ?.activities.find((activity) => activity.activity === "code-integration");
+    expect(retainedActivity?.state).toBe("completed");
+    expect(retainedActivity?.currentAttemptId).toBe(ids.activityAttempt);
+    expect(retainedActivity?.stageAttemptId).toBe(ids.stageAttempt);
     const crossParentWithRetentionProjection = projectConstruction(collectHistory(missionId, [source(
       "origin://cross-parent-with-retention",
       "journal-integration",
@@ -1441,6 +1564,17 @@ describe("Construction history projection", () => {
       inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
       checkpoints: [],
     }, "journal-integration", [newerParentTaskAdmission.id, nextImplementationStarted.id]);
+    const parentActivityRestartProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://parent-activity-restart",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopened, nextImplementationStarted,
+        retainedIntegrationAssessment, newerParentTaskAdmission, newerParentIntegrationStart],
+    )]));
+    const restartedIntegration = parentActivityRestartProjection.units[0]?.tasks.find((task) => task.taskId === ids.task)
+      ?.activities.find((activity) => activity.activity === "code-integration");
+    expect(parentActivityRestartProjection.projectionIssues).toEqual([]);
+    expect(restartedIntegration?.currentAttemptId).toBe(ids.resumeActivityAttempt);
+    expect(restartedIntegration?.attempts.find((attempt) => attempt.attemptId === ids.activityAttempt)?.state).toBe("ended_by_revision");
     const lateParentScopeProjection = projectConstruction(collectHistory(missionId, [source(
       "origin://late-parent-scope-transition",
       "journal-integration",

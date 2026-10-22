@@ -90,6 +90,7 @@ export interface QualityRequirementsCompletionRecord {
   readonly approval_event_id: EventId;
   readonly artifact_bindings: readonly ArtifactBinding[];
   readonly functional_design_bindings: readonly ArtifactBinding[];
+  readonly artifact_paths: readonly string[];
   readonly assessments: QualityRequirementsCompletionAssessments;
 }
 
@@ -122,6 +123,9 @@ const onlyKeys = (value: Record<string, unknown>, keys: readonly string[]): bool
   Object.keys(value).every((key) => keys.includes(key));
 const stringList = (value: unknown, minimum = 0): value is readonly string[] =>
   Array.isArray(value) && value.length >= minimum && value.every(nonEmpty) && new Set(value).size === value.length;
+const artifactPathList = (value: unknown): value is readonly string[] =>
+  stringList(value, 1) && value.every((path) => !path.startsWith("/") && !path.includes("\\") &&
+    path.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== ".."));
 
 const isCategoryAssessment = (value: unknown): value is QualityCategoryAssessment =>
   isRecord(value) && onlyKeys(value, ["category", "applies", "rationale"]) &&
@@ -250,13 +254,37 @@ export const qualityRequirementsEvidenceIds = (
   ...(assessments.external_review.requested ? [assessments.external_review.evidence_id] : []),
 ];
 
+export type LegacyQualityRequirementsCompletionRecord = Pick<QualityRequirementsCompletionRecord, "approval_event_id" | "artifact_bindings" | "assessments"> & {
+  readonly functional_design_bindings?: readonly ArtifactBinding[];
+};
+
+export const isLegacyQualityRequirementsCompletionRecord = (value: unknown): value is LegacyQualityRequirementsCompletionRecord => {
+  if (!isRecord(value) || !onlyKeys(value, ["approval_event_id", "artifact_bindings", "functional_design_bindings", "assessments"]) ||
+      !uuidV4(value.approval_event_id) || !Array.isArray(value.artifact_bindings) || value.artifact_bindings.length === 0 ||
+      (value.functional_design_bindings !== undefined && (!Array.isArray(value.functional_design_bindings) || value.functional_design_bindings.length === 0)) ||
+      !isQualityRequirementsCompletionAssessments(value.assessments)) return false;
+  const artifactIds: string[] = [];
+  for (const binding of value.artifact_bindings) {
+    if (!isRecord(binding) || !uuidV4(binding.artifact_id) || !nonEmpty(binding.content_version) ||
+        binding.checkpoint !== undefined || !onlyKeys(binding, ["artifact_id", "content_version"])) return false;
+    artifactIds.push(binding.artifact_id);
+  }
+  const functionalDesignIds: string[] = [];
+  for (const binding of value.functional_design_bindings ?? []) {
+    if (!isRecord(binding) || !uuidV4(binding.artifact_id) || !nonEmpty(binding.content_version) ||
+        binding.checkpoint !== undefined || !onlyKeys(binding, ["artifact_id", "content_version"])) return false;
+    functionalDesignIds.push(binding.artifact_id);
+  }
+  return new Set(artifactIds).size === artifactIds.length && new Set(functionalDesignIds).size === functionalDesignIds.length;
+};
+
 export const isQualityRequirementsCompletionRecord = (
   value: unknown,
 ): value is QualityRequirementsCompletionRecord => {
-  if (!isRecord(value) || !onlyKeys(value, ["approval_event_id", "artifact_bindings", "functional_design_bindings", "assessments"]) ||
+  if (!isRecord(value) || !onlyKeys(value, ["approval_event_id", "artifact_bindings", "functional_design_bindings", "artifact_paths", "assessments"]) ||
       !uuidV4(value.approval_event_id) || !Array.isArray(value.artifact_bindings) || value.artifact_bindings.length === 0 ||
       !Array.isArray(value.functional_design_bindings) || value.functional_design_bindings.length === 0 ||
-      !isQualityRequirementsCompletionAssessments(value.assessments)) return false;
+      !artifactPathList(value.artifact_paths) || !isQualityRequirementsCompletionAssessments(value.assessments)) return false;
   const artifactIds: string[] = [];
   for (const binding of value.artifact_bindings) {
     if (!isRecord(binding) || !uuidV4(binding.artifact_id) || !nonEmpty(binding.content_version) ||
@@ -271,4 +299,15 @@ export const isQualityRequirementsCompletionRecord = (
     functionalDesignIds.push(binding.artifact_id);
   }
   return new Set(functionalDesignIds).size === functionalDesignIds.length;
+};
+
+export const readQualityRequirementsCompletionRecord = (
+  value: unknown,
+  functionalDesignPaths: readonly string[],
+): QualityRequirementsCompletionRecord | undefined => {
+  if (isQualityRequirementsCompletionRecord(value)) return value;
+  if (!isLegacyQualityRequirementsCompletionRecord(value) || !value.functional_design_bindings) return undefined;
+  const artifactPaths = value.assessments.handoff.artifacts.filter((path) => !functionalDesignPaths.includes(path));
+  const normalized = { ...value, artifact_paths: artifactPaths };
+  return isQualityRequirementsCompletionRecord(normalized) ? normalized : undefined;
 };

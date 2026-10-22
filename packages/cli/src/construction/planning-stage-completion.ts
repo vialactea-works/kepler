@@ -3,10 +3,12 @@ import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
+import { hasRequesterParticipant } from "../audit/participants.js";
+import { validateStageStartAuthority } from "./stage-authority.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
 import {
-  CONSTRUCTION_EVENT_VERSION,
+  CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
   validateConstructionEvent,
   type ArtifactBinding,
@@ -17,9 +19,9 @@ import {
   type UnitId,
 } from "./events.js";
 import { validateConstructionArtifact } from "./artifacts.js";
-import { isFunctionalDesignCompletionRecord, sameArtifactBindings } from "./functional-design-completion.js";
+import { readFunctionalDesignCompletionRecord, sameArtifactBindings } from "./functional-design-completion.js";
 import {
-  isQualityRequirementsCompletionRecord,
+  readQualityRequirementsCompletionRecord,
   type QualityRequirementsCompletionRecord as QualityRecord,
 } from "./quality-requirements-completion.js";
 import {
@@ -35,6 +37,8 @@ import { validateTaskGraphPathOperands } from "./task-graph-paths.js";
 import type { ConstructionHistoryFact } from "./projection.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
+import { captureStageCheckpoints } from "./stage-start.js";
+import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
 
 export interface PlanningStageCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
@@ -50,7 +54,7 @@ export type PlanningStageCompletionResult =
   | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
   | { readonly kind: "failed"; readonly data: Readonly<Record<string, unknown>> };
 
-interface PlanningMaterial extends StageArtifactMaterial {
+export interface PlanningMaterial extends StageArtifactMaterial {
   readonly graphRef: GraphReference;
   readonly taskIds: readonly string[];
   readonly graph: TaskGraph;
@@ -91,12 +95,11 @@ const propagateReadFailure = (result: Extract<AuditHistoryReadResult, { kind: "f
   failure(result.code, result.message, result.details, result.recovery);
 const sameGraphReference = (left: unknown, right: GraphReference): boolean =>
   isRecord(left) && left.graph_id === right.graph_id && left.content_version === right.content_version;
-const graphInputReference = (graphRef: GraphReference): string =>
-  `task-graph:${graphRef.graph_id}@${graphRef.content_version}`;
-const hasGraphInput = (fact: ConstructionHistoryFact, graphRef: GraphReference): boolean =>
-  Array.isArray(fact.event.data.inputs) && fact.event.data.inputs.some((input) =>
-    isRecord(input) && input.reference === graphInputReference(graphRef) && nonEmpty(input.purpose),
-  );
+const localArtifactLinkPath = (url: string): string | undefined => {
+  if (url.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(url)) return undefined;
+  const path = url.split(/[?#]/, 1)[0];
+  try { return decodeURIComponent(path ?? ""); } catch { return undefined; }
+};
 
 const currentFunctionalDesignRecord = (
   loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
@@ -107,8 +110,8 @@ const currentFunctionalDesignRecord = (
   const stage = loaded.unit.stages.find((candidate) => candidate.stage === "functional-design");
   const attempt = stage?.attempts.find((candidate) => candidate.attemptId === stage.currentAttemptId);
   const completions = attempt?.facts.filter((fact) => fact.event.type === "construction.stage-attempt-completed") ?? [];
-  const record = completions[0]?.event.data.functional_design_assessment;
-  if (!stage || stage.state !== "completed" || completions.length !== 1 || !isFunctionalDesignCompletionRecord(record)) {
+  const record = readFunctionalDesignCompletionRecord(completions[0]?.event.data.functional_design_assessment);
+  if (!stage || stage.state !== "completed" || completions.length !== 1 || !record) {
     return { kind: "invalid", details: { stage: "functional-design", state: stage?.state, current_attempt_id: stage?.currentAttemptId, completion_events: completions.length } };
   }
   return { kind: "valid", record, completion: completions[0]! };
@@ -116,6 +119,7 @@ const currentFunctionalDesignRecord = (
 
 const currentQualityRecord = (
   loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
+  functionalDesignPaths: readonly string[],
 ): { readonly kind: "valid"; readonly record: QualityRecord; readonly completion: ConstructionHistoryFact } | {
   readonly kind: "invalid";
   readonly details: Readonly<Record<string, unknown>>;
@@ -123,8 +127,11 @@ const currentQualityRecord = (
   const stage = loaded.unit.stages.find((candidate) => candidate.stage === "quality-requirements");
   const attempt = stage?.attempts.find((candidate) => candidate.attemptId === stage.currentAttemptId);
   const completions = attempt?.facts.filter((fact) => fact.event.type === "construction.stage-attempt-completed") ?? [];
-  const record = completions[0]?.event.data.quality_requirements_assessment;
-  if (!stage || stage.state !== "completed" || completions.length !== 1 || !isQualityRequirementsCompletionRecord(record)) {
+  const record = readQualityRequirementsCompletionRecord(
+    completions[0]?.event.data.quality_requirements_assessment,
+    functionalDesignPaths,
+  );
+  if (!stage || stage.state !== "completed" || completions.length !== 1 || !record) {
     return { kind: "invalid", details: { stage: "quality-requirements", state: stage?.state, current_attempt_id: stage?.currentAttemptId, completion_events: completions.length } };
   }
   return { kind: "valid", record, completion: completions[0]! };
@@ -139,12 +146,12 @@ const requesterInstructionEvent = (
   const matches = loaded.unit.interactions.filter((fact) => fact.event.id === eventId);
   const fact = matches.length === 1 ? matches[0] : undefined;
   if (!fact || fact.event.type !== "construction.interaction-recorded" || fact.event.data.stage !== "implementation-planning" ||
-      fact.event.data.stage_attempt_id !== attemptId || !Array.isArray(fact.event.data.participants) ||
-      !fact.event.data.participants.includes("requester") || !fact.event.caused_by.includes(startEventId)) return undefined;
+      fact.event.data.stage_attempt_id !== attemptId || !hasRequesterParticipant(fact.event.data.participants) ||
+      !fact.event.caused_by.includes(startEventId)) return undefined;
   return fact;
 };
 
-const readPlanningMaterial = async (
+export const readPlanningMaterial = async (
   loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
   persistedUnitDirectory: unknown,
 ): Promise<{ readonly kind: "valid"; readonly material: PlanningMaterial } | {
@@ -187,6 +194,25 @@ const readPlanningMaterial = async (
     return { kind: "invalid", diagnostics: [{ path: unitRoot, code: "record-home-missing", message: "The mission record-home repository identity is unavailable." }] };
   }
   const graphRelativePath = `${unitRoot}/tasks-dag.json`;
+  let graphRealPath: string;
+  try { graphRealPath = await Fs.realpath(Path.resolve(loaded.root, graphRelativePath)); }
+  catch { graphRealPath = ""; }
+  const planPath = Path.resolve(loaded.root, `${unitRoot}/plan.md`);
+  let graphIsLinked = false;
+  for (const link of planArtifact.artifact.links) {
+    if (link.kind !== "link") continue;
+    const linkPath = localArtifactLinkPath(link.url);
+    if (linkPath === undefined || graphRealPath.length === 0) continue;
+    const target = Path.isAbsolute(linkPath)
+      ? Path.resolve(loaded.root, `.${linkPath}`)
+      : Path.resolve(Path.dirname(planPath), linkPath);
+    try {
+      if (await Fs.realpath(target) === graphRealPath) graphIsLinked = true;
+    } catch { continue; }
+  }
+  if (!graphIsLinked) {
+    return { kind: "invalid", diagnostics: [{ path: `${unitRoot}/plan.md`, code: "task-graph-link-missing", message: "The canonical plan must link the current tasks-dag.json graph." }] };
+  }
   const pathDiagnostics = await validateTaskGraphPathOperands(
     [{ id: recordHomeRepositoryId, path: loaded.root }],
     [{ repositoryId: recordHomeRepositoryId, basePath: ".", path: graphRelativePath, pointer: "" }],
@@ -268,7 +294,6 @@ const validatePlanningFacts = (
     ...(assessments.external_review.requested ? [{ kind: "external_review" as const, evidenceId: assessments.external_review.evidence_id, check: "planning-external-review" }] : []),
   ];
   const evidence: ConstructionHistoryFact[] = [];
-  let selectedCheckpointKey: string | undefined;
   let selectedCheckpoints: readonly unknown[] = [];
   for (const item of named) {
     const matches = loaded.unit.evidence.map((entry) => entry.fact).filter((fact) => fact.event.data.evidence_id === item.evidenceId);
@@ -277,18 +302,16 @@ const validatePlanningFacts = (
         fact.event.data.mission_id !== loaded.missionId || fact.event.data.unit_id !== loaded.unit.unitId ||
         fact.event.data.stage !== "implementation-planning" || fact.event.data.stage_attempt_id !== attemptId ||
         fact.event.data.check !== item.check || !isRecord(fact.event.data.result) || fact.event.data.result.status !== "passed" ||
-        !sameArtifactBindings(fact.event.data.artifact_bindings, reviewedBindings) || !hasGraphInput(fact, material.graphRef) ||
+        !sameArtifactBindings(fact.event.data.artifact_bindings, reviewedBindings) ||
         !fact.event.caused_by.includes(startEventId) ||
         (item.kind === "external_review" && (!externalReviewRequest || !fact.event.caused_by.includes(externalReviewRequest.event.id)))) {
       return { kind: "invalid", details: { evidence: item.kind, evidence_id: item.evidenceId, reason: "missing, failed, stale-attempt, stale-material, or graph-unbound evidence" } };
     }
     const observedKey = checkpointKey(fact.event.data.checkpoints);
-    if (observedKey === undefined || observedKey === "[]" ||
-        (selectedCheckpointKey !== undefined && observedKey !== selectedCheckpointKey) || !Array.isArray(fact.event.data.checkpoints)) {
-      return { kind: "invalid", details: { evidence: item.kind, evidence_id: item.evidenceId, reason: "named evidence does not share one valid non-empty checkpoint set" } };
+    if (observedKey === undefined || observedKey === "[]" || !Array.isArray(fact.event.data.checkpoints)) {
+      return { kind: "invalid", details: { evidence: item.kind, evidence_id: item.evidenceId, reason: "named evidence requires its own valid non-empty checkpoint set" } };
     }
-    selectedCheckpointKey = observedKey;
-    selectedCheckpoints = fact.event.data.checkpoints;
+    if (selectedCheckpoints.length === 0) selectedCheckpoints = fact.event.data.checkpoints;
     evidence.push(fact);
   }
   const approvalRequired = assessments.approval_requirement.required;
@@ -299,8 +322,8 @@ const validatePlanningFacts = (
     if (!approval || approval.event.type !== "construction.approval-recorded" ||
         approval.event.data.mission_id !== loaded.missionId || approval.event.data.unit_id !== loaded.unit.unitId ||
         approval.event.data.stage !== "implementation-planning" || approval.event.data.stage_attempt_id !== attemptId ||
-        !sameArtifactBindings(approval.event.data.artifact_bindings, reviewedBindings) || !hasGraphInput(approval, material.graphRef) ||
-        selectedCheckpointKey === undefined || checkpointKey(approval.event.data.checkpoints) !== selectedCheckpointKey ||
+        !sameArtifactBindings(approval.event.data.artifact_bindings, reviewedBindings) ||
+        checkpointKey(approval.event.data.checkpoints) === undefined || checkpointKey(approval.event.data.checkpoints) === "[]" ||
         !approval.event.caused_by.includes(startEventId)) {
       return { kind: "invalid", details: { approval_event_id: request.approval_event_id, reason: "required requester approval is missing or bound to different material" } };
     }
@@ -410,18 +433,21 @@ export class ImplementationPlanningStageCompletion {
         diagnostics: functionalDesignMaterial.kind === "invalid" ? functionalDesignMaterial.diagnostics : [],
       });
     }
-    const qualityRecord = currentQualityRecord(loaded);
+    const qualityRecord = currentQualityRecord(loaded, functionalDesignRecord.record.artifact_paths);
     if (qualityRecord.kind === "invalid") return failure("quality_requirements_completion_invalid", "Planning requires one current validated Quality Requirements completion.", qualityRecord.details);
-    const expectedAuthorityIds = [functionalDesignRecord.completion.event.id, qualityRecord.completion.event.id];
-    const planningAuthorityIds = originalStart.event.data.authority_event_ids;
-    if (expectedAuthorityIds.length !== 2 || !Array.isArray(planningAuthorityIds) ||
-        JSON.stringify(planningAuthorityIds.map(String)) !== JSON.stringify(expectedAuthorityIds.map(String)) ||
-        expectedAuthorityIds.some((authorityId) => !originalStart.event.caused_by.includes(authorityId))) {
-      return failure("planning_stage_start_authority_invalid", "The current Implementation Planning attempt must start from the accepted Functional Design and Quality Requirements completion authorities.", {
-        expected_authority_event_ids: expectedAuthorityIds,
-        actual_authority_event_ids: planningAuthorityIds,
-      });
-    }
+    const authority = validateStageStartAuthority({
+      stage: "implementation-planning",
+      unitId: loaded.unit.unitId,
+      authorityEventIds: originalStart.event.data.authority_event_ids,
+      causedBy: originalStart.event.caused_by,
+      expectedUpstreamEventIds: [String(functionalDesignRecord.completion.event.id), String(qualityRecord.completion.event.id)],
+      facts: loaded.history.events.flatMap((record) => record.event ? [{ event: record.event }] : []),
+    });
+    if (authority.kind !== "valid") return failure(
+      "planning_stage_start_authority_invalid",
+      "The current Implementation Planning attempt must bind its accepted upstream completions and any authorized reopen chain.",
+      authority.details,
+    );
     const qualityMaterial = await readStageArtifactMaterial({
       repositoryRoot: loaded.root, missionId: loaded.missionId, unitId: loaded.unit.unitId, persistedUnitDirectory,
       primaryArtifact: "quality.md", supportFolder: "quality-requirements",
@@ -487,6 +513,39 @@ export class ImplementationPlanningStageCompletion {
     }
     const facts = validatePlanningFacts(loaded, attemptId, start.event.id, request, material, reviewedBindings);
     if (facts.kind === "invalid") return failure("planning_evidence_invalid", "Planning evidence, applicable approvals, and requested reviews must bind to the current attempt, outputs, upstream material, and graph.", facts.details);
+    const currentCommonDirectory = await commonDirectory(this.runtime, loaded.root);
+    if (!currentCommonDirectory) return failure("stage_coordination_unavailable", "Git could not resolve the record home's common directory.", { repository_root: loaded.root });
+    const actualCheckpoints = await captureStageCheckpoints(this.runtime, loaded, currentCommonDirectory);
+    if (actualCheckpoints.kind === "failed") return failure(actualCheckpoints.code, actualCheckpoints.message, actualCheckpoints.details);
+    const repositoryId = recordHomeRepositoryId(loaded.history.events);
+    const artifactPaths = [
+      ...functionalDesignMaterial.material.artifactPaths.map((artifactPath) => Path.join(functionalDesignMaterial.material.unitDirectory, artifactPath)),
+      ...qualityMaterial.material.artifactPaths.map((artifactPath) => Path.join(qualityMaterial.material.unitDirectory, artifactPath)),
+      ...material.artifactPaths.map((artifactPath) => Path.join(material.unitDirectory, artifactPath)),
+      Path.join(material.unitDirectory, "tasks-dag.json"),
+    ];
+    const recordHomeCheckpoint = repositoryId ? actualCheckpoints.checkpoints.find((checkpoint) => checkpoint.repository_id === repositoryId) : undefined;
+    if (!repositoryId || !recordHomeCheckpoint) return failure("planning_checkpoint_missing", "The record-home repository must have a current committed checkpoint.", { repository_id: repositoryId });
+    const currentMaterial = await verifyStageCheckpointMaterial(this.runtime.workspace, {
+      repositoryRoot: loaded.root, repositoryId, checkpoint: recordHomeCheckpoint, artifactPaths,
+    });
+    if (currentMaterial.kind === "invalid") return failure("planning_checkpoint_material_mismatch", "Functional Design, Quality Requirements, plan, support, and task graph material must match the current record-home checkpoint.", { artifact_paths: currentMaterial.artifactPaths });
+    for (const fact of [...facts.facts.evidence, ...(facts.facts.approval ? [facts.facts.approval] : [])]) {
+      const verifiedSet = await verifyStageCheckpointSet(this.runtime.workspace, actualCheckpoints.repositoryRoots, fact.event.data.checkpoints);
+      if (verifiedSet.kind === "invalid") return failure("planning_evidence_checkpoint_invalid", "Every evidence and approval checkpoint must resolve in its selected repository workspace.", {
+        event_id: fact.event.id, repository_ids: verifiedSet.repositoryIds, invalid_commits: verifiedSet.invalidCommits,
+      });
+      const checkpoint = Array.isArray(fact.event.data.checkpoints)
+        ? fact.event.data.checkpoints.find((item) => isRecord(item) && item.repository_id === repositoryId)
+        : undefined;
+      if (!isRecord(checkpoint)) return failure("planning_evidence_checkpoint_missing", "Every evidence and approval checkpoint set must include the record-home repository.", { event_id: fact.event.id, repository_id: repositoryId });
+      const materialAtCheckpoint = await verifyStageCheckpointMaterial(this.runtime.workspace, {
+        repositoryRoot: loaded.root, repositoryId, checkpoint, artifactPaths,
+      });
+      if (materialAtCheckpoint.kind === "invalid") return failure("planning_evidence_material_checkpoint_mismatch", "Planning material and graph must exist unchanged in each evidence and approval checkpoint.", {
+        event_id: fact.event.id, artifact_paths: materialAtCheckpoint.artifactPaths,
+      });
+    }
     const eventId = this.runtime.identities.next();
     const journalId = this.runtime.identities.next();
     const existingIds = new Set<string>(loaded.history.events.flatMap((record) => record.event ? [String(record.event.id), String(record.event.journal_id)] : []));
@@ -501,6 +560,9 @@ export class ImplementationPlanningStageCompletion {
       graph_ref: material.graphRef,
       artifact_bindings: material.artifactBindings,
       reviewed_material_bindings: reviewedBindings,
+      artifact_paths: material.artifactPaths,
+      task_graph_path: "tasks-dag.json",
+      plan_graph_link: { plan_path: "plan.md", task_graph_path: "tasks-dag.json" },
       ...(facts.facts.approval ? { approval_event_id: facts.facts.approval.event.id } : {}),
       assessments: request.assessments,
     };
@@ -512,12 +574,12 @@ export class ImplementationPlanningStageCompletion {
     ];
     const candidate = {
       id: eventId, phase: CONSTRUCTION_PHASE, type: "construction.stage-attempt-completed",
-      envelope_version: 1, event_version: CONSTRUCTION_EVENT_VERSION, journal_id: journalId,
+      envelope_version: 1, event_version: CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, journal_id: journalId,
       recorded_at: this.runtime.now(), producer: this.runtime.producer, caused_by: [...new Set(causedBy)],
       data: {
         mission_id: loaded.missionId as MissionId, unit_id: loaded.unit.unitId as UnitId,
         stage: "implementation-planning", stage_attempt_id: attemptId as StageAttemptId,
-        evidence_ids: planningEvidenceIds(request.assessments), checkpoints: facts.facts.checkpoints,
+        evidence_ids: planningEvidenceIds(request.assessments), checkpoints: actualCheckpoints.checkpoints,
         implementation_planning_assessment: record,
       },
     };

@@ -2,12 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
+import { hasRequesterParticipant } from "../audit/participants.js";
+import { validateStageStartAuthority } from "./stage-authority.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { readFunctionalDesignMaterial } from "./stage-completion.js";
 import { readStageArtifactMaterial, type StageArtifactMaterial } from "./stage-artifact-material.js";
 import {
-  CONSTRUCTION_EVENT_VERSION,
+  CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
   validateConstructionEvent,
   type ArtifactBinding,
@@ -17,7 +19,7 @@ import {
   type UnitId,
 } from "./events.js";
 import {
-  isFunctionalDesignCompletionRecord,
+  readFunctionalDesignCompletionRecord,
   sameArtifactBindings,
 } from "./functional-design-completion.js";
 import {
@@ -29,6 +31,8 @@ import {
 import type { ConstructionHistoryFact } from "./projection.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
+import { captureStageCheckpoints } from "./stage-start.js";
+import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
 
 export interface QualityStageCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
@@ -104,8 +108,8 @@ const currentFunctionalDesignRecord = (
   const stage = loaded.unit.stages.find((candidate) => candidate.stage === "functional-design");
   const attempt = stage?.attempts.find((candidate) => candidate.attemptId === stage.currentAttemptId);
   const completions = attempt?.facts.filter((fact) => fact.event.type === "construction.stage-attempt-completed") ?? [];
-  const record = completions[0]?.event.data.functional_design_assessment;
-  if (!stage || stage.state !== "completed" || completions.length !== 1 || !isFunctionalDesignCompletionRecord(record)) {
+  const record = readFunctionalDesignCompletionRecord(completions[0]?.event.data.functional_design_assessment);
+  if (!stage || stage.state !== "completed" || completions.length !== 1 || !record) {
     return { kind: "invalid", details: { state: stage?.state, current_attempt_id: stage?.currentAttemptId, completion_events: completions.length } };
   }
   return { kind: "valid", record, completion: completions[0]! };
@@ -121,8 +125,8 @@ const requesterRequirementEvent = (
   const matches = loaded.unit.interactions.filter((fact) => fact.event.id === eventId);
   const fact = matches.length === 1 ? matches[0] : undefined;
   if (!fact || fact.event.type !== "construction.interaction-recorded" || fact.event.data.stage !== stage ||
-      fact.event.data.stage_attempt_id !== attemptId || !Array.isArray(fact.event.data.participants) ||
-      !fact.event.data.participants.includes("requester") || !fact.event.caused_by.includes(startEventId)) return undefined;
+      fact.event.data.stage_attempt_id !== attemptId || !hasRequesterParticipant(fact.event.data.participants) ||
+      !fact.event.caused_by.includes(startEventId)) return undefined;
   return fact;
 };
 
@@ -156,7 +160,6 @@ const validateQualityMaterialFacts = (
     }
   }
   const evidence: ConstructionHistoryFact[] = [];
-  let selectedCheckpointKey: string | undefined;
   let selectedCheckpoints: readonly unknown[] = [];
   for (const item of named) {
     const matches = loaded.unit.evidence.map((entry) => entry.fact).filter((fact) => fact.event.data.evidence_id === item.evidenceId);
@@ -171,12 +174,10 @@ const validateQualityMaterialFacts = (
       return { kind: "invalid", details: { evidence: item.kind, evidence_id: item.evidenceId, reason: "missing, failed, stale-attempt, or stale-material evidence" } };
     }
     const observedKey = checkpointKey(fact.event.data.checkpoints);
-    if (observedKey === undefined || observedKey === "[]" ||
-        (selectedCheckpointKey !== undefined && observedKey !== selectedCheckpointKey) || !Array.isArray(fact.event.data.checkpoints)) {
-      return { kind: "invalid", details: { evidence: item.kind, evidence_id: item.evidenceId, reason: "named evidence does not share one valid non-empty checkpoint set" } };
+    if (observedKey === undefined || observedKey === "[]" || !Array.isArray(fact.event.data.checkpoints)) {
+      return { kind: "invalid", details: { evidence: item.kind, evidence_id: item.evidenceId, reason: "named evidence requires its own valid non-empty checkpoint set" } };
     }
-    selectedCheckpointKey = observedKey;
-    selectedCheckpoints = fact.event.data.checkpoints;
+    if (selectedCheckpoints.length === 0) selectedCheckpoints = fact.event.data.checkpoints;
     evidence.push(fact);
   }
   const approvalMatches = loaded.unit.approvals.map((entry) => entry.fact).filter((fact) => String(fact.event.id) === request.approval_event_id);
@@ -185,8 +186,8 @@ const validateQualityMaterialFacts = (
       approval.event.data.mission_id !== loaded.missionId || approval.event.data.unit_id !== loaded.unit.unitId ||
       approval.event.data.stage !== "quality-requirements" || approval.event.data.stage_attempt_id !== stageAttemptId ||
       !sameArtifactBindings(approval.event.data.artifact_bindings, artifactBindings) ||
-      selectedCheckpointKey === undefined || selectedCheckpointKey === "[]" ||
-      checkpointKey(approval.event.data.checkpoints) !== selectedCheckpointKey || !approval.event.caused_by.includes(startEventId)) {
+    checkpointKey(approval.event.data.checkpoints) === undefined || checkpointKey(approval.event.data.checkpoints) === "[]" ||
+    !approval.event.caused_by.includes(startEventId)) {
     return { kind: "invalid", details: { approval_event_id: request.approval_event_id, reason: "missing approval for the current attempt or current Quality Requirements material" } };
   }
   return { kind: "valid", facts: { evidence, approval, ...(requestEvent ? { requestEvent } : {}), checkpoints: selectedCheckpoints } };
@@ -286,14 +287,18 @@ export class QualityRequirementsStageCompletion {
     const persistedUnitDirectory = created?.event.type === "construction.unit-created" ? created.event.data.directory : undefined;
     const upstream = currentFunctionalDesignRecord(loaded);
     if (upstream.kind === "invalid") return failure("functional_design_completion_invalid", "Quality Requirements requires one current validated Functional Design completion.", upstream.details);
-    const authorityEventIds = originalStart.event.data.authority_event_ids;
-    if (!Array.isArray(authorityEventIds) || authorityEventIds.length !== 1 ||
-        String(authorityEventIds[0]) !== String(upstream.completion.event.id) ||
-        !originalStart.event.caused_by.includes(upstream.completion.event.id)) {
-      return failure("quality_stage_start_authority_invalid", "The current Quality Requirements attempt must start from the accepted Functional Design completion authority.", {
+    const authority = validateStageStartAuthority({
+      stage: "quality-requirements",
+      unitId: loaded.unit.unitId,
+      authorityEventIds: originalStart.event.data.authority_event_ids,
+      causedBy: originalStart.event.caused_by,
+      expectedUpstreamEventIds: [String(upstream.completion.event.id)],
+      facts: loaded.history.events.flatMap((record) => record.event ? [{ event: record.event }] : []),
+    });
+    if (authority.kind !== "valid") {
+      return failure("quality_stage_start_authority_invalid", "The current Quality Requirements attempt must bind its accepted Functional Design and any authorized reopen chain.", {
         attempt_id: stageAttemptId,
-        expected_authority_event_id: upstream.completion.event.id,
-        actual_authority_event_ids: authorityEventIds,
+        ...authority.details,
       });
     }
     const functionalDesign = await readFunctionalDesignMaterial(loaded.root, loaded.missionId, loaded.unit.unitId, persistedUnitDirectory);
@@ -329,6 +334,39 @@ export class QualityRequirementsStageCompletion {
     }
     const materialFacts = validateQualityMaterialFacts(loaded, stageAttemptId, start.event.id, request, material.artifactBindings);
     if (materialFacts.kind === "invalid") return failure("quality_evidence_invalid", "Named Quality Requirements evidence, requester approval, and any requested external review must bind to the current attempt and material.", materialFacts.details);
+    const currentCommonDirectory = await commonDirectory(this.runtime, loaded.root);
+    if (!currentCommonDirectory) return failure("stage_coordination_unavailable", "Git could not resolve the record home's common directory.", { repository_root: loaded.root });
+    const actualCheckpoints = await captureStageCheckpoints(this.runtime, loaded, currentCommonDirectory);
+    if (actualCheckpoints.kind === "failed") return failure(actualCheckpoints.code, actualCheckpoints.message, actualCheckpoints.details);
+    const repositoryId = recordHomeRepositoryId(loaded.history.events);
+    const artifactPaths = [
+      ...functionalDesign.material.artifactPaths.map((artifactPath) => Path.join(functionalDesign.material.unitDirectory, artifactPath)),
+      ...material.artifactPaths.map((artifactPath) => Path.join(material.unitDirectory, artifactPath)),
+    ];
+    const recordHomeCheckpoint = repositoryId ? actualCheckpoints.checkpoints.find((checkpoint) => checkpoint.repository_id === repositoryId) : undefined;
+    if (!repositoryId || !recordHomeCheckpoint) return failure("quality_checkpoint_missing", "The record-home repository must have a current committed checkpoint.", { repository_id: repositoryId });
+    const currentMaterial = await verifyStageCheckpointMaterial(this.runtime.workspace, {
+      repositoryRoot: loaded.root, repositoryId, checkpoint: recordHomeCheckpoint, artifactPaths,
+    });
+    if (currentMaterial.kind === "invalid") return failure("quality_checkpoint_material_mismatch", "Functional Design and Quality Requirements material must match the current record-home checkpoint.", { artifact_paths: currentMaterial.artifactPaths });
+    for (const fact of [...materialFacts.facts.evidence, materialFacts.facts.approval]) {
+      const verifiedSet = await verifyStageCheckpointSet(this.runtime.workspace, actualCheckpoints.repositoryRoots, fact.event.data.checkpoints);
+      if (verifiedSet.kind === "invalid") return failure("quality_evidence_checkpoint_invalid", "Every evidence and approval checkpoint must resolve in its selected repository workspace.", {
+        event_id: fact.event.id, repository_ids: verifiedSet.repositoryIds, invalid_commits: verifiedSet.invalidCommits,
+      });
+      const checkpoint = Array.isArray(fact.event.data.checkpoints)
+        ? fact.event.data.checkpoints.find((item) => isRecord(item) && item.repository_id === repositoryId)
+        : undefined;
+      if (!isRecord(checkpoint)) return failure("quality_evidence_checkpoint_missing", "Every evidence and approval checkpoint set must include the record-home repository.", { event_id: fact.event.id, repository_id: repositoryId });
+      const materialAtCheckpoint = await verifyStageCheckpointMaterial(this.runtime.workspace, {
+        repositoryRoot: loaded.root, repositoryId,
+        checkpoint,
+        artifactPaths,
+      });
+      if (materialAtCheckpoint.kind === "invalid") return failure("quality_evidence_material_checkpoint_mismatch", "The material covered by each Quality evidence result and approval must exist unchanged in its recorded checkpoint.", {
+        event_id: fact.event.id, artifact_paths: materialAtCheckpoint.artifactPaths,
+      });
+    }
 
     const eventId = this.runtime.identities.next();
     const journalId = this.runtime.identities.next();
@@ -347,6 +385,7 @@ export class QualityRequirementsStageCompletion {
         artifact_id: binding.artifact_id as ArtifactBinding["artifact_id"],
         content_version: binding.content_version,
       })),
+      artifact_paths: material.artifactPaths,
       assessments: request.assessments,
     };
     const causedBy = [
@@ -360,7 +399,7 @@ export class QualityRequirementsStageCompletion {
       phase: CONSTRUCTION_PHASE,
       type: "construction.stage-attempt-completed",
       envelope_version: 1,
-      event_version: CONSTRUCTION_EVENT_VERSION,
+      event_version: CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
       journal_id: journalId,
       recorded_at: this.runtime.now(),
       producer: this.runtime.producer,
@@ -371,7 +410,7 @@ export class QualityRequirementsStageCompletion {
         stage: "quality-requirements",
         stage_attempt_id: stageAttemptId as StageAttemptId,
         evidence_ids: qualityRequirementsEvidenceIds(request.assessments),
-        checkpoints: materialFacts.facts.checkpoints,
+        checkpoints: actualCheckpoints.checkpoints,
         quality_requirements_assessment: record,
       },
     };

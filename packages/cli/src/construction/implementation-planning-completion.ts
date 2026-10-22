@@ -97,6 +97,9 @@ export interface ImplementationPlanningCompletionRecord {
   readonly graph_ref: GraphReference;
   readonly artifact_bindings: readonly ArtifactBinding[];
   readonly reviewed_material_bindings: readonly ArtifactBinding[];
+  readonly artifact_paths: readonly string[];
+  readonly task_graph_path: string;
+  readonly plan_graph_link: { readonly plan_path: "plan.md"; readonly task_graph_path: "tasks-dag.json" };
   readonly approval_event_id?: EventId;
   readonly assessments: ImplementationPlanningCompletionAssessments;
 }
@@ -121,6 +124,13 @@ const onlyKeys = (value: Record<string, unknown>, keys: readonly string[]): bool
   Object.keys(value).every((key) => keys.includes(key));
 const stringList = (value: unknown, minimum = 0): value is readonly string[] =>
   Array.isArray(value) && value.length >= minimum && value.every(nonEmpty) && new Set(value).size === value.length;
+const relativeArtifactPath = (value: unknown): value is string => typeof value === "string" && nonEmpty(value) &&
+  !value.startsWith("/") && !value.includes("\\") && value.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+const artifactPathList = (value: unknown): value is readonly string[] =>
+  stringList(value, 1) && value.every(relativeArtifactPath);
+const isPlanGraphLink = (value: unknown): value is ImplementationPlanningCompletionRecord["plan_graph_link"] =>
+  isRecord(value) && onlyKeys(value, ["plan_path", "task_graph_path"]) &&
+  value.plan_path === "plan.md" && value.task_graph_path === "tasks-dag.json";
 const isGraphReference = (value: unknown): value is GraphReference =>
   isRecord(value) && onlyKeys(value, ["graph_id", "content_version"]) &&
   uuidV4(value.graph_id) && nonEmpty(value.content_version);
@@ -248,9 +258,9 @@ export const planningEvidenceIds = (
   ...(assessments.external_review.requested ? [assessments.external_review.evidence_id] : []),
 ];
 
-export const isImplementationPlanningCompletionRecord = (
-  value: unknown,
-): value is ImplementationPlanningCompletionRecord => {
+export type LegacyImplementationPlanningCompletionRecord = Omit<ImplementationPlanningCompletionRecord, "artifact_paths" | "task_graph_path" | "plan_graph_link">;
+
+export const isLegacyImplementationPlanningCompletionRecord = (value: unknown): value is LegacyImplementationPlanningCompletionRecord => {
   if (!isRecord(value) || !onlyKeys(value, [
     "graph_ref", "artifact_bindings", "reviewed_material_bindings", "approval_event_id", "assessments",
   ]) || !isGraphReference(value.graph_ref) || !Array.isArray(value.artifact_bindings) ||
@@ -266,6 +276,42 @@ export const isImplementationPlanningCompletionRecord = (
       value.assessments.handoff.graph_ref.content_version !== value.graph_ref.content_version ||
       outputBindings.some((binding) => !reviewedBindings.some((reviewed) =>
         reviewed.artifact_id === binding.artifact_id && reviewed.content_version === binding.content_version))) return false;
+  return value.assessments.approval_requirement.required ? uuidV4(value.approval_event_id) : value.approval_event_id === undefined;
+};
+
+export const isImplementationPlanningCompletionRecord = (
+  value: unknown,
+): value is ImplementationPlanningCompletionRecord => {
+  if (!isRecord(value) || !onlyKeys(value, [
+    "graph_ref", "artifact_bindings", "reviewed_material_bindings", "artifact_paths", "task_graph_path", "plan_graph_link", "approval_event_id", "assessments",
+  ]) || !isGraphReference(value.graph_ref) || !Array.isArray(value.artifact_bindings) ||
+      value.artifact_bindings.length === 0 || !value.artifact_bindings.every(isArtifactBinding) ||
+      new Set(value.artifact_bindings.map((item) => item.artifact_id)).size !== value.artifact_bindings.length ||
+      !artifactPathList(value.artifact_paths) || !relativeArtifactPath(value.task_graph_path) || value.task_graph_path !== "tasks-dag.json" ||
+      !isPlanGraphLink(value.plan_graph_link) ||
+      !Array.isArray(value.reviewed_material_bindings) || value.reviewed_material_bindings.length === 0 ||
+      !value.reviewed_material_bindings.every(isArtifactBinding) ||
+      new Set(value.reviewed_material_bindings.map((item) => item.artifact_id)).size !== value.reviewed_material_bindings.length ||
+      !isAssessments(value.assessments)) return false;
+  const outputBindings = value.artifact_bindings as readonly ArtifactBinding[];
+  const reviewedBindings = value.reviewed_material_bindings as readonly ArtifactBinding[];
+  if (value.assessments.handoff.graph_ref.graph_id !== value.graph_ref.graph_id ||
+      value.assessments.handoff.graph_ref.content_version !== value.graph_ref.content_version ||
+      outputBindings.some((binding) => !reviewedBindings.some((reviewed) =>
+        reviewed.artifact_id === binding.artifact_id && reviewed.content_version === binding.content_version))) return false;
   if (value.assessments.approval_requirement.required) return uuidV4(value.approval_event_id);
   return value.approval_event_id === undefined;
+};
+
+export const readImplementationPlanningCompletionRecord = (value: unknown): ImplementationPlanningCompletionRecord | undefined => {
+  if (isImplementationPlanningCompletionRecord(value)) return value;
+  if (!isLegacyImplementationPlanningCompletionRecord(value) ||
+      !value.assessments.handoff.artifacts.includes("plan.md") || !value.assessments.handoff.artifacts.includes("tasks-dag.json")) return undefined;
+  const normalized = {
+    ...value,
+    artifact_paths: value.assessments.handoff.artifacts.filter((path) => path !== "tasks-dag.json"),
+    task_graph_path: "tasks-dag.json",
+    plan_graph_link: { plan_path: "plan.md", task_graph_path: "tasks-dag.json" },
+  };
+  return isImplementationPlanningCompletionRecord(normalized) ? normalized : undefined;
 };

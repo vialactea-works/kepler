@@ -61,7 +61,7 @@ const validInputs = (value: unknown): value is readonly MaterialInput[] =>
     nonEmptyString(item.reference) && nonEmptyString(item.purpose));
 
 const requestKeys: Readonly<Record<AuditRecordKind, readonly string[]>> = {
-  evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "result", "output_refs", "conditions", "related_request_event_id"],
+  evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "result", "output_refs", "conditions", "related_request_event_id", "related_event_ids"],
   approval: ["requester", "inputs", "artifact_bindings", "checkpoints", "decision_reference"],
   interaction: ["participants", "content", "references", "reply_reference", "effort_selection"],
 };
@@ -94,6 +94,18 @@ const validateRequest = (
   }
   if (request.related_request_event_id !== undefined && kind !== "evidence") {
     issues.push({ pointer: "/related_request_event_id", message: "A related requester interaction is only valid on evidence." });
+  }
+  if (request.related_event_ids !== undefined && (!Array.isArray(request.related_event_ids) || request.related_event_ids.length === 0 ||
+      !request.related_event_ids.every((id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) ||
+      new Set(request.related_event_ids).size !== request.related_event_ids.length)) {
+    issues.push({ pointer: "/related_event_ids", message: "Expected distinct UUIDv4 references to related evidence events." });
+  }
+  if (request.related_event_ids !== undefined && kind !== "evidence") {
+    issues.push({ pointer: "/related_event_ids", message: "Related events are only valid on evidence." });
+  }
+  if (Array.isArray(request.related_event_ids) && typeof request.related_request_event_id === "string" &&
+      request.related_event_ids.includes(request.related_request_event_id)) {
+    issues.push({ pointer: "/related_event_ids", message: "A requester interaction must use related_request_event_id, not both relationship fields." });
   }
   if (kind === "evidence") {
     requireText("check");
@@ -138,7 +150,7 @@ export interface AuditRecordContext {
 }
 
 export interface AuditRecordContextResolver {
-  readonly resolve: (selectors: ScopeSelectors, project?: string, kind?: AuditRecordKind, relatedRequestEventId?: string) => Promise<
+  readonly resolve: (selectors: ScopeSelectors, project?: string, kind?: AuditRecordKind, relatedRequestEventId?: string, relatedEventIds?: readonly string[]) => Promise<
     | { readonly kind: "resolved"; readonly context: AuditRecordContext }
     | { readonly kind: "failed"; readonly code: string; readonly message: string; readonly details: Readonly<Record<string, unknown>>; readonly recovery: string }
   >;
@@ -164,7 +176,10 @@ export class AuditRecording {
     const relatedRequestEventId = isRecord(request) && typeof request.related_request_event_id === "string"
       ? request.related_request_event_id
       : undefined;
-    const context = await this.contexts.resolve(selectors, project, kind, relatedRequestEventId);
+    const relatedEventIds = isRecord(request) && Array.isArray(request.related_event_ids) && request.related_event_ids.every((id) => typeof id === "string")
+      ? request.related_event_ids as string[]
+      : undefined;
+    const context = await this.contexts.resolve(selectors, project, kind, relatedRequestEventId, relatedEventIds);
     if (context.kind === "failed") return { kind: "failed", data: {
       code: context.code,
       message: context.message,
@@ -278,6 +293,7 @@ export const createAuditRecord = (
       ...(kind === "evidence" && typeof request.related_request_event_id === "string"
         ? [request.related_request_event_id]
         : []),
+      ...(kind === "evidence" && Array.isArray(request.related_event_ids) ? request.related_event_ids : []),
     ])] as EventId[],
     data,
   };

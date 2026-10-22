@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { validateQualityRequirementsCompletionRequest } from "../../packages/cli/src/construction/quality-requirements-completion.js";
+import {
+  isLegacyQualityRequirementsCompletionRecord,
+  isQualityRequirementsCompletionRecord,
+  validateQualityRequirementsCompletionRequest,
+} from "../../packages/cli/src/construction/quality-requirements-completion.js";
 
 const categoryNames = [
   "performance",
@@ -61,6 +65,17 @@ const request = () => ({
 });
 
 describe("Quality Requirements completion request", () => {
+  it("recognizes the historical version 1 record without Functional Design bindings", () => {
+    const valid = request();
+    const record = {
+      approval_event_id: valid.approval_event_id,
+      artifact_bindings: [{ artifact_id: "74000000-0000-4000-8000-000000000001", content_version: "sha256:quality" }],
+      assessments: valid.assessments,
+    };
+    expect(isLegacyQualityRequirementsCompletionRecord(record)).toBe(true);
+    expect(isQualityRequirementsCompletionRecord(record)).toBe(false);
+  });
+
   it("accepts explicit applicability for all eight categories and objective targets", () => {
     const result = validateQualityRequirementsCompletionRequest(request());
     expect(result.kind).toBe("valid");
