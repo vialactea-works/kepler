@@ -55,6 +55,48 @@ const createRuntime = (overrides: {
           return { kind: "resolved", root: "/record" };
         },
     },
+    workspace: {
+      cwd: "/record",
+      git: {
+        run: async (_cwd, args) => {
+          if (args[0] === "rev-parse") {
+            effects.push("git:common");
+            return { status: 0, stdout: "/record/.git", stderr: "" };
+          }
+          effects.push("git:worktrees");
+          return { status: 0, stdout: "worktree /record\0HEAD 0123456789abcdef\0branch refs/heads/main\0\0", stderr: "" };
+        },
+        findReachableObjects: async () => ({ status: 0, objectIds: [], stderr: "" }),
+      },
+      fileSystem: {
+        pathKind: async () => "directory",
+        realpath: async (path) => path,
+        mkdir: async () => {},
+        readFile: async () => "",
+        writeFileExclusive: async () => {},
+      },
+      coordination: {
+        acquire: async (request) => {
+          effects.push("acquire");
+          return {
+            kind: "acquired",
+            lease: {
+              lockPath: "/record/.git/kepler/workspaces/unit-create",
+              owner: { ...request.owner, token: "90000000-0000-4000-8000-000000000009" },
+              release: async () => {
+                effects.push("release");
+                return { kind: "released" };
+              },
+            },
+          };
+        },
+      },
+      identity: {
+        machine_id: "unit-test",
+        process_id: 1,
+        process_incarnation_id: "80000000-0000-4000-8000-000000000008",
+      },
+    },
     records: {
       inspect: overrides.inspect
         ? async () => {
@@ -67,6 +109,8 @@ const createRuntime = (overrides: {
             kind: "inspected",
             mission: { id: missionId, workflow: "standard", prepared: true },
             unitIds: [],
+            unitPaths: [],
+            unitFacts: [],
           };
         },
       createDirectory: overrides.createDirectory
@@ -161,7 +205,7 @@ describe("UnitCreate", () => {
         stageOverrides: { implementation: "minimal", deliver: "standard" },
       },
     });
-    expect(effects).toEqual(["resolve:../record-home", "inspect", "journal", "directory", "append"]);
+    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "inspect", "journal", "append", "directory", "release"]);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       id: eventId,
@@ -208,11 +252,11 @@ describe("UnitCreate", () => {
   });
 
   it.each([
-    { name: "missing mission", inspection: { kind: "inspected", unitIds: [] }, code: "mission_not_found" },
-    { name: "mismatched workflow", inspection: { kind: "inspected", mission: { id: missionId, workflow: "experimental", prepared: true }, unitIds: [] }, code: "mission_workflow_mismatch" },
-    { name: "unprepared mission", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: false }, unitIds: [] }, code: "mission_not_prepared" },
-    { name: "directory identity", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: true }, unitIds: [unitId] }, code: "unit_id_conflict" },
-    { name: "history identity", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: true }, unitIds: [unitId] }, code: "unit_id_conflict" },
+    { name: "missing mission", inspection: { kind: "inspected", unitIds: [], unitPaths: [], unitFacts: [] }, code: "mission_not_found" },
+    { name: "mismatched workflow", inspection: { kind: "inspected", mission: { id: missionId, workflow: "experimental", prepared: true }, unitIds: [], unitPaths: [], unitFacts: [] }, code: "mission_workflow_mismatch" },
+    { name: "unprepared mission", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: false }, unitIds: [], unitPaths: [], unitFacts: [] }, code: "mission_not_prepared" },
+    { name: "directory identity", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: true }, unitIds: [unitId], unitPaths: [], unitFacts: [] }, code: "unit_id_conflict" },
+    { name: "history identity", inspection: { kind: "inspected", mission: { id: missionId, workflow: "standard", prepared: true }, unitIds: [unitId], unitPaths: [], unitFacts: [] }, code: "unit_id_conflict" },
   ])("does not write when $name prevents creation", async ({ inspection, code }) => {
     const { runtime, events, effects } = createRuntime({ inspect: async () => inspection });
 
@@ -220,7 +264,7 @@ describe("UnitCreate", () => {
 
     expect(result).toMatchObject({ kind: "failed", code });
     expect(events).toHaveLength(0);
-    expect(effects).toEqual(["resolve:../record-home", "inspect"]);
+    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "inspect", "release"]);
   });
 
   it("does not write when project selection fails", async () => {
@@ -243,11 +287,11 @@ describe("UnitCreate", () => {
     const result = await new UnitCreate(runtime).execute(request);
 
     expect(result).toMatchObject({ kind: "failed", code: "unit_directory_exists" });
-    expect(events).toHaveLength(0);
-    expect(effects).toEqual(["resolve:../record-home", "inspect", "journal", "directory"]);
+    expect(events).toHaveLength(1);
+    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "inspect", "journal", "append", "directory", "release"]);
   });
 
-  it("reports a journal failure without deleting the created directory", async () => {
+  it("reports a journal failure before creating the unit directory", async () => {
     const { runtime, events, effects } = createRuntime({
       append: async () => { throw new Error("journal unavailable"); },
     });
@@ -257,9 +301,9 @@ describe("UnitCreate", () => {
     expect(result).toMatchObject({
       kind: "failed",
       code: "unit_record_failed",
-      details: { unit_id: unitId, directory_created: true },
+      details: { unit_id: unitId, journal_path: `/record/.kepler/missions/${missionId}/history/construction/${journalId}.jsonl` },
     });
     expect(events).toHaveLength(1);
-    expect(effects).toEqual(["resolve:../record-home", "inspect", "journal", "directory", "append"]);
+    expect(effects).toEqual(["resolve:../record-home", "git:common", "git:worktrees", "acquire", "inspect", "journal", "append", "release"]);
   });
 });

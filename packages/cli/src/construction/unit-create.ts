@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as Path from "node:path";
 import {
   EVENT_ENVELOPE_VERSION,
@@ -18,6 +19,7 @@ import {
   type UnitId,
 } from "./events.js";
 import type { EventJournal } from "../history/journal.js";
+import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 
 export interface UnitCreateRequest {
   readonly slug: string;
@@ -44,10 +46,35 @@ export interface UnitCreateFailure {
   readonly recovery: string;
 }
 
+export interface UnitCreateRecordedFact {
+  readonly unitId: string;
+  readonly missionId: string;
+  readonly recordHome: string;
+  readonly directory: string;
+  readonly workflow: string;
+  readonly effort: {
+    readonly default: string;
+    readonly stageOverrides: Readonly<Record<string, string>>;
+    readonly selectedBy: string;
+  };
+  readonly journalId: string;
+  readonly eventId: string;
+}
+
+export interface UnitCreateKnownPath {
+  readonly unitId: string;
+  readonly missionId?: string;
+  readonly recordHome: string;
+  readonly directory: string;
+  readonly pathKind: "directory" | "file" | "other";
+}
+
 export interface UnitCreateInspection {
   readonly kind: "inspected";
   readonly mission?: { readonly id: string; readonly workflow: string; readonly prepared: boolean };
   readonly unitIds: readonly string[];
+  readonly unitPaths: readonly UnitCreateKnownPath[];
+  readonly unitFacts: readonly UnitCreateRecordedFact[];
 }
 
 export type UnitCreateInspectionResult = UnitCreateInspection | UnitCreateFailure;
@@ -58,7 +85,7 @@ export type UnitCreateDirectoryResult =
   | UnitCreateFailure;
 
 export interface UnitCreateRecords {
-  readonly inspect: (recordHome: string, missionId: MissionId) => Promise<UnitCreateInspectionResult>;
+  readonly inspect: (recordHomes: readonly string[], selectedRecordHome: string, missionId: MissionId) => Promise<UnitCreateInspectionResult>;
   readonly createDirectory: (recordHome: string, missionId: MissionId, unitId: string) => Promise<UnitCreateDirectoryResult>;
 }
 
@@ -68,6 +95,7 @@ export interface UnitCreateJournalFactory {
 
 export interface UnitCreateRuntime {
   readonly projects: { readonly resolve: (project?: string) => Promise<ProjectSelectionResult> };
+  readonly workspace: MissionWorkspaceRuntime;
   readonly records: UnitCreateRecords;
   readonly journals: UnitCreateJournalFactory;
   readonly identities: { readonly next: () => string };
@@ -226,6 +254,86 @@ const expectedJournalPath = (recordHome: string, missionId: string, journalId: s
 
 const expectedDirectory = (unitId: string): string => `construction/units-of-work/${unitId}`;
 
+interface UnitCreateWorkspaceScope {
+  readonly commonDirectory: string;
+  readonly recordHomes: readonly string[];
+}
+
+const resolveWorkspaceScope = async (
+  runtime: UnitCreateRuntime,
+  selectedRoot: string,
+): Promise<UnitCreateWorkspaceScope | UnitCreateFailure> => {
+  const commonResult = await runtime.workspace.git.run(selectedRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  if (commonResult.status !== 0 || commonResult.stdout.trim().length === 0) {
+    return failure("unit_project_inspection_failed", "Git could not resolve the record-home common directory.", {
+      repository_root: selectedRoot,
+      stderr: commonResult.stderr.trim(),
+    });
+  }
+  let commonDirectory: string;
+  try {
+    commonDirectory = await runtime.workspace.fileSystem.realpath(Path.resolve(selectedRoot, commonResult.stdout.trim()));
+  } catch (error) {
+    return failure("unit_project_inspection_failed", "Kepler could not resolve the canonical Git common directory.", {
+      repository_root: selectedRoot,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const worktreesResult = await runtime.workspace.git.run(selectedRoot, ["worktree", "list", "--porcelain", "-z"]);
+  if (worktreesResult.status !== 0) {
+    return failure("unit_project_inspection_failed", "Git could not enumerate record-home worktrees for project-wide unit identity checks.", {
+      repository_root: selectedRoot,
+      stderr: worktreesResult.stderr.trim(),
+    });
+  }
+  const rawWorktrees = worktreesResult.stdout.split("\0\0").flatMap((block) => {
+    const field = block.split("\0").find((value) => value.startsWith("worktree "));
+    return field ? [field.slice("worktree ".length)] : [];
+  });
+  if (rawWorktrees.length === 0) {
+    return failure("unit_project_inspection_failed", "Git returned no worktrees for the selected record home.", {
+      repository_root: selectedRoot,
+    });
+  }
+  const recordHomes = new Set<string>();
+  try {
+    const canonicalSelectedRoot = await runtime.workspace.fileSystem.realpath(selectedRoot);
+    recordHomes.add(canonicalSelectedRoot);
+    let selectedRootFound = false;
+    for (const worktree of rawWorktrees) {
+      const candidate = Path.isAbsolute(worktree) ? worktree : Path.resolve(selectedRoot, worktree);
+      if (await runtime.workspace.fileSystem.pathKind(candidate) !== "directory") {
+        return failure("unit_project_inspection_failed", "A linked worktree is unavailable, so project-wide unit IDs cannot be verified.", {
+          worktree: candidate,
+        });
+      }
+      const canonical = await runtime.workspace.fileSystem.realpath(candidate);
+      if (canonical === canonicalSelectedRoot) selectedRootFound = true;
+      recordHomes.add(canonical);
+    }
+    if (!selectedRootFound) {
+      return failure("unit_project_inspection_failed", "Git's worktree list does not contain the selected record home.", {
+        repository_root: canonicalSelectedRoot,
+      });
+    }
+  } catch (error) {
+    return failure("unit_project_inspection_failed", "Kepler could not resolve every linked worktree for project-wide unit identity checks.", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return { commonDirectory, recordHomes: [...recordHomes] };
+};
+
+const sameStageOverrides = (
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Partial<Record<ConstructionStage, EffortLevel>>>,
+): boolean => {
+  const leftEntries = Object.entries(left).sort(([a], [b]) => a.localeCompare(b));
+  const rightEntries = Object.entries(right).sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(leftEntries) === JSON.stringify(rightEntries);
+};
+
 export class UnitCreate {
   constructor(private readonly runtime: UnitCreateRuntime) {}
 
@@ -251,9 +359,92 @@ export class UnitCreate {
     }
     if (selectedProject.kind === "failed") return selectedProject;
 
+    let today: string;
+    try {
+      today = this.runtime.today();
+    } catch (error) {
+      return failure("unit_date_unavailable", "Kepler could not determine the machine-local creation date.", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (!validLocalDate(today)) {
+      return failure("unit_date_invalid", "The machine-local creation date is invalid.", { date: today });
+    }
+    const unitId = `${today}-${request.slug}`;
+
+    let scope: UnitCreateWorkspaceScope | UnitCreateFailure;
+    try {
+      scope = await resolveWorkspaceScope(this.runtime, selectedProject.root);
+    } catch (error) {
+      return failure("unit_project_inspection_failed", "Kepler could not inspect the selected project's Git worktrees.", {
+        repository_root: selectedProject.root,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if ("kind" in scope) return scope;
+
+    let acquired: Awaited<ReturnType<MissionWorkspaceRuntime["coordination"]["acquire"]>>;
+    try {
+      acquired = await this.runtime.workspace.coordination.acquire({
+        commonDirectory: scope.commonDirectory,
+        location: { kind: "code-workspace" },
+        resourceKey: createHash("sha256").update(JSON.stringify(["construction-unit-create", unitId])).digest("hex"),
+        owner: {
+          machine_id: this.runtime.workspace.identity.machine_id,
+          process_id: this.runtime.workspace.identity.process_id,
+          process_incarnation_id: this.runtime.workspace.identity.process_incarnation_id,
+          mission_id: request.missionId,
+          resource_scope: `construction/unit-create/${unitId}`,
+        },
+      });
+    } catch (error) {
+      return failure("unit_coordination_failed", "Kepler could not acquire project-wide unit creation coordination.", {
+        unit_id: unitId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (acquired.kind === "failed") return acquired;
+
+    let result: UnitCreateResult;
+    try {
+      result = await this.createUnderLease(request, selectedProject.root, scope.recordHomes, unitId);
+    } catch (error) {
+      result = failure("unit_creation_failed", "Kepler could not reconcile or create the unit safely.", {
+        unit_id: unitId,
+        message: error instanceof Error ? error.message : String(error),
+      }, "Preserve all unit paths and journal bytes, then reconcile them before retrying.");
+    }
+
+    try {
+      const released = await acquired.lease.release();
+      if (released.kind === "failed") {
+        return failure("unit_coordination_release_failed", "Unit creation finished, but project-wide coordination could not be released safely.", {
+          unit_id: unitId,
+          creation_result: result.kind,
+          ...(result.kind === "failed" ? { creation_failure: result.code } : { event_id: result.eventId }),
+          release_failure: released.code,
+          release_details: released.details,
+        }, "Preserve the coordination artifacts and reconcile their current owner before retrying.");
+      }
+    } catch (error) {
+      return failure("unit_coordination_release_failed", "Unit creation finished, but project-wide coordination could not be released safely.", {
+        unit_id: unitId,
+        creation_result: result.kind,
+        message: error instanceof Error ? error.message : String(error),
+      }, "Preserve the coordination artifacts and reconcile their current owner before retrying.");
+    }
+    return result;
+  }
+
+  private async createUnderLease(
+    request: UnitCreateRequest,
+    selectedRoot: string,
+    recordHomes: readonly string[],
+    unitId: string,
+  ): Promise<UnitCreateResult> {
     let inspected: UnitCreateInspectionResult;
     try {
-      inspected = await this.runtime.records.inspect(selectedProject.root, request.missionId);
+      inspected = await this.runtime.records.inspect(recordHomes, selectedRoot, request.missionId);
     } catch (error) {
       return failure("unit_history_read_failed", "Kepler could not inspect record-home mission and unit identities.", {
         message: error instanceof Error ? error.message : String(error),
@@ -263,7 +454,7 @@ export class UnitCreate {
     if (!inspected.mission || inspected.mission.id !== request.missionId) {
       return failure("mission_not_found", "The selected mission has no creation record in this record home.", {
         mission_id: request.missionId,
-        record_home: selectedProject.root,
+        record_home: selectedRoot,
       }, "Select an existing mission recorded in this record home.");
     }
     if (inspected.mission.workflow !== "standard") {
@@ -278,22 +469,38 @@ export class UnitCreate {
       }, "Complete and reconcile mission workspace preparation before creating its unit.");
     }
 
-    let today: string;
-    try {
-      today = this.runtime.today();
-    } catch (error) {
-      return failure("unit_date_unavailable", "Kepler could not determine the machine-local creation date.", {
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-    if (!validLocalDate(today)) {
-      return failure("unit_date_invalid", "The machine-local creation date is invalid.", { date: today });
-    }
-    const unitId = `${today}-${request.slug}`;
+    const directory = expectedDirectory(unitId);
     if (inspected.unitIds.includes(unitId)) {
-      return failure("unit_id_conflict", "The generated unit ID is already known in this project.", {
+      const facts = inspected.unitFacts.filter((fact) => fact.unitId === unitId);
+      const paths = inspected.unitPaths.filter((path) => path.unitId === unitId);
+      const fact = facts[0];
+      const retryMatches = facts.length === 1 && paths.length === 0 && fact !== undefined &&
+        fact.recordHome === selectedRoot && fact.missionId === request.missionId &&
+        fact.directory === directory && fact.workflow === "standard" &&
+        fact.effort.default === request.effort && fact.effort.selectedBy === "requester" &&
+        sameStageOverrides(fact.effort.stageOverrides, request.stageEffort);
+      if (retryMatches && fact) {
+        const recoveredDirectory = await this.runtime.records.createDirectory(selectedRoot, request.missionId, unitId);
+        if (recoveredDirectory.kind === "created") {
+          return {
+            kind: "created",
+            unitId,
+            missionId: request.missionId,
+            recordHome: selectedRoot,
+            directory,
+            workflow: "standard",
+            effort: { default: request.effort, stageOverrides: request.stageEffort },
+            journalId: fact.journalId,
+            eventId: fact.eventId,
+          };
+        }
+        if (recoveredDirectory.kind === "failed") return recoveredDirectory;
+      }
+      return failure("unit_id_conflict", "The generated unit ID already has a directory or recorded identity that cannot be safely adopted.", {
         unit_id: unitId,
-      }, "Choose a different slug or reconcile the existing unit directory and history.");
+        matching_creation_facts: facts.length,
+        known_paths: paths.map((path) => ({ record_home: path.recordHome, mission_id: path.missionId, directory: path.directory, path_kind: path.pathKind })),
+      }, "Preserve the existing paths and history. Reconcile them explicitly or choose a different slug.");
     }
 
     let journalId: string;
@@ -311,7 +518,6 @@ export class UnitCreate {
       return failure("identity_generation_failed", "Unit-history identities must be distinct lowercase UUIDv4 values.");
     }
 
-    const directory = expectedDirectory(unitId);
     let recordedAt: string;
     try {
       recordedAt = this.runtime.now();
@@ -353,13 +559,13 @@ export class UnitCreate {
 
     let journal: EventJournal;
     try {
-      journal = this.runtime.journals.create(selectedProject.root, request.missionId, journalId as JournalId);
+      journal = this.runtime.journals.create(selectedRoot, request.missionId, journalId as JournalId);
     } catch (error) {
       return failure("unit_journal_unavailable", "Kepler could not prepare the unit's Construction journal.", {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    const expectedPath = expectedJournalPath(selectedProject.root, request.missionId, journalId);
+    const expectedPath = expectedJournalPath(selectedRoot, request.missionId, journalId);
     if (!Path.isAbsolute(journal.path) || Path.resolve(journal.path) !== expectedPath) {
       return failure("unit_journal_path_invalid", "Unit history must use its selected record-home journal path.", {
         journal_path: journal.path,
@@ -367,40 +573,40 @@ export class UnitCreate {
       });
     }
 
-    let directoryResult: UnitCreateDirectoryResult;
-    try {
-      directoryResult = await this.runtime.records.createDirectory(selectedProject.root, request.missionId, unitId);
-    } catch (error) {
-      return failure("unit_directory_creation_failed", "Kepler could not create the unit directory.", {
-        unit_id: unitId,
-        directory,
-        message: error instanceof Error ? error.message : String(error),
-      }, "Inspect the unit path and record-home history before retrying; do not remove uncertain work.");
-    }
-    if (directoryResult.kind === "failed") return directoryResult;
-    if (directoryResult.kind === "exists") {
-      return failure("unit_directory_exists", "The destination unit directory already exists.", {
-        unit_id: unitId,
-        directory,
-      }, "Inspect the existing directory and history; do not adopt or overwrite it.");
-    }
-
     try {
       await journal.append(eventValidation.event);
     } catch (error) {
-      return failure("unit_record_failed", "The unit directory was created, but its creation fact was not confirmed durable.", {
+      return failure("unit_record_failed", "The unit creation fact was not confirmed durable; no unit directory was created.", {
         unit_id: unitId,
-        directory_created: true,
         journal_path: journal.path,
         message: error instanceof Error ? error.message : String(error),
-      }, "Keep the directory and any partial journal bytes. Reconcile actual effects before retrying.");
+      }, "Preserve any partial journal bytes. Reconcile actual history before retrying.");
+    }
+
+    let directoryResult: UnitCreateDirectoryResult;
+    try {
+      directoryResult = await this.runtime.records.createDirectory(selectedRoot, request.missionId, unitId);
+    } catch (error) {
+      return failure("unit_directory_creation_failed", "The unit creation fact was recorded, but its directory could not be created.", {
+        unit_id: unitId,
+        journal_path: journal.path,
+        message: error instanceof Error ? error.message : String(error),
+      }, "Preserve the creation fact and reconcile the expected unit path before retrying.");
+    }
+    if (directoryResult.kind === "failed") return directoryResult;
+    if (directoryResult.kind === "exists") {
+      return failure("unit_directory_exists", "The unit creation fact was recorded, but the expected destination path already exists.", {
+        unit_id: unitId,
+        directory,
+        journal_path: journal.path,
+      }, "Preserve the existing directory and history; reconcile them explicitly before retrying.");
     }
 
     return {
       kind: "created",
       unitId,
       missionId: request.missionId,
-      recordHome: selectedProject.root,
+      recordHome: selectedRoot,
       directory,
       workflow: "standard",
       effort: { default: request.effort, stageOverrides: request.stageEffort },

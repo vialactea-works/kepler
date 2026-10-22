@@ -114,6 +114,7 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
       provide: UnitCreate,
       useFactory: (projects: ProjectResolver) => new UnitCreate({
         projects: { resolve: (project) => projects.resolve(project) },
+        workspace: createNodeMissionWorkspaceRuntime(),
         records: createNodeUnitCreateRecords(),
         journals: {
           create: (recordHome, missionId, journalId) => createEventJournal({
