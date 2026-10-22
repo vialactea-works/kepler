@@ -1,12 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { validateConstructionArtifact } from "./artifacts.js";
-import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { readFunctionalDesignMaterial } from "./stage-completion.js";
+import { readStageArtifactMaterial, type StageArtifactMaterial } from "./stage-artifact-material.js";
 import {
   CONSTRUCTION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
@@ -45,12 +44,6 @@ export type QualityStageCompletionResult =
   | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
   | { readonly kind: "failed"; readonly data: Readonly<Record<string, unknown>> };
 
-interface QualityMaterial {
-  readonly artifactBindings: readonly ArtifactBinding[];
-  readonly artifactPaths: readonly string[];
-  readonly unitDirectory: string;
-}
-
 interface ValidQualityMaterialFacts {
   readonly evidence: readonly ConstructionHistoryFact[];
   readonly approval: ConstructionHistoryFact;
@@ -64,23 +57,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const isNonEmpty = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
-const contained = (root: string, path: string): boolean => {
-  const relative = Path.relative(root, path);
-  return relative === "" || (!relative.startsWith(`..${Path.sep}`) && relative !== ".." && !Path.isAbsolute(relative));
-};
-const normalized = (value: string): string => value.split(Path.sep).join("/");
-const parseLinkPath = (url: string): string | undefined => {
-  if (url.startsWith("//") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(url)) return undefined;
-  const suffix = url.search(/[?#]/);
-  const rawPath = suffix < 0 ? url : url.slice(0, suffix);
-  if (rawPath.length === 0) return undefined;
-  try {
-    return decodeURIComponent(rawPath);
-  } catch {
-    return undefined;
-  }
-};
-
 const failure = (
   code: string,
   message: string,
@@ -90,88 +66,6 @@ const failure = (
 
 const propagateReadFailure = (result: Extract<AuditHistoryReadResult, { kind: "failed" }>): QualityStageCompletionResult =>
   failure(result.code, result.message, result.details, result.recovery);
-
-const readQualityMaterial = async (
-  repositoryRoot: string,
-  missionId: string,
-  unitId: string,
-  persistedUnitDirectory: unknown,
-): Promise<{ readonly kind: "valid"; readonly material: QualityMaterial } | {
-  readonly kind: "invalid";
-  readonly diagnostics: readonly Readonly<Record<string, unknown>>[];
-}> => {
-  const canonicalDirectory = `construction/units-of-work/${unitId}`;
-  if (typeof persistedUnitDirectory !== "string" || persistedUnitDirectory !== canonicalDirectory) {
-    return { kind: "invalid", diagnostics: [{ path: persistedUnitDirectory, code: "unit-directory-mismatch", expected: canonicalDirectory }] };
-  }
-  const unitDirectory = `.kepler/missions/${missionId}/${persistedUnitDirectory}`;
-  const absoluteUnitDirectory = Path.resolve(repositoryRoot, unitDirectory);
-  const supportDirectory = Path.join(absoluteUnitDirectory, "details", "quality-requirements");
-  const requiredPath = `${unitDirectory}/quality.md`;
-  const pending = [requiredPath];
-  const visited = new Set<string>();
-  const artifacts: { readonly path: string; readonly id: string; readonly contentVersion: string }[] = [];
-  const diagnostics: Readonly<Record<string, unknown>>[] = [];
-  while (pending.length > 0) {
-    const artifactPath = pending.shift();
-    if (artifactPath === undefined || visited.has(artifactPath)) continue;
-    visited.add(artifactPath);
-    const validation = await validateConstructionArtifact({
-      repositoryRoot,
-      artifactPath,
-      ownership: { kind: "unit", unitId, unitRoot: unitDirectory },
-    });
-    if (validation.kind === "invalid") {
-      diagnostics.push(...validation.diagnostics.map((item) => ({ path: item.sourcePath, code: item.code, message: item.message })));
-      continue;
-    }
-    artifacts.push({
-      path: artifactPath,
-      id: validation.artifact.metadata.id,
-      contentVersion: `sha256:${createHash("sha256").update(validation.artifact.source, "utf8").digest("hex")}`,
-    });
-    for (const link of validation.artifact.links) {
-      const linkPath = parseLinkPath(link.url);
-      if (linkPath === undefined) continue;
-      const target = Path.isAbsolute(linkPath)
-        ? Path.resolve(repositoryRoot, `.${linkPath}`)
-        : Path.resolve(Path.dirname(Path.resolve(repositoryRoot, artifactPath)), linkPath);
-      if (!contained(supportDirectory, target)) continue;
-      if (Path.extname(target).toLowerCase() !== ".md") {
-        diagnostics.push({ path: artifactPath, code: "invalid-quality-support", message: `Linked Quality Requirements support must be Markdown: ${link.url}` });
-        continue;
-      }
-      let realTarget: string;
-      try {
-        realTarget = await Fs.realpath(target);
-      } catch {
-        diagnostics.push({ path: artifactPath, code: "missing-quality-support", message: `Linked Quality Requirements support does not exist: ${link.url}` });
-        continue;
-      }
-      if (!contained(supportDirectory, realTarget)) {
-        diagnostics.push({ path: artifactPath, code: "outside-quality-support", message: `Linked Quality Requirements support must remain under details/quality-requirements/: ${link.url}` });
-        continue;
-      }
-      pending.push(normalized(Path.relative(repositoryRoot, realTarget)));
-    }
-  }
-  if (diagnostics.length > 0) return { kind: "invalid", diagnostics };
-  if (!visited.has(requiredPath)) {
-    return { kind: "invalid", diagnostics: [{ path: unitDirectory, code: "required-artifact-missing", message: "quality.md is required." }] };
-  }
-  if (new Set(artifacts.map((artifact) => artifact.id)).size !== artifacts.length) {
-    return { kind: "invalid", diagnostics: [{ path: unitDirectory, code: "duplicate-artifact-id", message: "Quality Requirements material contains duplicate artifact identities." }] };
-  }
-  const sorted = artifacts.sort((left, right) => left.path.localeCompare(right.path));
-  return {
-    kind: "valid",
-    material: {
-      unitDirectory,
-      artifactBindings: sorted.map((artifact) => ({ artifact_id: artifact.id as ArtifactBinding["artifact_id"], content_version: artifact.contentVersion })),
-      artifactPaths: sorted.map((artifact) => normalized(Path.relative(absoluteUnitDirectory, Path.resolve(repositoryRoot, artifact.path)))),
-    },
-  };
-};
 
 const checkpointKey = (value: unknown): string | undefined => {
   if (!Array.isArray(value)) return undefined;
@@ -203,7 +97,7 @@ const commonDirectory = async (
 
 const currentFunctionalDesignRecord = (
   loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
-): { readonly kind: "valid"; readonly record: FunctionalDesignCompletionRecord } | {
+): { readonly kind: "valid"; readonly record: FunctionalDesignCompletionRecord; readonly completion: ConstructionHistoryFact } | {
   readonly kind: "invalid";
   readonly details: Readonly<Record<string, unknown>>;
 } => {
@@ -214,7 +108,7 @@ const currentFunctionalDesignRecord = (
   if (!stage || stage.state !== "completed" || completions.length !== 1 || !isFunctionalDesignCompletionRecord(record)) {
     return { kind: "invalid", details: { state: stage?.state, current_attempt_id: stage?.currentAttemptId, completion_events: completions.length } };
   }
-  return { kind: "valid", record };
+  return { kind: "valid", record, completion: completions[0]! };
 };
 
 const requesterRequirementEvent = (
@@ -237,7 +131,7 @@ const validateQualityMaterialFacts = (
   stageAttemptId: string,
   startEventId: EventId,
   request: QualityRequirementsCompletionRequest,
-  artifactBindings: QualityMaterial["artifactBindings"],
+  artifactBindings: StageArtifactMaterial["artifactBindings"],
 ): { readonly kind: "valid"; readonly facts: ValidQualityMaterialFacts } | {
   readonly kind: "invalid";
   readonly details: Readonly<Record<string, unknown>>;
@@ -248,6 +142,19 @@ const validateQualityMaterialFacts = (
     { kind: "self_review", evidenceId: assessments.self_review.evidence_id, check: "quality-self-review" },
     ...(assessments.external_review.requested ? [{ kind: "external_review" as const, evidenceId: assessments.external_review.evidence_id, check: "quality-external-review" }] : []),
   ];
+  let requestEvent: ConstructionHistoryFact | undefined;
+  if (assessments.external_review.requested) {
+    requestEvent = requesterRequirementEvent(
+      loaded,
+      assessments.external_review.request_event_id,
+      "quality-requirements",
+      stageAttemptId,
+      startEventId,
+    );
+    if (!requestEvent) {
+      return { kind: "invalid", details: { request_event_id: assessments.external_review.request_event_id, reason: "external review has no matching requester request in this attempt" } };
+    }
+  }
   const evidence: ConstructionHistoryFact[] = [];
   let selectedCheckpointKey: string | undefined;
   let selectedCheckpoints: readonly unknown[] = [];
@@ -259,7 +166,8 @@ const validateQualityMaterialFacts = (
         fact.event.data.stage !== "quality-requirements" || fact.event.data.stage_attempt_id !== stageAttemptId ||
         fact.event.data.check !== item.check || !isRecord(fact.event.data.result) || fact.event.data.result.status !== "passed" ||
         !sameArtifactBindings(fact.event.data.artifact_bindings, artifactBindings) ||
-        !fact.event.caused_by.includes(startEventId)) {
+        !fact.event.caused_by.includes(startEventId) ||
+        (item.kind === "external_review" && (!requestEvent || !fact.event.caused_by.includes(requestEvent.event.id)))) {
       return { kind: "invalid", details: { evidence: item.kind, evidence_id: item.evidenceId, reason: "missing, failed, stale-attempt, or stale-material evidence" } };
     }
     const observedKey = checkpointKey(fact.event.data.checkpoints);
@@ -280,19 +188,6 @@ const validateQualityMaterialFacts = (
       selectedCheckpointKey === undefined || selectedCheckpointKey === "[]" ||
       checkpointKey(approval.event.data.checkpoints) !== selectedCheckpointKey || !approval.event.caused_by.includes(startEventId)) {
     return { kind: "invalid", details: { approval_event_id: request.approval_event_id, reason: "missing approval for the current attempt or current Quality Requirements material" } };
-  }
-  let requestEvent: ConstructionHistoryFact | undefined;
-  if (request.assessments.external_review.requested) {
-    requestEvent = requesterRequirementEvent(
-      loaded,
-      request.assessments.external_review.request_event_id,
-      "quality-requirements",
-      stageAttemptId,
-      startEventId,
-    );
-    if (!requestEvent) {
-      return { kind: "invalid", details: { request_event_id: request.assessments.external_review.request_event_id, reason: "external review has no matching requester request in this attempt" } };
-    }
   }
   return { kind: "valid", facts: { evidence, approval, ...(requestEvent ? { requestEvent } : {}), checkpoints: selectedCheckpoints } };
 };
@@ -385,11 +280,22 @@ export class QualityRequirementsStageCompletion {
       });
     }
     const start = latestAttemptStart(attempt.facts);
-    if (!start) return failure("stage_attempt_start_missing", "The selected Quality Requirements attempt has no validated start fact.", { attempt_id: stageAttemptId });
+    const originalStart = attempt.facts.find((fact) => fact.event.type === "construction.stage-attempt-started");
+    if (!start || !originalStart) return failure("stage_attempt_start_missing", "The selected Quality Requirements attempt has no validated start fact.", { attempt_id: stageAttemptId });
     const created = loaded.unit.created;
     const persistedUnitDirectory = created?.event.type === "construction.unit-created" ? created.event.data.directory : undefined;
     const upstream = currentFunctionalDesignRecord(loaded);
     if (upstream.kind === "invalid") return failure("functional_design_completion_invalid", "Quality Requirements requires one current validated Functional Design completion.", upstream.details);
+    const authorityEventIds = originalStart.event.data.authority_event_ids;
+    if (!Array.isArray(authorityEventIds) || authorityEventIds.length !== 1 ||
+        String(authorityEventIds[0]) !== String(upstream.completion.event.id) ||
+        !originalStart.event.caused_by.includes(upstream.completion.event.id)) {
+      return failure("quality_stage_start_authority_invalid", "The current Quality Requirements attempt must start from the accepted Functional Design completion authority.", {
+        attempt_id: stageAttemptId,
+        expected_authority_event_id: upstream.completion.event.id,
+        actual_authority_event_ids: authorityEventIds,
+      });
+    }
     const functionalDesign = await readFunctionalDesignMaterial(loaded.root, loaded.missionId, loaded.unit.unitId, persistedUnitDirectory);
     if (functionalDesign.kind === "invalid") return failure("functional_design_material_invalid", "Current Functional Design inputs failed validation.", { diagnostics: functionalDesign.diagnostics });
     if (!sameArtifactBindings(upstream.record.artifact_bindings, functionalDesign.material.artifactBindings)) {
@@ -398,18 +304,27 @@ export class QualityRequirementsStageCompletion {
         current_bindings: functionalDesign.material.artifactBindings,
       });
     }
-    const materialResult = await readQualityMaterial(loaded.root, loaded.missionId, loaded.unit.unitId, persistedUnitDirectory);
+    const materialResult = await readStageArtifactMaterial({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory,
+      primaryArtifact: "quality.md",
+      supportFolder: "quality-requirements",
+    });
     if (materialResult.kind === "invalid") return failure("quality_artifacts_invalid", "Quality Requirements artifacts or linked support failed validation.", { diagnostics: materialResult.diagnostics });
     const material = materialResult.material;
     if (material.artifactBindings.some((binding) => functionalDesign.material.artifactBindings.some((prior) => prior.artifact_id === binding.artifact_id))) {
       return failure("quality_artifact_identity_collision", "Quality Requirements artifact identities must differ from accepted Functional Design material.");
     }
     const handoff = request.assessments.handoff;
+    const expectedHandoffArtifacts = [...functionalDesign.material.artifactPaths, ...material.artifactPaths]
+      .sort((left, right) => left.localeCompare(right));
     if (handoff.unit_directory !== material.unitDirectory ||
-        JSON.stringify([...handoff.artifacts].sort()) !== JSON.stringify([...material.artifactPaths].sort())) {
-      return failure("quality_handoff_mismatch", "The Implementation Planning handoff must identify current quality.md and every linked Quality Requirements support file.", {
+        JSON.stringify([...handoff.artifacts].sort()) !== JSON.stringify(expectedHandoffArtifacts)) {
+      return failure("quality_handoff_mismatch", "The Implementation Planning handoff must identify accepted Functional Design inputs, current quality.md, and every linked Quality Requirements support file.", {
         expected_unit_directory: material.unitDirectory,
-        expected_artifacts: material.artifactPaths,
+        expected_artifacts: expectedHandoffArtifacts,
       });
     }
     const materialFacts = validateQualityMaterialFacts(loaded, stageAttemptId, start.event.id, request, material.artifactBindings);
@@ -428,6 +343,10 @@ export class QualityRequirementsStageCompletion {
     const record: QualityRequirementsCompletionRecord = {
       approval_event_id: materialFacts.facts.approval.event.id,
       artifact_bindings: material.artifactBindings,
+      functional_design_bindings: functionalDesign.material.artifactBindings.map((binding) => ({
+        artifact_id: binding.artifact_id as ArtifactBinding["artifact_id"],
+        content_version: binding.content_version,
+      })),
       assessments: request.assessments,
     };
     const causedBy = [

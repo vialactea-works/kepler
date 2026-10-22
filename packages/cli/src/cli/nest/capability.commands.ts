@@ -12,6 +12,7 @@ import { ConstructionQueries } from "../../construction/scoped-queries.js";
 import { ConstructionLint } from "../../construction/construction-lint.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
 import { QualityRequirementsStageCompletion } from "../../construction/quality-stage-completion.js";
+import { ImplementationPlanningStageCompletion } from "../../construction/planning-stage-completion.js";
 import { StageStart } from "../../construction/stage-start.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
@@ -486,6 +487,7 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
     private readonly reporter: ResultReporter,
     private readonly functionalDesignCompletion: FunctionalDesignStageCompletion,
     private readonly qualityRequirementsCompletion: QualityRequirementsStageCompletion,
+    private readonly implementationPlanningCompletion: ImplementationPlanningStageCompletion,
   ) {
     super();
   }
@@ -532,7 +534,9 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
     }
     const completion = selectors.selectors.stage === "quality-requirements"
       ? this.qualityRequirementsCompletion
-      : this.functionalDesignCompletion;
+      : selectors.selectors.stage === "implementation-planning"
+        ? this.implementationPlanningCompletion
+        : this.functionalDesignCompletion;
     const result = await completion.execute(selectors.selectors, parsed.value, selectedProject.project);
     this.reporter.report({ status: result.kind, data: result.data });
   }

@@ -385,7 +385,7 @@ This fragment shows only the accepted `inputs` structure, not a complete evidenc
 }
 ```
 
-The operation records an existing check or review result. It does not run checks, grant approval, or complete workflow work. Keep the actual executor and supporting evidence under the existing binding rules.
+The operation records an existing check or review result. It does not run checks, grant approval, or complete workflow work. Keep the actual executor and supporting evidence under the existing binding rules. When evidence fulfills an explicit requester request, `related_request_event_id` may identify that exact requester interaction. The recorder validates its unit, stage, attempt, and requester attribution, then records it as a direct cause of the evidence event; the reference does not grant authority.
 
 On successful recording, return `success` and exit `0`. Include the following required fields inside `data`:
 

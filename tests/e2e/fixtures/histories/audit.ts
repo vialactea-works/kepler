@@ -36,14 +36,30 @@ export const createAuditHistory = async (
 ): Promise<string> => {
   const historyDirectory = Path.join(repository, ".kepler", "missions", auditFixture.missionId, "history", CONSTRUCTION_PHASE);
   await Fs.mkdir(historyDirectory, { recursive: true });
+  const missionCreatedId = "f0000000-0000-4000-8000-00000000000f";
   const facts = [
+    event(missionCreatedId, "construction.mission-created", {
+      mission_id: auditFixture.missionId,
+      title: "Prepare the selected implementation work",
+      request: "Implement the reviewed unit behavior.",
+      workflow: "standard",
+      record_home: { repository_id: "repo-main" },
+      contexts: [],
+      repositories: [{
+        repository_id: "repo-main",
+        context: { kind: "existing" },
+        branch: { kind: "current" },
+        integration_target: "refs/heads/main",
+        starting_checkpoint: { kind: "commit", commit: "a".repeat(40) },
+      }],
+    }),
     event(auditFixture.eventIds[0], "construction.unit-created", {
       mission_id: auditFixture.missionId,
       unit_id: auditFixture.unitId,
       directory: unitDirectory,
       workflow: "standard",
       initial_effort: { default: "standard", stage_overrides: {}, selected_by: "Requester" },
-    }),
+    }, [missionCreatedId]),
     event(auditFixture.eventIds[1], "construction.stage-attempt-started", {
       mission_id: auditFixture.missionId,
       unit_id: auditFixture.unitId,

@@ -308,6 +308,17 @@ describe("Construction event contracts", () => {
     expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", data)).status).toBe("invalid");
   });
 
+  it("rejects generic Implementation Planning completion without its typed assessment", () => {
+    const data = {
+      ...base,
+      stage: "implementation-planning",
+      stage_attempt_id: identities.stageAttempt,
+      evidence_ids: [],
+      checkpoints: [],
+    };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", data)).status).toBe("invalid");
+  });
+
   it("requires a typed Functional Design assessment and matching named evidence", () => {
     const assessments = {
       self_review: {

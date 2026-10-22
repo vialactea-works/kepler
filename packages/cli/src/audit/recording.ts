@@ -61,7 +61,7 @@ const validInputs = (value: unknown): value is readonly MaterialInput[] =>
     nonEmptyString(item.reference) && nonEmptyString(item.purpose));
 
 const requestKeys: Readonly<Record<AuditRecordKind, readonly string[]>> = {
-  evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "result", "output_refs", "conditions"],
+  evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "result", "output_refs", "conditions", "related_request_event_id"],
   approval: ["requester", "inputs", "artifact_bindings", "checkpoints", "decision_reference"],
   interaction: ["participants", "content", "references", "reply_reference", "effort_selection"],
 };
@@ -88,6 +88,12 @@ const validateRequest = (
   if (kind !== "interaction") {
     if (!Array.isArray(request.artifact_bindings)) issues.push({ pointer: "/artifact_bindings", message: "Expected the bound artifact versions." });
     if (!Array.isArray(request.checkpoints)) issues.push({ pointer: "/checkpoints", message: "Expected the repository checkpoint set." });
+  }
+  if (request.related_request_event_id !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(String(request.related_request_event_id))) {
+    issues.push({ pointer: "/related_request_event_id", message: "Expected the related requester interaction event UUIDv4." });
+  }
+  if (request.related_request_event_id !== undefined && kind !== "evidence") {
+    issues.push({ pointer: "/related_request_event_id", message: "A related requester interaction is only valid on evidence." });
   }
   if (kind === "evidence") {
     requireText("check");
@@ -132,7 +138,7 @@ export interface AuditRecordContext {
 }
 
 export interface AuditRecordContextResolver {
-  readonly resolve: (selectors: ScopeSelectors, project?: string, kind?: AuditRecordKind) => Promise<
+  readonly resolve: (selectors: ScopeSelectors, project?: string, kind?: AuditRecordKind, relatedRequestEventId?: string) => Promise<
     | { readonly kind: "resolved"; readonly context: AuditRecordContext }
     | { readonly kind: "failed"; readonly code: string; readonly message: string; readonly details: Readonly<Record<string, unknown>>; readonly recovery: string }
   >;
@@ -155,7 +161,10 @@ export class AuditRecording {
     request: unknown,
     project?: string,
   ): Promise<AuditRecordingResult> {
-    const context = await this.contexts.resolve(selectors, project, kind);
+    const relatedRequestEventId = isRecord(request) && typeof request.related_request_event_id === "string"
+      ? request.related_request_event_id
+      : undefined;
+    const context = await this.contexts.resolve(selectors, project, kind, relatedRequestEventId);
     if (context.kind === "failed") return { kind: "failed", data: {
       code: context.code,
       message: context.message,
@@ -264,7 +273,12 @@ export const createAuditRecord = (
     journal_id: journalId as JournalId,
     recorded_at: runtime.now(),
     producer: runtime.producer,
-    caused_by: [...scope.causedBy] as EventId[],
+    caused_by: [...new Set([
+      ...scope.causedBy,
+      ...(kind === "evidence" && typeof request.related_request_event_id === "string"
+        ? [request.related_request_event_id]
+        : []),
+    ])] as EventId[],
     data,
   };
   const validation = validateConstructionEvent(event);

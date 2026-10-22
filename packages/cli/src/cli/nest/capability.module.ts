@@ -21,6 +21,10 @@ import {
   createNodeQualityStageCompletionRuntime,
   QualityRequirementsStageCompletion,
 } from "../../construction/quality-stage-completion.js";
+import {
+  createNodePlanningStageCompletionRuntime,
+  ImplementationPlanningStageCompletion,
+} from "../../construction/planning-stage-completion.js";
 import { MissionHandoffPreflight } from "../../construction/mission-handoff-preflight.js";
 import { createNodeStageStartRuntime, StageStart } from "../../construction/stage-start.js";
 import { AuditContextResolver, createNodeAuditContextRuntime } from "../../audit/context.js";
@@ -109,6 +113,7 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionStageStartCommand,
     FunctionalDesignStageCompletion,
     QualityRequirementsStageCompletion,
+    ImplementationPlanningStageCompletion,
     StageStart,
     MissionCommand,
     MissionCreateCommand,
@@ -127,6 +132,14 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
       useFactory: (contexts: AuditContextResolver) => new FunctionalDesignStageCompletion(
         contexts,
         createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: ImplementationPlanningStageCompletion,
+      useFactory: (contexts: AuditContextResolver) => new ImplementationPlanningStageCompletion(
+        contexts,
+        createNodePlanningStageCompletionRuntime({ name: "kepler", version: cliVersion }),
       ),
       inject: [AuditContextResolver],
     },

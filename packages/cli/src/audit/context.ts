@@ -233,13 +233,36 @@ export class AuditContextResolver implements AuditRecordContextResolver {
     return { kind: "loaded", root: selected.root, missionId: match.missionId, history: match.history, projection: match.projection, unit: match.unit };
   }
 
-  async resolve(selectors: ScopeSelectors, project?: string, kind: AuditRecordKind = "evidence") {
+  async resolve(
+    selectors: ScopeSelectors,
+    project?: string,
+    kind: AuditRecordKind = "evidence",
+    relatedRequestEventId?: string,
+  ) {
     if (!selectors.unit) return invalidScope("Audit recording requires an explicit --unit selector.");
     if (selectors.attempt && !selectors.stage && !selectors.activity) return invalidScope("--attempt requires --stage unless it selects an Activity attempt.");
     const loaded = await this.readUnit(selectors.unit, project);
     if (loaded.kind === "failed") return loaded;
     const bound = attemptContext(kind, selectors, loaded.unit);
     if (!bound.ok) return invalidScope(bound.message, { mission_id: loaded.missionId, unit_id: loaded.unit.unitId });
+    let causedBy = bound.causedBy;
+    if (relatedRequestEventId !== undefined) {
+      if (kind !== "evidence" || !selectors.stage || !selectors.attempt || !uuidV4.test(relatedRequestEventId)) {
+        return invalidScope("A related requester interaction requires stage-scoped evidence for an explicit current attempt.", { stage: selectors.stage, attempt_id: selectors.attempt });
+      }
+      const matches = loaded.unit.interactions.filter((fact) => fact.event.id === relatedRequestEventId);
+      const request = matches.length === 1 ? matches[0] : undefined;
+      const currentStart = bound.causedBy.at(-1);
+      if (!request || request.event.type !== "construction.interaction-recorded" ||
+          request.event.data.stage !== selectors.stage || request.event.data.stage_attempt_id !== selectors.attempt ||
+          !Array.isArray(request.event.data.participants) || !request.event.data.participants.includes("requester") ||
+          !currentStart || !request.event.caused_by.some((cause) => String(cause) === currentStart)) {
+        return invalidScope("The related requester interaction must belong to the selected attempt and follow its current stage start.", {
+          request_event_id: relatedRequestEventId, stage: selectors.stage, attempt_id: selectors.attempt,
+        });
+      }
+      causedBy = [...causedBy, relatedRequestEventId];
+    }
     const journalId = this.runtime.identities.next();
     if (!uuidV4.test(journalId)) return failure("audit_identity_failed", "Kepler could not allocate a valid journal identity.");
     return {
@@ -253,7 +276,7 @@ export class AuditContextResolver implements AuditRecordContextResolver {
           ...(bound.taskId ? { taskId: bound.taskId } : {}),
           ...(bound.activity ? { activity: bound.activity } : {}),
           ...(bound.activityAttemptId ? { activityAttemptId: bound.activityAttemptId } : {}),
-          causedBy: bound.causedBy,
+          causedBy,
         },
         journalId,
         journal: this.runtime.journals.create(loaded.root, loaded.missionId, journalId, CONSTRUCTION_PHASE),

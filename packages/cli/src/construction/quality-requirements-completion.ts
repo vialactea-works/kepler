@@ -89,6 +89,7 @@ export interface QualityRequirementsCompletionAssessments {
 export interface QualityRequirementsCompletionRecord {
   readonly approval_event_id: EventId;
   readonly artifact_bindings: readonly ArtifactBinding[];
+  readonly functional_design_bindings: readonly ArtifactBinding[];
   readonly assessments: QualityRequirementsCompletionAssessments;
 }
 
@@ -252,8 +253,9 @@ export const qualityRequirementsEvidenceIds = (
 export const isQualityRequirementsCompletionRecord = (
   value: unknown,
 ): value is QualityRequirementsCompletionRecord => {
-  if (!isRecord(value) || !onlyKeys(value, ["approval_event_id", "artifact_bindings", "assessments"]) ||
+  if (!isRecord(value) || !onlyKeys(value, ["approval_event_id", "artifact_bindings", "functional_design_bindings", "assessments"]) ||
       !uuidV4(value.approval_event_id) || !Array.isArray(value.artifact_bindings) || value.artifact_bindings.length === 0 ||
+      !Array.isArray(value.functional_design_bindings) || value.functional_design_bindings.length === 0 ||
       !isQualityRequirementsCompletionAssessments(value.assessments)) return false;
   const artifactIds: string[] = [];
   for (const binding of value.artifact_bindings) {
@@ -261,5 +263,12 @@ export const isQualityRequirementsCompletionRecord = (
         binding.checkpoint !== undefined || !onlyKeys(binding, ["artifact_id", "content_version"])) return false;
     artifactIds.push(binding.artifact_id);
   }
-  return new Set(artifactIds).size === artifactIds.length;
+  if (new Set(artifactIds).size !== artifactIds.length) return false;
+  const functionalDesignIds: string[] = [];
+  for (const binding of value.functional_design_bindings) {
+    if (!isRecord(binding) || !uuidV4(binding.artifact_id) || !nonEmpty(binding.content_version) ||
+        binding.checkpoint !== undefined || !onlyKeys(binding, ["artifact_id", "content_version"])) return false;
+    functionalDesignIds.push(binding.artifact_id);
+  }
+  return new Set(functionalDesignIds).size === functionalDesignIds.length;
 };

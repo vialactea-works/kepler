@@ -197,6 +197,49 @@ describe("Construction history projection", () => {
     }));
   });
 
+  it("does not project a generic Implementation Planning completion as complete", () => {
+    const journalId = "72000000-0000-4000-8000-000000000001";
+    const unitCreated = created("72000000-0000-4000-8000-000000000002", ids.unit, journalId);
+    const started = stageStart(
+      "72000000-0000-4000-8000-000000000003",
+      ids.stageAttempt,
+      ids.unit,
+      journalId,
+      [unitCreated.id],
+      "implementation-planning",
+    );
+    const history = collectHistory(missionId, [source("origin://planning", journalId, [unitCreated, started])]);
+    const unguardedCompletion = event("72000000-0000-4000-8000-000000000004", "construction.stage-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation-planning",
+      stage_attempt_id: ids.stageAttempt,
+      evidence_ids: [],
+      checkpoints: [],
+    }, journalId, [started.id]);
+    const forgedRecord = {
+      sourceId: "origin://planning-forged",
+      scope: { missionId, unitId: ids.unit },
+      missionId,
+      phase: "construction",
+      journalId,
+      line: 3,
+      byteOffset: 0,
+      status: "valid",
+      constructionEvent: unguardedCompletion as unknown as ConstructionEventRecord,
+      validationIssues: [],
+      issueCodes: [],
+    } as unknown as CollectedHistoryEvent;
+    const projection = projectConstruction({ ...history, events: [...history.events, forgedRecord] });
+
+    expect(projection.units[0]?.stages.find((stage) => stage.stage === "implementation-planning")?.state).toBe("unknown");
+    expect(projection.units[0]?.blocked).toBe(true);
+    expect(projection.projectionIssues).toContainEqual(expect.objectContaining({
+      code: "invalid-completion-evidence",
+      eventIds: [unguardedCompletion.id],
+    }));
+  });
+
   it("rebuilds deterministically and preserves scope, attempt, artifact, checkpoint, and input bindings", () => {
     const unitCreated = created("event-unit-created", ids.unit, "journal-unit");
     const baseline = event("event-baseline", "construction.unit-baseline-selected", {

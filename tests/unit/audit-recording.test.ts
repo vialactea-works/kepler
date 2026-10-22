@@ -52,6 +52,26 @@ describe("audit record creation", () => {
     expect(result.evidenceId).toBe(ids[1]);
   });
 
+  it("records a selected requester interaction as direct evidence provenance", () => {
+    const relatedRequest = "70000000-0000-4000-8000-000000000007";
+    const result = createAuditRecord("evidence", {
+      inputs: [{ reference: "artifact:current", purpose: "Reviewed material" }],
+      artifact_bindings: [],
+      checkpoints: [],
+      check: "Requested independent review",
+      executor: "Independent reviewer",
+      result: { status: "passed", summary: "No blocking findings." },
+      related_request_event_id: relatedRequest,
+    }, { ...scope, causedBy: ["80000000-0000-4000-8000-000000000008"] }, journalId, runtime());
+
+    expect(result.kind).toBe("valid");
+    if (result.kind !== "valid") return;
+    expect(result.event.caused_by).toEqual([
+      "80000000-0000-4000-8000-000000000008",
+      relatedRequest,
+    ]);
+  });
+
   it("rejects invalid request keys, empty fields, and malformed inputs", () => {
     const result = createAuditRecord("approval", {
       requester: "Requester",
