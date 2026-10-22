@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,6 +15,13 @@ const artifactIds = {
   "design.md": "a2000000-0000-4000-8000-000000000002",
   "details/functional-design/domain-model.md": "a3000000-0000-4000-8000-000000000003",
 } as const;
+const qualityArtifactIds = {
+  "quality.md": "b1000000-0000-4000-8000-000000000001",
+  "details/quality-requirements/security.md": "b2000000-0000-4000-8000-000000000002",
+} as const;
+const qualityCategories = [
+  "performance", "availability", "security", "accessibility", "compatibility", "operability", "observability", "maintainability",
+] as const;
 
 const sources = {
   "unit-of-work.md": `---\nid: ${artifactIds["unit-of-work.md"]}\ntype: unit-of-work\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Unit of Work\n\n## Purpose\n\nMake the selected workflow behavior explicit.\n\n## Scope\n\nInclude the Functional Design contract.\n\n## Context\n\nKeep the current public behavior and constraints.\n`,
@@ -43,6 +50,197 @@ const createProjectArtifacts = async (harness: E2EHarness) => {
     artifactPaths: ["unit-of-work.md", "design.md", "details/functional-design/domain-model.md"],
   };
 };
+
+const createQualityArtifacts = async (harness: E2EHarness) => {
+  const root = harness.resources.repositoryDirectory;
+  const unitRoot = Path.join(root, unitDirectory);
+  const sources = {
+    "quality.md": `---\nid: ${qualityArtifactIds["quality.md"]}\ntype: non-functional-requirements\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Quality requirements\n\n## Quality requirements\n\nSecurity applies to stored requester data. See [security detail](details/quality-requirements/security.md).\n\n## Constraints and dependencies\n\nPreserve the accepted Functional Design contract.\n\n## Decisions and open questions\n\nNo material quality decisions remain unresolved.\n`,
+    "details/quality-requirements/security.md": `---\nid: ${qualityArtifactIds["details/quality-requirements/security.md"]}\ntype: supporting-document\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Security requirement detail\n\nOnly the owning user can read saved request data.\n`,
+  } as const;
+  await Fs.mkdir(Path.join(unitRoot, "details", "quality-requirements"), { recursive: true });
+  const artifactBindings = [] as Array<{ artifact_id: string; content_version: string }>;
+  for (const [relativePath, source] of Object.entries(sources)) {
+    await Fs.writeFile(Path.join(unitRoot, relativePath), source, "utf8");
+    artifactBindings.push({
+      artifact_id: qualityArtifactIds[relativePath as keyof typeof qualityArtifactIds],
+      content_version: `sha256:${createHash("sha256").update(source, "utf8").digest("hex")}`,
+    });
+  }
+  harness.resources.runGit(root, "add", unitDirectory);
+  harness.resources.runGit(root, "commit", "-q", "-m", "Record Quality Requirements material");
+  const commit = harness.resources.runGit(root, "rev-parse", "HEAD");
+  return {
+    artifactBindings,
+    checkpoints: [{ repository_id: repositoryId, commit }],
+    artifactPaths: ["quality.md", "details/quality-requirements/security.md"],
+  };
+};
+
+const appendQualityStageStart = async (harness: E2EHarness, authorityEventId: string): Promise<string> => {
+  const stageAttemptId = randomUUID();
+  const journalId = randomUUID();
+  const historyDirectory = Path.join(harness.resources.repositoryDirectory, ".kepler", "missions", auditFixture.missionId, "history", "construction");
+  await Fs.writeFile(Path.join(historyDirectory, `${journalId}.jsonl`), `${JSON.stringify({
+    id: randomUUID(),
+    phase: "construction",
+    type: "construction.stage-attempt-started",
+    envelope_version: 1,
+    event_version: 1,
+    journal_id: journalId,
+    recorded_at: "2026-10-22T13:00:00.000Z",
+    producer: { name: "kepler-test", version: "0.10.3" },
+    caused_by: [authorityEventId],
+    data: {
+      mission_id: auditFixture.missionId,
+      unit_id: auditFixture.unitId,
+      stage: "quality-requirements",
+      stage_attempt_id: stageAttemptId,
+      inputs: [{ reference: "request:scope", purpose: "Accepted quality scope" }],
+      checkpoints: [],
+      authority_event_ids: [authorityEventId],
+    },
+  })}\n`, "utf8");
+  return stageAttemptId;
+};
+
+const recordQualityEvidence = (
+  audit: AuditCliDriver,
+  attempt: string,
+  material: Awaited<ReturnType<typeof createQualityArtifacts>>,
+  failedKind?: "artifact_validation" | "self_review",
+): Record<string, string> => {
+  const entries = [
+    ["artifact_validation", "quality-artifact-validation"],
+    ["self_review", "quality-self-review"],
+  ] as const;
+  const ids: Record<string, string> = {};
+  for (const [kind, check] of entries) {
+    const result = audit.record("evidence", {
+      unit: auditFixture.unitId,
+      stage: "quality-requirements",
+      attempt,
+    }, {
+      inputs: material.artifactBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Current Quality Requirements material" })),
+      artifact_bindings: material.artifactBindings,
+      checkpoints: material.checkpoints,
+      check,
+      executor: "Quality Requirements assessment runner",
+      result: {
+        status: kind === failedKind ? "failed" : "passed",
+        summary: kind === failedKind ? "A blocking finding remains." : "The named assessment passed.",
+      },
+    });
+    expect(result.exitCode, JSON.stringify(result.result)).toBe(0);
+    expect(result.result.status).toBe("success");
+    ids[kind] = String(result.result.data.evidence_id);
+  }
+  return ids;
+};
+
+const recordQualityExternalReviewEvidence = (
+  audit: AuditCliDriver,
+  attempt: string,
+  material: Awaited<ReturnType<typeof createQualityArtifacts>>,
+): string => {
+  const result = audit.record("evidence", {
+    unit: auditFixture.unitId,
+    stage: "quality-requirements",
+    attempt,
+  }, {
+    inputs: material.artifactBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Current material reviewed by the requested external reviewer" })),
+    artifact_bindings: material.artifactBindings,
+    checkpoints: material.checkpoints,
+    check: "quality-external-review",
+    executor: "Independent quality reviewer",
+    result: { status: "passed", summary: "The requested external review found no blocking issue." },
+  });
+  expect(result.exitCode, JSON.stringify(result.result)).toBe(0);
+  expect(result.result.status).toBe("success");
+  return String(result.result.data.evidence_id);
+};
+
+const recordQualityApproval = (
+  audit: AuditCliDriver,
+  attempt: string,
+  material: Awaited<ReturnType<typeof createQualityArtifacts>>,
+): string => {
+  const result = audit.record("approval", {
+    unit: auditFixture.unitId,
+    stage: "quality-requirements",
+    attempt,
+  }, {
+    requester: "Requester",
+    inputs: material.artifactBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Current quality requirements approved" })),
+    artifact_bindings: material.artifactBindings,
+    checkpoints: material.checkpoints,
+    decision_reference: "requester:approved-current-quality-requirements",
+  });
+  expect(result.exitCode, JSON.stringify(result.result)).toBe(0);
+  expect(result.result.status).toBe("success");
+  return String(result.result.data.id);
+};
+
+const qualityCompletionRequest = (
+  evidenceIds: Readonly<Record<string, string>>,
+  approvalEventId: string,
+  externalReview?: { readonly requestEventId: string; readonly evidenceId: string },
+): Record<string, unknown> => ({
+  approval_event_id: approvalEventId,
+  assessments: {
+    artifact_validation: {
+      evidence_id: evidenceIds.artifact_validation,
+      summary: "quality.md and its linked support pass structural validation.",
+    },
+    self_review: {
+      status: "passed",
+      evidence_id: evidenceIds.self_review,
+      reviewer: "Quality Requirements owner",
+      summary: "Applicability, objective scope, consistency, and Planning handoff were reviewed.",
+      checks: ["category-applicability", "objective-conditions", "consistency", "material-decisions", "planning-handoff"],
+      categories: qualityCategories.map((category) => ({
+        category,
+        applies: category === "security",
+        rationale: `${category} applicability was considered for this unit.`,
+      })),
+      requirements: [{
+        category: "security",
+        reference: "quality.md#security",
+        scope: "Stored requester data",
+        conditions: "When a requester saves data",
+        target: "Only the owning user can read saved request data.",
+        acceptance_condition: "A different user receives an access-denied result.",
+        owner: "Security Requirements owner",
+      }],
+      resolved_material_choices: [],
+      unresolved_material_choices: [],
+      unresolved_material_targets: [],
+      unresolved_tradeoffs: [],
+      unsupported_assumptions: [],
+    },
+    external_review: externalReview
+      ? {
+          requested: true,
+          request_event_id: externalReview.requestEventId,
+          evidence_id: externalReview.evidenceId,
+          reviewer: "Independent quality reviewer",
+          summary: "The requested external review found no blocking issue.",
+          findings: [],
+        }
+      : { requested: false },
+    handoff: {
+      status: "ready",
+      summary: "Current quality requirements are ready for Implementation Planning.",
+      recipient: "implementation-planning",
+      unit_directory: unitDirectory,
+      artifacts: ["quality.md", "details/quality-requirements/security.md"],
+      requirement_references: ["quality.md#security"],
+      constraints: ["Preserve the accepted Functional Design contract."],
+      assumptions: [],
+      planning_questions: ["Choose a mechanism that satisfies the security acceptance condition."],
+    },
+  },
+});
 
 const createAuditDriver = (harness: E2EHarness): AuditCliDriver => {
   const historyDirectory = Path.join(
@@ -269,6 +467,101 @@ describe("Functional Design stage completion CLI E2E", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.result).toMatchObject({ status: "failed", data: { code: "functional_design_artifacts_invalid" } });
+    expect(await audit.journalSnapshot()).toBe(before);
+  }, 120_000);
+
+  it("completes Quality Requirements through the stage CLI and projects it complete", async () => {
+    const harness = await createE2EHarness({ application: "native" });
+    harnesses.push(harness);
+    await createAuditHistory(harness.resources.repositoryDirectory);
+    const functionalMaterial = await createProjectArtifacts(harness);
+    const audit = createAuditDriver(harness);
+    const functionalEvidence = recordEvidence(audit, auditFixture.stageAttemptId, functionalMaterial);
+    const functionalApproval = recordApproval(audit, functionalMaterial);
+    const functionalCompletion = new StageCompletionCliDriver(harness.cli).complete(
+      auditFixture.unitId,
+      auditFixture.stageAttemptId,
+      completionRequest(functionalEvidence, functionalApproval),
+    );
+    expect(functionalCompletion.exitCode, JSON.stringify(functionalCompletion.result)).toBe(0);
+    const qualityAttempt = await appendQualityStageStart(harness, String(functionalCompletion.result.data.id));
+    const qualityMaterial = await createQualityArtifacts(harness);
+    const qualityEvidence = recordQualityEvidence(audit, qualityAttempt, qualityMaterial);
+    const requestEvent = audit.record("interaction", {
+      unit: auditFixture.unitId,
+      stage: "quality-requirements",
+      attempt: qualityAttempt,
+    }, {
+      participants: ["requester"],
+      content: "Please obtain an independent review of the current quality requirements.",
+      references: ["quality.md"],
+    });
+    expect(requestEvent.exitCode, JSON.stringify(requestEvent.result)).toBe(0);
+    const externalReviewEvidence = recordQualityExternalReviewEvidence(audit, qualityAttempt, qualityMaterial);
+    const qualityApproval = recordQualityApproval(audit, qualityAttempt, qualityMaterial);
+
+    const result = new StageCompletionCliDriver(harness.cli).complete(
+      auditFixture.unitId,
+      qualityAttempt,
+      qualityCompletionRequest(qualityEvidence, qualityApproval, {
+        requestEventId: String(requestEvent.result.data.id),
+        evidenceId: externalReviewEvidence,
+      }),
+      "quality-requirements",
+    );
+
+    expect(result.exitCode, JSON.stringify(result.result)).toBe(0);
+    expect(result.result).toMatchObject({
+      status: "success",
+      data: {
+        unit_id: auditFixture.unitId,
+        stage: "quality-requirements",
+        attempt_id: qualityAttempt,
+        evidence_ids: [qualityEvidence.artifact_validation, qualityEvidence.self_review, externalReviewEvidence],
+        approval_event_id: qualityApproval,
+      },
+    });
+    const shown = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    expect(shown.exitCode).toBe(0);
+    expect(JSON.parse(shown.stdout).data.unit.stages).toContainEqual(expect.objectContaining({
+      stage: "quality-requirements",
+      state: "completed",
+    }));
+  }, 120_000);
+
+  it("denies a requested external review without a current requester instruction event", async () => {
+    const harness = await createE2EHarness({ application: "native" });
+    harnesses.push(harness);
+    await createAuditHistory(harness.resources.repositoryDirectory);
+    const functionalMaterial = await createProjectArtifacts(harness);
+    const audit = createAuditDriver(harness);
+    const functionalEvidence = recordEvidence(audit, auditFixture.stageAttemptId, functionalMaterial);
+    const functionalApproval = recordApproval(audit, functionalMaterial);
+    const functionalCompletion = new StageCompletionCliDriver(harness.cli).complete(
+      auditFixture.unitId,
+      auditFixture.stageAttemptId,
+      completionRequest(functionalEvidence, functionalApproval),
+    );
+    expect(functionalCompletion.exitCode, JSON.stringify(functionalCompletion.result)).toBe(0);
+    const qualityAttempt = await appendQualityStageStart(harness, String(functionalCompletion.result.data.id));
+    const qualityMaterial = await createQualityArtifacts(harness);
+    const qualityEvidence = recordQualityEvidence(audit, qualityAttempt, qualityMaterial);
+    const externalReviewEvidence = recordQualityExternalReviewEvidence(audit, qualityAttempt, qualityMaterial);
+    const qualityApproval = recordQualityApproval(audit, qualityAttempt, qualityMaterial);
+    const before = await audit.journalSnapshot();
+
+    const result = new StageCompletionCliDriver(harness.cli).complete(
+      auditFixture.unitId,
+      qualityAttempt,
+      qualityCompletionRequest(qualityEvidence, qualityApproval, {
+        requestEventId: randomUUID(),
+        evidenceId: externalReviewEvidence,
+      }),
+      "quality-requirements",
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.result).toMatchObject({ status: "failed", data: { code: "quality_evidence_invalid" } });
     expect(await audit.journalSnapshot()).toBe(before);
   }, 120_000);
 });

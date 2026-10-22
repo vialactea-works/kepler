@@ -4,7 +4,7 @@ import type { AuditCommandResult, AuditEnvelope } from "./audit-cli.js";
 export class StageCompletionCliDriver {
   constructor(private readonly cli: KeplerCliDriver) {}
 
-  complete(unit: string, attempt: string, request: unknown): AuditCommandResult {
+  complete(unit: string, attempt: string, request: unknown, stage = "functional-design"): AuditCommandResult {
     const result = this.cli.run([
       "workflow",
       "construction",
@@ -13,7 +13,7 @@ export class StageCompletionCliDriver {
       "--unit",
       unit,
       "--stage",
-      "functional-design",
+      stage,
       "--attempt",
       attempt,
       "--request",

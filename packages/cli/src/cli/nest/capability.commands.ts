@@ -11,6 +11,7 @@ import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
 import { ConstructionLint } from "../../construction/construction-lint.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
+import { QualityRequirementsStageCompletion } from "../../construction/quality-stage-completion.js";
 import { StageStart } from "../../construction/stage-start.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
@@ -479,11 +480,12 @@ export class MissionCommand extends CommandRunner {
   }
 }
 
-@SubCommand({ name: "complete", description: "Complete the selected Functional Design attempt" })
+@SubCommand({ name: "complete", description: "Complete a guarded Construction stage attempt" })
 export class ConstructionStageCompleteCommand extends CommandRunner {
   constructor(
     private readonly reporter: ResultReporter,
-    private readonly completion: FunctionalDesignStageCompletion,
+    private readonly functionalDesignCompletion: FunctionalDesignStageCompletion,
+    private readonly qualityRequirementsCompletion: QualityRequirementsStageCompletion,
   ) {
     super();
   }
@@ -502,7 +504,7 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
         code: selectors.code,
         message: selectors.message,
         details: selectors.details,
-        recovery: "Provide the exact Unit of Work, Functional Design stage, and attempt selectors.",
+        recovery: "Provide the exact Unit of Work, supported Construction stage, and attempt selectors.",
       });
       return;
     }
@@ -528,7 +530,10 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
       });
       return;
     }
-    const result = await this.completion.execute(selectors.selectors, parsed.value, selectedProject.project);
+    const completion = selectors.selectors.stage === "quality-requirements"
+      ? this.qualityRequirementsCompletion
+      : this.functionalDesignCompletion;
+    const result = await completion.execute(selectors.selectors, parsed.value, selectedProject.project);
     this.reporter.report({ status: result.kind, data: result.data });
   }
 }

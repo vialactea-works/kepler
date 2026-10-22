@@ -8,6 +8,11 @@ import {
   functionalDesignEvidenceIds,
   isFunctionalDesignCompletionRecord,
 } from "./functional-design-completion.js";
+import {
+  isQualityRequirementsCompletionRecord,
+  qualityRequirementsEvidenceIds,
+  type QualityRequirementsCompletionRecord,
+} from "./quality-requirements-completion.js";
 
 const identityBrand: unique symbol = Symbol("ConstructionIdentity");
 
@@ -291,6 +296,7 @@ export interface StageAttemptCompletedData extends StageAttemptData {
   readonly evidence_ids: readonly EvidenceId[];
   readonly checkpoints: readonly RepositoryCheckpoint[];
   readonly functional_design_assessment?: FunctionalDesignCompletionRecord;
+  readonly quality_requirements_assessment?: QualityRequirementsCompletionRecord;
 }
 
 export interface StageAttemptEndedData extends StageAttemptData {
@@ -775,6 +781,7 @@ const validatePayload = (
     const assessment = data.functional_design_assessment;
     const assessmentValid = isFunctionalDesignCompletionRecord(assessment);
     invalid("functional_design_assessment", assessmentValid);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
     invalid("checkpoints", Array.isArray(data.checkpoints) && data.checkpoints.length > 0,
       "Functional Design completion requires a non-empty repository output checkpoint set");
     if (assessmentValid) {
@@ -785,6 +792,26 @@ const validatePayload = (
         JSON.stringify([...actualEvidenceIds].sort()) === JSON.stringify(expectedEvidenceIds);
       invalid("evidence_ids", evidenceIdsMatch, "Functional Design evidence IDs must exactly match its typed assessments");
     }
+  }
+  if (type === "construction.stage-attempt-completed" && data.stage === "quality-requirements") {
+    const assessment = data.quality_requirements_assessment;
+    const assessmentValid = isQualityRequirementsCompletionRecord(assessment);
+    invalid("quality_requirements_assessment", assessmentValid);
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("checkpoints", Array.isArray(data.checkpoints) && data.checkpoints.length > 0,
+      "Quality Requirements completion requires a non-empty repository output checkpoint set");
+    if (assessmentValid) {
+      const expectedEvidenceIds = qualityRequirementsEvidenceIds(assessment.assessments).slice().sort();
+      const actualEvidenceIds = data.evidence_ids;
+      const evidenceIdsMatch = Array.isArray(actualEvidenceIds) && actualEvidenceIds.every((id) => typeof id === "string") &&
+        actualEvidenceIds.length === expectedEvidenceIds.length &&
+        JSON.stringify([...actualEvidenceIds].sort()) === JSON.stringify(expectedEvidenceIds);
+      invalid("evidence_ids", evidenceIdsMatch, "Quality Requirements evidence IDs must exactly match its typed assessments");
+    }
+  }
+  if (type === "construction.stage-attempt-completed" && data.stage !== "functional-design" && data.stage !== "quality-requirements") {
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
   }
   if (type === "construction.stage-attempt-ended-by-revision" || type === "construction.stage-reopened" || type.includes("scope-ended-by-revision") || type.includes("scope-reopened") || type === "construction.activity-attempt-ended-by-revision" || type === "construction.activity-reopened" || type === "construction.revision-authorized") {
     invalid("revision_id", isUuidV4(data.revision_id));

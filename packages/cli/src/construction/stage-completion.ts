@@ -35,7 +35,7 @@ export type FunctionalDesignStageCompletionResult =
   | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
   | { readonly kind: "failed"; readonly data: Readonly<Record<string, unknown>> };
 
-interface FunctionalDesignMaterial {
+export interface FunctionalDesignMaterial {
   readonly artifactBindings: readonly { readonly artifact_id: string; readonly content_version: string }[];
   readonly artifactPaths: readonly string[];
   readonly unitDirectory: string;
@@ -83,7 +83,7 @@ const parseLinkPath = (url: string): string | undefined => {
   }
 };
 
-const readFunctionalDesignMaterial = async (
+export const readFunctionalDesignMaterial = async (
   repositoryRoot: string,
   missionId: string,
   unitId: string,

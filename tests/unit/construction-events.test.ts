@@ -297,6 +297,17 @@ describe("Construction event contracts", () => {
     expect(result.event.data.inputs).toEqual([{ reference: "opaque: source material ", purpose: "Reviewed input" }]);
   });
 
+  it("rejects generic Quality Requirements completion without its stage-specific assessment", () => {
+    const data = {
+      ...base,
+      stage: "quality-requirements",
+      stage_attempt_id: identities.stageAttempt,
+      evidence_ids: [],
+      checkpoints: [],
+    };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", data)).status).toBe("invalid");
+  });
+
   it("requires a typed Functional Design assessment and matching named evidence", () => {
     const assessments = {
       self_review: {

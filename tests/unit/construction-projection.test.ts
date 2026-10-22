@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { collectHistory as collectHistoryFromSources, type HistoryJournalSource } from "../../packages/cli/src/history/collection.js";
+import { collectHistory as collectHistoryFromSources, type CollectedHistoryEvent, type HistoryJournalSource } from "../../packages/cli/src/history/collection.js";
+import type { ConstructionEventRecord } from "../../packages/cli/src/construction/events.js";
 import { projectConstruction } from "../../packages/cli/src/construction/projection.js";
 
 const missionId = "10000000-0000-4000-8000-000000000001";
@@ -151,6 +152,49 @@ describe("Construction history projection", () => {
       knownTasks: 0,
       reliable: false,
     });
+  });
+
+  it("does not project a generic Quality Requirements completion as complete", () => {
+    const journalId = "71000000-0000-4000-8000-000000000001";
+    const unitCreated = created("71000000-0000-4000-8000-000000000002", ids.unit, journalId);
+    const started = stageStart(
+      "71000000-0000-4000-8000-000000000003",
+      ids.stageAttempt,
+      ids.unit,
+      journalId,
+      [unitCreated.id],
+      "quality-requirements",
+    );
+    const history = collectHistory(missionId, [source("origin://quality", journalId, [unitCreated, started])]);
+    const unguardedCompletion = event("71000000-0000-4000-8000-000000000004", "construction.stage-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "quality-requirements",
+      stage_attempt_id: ids.stageAttempt,
+      evidence_ids: [],
+      checkpoints: [],
+    }, journalId, [started.id]);
+    const forgedRecord = {
+      sourceId: "origin://quality-forged",
+      scope: { missionId, unitId: ids.unit },
+      missionId,
+      phase: "construction",
+      journalId,
+      line: 3,
+      byteOffset: 0,
+      status: "valid",
+      constructionEvent: unguardedCompletion as unknown as ConstructionEventRecord,
+      validationIssues: [],
+      issueCodes: [],
+    } as unknown as CollectedHistoryEvent;
+    const projection = projectConstruction({ ...history, events: [...history.events, forgedRecord] });
+
+    expect(projection.units[0]?.stages.find((stage) => stage.stage === "quality-requirements")?.state).toBe("unknown");
+    expect(projection.units[0]?.blocked).toBe(true);
+    expect(projection.projectionIssues).toContainEqual(expect.objectContaining({
+      code: "invalid-completion-evidence",
+      eventIds: [unguardedCompletion.id],
+    }));
   });
 
   it("rebuilds deterministically and preserves scope, attempt, artifact, checkpoint, and input bindings", () => {
