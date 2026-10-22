@@ -340,7 +340,7 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 **Complete when:** A prepared mission can receive its one unit. All accepted queries and lint stay read-only. Unit creation does not start execution or generate authored artifacts.
 
-**Verified:** `bun run check:typescript-sources`, `bun run typecheck`, `bun run build`, `bun run test:unit` (43 files, 687 tests), `bun run test:integration` (41 files, 614 tests), `bun run test:package` (1 test), and `bun --bun vitest run --project e2e` (6 files, 66 tests) passed.
+**Verified:** `bun run check:typescript-sources`, `bun run typecheck`, `bun run build`, `bun run test:unit` (43 files, 687 tests), `bun run test:integration` (41 files, 614 tests), `bun run test:package` (1 test), and `bun --bun vitest run --project e2e` (6 files, 66 tests) passed against revision `29dfea6`. See the [M08 verification evidence](docs/specs/v3/m08-verification.md) for captured command output.
 
 ## M09: Add Standard stage lifecycle and completion rules
 
