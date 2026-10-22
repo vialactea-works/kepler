@@ -9,6 +9,7 @@ import { CONSTRUCTION_PHASE } from "../../construction/events.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
 import { UnitQueries } from "../../construction/unit-queries.js";
+import { ConstructionQueries } from "../../construction/scoped-queries.js";
 import { createNodeUnitQueryFileSystem } from "../../construction/unit-queries-runtime.js";
 import { createNodeUnitCreateRecords, machineLocalDate } from "../../construction/unit-create-runtime.js";
 import {
@@ -38,6 +39,13 @@ import {
   AuditShowCommand,
   ConstructionCommand,
   ConstructionStageCommand,
+  ConstructionStageShowCommand,
+  ConstructionTaskCommand,
+  ConstructionTaskListCommand,
+  ConstructionTaskShowCommand,
+  ConstructionTaskReadyCommand,
+  ConstructionActivityCommand,
+  ConstructionActivityShowCommand,
   ConstructionUnitCommand,
   ConstructionUnitCreateCommand,
   ConstructionUnitListCommand,
@@ -77,6 +85,13 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     WorkflowCommand,
     ConstructionCommand,
     ConstructionStageCommand,
+    ConstructionStageShowCommand,
+    ConstructionTaskCommand,
+    ConstructionTaskListCommand,
+    ConstructionTaskShowCommand,
+    ConstructionTaskReadyCommand,
+    ConstructionActivityCommand,
+    ConstructionActivityShowCommand,
     ConstructionUnitCommand,
     ConstructionUnitCreateCommand,
     ConstructionUnitListCommand,
@@ -141,6 +156,11 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
       provide: UnitQueries,
       useFactory: (projects: ProjectResolver) => new UnitQueries(projects, createNodeUnitQueryFileSystem()),
       inject: [ProjectResolver],
+    },
+    {
+      provide: ConstructionQueries,
+      useFactory: (units: UnitQueries) => new ConstructionQueries(units, createNodeUnitQueryFileSystem()),
+      inject: [UnitQueries],
     },
     {
       provide: MissionStartup,

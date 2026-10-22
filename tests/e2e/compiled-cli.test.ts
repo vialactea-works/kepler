@@ -176,6 +176,20 @@ describe("compiled CLI E2E", () => {
     for (const command of ["setup", "uuid", "workbench", "git", "lint", "audit", "workflow"]) {
       expect(help.stdout).toContain(command);
     }
+    const constructionHelp = e2e.cli.run(["workflow", "construction", "--help"]);
+    expect(constructionHelp.exitCode).toBe(0);
+    expect(constructionHelp.stdout).toContain("stage");
+    expect(constructionHelp.stdout).toContain("task");
+    expect(constructionHelp.stdout).toContain("activity");
+    const taskHelp = e2e.cli.run(["workflow", "construction", "task", "--help"]);
+    expect(taskHelp.exitCode).toBe(0);
+    for (const operation of ["list", "show", "ready"]) expect(taskHelp.stdout).toContain(operation);
+    const taskScopeFailure = e2e.cli.run(["workflow", "construction", "task", "ready", "--task", "33333333-3333-4333-8333-333333333333"]);
+    expect(taskScopeFailure.exitCode).toBe(1);
+    expect(envelope(taskScopeFailure.stdout)).toMatchObject({
+      status: "failed",
+      data: { code: "required_selector_missing", message: "--task requires --unit." },
+    });
 
     const failure = e2e.cli.run(["unknown-command"]);
     const parsed = envelope(failure.stdout);

@@ -1,9 +1,20 @@
 import * as Path from "node:path";
-import { collectHistory, type HistoryJournalSource } from "../history/collection.js";
-import { projectConstruction, type ConstructionUnitProjection } from "./projection.js";
+import { collectHistory, type HistoryCollection, type HistoryJournalSource } from "../history/collection.js";
+import { projectConstruction, type ConstructionProjection, type ConstructionUnitProjection } from "./projection.js";
 import { CONSTRUCTION_STAGES, type ConstructionStage } from "./events.js";
 import type { ProjectResolver, ProjectSelectionResult } from "../cli/project-selection.js";
-import type { UnitQueryDirectoryEntry, UnitQueryFileSystem } from "./unit-queries-runtime.js";
+
+export interface UnitQueryDirectoryEntry {
+  readonly name: string;
+  readonly kind: "directory" | "file" | "other";
+}
+
+export interface UnitQueryFileSystem {
+  readonly entries: (path: string, root: string) => Promise<readonly UnitQueryDirectoryEntry[]>;
+  readonly directories: (path: string, root: string) => Promise<readonly string[]>;
+  readonly journals: (path: string, root: string) => Promise<readonly string[]>;
+  readonly read: (path: string, root: string) => Promise<Uint8Array>;
+}
 
 export interface UnitQueryFailure {
   readonly kind: "failed";
@@ -62,6 +73,17 @@ export type UnitShowResult =
   | { readonly kind: "shown"; readonly recordHome: string; readonly unit: UnitQueryUnit }
   | UnitQueryFailure;
 
+export type UnitQueryContextResult =
+  | {
+    readonly kind: "context";
+    readonly recordHome: string;
+    readonly missionId: string;
+    readonly history: HistoryCollection;
+    readonly projection: ConstructionProjection;
+    readonly unit?: ConstructionUnitProjection;
+  }
+  | UnitQueryFailure;
+
 interface RawCreationFact {
   readonly unitId: string;
   readonly sourceMissionId: string;
@@ -70,11 +92,18 @@ interface RawCreationFact {
   readonly valid: boolean;
 }
 
+interface UnitMissionContext {
+  readonly missionId: string;
+  readonly history: HistoryCollection;
+  readonly projection: ConstructionProjection;
+}
+
 interface UnitInventoryEntry {
   readonly unitId: string;
   readonly paths: { readonly path: string; readonly kind: UnitQueryDirectoryEntry["kind"] }[];
   readonly creationFacts: RawCreationFact[];
   readonly projections: { readonly missionId: string; readonly unit: ConstructionUnitProjection }[];
+  readonly missionContexts: UnitMissionContext[];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -209,6 +238,41 @@ export class UnitQueries {
     };
   }
 
+  async readContext(unitId: string, project?: string): Promise<UnitQueryContextResult> {
+    if (typeof unitId !== "string" || unitId.length === 0 || unitId.trim() !== unitId) {
+      return failed("invalid_unit_selector", "A Construction query requires one exact non-empty unit ID.", { unit_id: unitId });
+    }
+    const selected = await this.resolveProject(project);
+    if (!("root" in selected)) return selected;
+    const inventory = await this.readInventory(selected.root);
+    if (inventory.kind === "failed") return inventory;
+    const entry = inventory.units.find((unit) => unit.unitId === unitId);
+    if (!entry) return failed("unit_not_found", "The selected unit ID is not known in this record home.", { unit_id: unitId, record_home: selected.root });
+    const view = unitView(entry);
+    if (view.membership.status !== "bound") {
+      return failed(view.membership.status === "missing" ? "unit_membership_missing" : "unit_membership_conflict",
+        "Construction scope requires one unambiguous recorded mission membership.",
+        { unit_id: unitId, membership: view.membership });
+    }
+    if (entry.missionContexts.some((context) => context.missionId !== view.membership.mission_id)) {
+      return failed("unit_history_membership_conflict", "The unit has history in more than its uniquely bound mission.", {
+        unit_id: unitId,
+        mission_id: view.membership.mission_id,
+        history_missions: entry.missionContexts.map((context) => context.missionId).sort((left, right) => left.localeCompare(right)),
+      });
+    }
+    const context = entry.missionContexts.find((candidate) => candidate.missionId === view.membership.mission_id);
+    if (!context) return failed("unit_history_missing", "The unit membership has no readable mission history context.", { unit_id: unitId, mission_id: view.membership.mission_id });
+    return {
+      kind: "context",
+      recordHome: selected.root,
+      missionId: context.missionId,
+      history: context.history,
+      projection: context.projection,
+      unit: context.projection.units.find((candidate) => candidate.unitId === unitId),
+    };
+  }
+
   async show(unitId: string, project?: string): Promise<UnitShowResult> {
     if (typeof unitId !== "string" || unitId.length === 0 || unitId.trim() !== unitId) {
       return failed("invalid_unit_selector", "Unit show requires one exact non-empty unit ID.", { unit_id: unitId });
@@ -245,7 +309,7 @@ export class UnitQueries {
       const ensure = (unitId: string): UnitInventoryEntry => {
         const existing = entries.get(unitId);
         if (existing) return existing;
-        const created = { unitId, paths: [], creationFacts: [], projections: [] };
+        const created = { unitId, paths: [], creationFacts: [], projections: [], missionContexts: [] };
         entries.set(unitId, created);
         return created;
       };
@@ -280,13 +344,19 @@ export class UnitQueries {
         }
         const history = collectHistory(missionId, sources, { completeness: "complete" });
         const projection = projectConstruction(history);
+        const attachContext = (entry: UnitInventoryEntry): void => {
+          if (!entry.missionContexts.some((context) => context.missionId === missionId)) {
+            entry.missionContexts.push({ missionId, history, projection });
+          }
+        };
         for (const record of history.events) {
           const rawUnitId = record.scope.unitId ?? (typeof record.event?.data.unit_id === "string" ? record.event.data.unit_id : undefined);
-          if (rawUnitId) ensure(rawUnitId);
+          if (rawUnitId) attachContext(ensure(rawUnitId));
           if (record.event?.type !== "construction.unit-created" || !isRecord(record.event.data)) continue;
           const data = record.event.data;
           if (typeof data.unit_id !== "string") continue;
           const entry = ensure(data.unit_id);
+          attachContext(entry);
           entry.creationFacts.push({
             unitId: data.unit_id,
             sourceMissionId: missionId,
@@ -295,7 +365,11 @@ export class UnitQueries {
             valid: record.status === "valid" && record.constructionEvent !== undefined && data.mission_id === missionId,
           });
         }
-        for (const unit of projection.units) ensure(unit.unitId).projections.push({ missionId, unit });
+        for (const unit of projection.units) {
+          const entry = ensure(unit.unitId);
+          entry.projections.push({ missionId, unit });
+          attachContext(entry);
+        }
       }
       return { kind: "loaded", units: [...entries.values()].sort((left, right) => left.unitId.localeCompare(right.unitId)) };
     } catch (error) {

@@ -1,17 +1,6 @@
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
-
-export interface UnitQueryDirectoryEntry {
-  readonly name: string;
-  readonly kind: "directory" | "file" | "other";
-}
-
-export interface UnitQueryFileSystem {
-  readonly entries: (path: string, root: string) => Promise<readonly UnitQueryDirectoryEntry[]>;
-  readonly directories: (path: string, root: string) => Promise<readonly string[]>;
-  readonly journals: (path: string, root: string) => Promise<readonly string[]>;
-  readonly read: (path: string, root: string) => Promise<Uint8Array>;
-}
+import type { UnitQueryDirectoryEntry, UnitQueryFileSystem } from "./unit-queries.js";
 
 const isMissing = (error: unknown): boolean =>
   error instanceof Error && "code" in error && error.code === "ENOENT";

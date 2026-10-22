@@ -2,12 +2,13 @@ import { Command, CommandRunner, Option, SubCommand } from "nest-commander";
 import { GitAuthorLookup } from "../git-author.js";
 import { MetadataLinter } from "../metadata-lint.js";
 import { parseProjectSelector, ProjectResolver } from "../project-selection.js";
-import { appendSelectorValue, parseScopeSelectors } from "../scope-selectors.js";
+import { appendSelectorValue, parseScopeSelectors, type ScopeSelectorFailure } from "../scope-selectors.js";
 import { generateUuid } from "../uuid.js";
 import { parseStrictJson } from "../../json/strict-json.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
 import { UnitQueries } from "../../construction/unit-queries.js";
+import { ConstructionQueries } from "../../construction/scoped-queries.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
@@ -49,6 +50,17 @@ const reportFailure = (
 const projectSelector = (
   options?: Readonly<Record<string, unknown>>,
 ) => parseProjectSelector(options?.project);
+
+const reportSelectorFailure = (
+  reporter: ResultReporter,
+  failure: ScopeSelectorFailure,
+  recovery: string,
+): void => reportFailure(reporter, {
+  code: failure.code,
+  message: failure.message,
+  details: failure.details,
+  recovery,
+});
 
 @SubCommand({ name: "author", description: "Read effective Git author identity" })
 export class GitAuthorCommand extends CommandRunner {
@@ -519,14 +531,137 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
   }
 }
 
+@SubCommand({ name: "show", description: "Show a Construction stage projection" })
+export class ConstructionStageShowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "stage"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit and supported --stage selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    const stage = parsed.selectors.stage;
+    if (!unitId || !stage) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Stage show requires --unit and --stage.", details: { required: ["unit", "stage"] }, recovery: "Provide the exact unit and stage selectors." }); return; }
+    const result = await this.queries.stageShow(unitId, stage, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
 @SubCommand({
   name: "stage",
   description: "Read or change one Construction stage attempt",
-  subCommands: [ConstructionStageCompleteCommand],
+  subCommands: [ConstructionStageShowCommand, ConstructionStageCompleteCommand],
 })
 export class ConstructionStageCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) { super(); }
   async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction stage")); }
+}
+
+@SubCommand({ name: "list", description: "List authored tasks and execution state" })
+export class ConstructionTaskListCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    if (!unitId) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Task list requires --unit.", details: { required: "unit" }, recovery: "Provide one exact --unit selector." }); return; }
+    const result = await this.queries.taskList(unitId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+@SubCommand({ name: "show", description: "Show one task definition and its attempts" })
+export class ConstructionTaskShowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "task"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit and --task selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    const taskId = parsed.selectors.task;
+    if (!unitId || !taskId) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Task show requires --unit and --task.", details: { required: ["unit", "task"] }, recovery: "Provide the exact unit and task selectors." }); return; }
+    const result = await this.queries.taskShow(unitId, taskId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+@SubCommand({ name: "ready", description: "Read task dependencies, integrated outputs, and prerequisites" })
+export class ConstructionTaskReadyCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "task"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit and --task selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    const taskId = parsed.selectors.task;
+    if (!unitId || !taskId) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Task readiness requires --unit and --task.", details: { required: ["unit", "task"] }, recovery: "Provide the exact unit and task selectors." }); return; }
+    const result = await this.queries.taskReady(unitId, taskId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+@SubCommand({ name: "task", description: "Read authored task definitions and execution" , subCommands: [ConstructionTaskListCommand, ConstructionTaskShowCommand, ConstructionTaskReadyCommand] })
+export class ConstructionTaskCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction task")); }
+}
+
+@SubCommand({ name: "show", description: "Show one task-scoped Construction Activity" })
+export class ConstructionActivityShowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "task", "activity", "implementationAttempt"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide the exact unit, task, Activity, and Implementation attempt selectors."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const { unit, task, activity, implementationAttempt } = parsed.selectors;
+    if (!unit || !task || !activity || !implementationAttempt) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Activity show requires all four scope selectors.", details: { required: ["unit", "task", "activity", "implementationAttempt"] }, recovery: "Provide the exact selectors for one Activity occurrence." }); return; }
+    const result = await this.queries.activityShow(unit, task, activity, implementationAttempt, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+@SubCommand({ name: "activity", description: "Read task-scoped Construction Activities", subCommands: [ConstructionActivityShowCommand] })
+export class ConstructionActivityCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction activity")); }
 }
 
 @SubCommand({ name: "create", arguments: "<slug>", description: "Create one Unit of Work" })
@@ -645,7 +780,7 @@ export class ConstructionUnitCommand extends CommandRunner {
 @SubCommand({
   name: "construction",
   description: "Run Construction workflow operations",
-  subCommands: [ConstructionUnitCommand, ConstructionStageCommand],
+  subCommands: [ConstructionUnitCommand, ConstructionStageCommand, ConstructionTaskCommand, ConstructionActivityCommand],
 })
 export class ConstructionCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) {

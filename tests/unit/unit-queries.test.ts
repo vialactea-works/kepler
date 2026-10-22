@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { UnitQueryFileSystem } from "../../packages/cli/src/construction/unit-queries-runtime.js";
+import type { UnitQueryFileSystem } from "../../packages/cli/src/construction/unit-queries.js";
 import { UnitQueries } from "../../packages/cli/src/construction/unit-queries.js";
 
 const root = "/tmp/kepler-unit-query-test";
