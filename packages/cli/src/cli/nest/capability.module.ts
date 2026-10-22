@@ -10,6 +10,7 @@ import { MissionStartup } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
 import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
+import { ConstructionLint } from "../../construction/construction-lint.js";
 import { createNodeUnitQueryFileSystem } from "../../construction/unit-queries-runtime.js";
 import { createNodeUnitCreateRecords, machineLocalDate } from "../../construction/unit-create-runtime.js";
 import {
@@ -46,6 +47,7 @@ import {
   ConstructionTaskReadyCommand,
   ConstructionActivityCommand,
   ConstructionActivityShowCommand,
+  ConstructionLintCommand,
   ConstructionUnitCommand,
   ConstructionUnitCreateCommand,
   ConstructionUnitListCommand,
@@ -92,6 +94,7 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionTaskReadyCommand,
     ConstructionActivityCommand,
     ConstructionActivityShowCommand,
+    ConstructionLintCommand,
     ConstructionUnitCommand,
     ConstructionUnitCreateCommand,
     ConstructionUnitListCommand,
@@ -160,6 +163,11 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     {
       provide: ConstructionQueries,
       useFactory: (units: UnitQueries) => new ConstructionQueries(units, createNodeUnitQueryFileSystem()),
+      inject: [UnitQueries],
+    },
+    {
+      provide: ConstructionLint,
+      useFactory: (units: UnitQueries) => new ConstructionLint(units, createNodeUnitQueryFileSystem()),
       inject: [UnitQueries],
     },
     {

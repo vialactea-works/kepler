@@ -11,6 +11,7 @@ import {
 } from "../../packages/core/src/event-envelope.js";
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
 import { ConstructionQueries } from "../../packages/cli/src/construction/scoped-queries.js";
+import { ConstructionLint } from "../../packages/cli/src/construction/construction-lint.js";
 import { createNodeUnitQueryFileSystem } from "../../packages/cli/src/construction/unit-queries-runtime.js";
 import { UnitQueries } from "../../packages/cli/src/construction/unit-queries.js";
 import { createEventJournal } from "../../packages/cli/src/history/journal.js";
@@ -71,7 +72,7 @@ describe("scoped Construction queries", () => {
     await Fs.mkdir(unitRoot, { recursive: true });
     await Fs.mkdir(Path.join(root, ".git"));
     await Fs.writeFile(Path.join(unitRoot, "tasks-dag.json"), `${JSON.stringify(graph, null, 2)}\n`);
-    await Fs.writeFile(Path.join(unitRoot, "plan.md"), `---\nid: ${planArtifactId}\ntype: implementation-plan\nschema_version: 3\nunit_id: ${unitId}\nauthor: Query Test <query@example.invalid>\n---\n# Plan\n`);
+    await Fs.writeFile(Path.join(unitRoot, "plan.md"), `---\nid: ${planArtifactId}\ntype: implementation-plan\nschema_version: 3\nunit_id: ${unitId}\nauthor: Query Test <query@example.invalid>\n---\n# Plan\n\n## Technical solution\n\nUse the authored task contracts.\n\n## Task graph context\n\nThe graph is [tasks-dag.json](tasks-dag.json).\n\n## Verification strategy\n\nRun the focused checks.\n\n## Decisions and open questions\n\nNo open decisions.\n`);
     const journal = createEventJournal({ recordHome: root, missionId, journalId, phase: CONSTRUCTION_PHASE });
     const missionCreatedId = randomUUID();
     await journal.append(event(missionCreatedId, "construction.mission-created", {
@@ -175,12 +176,14 @@ describe("scoped Construction queries", () => {
     const fileSystem = createNodeUnitQueryFileSystem();
     const units = new UnitQueries({ resolve: async () => ({ kind: "resolved", root }) }, fileSystem);
     const queries = new ConstructionQueries(units, fileSystem);
+    const lint = new ConstructionLint(units, fileSystem);
     const before = await snapshot(root);
     const stage = await queries.stageShow(unitId, "implementation");
     const tasks = await queries.taskList(unitId);
     const shownTask = await queries.taskShow(unitId, task.id);
     const readiness = await queries.taskReady(unitId, dependentTask.id);
     const activity = await queries.activityShow(unitId, task.id, "code-generation", implementationAttemptId);
+    const lintResult = await lint.execute(unitId);
     const after = await snapshot(root);
 
     expect(stage).toMatchObject({
@@ -232,7 +235,37 @@ describe("scoped Construction queries", () => {
       })],
       evidence: expect.arrayContaining([expect.objectContaining({ event_id: evidenceEventId, type: "construction.evidence-recorded" })]),
     });
+    expect(lintResult).toEqual({ kind: "valid", findings: [] });
     expect(after).toEqual(before);
+
+    const graphPath = Path.join(unitRoot, "tasks-dag.json");
+    const invalidGraph = { ...graph, unsupported: true };
+    await Fs.writeFile(graphPath, `${JSON.stringify(invalidGraph, null, 2)}\n`);
+    const invalidBefore = await snapshot(root);
+    const invalidLint = await lint.execute(unitId);
+    expect(invalidLint).toMatchObject({
+      kind: "invalid",
+      findings: [{
+        path: `.kepler/missions/${missionId}/construction/units-of-work/${unitId}/tasks-dag.json`,
+        field: "/unsupported",
+        code: "invalid-schema",
+      }],
+    });
+    expect(await snapshot(root)).toEqual(invalidBefore);
+
+    await Fs.rm(graphPath);
+    const outsideRoot = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-scoped-graph-outside-"));
+    temporaryRoots.push(outsideRoot);
+    const outsideGraph = Path.join(outsideRoot, "tasks-dag.json");
+    await Fs.writeFile(outsideGraph, `${JSON.stringify(graph)}\n`);
+    await Fs.symlink(outsideGraph, graphPath);
+    const symlinkBefore = await Fs.readlink(graphPath);
+    const escapedLint = await lint.execute(unitId);
+    expect(escapedLint).toMatchObject({
+      kind: "invalid",
+      findings: expect.arrayContaining([expect.objectContaining({ code: "repository-path-outside" })]),
+    });
+    expect(await Fs.readlink(graphPath)).toBe(symlinkBefore);
   });
 
   it("rejects unbound units without writing", async () => {

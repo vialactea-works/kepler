@@ -181,6 +181,7 @@ describe("compiled CLI E2E", () => {
     expect(constructionHelp.stdout).toContain("stage");
     expect(constructionHelp.stdout).toContain("task");
     expect(constructionHelp.stdout).toContain("activity");
+    expect(constructionHelp.stdout).toContain("lint");
     const taskHelp = e2e.cli.run(["workflow", "construction", "task", "--help"]);
     expect(taskHelp.exitCode).toBe(0);
     for (const operation of ["list", "show", "ready"]) expect(taskHelp.stdout).toContain(operation);
@@ -190,6 +191,12 @@ describe("compiled CLI E2E", () => {
       status: "failed",
       data: { code: "required_selector_missing", message: "--task requires --unit." },
     });
+    const lintE2e = await createHarness("native");
+    const repository = lintE2e.resources.repositoryDirectory;
+    await addProjectMarker(repository);
+    const lintFailure = lintE2e.cli.run(["workflow", "construction", "lint", "--unit", "missing-unit", "--project", repository]);
+    expect(lintFailure.exitCode).toBe(1);
+    expect(envelope(lintFailure.stdout)).toMatchObject({ status: "failed", data: { code: "unit_not_found" } });
 
     const failure = e2e.cli.run(["unknown-command"]);
     const parsed = envelope(failure.stdout);

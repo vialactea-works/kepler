@@ -36,6 +36,18 @@ describe("UnitQueries", () => {
     expect(fileSystem.entries).not.toHaveBeenCalled();
   });
 
+  it("rejects path-bearing Construction scope IDs before resolving or reading a project", async () => {
+    const fileSystem = createFileSystem();
+    const resolve = vi.fn(async () => ({ kind: "resolved" as const, root }));
+    const queries = new UnitQueries({ resolve }, fileSystem);
+
+    const result = await queries.readContext("../../outside");
+
+    expect(result).toMatchObject({ kind: "failed", code: "invalid_unit_selector" });
+    expect(resolve).not.toHaveBeenCalled();
+    expect(fileSystem.entries).not.toHaveBeenCalled();
+  });
+
   it("returns a bounded read failure without attempting any write operation", async () => {
     const fileSystem = createFileSystem();
     vi.mocked(fileSystem.entries).mockRejectedValue(new Error("record home unavailable"));

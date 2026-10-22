@@ -109,6 +109,8 @@ interface UnitInventoryEntry {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const safeUnitId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 const failed = (code: string, message: string, details: Readonly<Record<string, unknown>> = {}): UnitQueryFailure => ({
   kind: "failed",
   code,
@@ -239,8 +241,8 @@ export class UnitQueries {
   }
 
   async readContext(unitId: string, project?: string): Promise<UnitQueryContextResult> {
-    if (typeof unitId !== "string" || unitId.length === 0 || unitId.trim() !== unitId) {
-      return failed("invalid_unit_selector", "A Construction query requires one exact non-empty unit ID.", { unit_id: unitId });
+    if (typeof unitId !== "string" || !safeUnitId.test(unitId) || unitId.trim() !== unitId) {
+      return failed("invalid_unit_selector", "A Construction query requires one exact path-safe Unit of Work ID.", { unit_id: unitId });
     }
     const selected = await this.resolveProject(project);
     if (!("root" in selected)) return selected;

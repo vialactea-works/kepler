@@ -9,6 +9,7 @@ import { MissionStartup } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
 import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
+import { ConstructionLint } from "../../construction/construction-lint.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
@@ -664,6 +665,34 @@ export class ConstructionActivityCommand extends CommandRunner {
   async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction activity")); }
 }
 
+@SubCommand({ name: "lint", description: "Validate the canonical Construction task graph" })
+export class ConstructionLintCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly lint: ConstructionLint) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    if (!unitId) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Construction lint requires --unit.", details: { required: "unit" }, recovery: "Provide one exact --unit selector." }); return; }
+    const result = await this.lint.execute(unitId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    if (result.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "construction_lint_failed",
+        message: "Construction graph validation found structural issues.",
+        details: { findings: result.findings },
+        recovery: "Correct the reported plan or graph findings without replacing the canonical mission-owned files.",
+      });
+      return;
+    }
+    this.reporter.report({ status: "success", data: { findings: result.findings } });
+  }
+}
+
 @SubCommand({ name: "create", arguments: "<slug>", description: "Create one Unit of Work" })
 export class ConstructionUnitCreateCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter, private readonly unitCreate: UnitCreate) {
@@ -780,7 +809,7 @@ export class ConstructionUnitCommand extends CommandRunner {
 @SubCommand({
   name: "construction",
   description: "Run Construction workflow operations",
-  subCommands: [ConstructionUnitCommand, ConstructionStageCommand, ConstructionTaskCommand, ConstructionActivityCommand],
+  subCommands: [ConstructionUnitCommand, ConstructionStageCommand, ConstructionTaskCommand, ConstructionActivityCommand, ConstructionLintCommand],
 })
 export class ConstructionCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) {
