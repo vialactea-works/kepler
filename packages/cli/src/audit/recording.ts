@@ -155,7 +155,7 @@ export interface AuditRecordContext {
 }
 
 export interface AuditRecordContextResolver {
-  readonly resolve: (selectors: ScopeSelectors, project?: string, kind?: AuditRecordKind, relatedRequestEventId?: string, relatedEventIds?: readonly string[]) => Promise<
+  readonly resolve: (selectors: ScopeSelectors, project?: string, kind?: AuditRecordKind, relatedRequestEventId?: string, relatedEventIds?: readonly string[], preAdmissionTaskEvidence?: boolean) => Promise<
     | { readonly kind: "resolved"; readonly context: AuditRecordContext }
     | { readonly kind: "failed"; readonly code: string; readonly message: string; readonly details: Readonly<Record<string, unknown>>; readonly recovery: string }
   >;
@@ -184,7 +184,14 @@ export class AuditRecording {
     const relatedEventIds = isRecord(request) && Array.isArray(request.related_event_ids) && request.related_event_ids.every((id) => typeof id === "string")
       ? request.related_event_ids as string[]
       : undefined;
-    const context = await this.contexts.resolve(selectors, project, kind, relatedRequestEventId, relatedEventIds);
+    const context = await this.contexts.resolve(
+      selectors,
+      project,
+      kind,
+      relatedRequestEventId,
+      relatedEventIds,
+      kind === "evidence" && isRecord(request) && request.check === "task-prerequisite",
+    );
     if (context.kind === "failed") return { kind: "failed", data: {
       code: context.code,
       message: context.message,

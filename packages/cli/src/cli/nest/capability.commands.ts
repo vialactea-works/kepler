@@ -9,6 +9,8 @@ import { MissionStartup } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
 import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
+import { TaskAdmission } from "../../construction/task-admission.js";
+import { ActivityExecution } from "../../construction/activity-execution.js";
 import { ConstructionLint } from "../../construction/construction-lint.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
 import { QualityRequirementsStageCompletion } from "../../construction/quality-stage-completion.js";
@@ -751,7 +753,44 @@ export class ConstructionTaskReadyCommand extends CommandRunner {
   }
 }
 
-@SubCommand({ name: "task", description: "Read authored task definitions and execution" , subCommands: [ConstructionTaskListCommand, ConstructionTaskShowCommand, ConstructionTaskReadyCommand] })
+@SubCommand({ name: "admit", description: "Admit one ready task under the current Implementation attempt" })
+export class ConstructionTaskAdmitCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly admission: TaskAdmission) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--prerequisites <json>" }) parsePrerequisites(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "task", "implementationAttempt"] });
+    if (selectors.kind === "failed") { reportSelectorFailure(this.reporter, selectors, "Provide exact --unit, --task, and --implementation-attempt selectors."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const raw = optionValue(values, "prerequisites");
+    if (typeof raw === "object") { reportFailure(this.reporter, raw); return; }
+    let request: unknown = { prerequisite_evidence_ids: [] };
+    if (typeof raw === "string") {
+      const parsed = parseStrictJson(raw);
+      if (parsed.kind === "invalid") {
+        reportFailure(this.reporter, {
+          code: "invalid_task_admission_request_json",
+          message: "The task admission prerequisites are not valid strict JSON.",
+          details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+          recovery: "Provide a unique prerequisite_evidence_ids array as strict JSON.",
+        });
+        return;
+      }
+      request = parsed.value;
+    }
+    const result = await this.admission.execute(selectors.selectors, request, selected.project);
+    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
+      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+    } });
+  }
+}
+
+@SubCommand({ name: "task", description: "Read authored task definitions and execution" , subCommands: [ConstructionTaskListCommand, ConstructionTaskShowCommand, ConstructionTaskReadyCommand, ConstructionTaskAdmitCommand] })
 export class ConstructionTaskCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) { super(); }
   async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction task")); }
@@ -780,7 +819,56 @@ export class ConstructionActivityShowCommand extends CommandRunner {
   }
 }
 
-@SubCommand({ name: "activity", description: "Read task-scoped Construction Activities", subCommands: [ConstructionActivityShowCommand] })
+abstract class ConstructionActivityExecutionCommand extends CommandRunner {
+  constructor(protected readonly reporter: ResultReporter, private readonly execution: ActivityExecution, private readonly operation: "start" | "complete") { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--evidence <json>" }) parseEvidence(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const required = this.operation === "start"
+      ? ["unit", "task", "activity", "implementationAttempt"] as const
+      : ["unit", "task", "activity", "implementationAttempt", "attempt"] as const;
+    const parsed = parseScopeSelectors(values, { required });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, `Provide the exact ${required.map((item) => `--${item}`).join(", ")} selectors.`); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const raw = optionValue(values, "evidence");
+    if (typeof raw === "object") { reportFailure(this.reporter, raw); return; }
+    let request: unknown = { evidence_ids: [] };
+    if (typeof raw === "string") {
+      const result = parseStrictJson(raw);
+      if (result.kind === "invalid") {
+        reportFailure(this.reporter, { code: "invalid_activity_evidence_json", message: "Activity evidence IDs are not valid strict JSON.",
+          details: { code: result.code, pointer: result.pointer, message: result.message }, recovery: "Provide evidence_ids as strict JSON." });
+        return;
+      }
+      request = result.value;
+    }
+    const result = this.operation === "start"
+      ? await this.execution.start(parsed.selectors, selected.project)
+      : await this.execution.complete(parsed.selectors, request, selected.project);
+    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
+      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+    } });
+  }
+}
+
+@SubCommand({ name: "start", description: "Start the next task-scoped Construction Activity" })
+export class ConstructionActivityStartCommand extends ConstructionActivityExecutionCommand {
+  constructor(reporter: ResultReporter, execution: ActivityExecution) { super(reporter, execution, "start"); }
+}
+
+@SubCommand({ name: "complete", description: "Complete a task-scoped Construction Activity with recorded evidence" })
+export class ConstructionActivityCompleteCommand extends ConstructionActivityExecutionCommand {
+  constructor(reporter: ResultReporter, execution: ActivityExecution) { super(reporter, execution, "complete"); }
+}
+
+@SubCommand({ name: "activity", description: "Read and execute task-scoped Construction Activities", subCommands: [ConstructionActivityShowCommand, ConstructionActivityStartCommand, ConstructionActivityCompleteCommand] })
 export class ConstructionActivityCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) { super(); }
   async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction activity")); }

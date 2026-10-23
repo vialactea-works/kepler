@@ -926,6 +926,13 @@ describe("Functional Design stage completion CLI E2E", () => {
       task_definition_ref: { graph_id: planningMaterial.graphRef.graph_id, task_id: planningTaskId, content_version: planningMaterial.graphRef.content_version },
       admission_baseline: [{ repository_id: repositoryId, commit: "checkpoint-start" }], predecessor_provenance: [], prerequisite_evidence: [],
     }, [previousImplementationStart.eventId, String(planningResult.result.data.id), auditFixture.baselineEventId]);
+    const previousActivityChecks = {
+      "code-generation": ["code-generation-typecheck", "code-generation-related-tests", "code-generation-self-review"],
+      "code-validation": ["code-validation-typecheck", "code-validation-build", "code-validation-full-test-suite",
+        "code-validation-independent-review", "code-validation-self-review"],
+      "code-integration": ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite",
+        "code-integration-self-review"],
+    } as const;
     const createPreviousActivity = async (
       activity: "code-generation" | "code-validation" | "code-integration",
       priorCompletionId?: string,
@@ -948,33 +955,44 @@ describe("Functional Design stage completion CLI E2E", () => {
         }, [started.id, previousImplementationAdmission.id, ...(priorCompletionId ? [priorCompletionId] : []), ...(sourceEvidence ? [sourceEvidence.eventId] : [])]);
         preparedId = prepared.id;
       }
-      const evidenceId = randomUUID();
-      const evidence = await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
-        mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
-        stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
-        activity_attempt_id: activityAttemptId, evidence_id: evidenceId,
-        artifact_bindings: planningMaterial.reviewedBindings, checkpoints: planningMaterial.checkpoints,
-        inputs: implementationInputs, check: `${activity}-verification`, executor: activity === "code-generation" ? "agent:builder" : "agent:verifier",
-        result: { status: "passed", summary: `${activity} produced passing evidence.` },
-        output_refs: [`task-output:${planningTaskId}`], conditions: [],
-      }, [started.id, ...(preparedId ? [preparedId] : [])]);
+      const evidenceRecords: { readonly evidenceId: string; readonly eventId: string; readonly check: string }[] = [];
+      for (const check of previousActivityChecks[activity]) {
+        const evidenceId = randomUUID();
+        const executor = check === "code-validation-independent-review" ? "agent:reviewer"
+          : activity === "code-generation" ? "agent:builder" : activity === "code-validation" ? "agent:verifier" : "agent:integrator";
+        const evidence = await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
+          mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
+          stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
+          activity_attempt_id: activityAttemptId, evidence_id: evidenceId,
+          artifact_bindings: planningMaterial.reviewedBindings, checkpoints: planningMaterial.checkpoints,
+          inputs: implementationInputs, check, executor,
+          result: { status: "passed", summary: `${check} passed for the current output.` },
+          output_refs: [`task-output:${planningTaskId}`], conditions: [],
+        }, [started.id, ...(preparedId ? [preparedId] : [])]);
+        evidenceRecords.push({ evidenceId, eventId: evidence.id, check });
+      }
       let integrationEventId: string | undefined;
       if (activity === "code-integration") {
+        const repositoryEvidence = evidenceRecords.filter((item) => item.check !== "code-integration-self-review");
+        const selfReview = evidenceRecords.find((item) => item.check === "code-integration-self-review")!;
         const accepted = await appendTypedConstructionEvent(harness, "construction.integration-accepted", {
           mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
           stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
           activity_attempt_id: activityAttemptId, prepared_event_id: preparedId,
           candidate_checkpoints: planningMaterial.checkpoints,
-          repository_results: [{ repository_id: repositoryId, evidence_ids: [evidenceId] }], authority_event_ids: [],
-        }, [String(preparedId), evidence.id]);
+          repository_results: [{ repository_id: repositoryId, evidence_ids: repositoryEvidence.map((item) => item.evidenceId) }],
+          authority_event_ids: [selfReview.eventId],
+        }, [String(preparedId), ...evidenceRecords.map((item) => item.eventId)]);
         integrationEventId = accepted.id;
       }
+      const evidenceIds = evidenceRecords.map((item) => item.evidenceId);
       const completed = await appendTypedConstructionEvent(harness, "construction.activity-attempt-completed", {
         mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
         stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
-        activity_attempt_id: activityAttemptId, evidence_ids: [evidenceId], checkpoints: planningMaterial.checkpoints,
-      }, [started.id, evidence.id, ...(integrationEventId ? [integrationEventId] : [])]);
-      return { activityAttemptId, evidenceId, evidenceEventId: evidence.id, completionId: completed.id, integrationEventId };
+        activity_attempt_id: activityAttemptId, evidence_ids: evidenceIds, checkpoints: planningMaterial.checkpoints,
+      }, [started.id, ...evidenceRecords.map((item) => item.eventId), ...(integrationEventId ? [integrationEventId] : [])]);
+      return { activityAttemptId, evidenceId: evidenceIds[0]!, evidenceIds, evidenceEventId: evidenceRecords[0]!.eventId,
+        completionId: completed.id, integrationEventId };
     };
     const previousCodeGeneration = await createPreviousActivity("code-generation");
     const previousCodeValidation = await createPreviousActivity("code-validation", previousCodeGeneration.completionId);
@@ -1009,17 +1027,17 @@ describe("Functional Design stage completion CLI E2E", () => {
     const retainedAssessmentRequest = { assessments: [
       {
         task_id: planningTaskId, activity: "code-generation", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeGeneration.activityAttemptId, original_evidence_ids: [previousCodeGeneration.evidenceId],
+        original_activity_attempt_id: previousCodeGeneration.activityAttemptId, original_evidence_ids: previousCodeGeneration.evidenceIds,
         applicable: true, reason: "Generation output remains valid for the unchanged task graph.", checkpoints: planningMaterial.checkpoints,
       },
       {
         task_id: planningTaskId, activity: "code-validation", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeValidation.activityAttemptId, original_evidence_ids: [previousCodeValidation.evidenceId],
+        original_activity_attempt_id: previousCodeValidation.activityAttemptId, original_evidence_ids: previousCodeValidation.evidenceIds,
         applicable: true, reason: "Validation remains valid for the unchanged generated output.", checkpoints: planningMaterial.checkpoints,
       },
       {
         task_id: planningTaskId, activity: "code-integration", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeIntegration.activityAttemptId, original_evidence_ids: [previousCodeIntegration.evidenceId],
+        original_activity_attempt_id: previousCodeIntegration.activityAttemptId, original_evidence_ids: previousCodeIntegration.evidenceIds,
         applicable: true, reason: "The predecessor Integration was available before current work and remains in the assessed history.", checkpoints: planningMaterial.checkpoints,
       },
     ] };
@@ -1048,11 +1066,20 @@ describe("Functional Design stage completion CLI E2E", () => {
         task_id: planningTaskId,
         content_version: planningMaterial.graphRef.content_version,
       },
-      admission_baseline: [{ repository_id: repositoryId, commit: "checkpoint-start" }],
+      admission_baseline: planningMaterial.checkpoints,
       predecessor_provenance: [],
       prerequisite_evidence: [],
-    }, [implementationStart.eventId, String(planningResult.result.data.id), auditFixture.baselineEventId, retainedAssessmentEventId]);
-    const activityNames = ["code-integration"] as const;
+    }, [implementationStart.eventId, String(planningResult.result.data.id), auditFixture.baselineEventId,
+      retainedAssessmentEventId, String(previousCodeIntegration.integrationEventId)]);
+    const activityNames = ["code-generation", "code-validation", "code-integration"] as const;
+    const activityExecutors = { "code-generation": "agent:builder", "code-validation": "agent:verifier", "code-integration": "agent:integrator" } as const;
+    const activityChecks = {
+      "code-generation": ["code-generation-typecheck", "code-generation-related-tests", "code-generation-self-review"],
+      "code-validation": ["code-validation-typecheck", "code-validation-build", "code-validation-full-test-suite",
+        "code-validation-independent-review", "code-validation-self-review"],
+      "code-integration": ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite",
+        "code-integration-self-review"],
+    } as const;
     const activityEvidenceIds: string[] = [];
     const activityStarts = new Map<string, string>();
     const activityAttemptIds = new Map<string, string>();
@@ -1094,27 +1121,39 @@ describe("Functional Design stage completion CLI E2E", () => {
         }, [started.id, admission.id, previousActivityCompletion, validationEvidenceEventId, retainedAssessmentEventId]);
         preparedId = prepared.id;
       }
-      const evidenceId = randomUUID();
-      const evidence = await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
-        mission_id: auditFixture.missionId,
-        unit_id: auditFixture.unitId,
-        stage: "implementation",
-        stage_attempt_id: implementationAttempt,
-        task_id: planningTaskId,
-        activity,
-        activity_attempt_id: activityAttemptId,
-        evidence_id: evidenceId,
-        artifact_bindings: planningMaterial.reviewedBindings,
-        checkpoints: planningMaterial.checkpoints,
-        inputs: implementationInputs,
-        check: `${activity}-verification`,
-        executor: "agent:integrator",
-        result: { status: "passed", summary: `${activity} produced passing evidence.` },
-        output_refs: [`task-output:${planningTaskId}`],
-        conditions: [],
-      }, [started.id, ...(preparedId ? [preparedId] : [])]);
-      activityEvidenceIds.push(evidenceId);
+      const activityEvidence: { readonly evidenceId: string; readonly eventId: string; readonly check: string }[] = [];
+      for (const check of activityChecks[activity]) {
+        const evidenceId = randomUUID();
+        const executor = check === "code-validation-independent-review" ? "agent:reviewer" : activityExecutors[activity];
+        const evidence = await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
+          mission_id: auditFixture.missionId,
+          unit_id: auditFixture.unitId,
+          stage: "implementation",
+          stage_attempt_id: implementationAttempt,
+          task_id: planningTaskId,
+          activity,
+          activity_attempt_id: activityAttemptId,
+          evidence_id: evidenceId,
+          artifact_bindings: planningMaterial.reviewedBindings,
+          checkpoints: planningMaterial.checkpoints,
+          inputs: implementationInputs,
+          check,
+          executor,
+          result: { status: "passed", summary: `${check} passed for the current candidate.` },
+          output_refs: [`task-output:${planningTaskId}`],
+          conditions: [],
+        }, [started.id, ...(preparedId ? [preparedId] : [])]);
+        activityEvidence.push({ evidenceId, eventId: evidence.id, check });
+      }
+      const activityEvidenceIdsForCompletion = activityEvidence.map((item) => item.evidenceId);
+      activityEvidenceIds.push(activityEvidenceIdsForCompletion[0]!);
+      if (activity === "code-validation") {
+        validationEvidenceId = activityEvidence[0]!.evidenceId;
+        validationEvidenceEventId = activityEvidence[0]!.eventId;
+      }
       if (activity === "code-integration") {
+        const repositoryEvidence = activityEvidence.filter((item) => item.check !== "code-integration-self-review");
+        const selfReview = activityEvidence.find((item) => item.check === "code-integration-self-review")!;
         const accepted = await appendTypedConstructionEvent(harness, "construction.integration-accepted", {
           mission_id: auditFixture.missionId,
           unit_id: auditFixture.unitId,
@@ -1125,9 +1164,9 @@ describe("Functional Design stage completion CLI E2E", () => {
           activity_attempt_id: activityAttemptId,
           prepared_event_id: preparedId,
           candidate_checkpoints: planningMaterial.checkpoints,
-          repository_results: [{ repository_id: repositoryId, evidence_ids: [evidenceId] }],
-          authority_event_ids: [],
-        }, [String(preparedId), evidence.id]);
+          repository_results: [{ repository_id: repositoryId, evidence_ids: repositoryEvidence.map((item) => item.evidenceId) }],
+          authority_event_ids: [selfReview.eventId],
+        }, [String(preparedId), ...activityEvidence.map((item) => item.eventId)]);
         integrationEventId = accepted.id;
       }
       const completed = await appendTypedConstructionEvent(harness, "construction.activity-attempt-completed", {
@@ -1138,9 +1177,9 @@ describe("Functional Design stage completion CLI E2E", () => {
         task_id: planningTaskId,
         activity,
         activity_attempt_id: activityAttemptId,
-        evidence_ids: [evidenceId],
+        evidence_ids: activityEvidenceIdsForCompletion,
         checkpoints: planningMaterial.checkpoints,
-      }, [started.id, evidence.id, ...(integrationEventId ? [integrationEventId] : [])]);
+      }, [started.id, ...activityEvidence.map((item) => item.eventId), ...(integrationEventId ? [integrationEventId] : [])]);
       previousActivityCompletion = completed.id;
       activityCompletionEventIds.set(activity, completed.id);
     }
@@ -1362,8 +1401,8 @@ describe("Functional Design stage completion CLI E2E", () => {
       code: "invalid-completion-evidence",
       eventIds: [String(implementationCompletionRecord.id)],
     }));
-    expect(activityStarts.size).toBe(1);
-    expect(activityEvidenceIds).toHaveLength(1);
+    expect(activityStarts.size).toBe(3);
+    expect(activityEvidenceIds).toHaveLength(3);
     const implementationCompletionFirstSources = implementationHistorySources.map((source) => encodeHistorySource(
       source,
       parseHistorySource(source).map((record) => String(record.id) === String(implementationCompletionRecord.id)
@@ -1377,7 +1416,10 @@ describe("Functional Design stage completion CLI E2E", () => {
       code: "invalid-completion-evidence",
       eventIds: [String(implementationCompletionRecord.id)],
     }));
-    expect(implementationCompletionFirstProjection.units.find((unit) => unit.unitId === auditFixture.unitId)?.blocked).toBe(false);
+    expect(implementationCompletionFirstProjection.units.find((unit) => unit.unitId === auditFixture.unitId)?.blocked, JSON.stringify({
+      historyIssues: implementationCompletionFirstProjection.historyIssues,
+      projectionIssues: implementationCompletionFirstProjection.projectionIssues,
+    })).toBe(false);
     const afterImplementationProjection = projectConstruction(collectHistoryFromSources(
       auditFixture.missionId, implementationHistorySources, { completeness: "complete" },
     ));

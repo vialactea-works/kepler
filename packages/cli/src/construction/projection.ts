@@ -33,6 +33,8 @@ import {
   isQualityRequirementsCompletionRecord,
   qualityRequirementsEvidenceIds,
   readQualityRequirementsCompletionRecord,
+  type LegacyQualityRequirementsCompletionRecord,
+  type QualityRequirementsCompletionRecord,
 } from "./quality-requirements-completion.js";
 import {
   isImplementationPlanningCompletionRecord,
@@ -765,11 +767,14 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
   ): boolean => {
     const legacy = completion.event.event_version === 1;
     const rawRecord = completion.event.data.functional_design_assessment;
-    const record = legacy
-      ? isLegacyFunctionalDesignCompletionRecord(rawRecord)
-        ? { ...rawRecord, artifact_paths: rawRecord.assessments.handoff.artifacts }
-        : undefined
-      : isFunctionalDesignCompletionRecord(rawRecord) ? rawRecord : undefined;
+    let record: ReturnType<typeof functionalDesignRecordFor>;
+    if (legacy && isLegacyFunctionalDesignCompletionRecord(rawRecord)) {
+      record = { ...rawRecord, artifact_paths: rawRecord.assessments.handoff.artifacts };
+    } else if (!legacy && isFunctionalDesignCompletionRecord(rawRecord)) {
+      record = rawRecord;
+    } else {
+      record = undefined;
+    }
     if (!record || (!legacy && !sameStringSet(record.artifact_paths, record.assessments.handoff.artifacts))) return false;
     const expectedIds = functionalDesignEvidenceIds(record.assessments).slice().sort();
     const actualIds = evidenceIds.filter((id): id is string => typeof id === "string").sort();
@@ -809,9 +814,10 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
   ): boolean => {
     const legacy = completion.event.event_version === 1;
     const rawRecord = completion.event.data.quality_requirements_assessment;
-    const record = legacy
-      ? isLegacyQualityRequirementsCompletionRecord(rawRecord) ? rawRecord : undefined
-      : isQualityRequirementsCompletionRecord(rawRecord) ? rawRecord : undefined;
+    let record: LegacyQualityRequirementsCompletionRecord | QualityRequirementsCompletionRecord | undefined;
+    if (legacy && isLegacyQualityRequirementsCompletionRecord(rawRecord)) record = rawRecord;
+    else if (!legacy && isQualityRequirementsCompletionRecord(rawRecord)) record = rawRecord;
+    else record = undefined;
     if (!record) return false;
     const expectedIds = qualityRequirementsEvidenceIds(record.assessments).slice().sort();
     const actualIds = evidenceIds.filter((id): id is string => typeof id === "string").sort();
@@ -912,9 +918,10 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
   ): boolean => {
     const legacy = completion.event.event_version === 1;
     const rawRecord = completion.event.data.implementation_planning_assessment;
-    const record = legacy
-      ? isLegacyImplementationPlanningCompletionRecord(rawRecord) ? readImplementationPlanningCompletionRecord(rawRecord) : undefined
-      : isImplementationPlanningCompletionRecord(rawRecord) ? readImplementationPlanningCompletionRecord(rawRecord) : undefined;
+    let record: ReturnType<typeof readImplementationPlanningCompletionRecord> | undefined;
+    if (legacy && isLegacyImplementationPlanningCompletionRecord(rawRecord)) record = readImplementationPlanningCompletionRecord(rawRecord);
+    else if (!legacy && isImplementationPlanningCompletionRecord(rawRecord)) record = readImplementationPlanningCompletionRecord(rawRecord);
+    else record = undefined;
     if (!record || !record.assessments.handoff.artifacts.includes("tasks-dag.json") ||
         (!legacy && !sameStringSet([...record.artifact_paths, record.task_graph_path], record.assessments.handoff.artifacts))) return false;
     const expectedIds = planningEvidenceIds(record.assessments).slice().sort();
@@ -939,9 +946,13 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     ));
     const qualityCompletion = latestQualityCompletions.length === 1 ? latestQualityCompletions[0] : undefined;
     const qualityAssessment = qualityCompletion?.event.data.quality_requirements_assessment;
-    const qualityRecord = qualityCompletion?.event.event_version === 1
-      ? isLegacyQualityRequirementsCompletionRecord(qualityAssessment) ? qualityAssessment : undefined
-      : isQualityRequirementsCompletionRecord(qualityAssessment) ? qualityAssessment : undefined;
+    let qualityRecord: LegacyQualityRequirementsCompletionRecord | QualityRequirementsCompletionRecord | undefined;
+    if (qualityCompletion?.event.event_version === 1 && isLegacyQualityRequirementsCompletionRecord(qualityAssessment)) {
+      qualityRecord = qualityAssessment;
+    } else if (qualityCompletion && qualityCompletion.event.event_version !== 1 &&
+        isQualityRequirementsCompletionRecord(qualityAssessment)) {
+      qualityRecord = qualityAssessment;
+    }
     const authorizedFunctionalCompletions = order.uniqueFacts.filter((candidate) =>
       candidate.event.type === "construction.stage-attempt-completed" &&
       factUnitId(candidate) === factUnitId(completion) && candidate.event.data.stage === "functional-design" &&
@@ -1703,6 +1714,33 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         ),
       ));
     if (!checkpointCoverage) evidenceValid = false;
+    if (activityCompletion) {
+      const activity = stringField(fact.event.data, "activity");
+      const starts = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-started" &&
+        sameActivityScope(candidate, fact) && order.hasPath(candidate.event.id, fact.event.id));
+      if (starts.length !== 1 ||
+          validEvidence.some((item) => checkpointKey(item.event.data.checkpoints) !== checkpointKey(fact.event.data.checkpoints)) ||
+          (activity === "code-validation" && checkpointKey(starts[0]?.event.data.checkpoints) !== checkpointKey(fact.event.data.checkpoints))) {
+        evidenceValid = false;
+      }
+      if (activity === "code-validation") {
+        const generations = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+          validCompletionEvents.has(candidate.event.id) && factUnitId(candidate) === factUnitId(fact) &&
+          stringField(candidate.event.data, "task_id") === stringField(fact.event.data, "task_id") &&
+          stringField(candidate.event.data, "stage_attempt_id") === stringField(fact.event.data, "stage_attempt_id") &&
+          stringField(candidate.event.data, "activity") === "code-generation" && order.hasPath(candidate.event.id, fact.event.id));
+        const generationExecutors = generations.flatMap((generation) =>
+          (Array.isArray(generation.event.data.evidence_ids) ? generation.event.data.evidence_ids : []).flatMap((id) => {
+            const matches = typeof id === "string" ? evidenceById.get(id) ?? [] : [];
+            const evidence = matches.length === 1 ? matches[0] : undefined;
+            return evidence?.event.type === "construction.evidence-recorded" ? [evidence.event.data.executor] : [];
+          }),
+        );
+        const reviewers = validEvidence.filter((item) => item.event.data.check === "code-validation-independent-review");
+        if (generations.length !== 1 || reviewers.length !== 1 ||
+            generationExecutors.includes(reviewers[0]?.event.data.executor)) evidenceValid = false;
+      }
+    }
     if (stageCompletion && fact.event.data.stage === "functional-design" &&
         !functionalDesignCompletionValid(fact, evidenceIds)) evidenceValid = false;
     if (stageCompletion && fact.event.data.stage === "quality-requirements" &&
@@ -1836,6 +1874,56 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     Array.isArray(fact.event.data.affected_activities)
       ? fact.event.data.affected_activities.filter((activity): activity is string => typeof activity === "string")
       : [];
+  const activityCompletionCurrentAt = (
+    completion: ConstructionHistoryFact,
+    boundary: ConstructionHistoryFact,
+  ): boolean => {
+    const activity = stringField(completion.event.data, "activity");
+    const taskId = stringField(completion.event.data, "task_id");
+    const stageAttemptId = stringField(completion.event.data, "stage_attempt_id");
+    if (!activity || !taskId || !stageAttemptId) return false;
+    return !order.uniqueFacts.some((candidate) => {
+      if (!validRevisionTransitions.has(candidate.event.id) || factUnitId(candidate) !== factUnitId(completion) ||
+          stringField(candidate.event.data, "stage_attempt_id") !== stageAttemptId ||
+          !order.hasPath(completion.event.id, candidate.event.id) || !order.hasPath(candidate.event.id, boundary.event.id)) return false;
+      if (["construction.activity-attempt-ended-by-revision", "construction.activity-reopened"].includes(candidate.event.type)) {
+        return stringField(candidate.event.data, "task_id") === taskId && stringField(candidate.event.data, "activity") === activity;
+      }
+      if (["construction.task-scope-ended-by-revision", "construction.task-scope-reopened"].includes(candidate.event.type)) {
+        return stringField(candidate.event.data, "task_id") === taskId && affectedActivitiesFor(candidate).includes(activity);
+      }
+      return candidate.event.type === "construction.stage-attempt-ended-by-revision" && candidate.event.data.stage === "implementation";
+    });
+  };
+  const activityStartRouteCurrentAt = (start: ConstructionHistoryFact, boundary: ConstructionHistoryFact): boolean => {
+    const activity = stringField(start.event.data, "activity");
+    const taskId = stringField(start.event.data, "task_id");
+    const stageAttemptId = stringField(start.event.data, "stage_attempt_id");
+    const unitId = factUnitId(start);
+    let previousActivity: string | undefined;
+    if (activity === "code-validation") previousActivity = "code-generation";
+    if (activity === "code-integration") previousActivity = "code-validation";
+    if (!activity || !taskId || !stageAttemptId || !unitId) return false;
+    if (!previousActivity) return activity === "code-generation";
+    const initialStart = start.event.type === "construction.activity-attempt-started"
+      ? start
+      : order.uniqueFacts.find((candidate) => candidate.event.type === "construction.activity-attempt-started" &&
+        sameActivityScope(candidate, start) && order.hasPath(candidate.event.id, start.event.id));
+    if (!initialStart) return false;
+    const previous = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+      validCompletionEvents.has(candidate.event.id) && activityCompletionCurrentAt(candidate, boundary) &&
+      factUnitId(candidate) === unitId && stringField(candidate.event.data, "task_id") === taskId &&
+      stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+      stringField(candidate.event.data, "activity") === previousActivity && hasDirectCause(initialStart, candidate) &&
+      checkpointKey(candidate.event.data.checkpoints) === checkpointKey(start.event.data.checkpoints));
+    if (previous.length !== 1) return false;
+    if (activity !== "code-integration") return true;
+    return order.uniqueFacts.some((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+      validCompletionEvents.has(candidate.event.id) && activityCompletionCurrentAt(candidate, boundary) &&
+      factUnitId(candidate) === unitId && stringField(candidate.event.data, "task_id") === taskId &&
+      stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+      stringField(candidate.event.data, "activity") === "code-generation" && order.hasPath(candidate.event.id, previous[0]!.event.id));
+  };
   for (const fact of order.uniqueFacts) {
     if (!validRevisionTransitions.has(fact.event.id) ||
         !["construction.task-scope-ended-by-revision", "construction.task-scope-reopened"].includes(fact.event.type)) continue;
@@ -1919,7 +2007,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const stageAttemptId = stringField(data, "stage_attempt_id");
     const starts = order.uniqueFacts.filter((candidate) =>
       ["construction.activity-attempt-started", "construction.activity-resumed"].includes(candidate.event.type) &&
-      sameActivityScope(candidate, fact) && hasDirectCause(fact, candidate),
+      sameActivityScope(candidate, fact) && hasDirectCause(fact, candidate) && activityStartRouteCurrentAt(candidate, fact),
     );
     const admissions = order.uniqueFacts.filter((candidate) =>
       candidate.event.type === "construction.task-admitted" && factUnitId(candidate) === unitId &&
@@ -1928,9 +2016,16 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     );
     const sourceEvidenceIds = Array.isArray(data.source_evidence_ids) ? data.source_evidence_ids : [];
     const taskOutputRefs = Array.isArray(data.task_output_refs) ? data.task_output_refs : [];
+    const capturedRepositoryIds = Array.isArray(data.captured_inputs)
+      ? data.captured_inputs.flatMap((item) => isRecord(item) && typeof item.repository_id === "string" ? [item.repository_id] : [])
+      : [];
+    const candidateRepositoryIds = Array.isArray(data.candidate_checkpoints)
+      ? data.candidate_checkpoints.flatMap((item) => isRecord(item) && typeof item.repository_id === "string" ? [item.repository_id] : [])
+      : [];
     const sourceEvidence: ConstructionHistoryFact[] = [];
     const retainedAssessments: ConstructionHistoryFact[] = [];
-    let sourcesValid = sourceEvidenceIds.length > 0 && taskOutputRefs.length > 0;
+    let sourcesValid = sourceEvidenceIds.length > 0 && taskOutputRefs.length > 0 && capturedRepositoryIds.length > 0 &&
+      sameStringSet(capturedRepositoryIds, candidateRepositoryIds);
     for (const sourceEvidenceId of sourceEvidenceIds) {
       const candidates = typeof sourceEvidenceId === "string" ? evidenceById.get(sourceEvidenceId) ?? [] : [];
       const evidence = candidates.length === 1 ? candidates[0] : undefined;
@@ -1958,15 +2053,18 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         continue;
       }
       const evidenceId = stringField(evidenceData, "evidence_id");
-      const validationCompleted = order.uniqueFacts.some((candidate) =>
-        candidate.event.type === "construction.activity-attempt-completed" &&
-        stringField(candidate.event.data, "task_id") === taskId &&
-        stringField(candidate.event.data, "activity") === "code-validation" &&
-        stringField(candidate.event.data, "activity_attempt_id") === stringField(evidenceData, "activity_attempt_id") &&
-        stringField(candidate.event.data, "stage_attempt_id") === stringField(evidenceData, "stage_attempt_id") &&
-        Array.isArray(candidate.event.data.evidence_ids) && candidate.event.data.evidence_ids.includes(evidenceId) &&
-        validCompletionEvents.has(candidate.event.id) && hasDirectCause(fact, candidate),
-      );
+      const validationCompleted = order.uniqueFacts.some((candidate) => {
+        if (candidate.event.type !== "construction.activity-attempt-completed" ||
+            stringField(candidate.event.data, "task_id") !== taskId ||
+            stringField(candidate.event.data, "activity") !== "code-validation" ||
+            stringField(candidate.event.data, "activity_attempt_id") !== stringField(evidenceData, "activity_attempt_id") ||
+            stringField(candidate.event.data, "stage_attempt_id") !== stringField(evidenceData, "stage_attempt_id") ||
+            !Array.isArray(candidate.event.data.evidence_ids) || !candidate.event.data.evidence_ids.includes(evidenceId) ||
+            !validCompletionEvents.has(candidate.event.id) || !activityCompletionCurrentAt(candidate, fact) || !hasDirectCause(fact, candidate)) return false;
+        const validationStart = order.uniqueFacts.find((start) => start.event.type === "construction.activity-attempt-started" &&
+          sameActivityScope(start, candidate));
+        return validationStart !== undefined && activityStartRouteCurrentAt(validationStart, fact);
+      });
       if (!validationCompleted) sourcesValid = false;
       sourceEvidence.push(evidence);
     }
@@ -2040,6 +2138,31 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         }
       }
     }
+    const candidateRepositoryIds = candidates.flatMap((checkpoint) =>
+      typeof checkpoint.repository_id === "string" ? [checkpoint.repository_id] : []);
+    if (!sameStringSet([...resultRepositories], candidateRepositoryIds)) resultsValid = false;
+    const requiredRepositoryChecks = ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite"];
+    for (const repositoryId of candidateRepositoryIds) {
+      const result = repositoryResults.find((item) => isRecord(item) && item.repository_id === repositoryId);
+      const repositoryEvidence = isRecord(result) && Array.isArray(result.evidence_ids)
+        ? result.evidence_ids.flatMap((evidenceId) => {
+          const matches = typeof evidenceId === "string" ? evidenceById.get(evidenceId) ?? [] : [];
+          const evidence = matches.length === 1 ? matches[0] : undefined;
+          return evidence?.event.type === "construction.evidence-recorded" ? [evidence] : [];
+        })
+        : [];
+      const repositoryChecks = repositoryEvidence.map((evidence) => stringField(evidence.event.data, "check") ?? "");
+      if (!sameStringSet(repositoryChecks, requiredRepositoryChecks)) resultsValid = false;
+    }
+    const selfReviewEvidence = authorityEventIds.flatMap((eventId) => {
+      const evidence = typeof eventId === "string" ? factsById.get(eventId) : undefined;
+      return evidence?.event.type === "construction.evidence-recorded" &&
+        evidence.event.data.check === "code-integration-self-review" && isRecord(evidence.event.data.result) &&
+        evidence.event.data.result.status === "passed" && sameActivityScope(evidence, fact) &&
+        fact.event.caused_by.includes(evidence.event.id) &&
+        order.hasPath(evidence.event.id, fact.event.id) ? [evidence] : [];
+    });
+    if (selfReviewEvidence.length !== 1) resultsValid = false;
     if (!resultsValid) {
       const unitId = factUnitId(fact);
       addIssue({
@@ -2169,11 +2292,30 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const baselines = order.uniqueFacts.filter((candidate) =>
       candidate.event.type === "construction.unit-baseline-selected" && factUnitId(candidate) === unitId,
     );
-    const baseline = baselines.length === 1 && baselines[0] && hasDirectCause(fact, baselines[0]) &&
-      checkpointKey(data.admission_baseline) === checkpointKey(baselines[0].event.data.review_baseline)
+    const baseline = baselines.length === 1 && baselines[0] && hasDirectCause(fact, baselines[0])
       ? baselines[0]
       : undefined;
+    const priorIntegrations = [...validIntegrationAcceptances].flatMap((eventId) => {
+      const candidate = factsById.get(eventId);
+      return candidate && order.hasPath(candidate.event.id, fact.event.id) ? [candidate] : [];
+    });
+    const latestPriorIntegrations = priorIntegrations.filter((candidate) =>
+      !priorIntegrations.some((other) => other.event.id !== candidate.event.id &&
+        order.hasPath(candidate.event.id, other.event.id) && order.hasPath(other.event.id, fact.event.id)),
+    );
+    const latestIntegration = latestPriorIntegrations.length === 1 ? latestPriorIntegrations[0] : undefined;
+    let expectedAdmissionBaseline: unknown;
+    if (latestIntegration?.event.type === "construction.integration-accepted") {
+      expectedAdmissionBaseline = latestIntegration.event.data.candidate_checkpoints;
+    } else if (baseline?.event.type === "construction.unit-baseline-selected") {
+      expectedAdmissionBaseline = baseline.event.data.review_baseline;
+    }
+    const admissionBaselineValid = expectedAdmissionBaseline !== undefined &&
+      (priorIntegrations.length === 0 || latestPriorIntegrations.length === 1) &&
+      checkpointKey(data.admission_baseline) === checkpointKey(expectedAdmissionBaseline) &&
+      (latestIntegration === undefined || hasDirectCause(fact, latestIntegration));
     if (!baseline) related.push(...baselines);
+    if (!admissionBaselineValid) related.push(...latestPriorIntegrations);
     const predecessorProvenance = Array.isArray(data.predecessor_provenance) ? data.predecessor_provenance : [];
     let dependenciesValid = true;
     for (const predecessor of predecessorProvenance) {
@@ -2206,13 +2348,13 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         related.push(...candidates);
       }
     }
-    if (start && baseline && dependenciesValid) {
+    if (start && baseline && dependenciesValid && admissionBaselineValid) {
       validTaskAdmissions.add(fact.event.id);
       continue;
     }
     addIssue({
       code: "invalid-task-admission",
-      message: "Task admission lacks its current Implementation start, unit baseline, or validated predecessor evidence causes",
+      message: "Task admission lacks its current Implementation start, fixed unit Review baseline, current integrated admission baseline, or validated predecessor evidence causes",
       scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId },
       eventIds: [fact.event.id, ...related.map((cause) => cause.event.id)],
     });
@@ -2384,7 +2526,50 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     });
     const retained = retainedAssessments.some((candidate) => hasDirectCause(fact, candidate));
     if (admitted || (admissionCauses.length === 0 && retained)) {
-      validActivityStarts.add(fact.event.id);
+      const requiredPreviousActivity = activity === "code-validation"
+        ? "code-generation"
+        : activity === "code-integration"
+          ? "code-validation"
+          : undefined;
+      const previousCompletions = requiredPreviousActivity
+        ? order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+          validCompletionEvents.has(candidate.event.id) && activityCompletionCurrentAt(candidate, fact) && factUnitId(candidate) === unitId &&
+          stringField(candidate.event.data, "task_id") === taskId &&
+          stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+          stringField(candidate.event.data, "activity") === requiredPreviousActivity &&
+          hasDirectCause(fact, candidate))
+        : [];
+      const previousRetained = requiredPreviousActivity
+        ? retainedAssessments.filter((candidate) => {
+          const assessments = candidate.event.type === "construction.retained-scope-assessed" && Array.isArray(candidate.event.data.assessments)
+            ? candidate.event.data.assessments
+            : [];
+          return assessments.some((assessment) => isRecord(assessment) && assessment.applicable === true &&
+            assessment.task_id === taskId && assessment.activity === requiredPreviousActivity &&
+            checkpointKey(assessment.checkpoints) === checkpointKey(data.checkpoints));
+        })
+        : [];
+      const generationCurrent = activity !== "code-integration" || order.uniqueFacts.some((candidate) =>
+        candidate.event.type === "construction.activity-attempt-completed" && validCompletionEvents.has(candidate.event.id) &&
+        activityCompletionCurrentAt(candidate, fact) && factUnitId(candidate) === unitId &&
+        stringField(candidate.event.data, "task_id") === taskId &&
+        stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+        stringField(candidate.event.data, "activity") === "code-generation" &&
+        previousCompletions.some((previous) => order.hasPath(candidate.event.id, previous.event.id)));
+      const routeValid = requiredPreviousActivity === undefined ||
+        (previousCompletions.length === 1 && checkpointKey(previousCompletions[0]!.event.data.checkpoints) === checkpointKey(data.checkpoints) && generationCurrent) ||
+        (previousRetained.length === 1 && hasDirectCause(fact, previousRetained[0]!) && generationCurrent);
+      if (routeValid) {
+        validActivityStarts.add(fact.event.id);
+        continue;
+      }
+      staleActivityStarts.add(fact.event.id);
+      addIssue({
+        code: "invalid-activity-start",
+        message: "Activity start does not follow exactly one completed predecessor Activity on its output checkpoints",
+        scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId },
+        eventIds: [fact.event.id, ...previousCompletions.map((candidate) => candidate.event.id)],
+      });
       continue;
     }
     if (admissionCauses.length > 0) {

@@ -10,6 +10,8 @@ import { MissionStartup } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
 import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
+import { TaskAdmission, createNodeTaskAdmissionRuntime } from "../../construction/task-admission.js";
+import { ActivityExecution, createNodeActivityExecutionRuntime } from "../../construction/activity-execution.js";
 import { ConstructionLint } from "../../construction/construction-lint.js";
 import { createNodeUnitQueryFileSystem } from "../../construction/unit-queries-runtime.js";
 import { createNodeUnitCreateRecords, machineLocalDate } from "../../construction/unit-create-runtime.js";
@@ -70,7 +72,10 @@ import {
   ConstructionTaskListCommand,
   ConstructionTaskShowCommand,
   ConstructionTaskReadyCommand,
+  ConstructionTaskAdmitCommand,
   ConstructionActivityCommand,
+  ConstructionActivityStartCommand,
+  ConstructionActivityCompleteCommand,
   ConstructionActivityShowCommand,
   ConstructionLintCommand,
   ConstructionUnitCommand,
@@ -119,7 +124,10 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionTaskListCommand,
     ConstructionTaskShowCommand,
     ConstructionTaskReadyCommand,
+    ConstructionTaskAdmitCommand,
     ConstructionActivityCommand,
+    ConstructionActivityStartCommand,
+    ConstructionActivityCompleteCommand,
     ConstructionActivityShowCommand,
     ConstructionLintCommand,
     ConstructionUnitCommand,
@@ -140,8 +148,11 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     MissionCreateCommand,
     {
       provide: AuditContextResolver,
-      useFactory: (projects: ProjectResolver) => new AuditContextResolver(createNodeAuditContextRuntime(projects)),
-      inject: [ProjectResolver],
+      useFactory: (projects: ProjectResolver, queries: ConstructionQueries) => new AuditContextResolver(
+        createNodeAuditContextRuntime(projects, async (unitId, taskId, project) =>
+          (await queries.taskExecutionContext(unitId, taskId, project)).kind === "execution-context"),
+      ),
+      inject: [ProjectResolver, ConstructionQueries],
     },
     {
       provide: AuditQueries,
@@ -255,6 +266,24 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
       provide: ConstructionQueries,
       useFactory: (units: UnitQueries) => new ConstructionQueries(units, createNodeUnitQueryFileSystem()),
       inject: [UnitQueries],
+    },
+    {
+      provide: TaskAdmission,
+      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries) => new TaskAdmission(
+        contexts,
+        queries,
+        createNodeTaskAdmissionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver, ConstructionQueries],
+    },
+    {
+      provide: ActivityExecution,
+      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries) => new ActivityExecution(
+        contexts,
+        queries,
+        createNodeActivityExecutionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver, ConstructionQueries],
     },
     {
       provide: ConstructionLint,

@@ -737,6 +737,46 @@ describe("Construction history projection", () => {
     }, "journal-integration", [unitCreated.id]);
     const started = stageStart("event-stage-start", ids.stageAttempt, ids.unit, "journal-integration", [unitCreated.id]);
     const admission = taskAdmission(ids.unit, "journal-integration", [started.id, baseline.id]);
+    const generationStarted = event("event-generation-start", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-generation",
+      activity_attempt_id: "40000000-0000-4000-8000-000000000012",
+      inputs: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+    }, "journal-integration", [admission.id]);
+    const generationEvidence = event("event-generation-evidence", "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-generation",
+      activity_attempt_id: "40000000-0000-4000-8000-000000000012",
+      evidence_id: "60000000-0000-4000-8000-000000000012",
+      artifact_bindings: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
+      inputs: [],
+      check: "Code Generation output",
+      executor: "agent:generator",
+      result: { status: "passed", summary: "Generated task output" },
+      output_refs: ["opaque: task output"],
+      conditions: [],
+    }, "journal-integration", [generationStarted.id]);
+    const generationCompleted = event("event-generation-completed", "construction.activity-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      activity: "code-generation",
+      activity_attempt_id: "40000000-0000-4000-8000-000000000012",
+      evidence_ids: ["60000000-0000-4000-8000-000000000012"],
+      checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
+    }, "journal-integration", [generationStarted.id, generationEvidence.id]);
     const validationStarted = event("event-validation-start", "construction.activity-attempt-started", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -747,7 +787,7 @@ describe("Construction history projection", () => {
       activity_attempt_id: ids.validationAttempt,
       inputs: [{ reference: "opaque: generated output", purpose: "Generated task output" }],
       checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
-    }, "journal-integration", [admission.id]);
+    }, "journal-integration", [admission.id, generationCompleted.id]);
     const sourceEvidence = event("event-validation-evidence", "construction.evidence-recorded", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -760,7 +800,7 @@ describe("Construction history projection", () => {
       artifact_bindings: [{ artifact_id: ids.artifact, content_version: "generated-version" }],
       checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
       inputs: [{ reference: "opaque: generated output", purpose: "Generated task output" }],
-      check: "Validate generated output",
+      check: "code-validation-independent-review",
       executor: "agent:validator",
       result: { status: "passed", summary: "The task output passed validation" },
       output_refs: ["opaque: task output"],
@@ -786,7 +826,7 @@ describe("Construction history projection", () => {
       activity: "code-integration",
       activity_attempt_id: ids.activityAttempt,
       inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
-      checkpoints: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
     }, "journal-integration", [admission.id, validationCompleted.id]);
     const prepared = event("event-integration-prepared", "construction.integration-prepared", {
       mission_id: missionId,
@@ -796,7 +836,7 @@ describe("Construction history projection", () => {
       task_id: ids.task,
       activity: "code-integration",
       activity_attempt_id: ids.activityAttempt,
-      captured_inputs: [],
+      captured_inputs: [{ repository_id: "repo-main", commit: "generated-commit" }],
       candidate_checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
       task_output_refs: ["opaque: task output"],
       source_evidence_ids: [ids.sourceEvidence],
@@ -814,11 +854,26 @@ describe("Construction history projection", () => {
       artifact_bindings: [{ artifact_id: ids.artifact, content_version: "candidate-version" }],
       checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
       inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
-      check: "Run integration checks",
+      check: "code-integration-typecheck",
       executor: "agent:integrator",
       result: { status: "passed", summary: "Candidate checks passed" },
       output_refs: ["opaque: integration output"],
       conditions: [],
+    }, "journal-integration", [prepared.id]);
+    const integrationBuildEvidence = event("event-integration-build-evidence", "construction.evidence-recorded", {
+      ...integrationEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000013",
+      check: "code-integration-build",
+    }, "journal-integration", [prepared.id]);
+    const integrationSuiteEvidence = event("event-integration-suite-evidence", "construction.evidence-recorded", {
+      ...integrationEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000014",
+      check: "code-integration-full-test-suite",
+    }, "journal-integration", [prepared.id]);
+    const integrationSelfReviewEvidence = event("event-integration-self-review-evidence", "construction.evidence-recorded", {
+      ...integrationEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000015",
+      check: "code-integration-self-review",
     }, "journal-integration", [prepared.id]);
     const accepted = event("event-integration-accepted", "construction.integration-accepted", {
       mission_id: missionId,
@@ -830,9 +885,10 @@ describe("Construction history projection", () => {
       activity_attempt_id: ids.activityAttempt,
       prepared_event_id: prepared.id,
       candidate_checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
-      repository_results: [{ repository_id: "repo-main", evidence_ids: [ids.evidence] }],
-      authority_event_ids: [],
-    }, "journal-integration", [prepared.id, integrationEvidence.id]);
+      repository_results: [{ repository_id: "repo-main", evidence_ids: [ids.evidence, "60000000-0000-4000-8000-000000000013", "60000000-0000-4000-8000-000000000014"] }],
+      authority_event_ids: [integrationSelfReviewEvidence.id],
+    }, "journal-integration", [prepared.id, integrationEvidence.id, integrationBuildEvidence.id,
+      integrationSuiteEvidence.id, integrationSelfReviewEvidence.id]);
     const activityCompleted = event("event-integration-completed", "construction.activity-attempt-completed", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -841,9 +897,10 @@ describe("Construction history projection", () => {
       task_id: ids.task,
       activity: "code-integration",
       activity_attempt_id: ids.activityAttempt,
-      evidence_ids: [ids.evidence],
+      evidence_ids: [ids.evidence, "60000000-0000-4000-8000-000000000013", "60000000-0000-4000-8000-000000000014", "60000000-0000-4000-8000-000000000015"],
       checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
-    }, "journal-integration", [integrationStarted.id, accepted.id, integrationEvidence.id]);
+    }, "journal-integration", [integrationStarted.id, accepted.id, integrationEvidence.id, integrationBuildEvidence.id,
+      integrationSuiteEvidence.id, integrationSelfReviewEvidence.id]);
     const taskCompleted = event("event-task-completed", "construction.task-completed", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -858,12 +915,18 @@ describe("Construction history projection", () => {
       baseline,
       started,
       admission,
+      generationStarted,
+      generationEvidence,
+      generationCompleted,
       validationStarted,
       sourceEvidence,
       validationCompleted,
       integrationStarted,
       prepared,
       integrationEvidence,
+      integrationBuildEvidence,
+      integrationSuiteEvidence,
+      integrationSelfReviewEvidence,
       accepted,
       activityCompleted,
       taskCompleted,
@@ -1048,7 +1111,7 @@ describe("Construction history projection", () => {
       task_id: ids.dependentTask,
       graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
       task_definition_ref: { graph_id: ids.graph, task_id: ids.dependentTask, content_version: "dependent-task-version" },
-      admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      admission_baseline: [{ repository_id: "repo-main", commit: "candidate-commit" }],
       predecessor_provenance: [{
         task_id: ids.task,
         integration_event_id: accepted.id,
@@ -1088,11 +1151,51 @@ describe("Construction history projection", () => {
     expect(dependentActivityAfterRevisionProjection.units[0]?.blocked).toBe(false);
     expect(dependentAfterActivityStart?.state).toBe("blocked");
     expect(dependentAfterActivityStart?.activities.find((activity) => activity.activity === "code-generation")?.state).not.toBe("running");
+    const dependentGenerationStarted = event("event-dependent-generation-started", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      activity: "code-generation",
+      activity_attempt_id: ids.dependentActivityAttempt,
+      inputs: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+    }, "journal-integration", [dependentAdmissionBeforeRevision.id]);
+    const dependentGenerationEvidence = event("event-dependent-generation-evidence", "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      activity: "code-generation",
+      activity_attempt_id: ids.dependentActivityAttempt,
+      evidence_id: "60000000-0000-4000-8000-000000000011",
+      artifact_bindings: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
+      inputs: [],
+      check: "Code Generation output",
+      executor: "agent:generator",
+      result: { status: "passed", summary: "Generated dependent task output" },
+      output_refs: ["opaque: task output"],
+      conditions: [],
+    }, "journal-integration", [dependentGenerationStarted.id]);
+    const dependentGenerationCompleted = event("event-dependent-generation-completed", "construction.activity-attempt-completed", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      activity: "code-generation",
+      activity_attempt_id: ids.dependentActivityAttempt,
+      evidence_ids: ["60000000-0000-4000-8000-000000000011"],
+      checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
+    }, "journal-integration", [dependentGenerationStarted.id, dependentGenerationEvidence.id]);
     const dependentValidationStarted = event("event-dependent-validation-started", "construction.activity-attempt-started", {
       ...validationStarted.data,
       task_id: ids.dependentTask,
       activity_attempt_id: ids.dependentValidationAttempt,
-    }, "journal-integration", [dependentAdmissionBeforeRevision.id]);
+    }, "journal-integration", [dependentAdmissionBeforeRevision.id, dependentGenerationCompleted.id]);
     const dependentValidationEvidence = event("event-dependent-validation-evidence", "construction.evidence-recorded", {
       ...sourceEvidence.data,
       task_id: ids.dependentTask,
@@ -1114,8 +1217,8 @@ describe("Construction history projection", () => {
       activity: "code-integration",
       activity_attempt_id: ids.dependentIntegrationAttempt,
       inputs: [{ reference: "opaque: stale predecessor input", purpose: "Integration input" }],
-      checkpoints: [],
-    }, "journal-integration", [dependentAdmissionBeforeRevision.id]);
+      checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
+    }, "journal-integration", [dependentAdmissionBeforeRevision.id, dependentValidationCompleted.id]);
     const dependentIntegrationPrepared = event("event-dependent-integration-prepared", "construction.integration-prepared", {
       ...prepared.data,
       task_id: ids.dependentTask,
@@ -1132,14 +1235,31 @@ describe("Construction history projection", () => {
       evidence_id: ids.dependentIntegrationEvidence,
       checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
     }, "journal-integration", [dependentIntegrationPrepared.id]);
+    const dependentIntegrationBuildEvidence = event("event-dependent-integration-build-evidence", "construction.evidence-recorded", {
+      ...dependentIntegrationEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000016",
+      check: "code-integration-build",
+    }, "journal-integration", [dependentIntegrationPrepared.id]);
+    const dependentIntegrationSuiteEvidence = event("event-dependent-integration-suite-evidence", "construction.evidence-recorded", {
+      ...dependentIntegrationEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000017",
+      check: "code-integration-full-test-suite",
+    }, "journal-integration", [dependentIntegrationPrepared.id]);
+    const dependentIntegrationSelfReview = event("event-dependent-integration-self-review", "construction.evidence-recorded", {
+      ...dependentIntegrationEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000018",
+      check: "code-integration-self-review",
+    }, "journal-integration", [dependentIntegrationPrepared.id]);
     const dependentIntegrationAccepted = event("event-dependent-integration-accepted", "construction.integration-accepted", {
       ...accepted.data,
       task_id: ids.dependentTask,
       activity_attempt_id: ids.dependentIntegrationAttempt,
       prepared_event_id: dependentIntegrationPrepared.id,
       candidate_checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
-      repository_results: [{ repository_id: "repo-main", evidence_ids: [ids.dependentIntegrationEvidence] }],
-    }, "journal-integration", [dependentIntegrationPrepared.id, dependentIntegrationEvidence.id]);
+      repository_results: [{ repository_id: "repo-main", evidence_ids: [ids.dependentIntegrationEvidence, "60000000-0000-4000-8000-000000000016", "60000000-0000-4000-8000-000000000017"] }],
+      authority_event_ids: [dependentIntegrationSelfReview.id],
+    }, "journal-integration", [dependentIntegrationPrepared.id, dependentIntegrationEvidence.id,
+      dependentIntegrationBuildEvidence.id, dependentIntegrationSuiteEvidence.id, dependentIntegrationSelfReview.id]);
     const dependentCompletionAfterRevision = event("event-dependent-completion-after-revision", "construction.task-completed", {
       ...taskCompleted.data,
       task_id: ids.dependentTask,
@@ -1148,9 +1268,11 @@ describe("Construction history projection", () => {
     const dependentIntegrationAfterRevisionProjection = projectConstruction(collectHistory(missionId, [source(
       "origin://dependent-integration-after-revision",
       "journal-integration",
-      [...records, dependentAdmissionBeforeRevision, dependentValidationStarted, dependentValidationEvidence,
+      [...records, dependentAdmissionBeforeRevision, dependentGenerationStarted, dependentGenerationEvidence,
+        dependentGenerationCompleted, dependentValidationStarted, dependentValidationEvidence,
         dependentValidationCompleted, revisionInteraction, revision, taskEnded, taskReopened,
         dependentIntegrationStarted, dependentIntegrationPrepared, dependentIntegrationEvidence,
+        dependentIntegrationBuildEvidence, dependentIntegrationSuiteEvidence, dependentIntegrationSelfReview,
         dependentIntegrationAccepted, dependentCompletionAfterRevision],
     )]));
     const dependentAfterIntegration = dependentIntegrationAfterRevisionProjection.units[0]?.tasks.find((task) => task.taskId === ids.dependentTask);
@@ -1178,9 +1300,11 @@ describe("Construction history projection", () => {
     const transitiveInvalidationProjection = projectConstruction(collectHistory(missionId, [source(
       "origin://transitive-invalidation",
       "journal-integration",
-      [...records, dependentAdmissionBeforeRevision, dependentValidationStarted, dependentValidationEvidence,
+      [...records, dependentAdmissionBeforeRevision, dependentGenerationStarted, dependentGenerationEvidence,
+        dependentGenerationCompleted, dependentValidationStarted, dependentValidationEvidence,
         dependentValidationCompleted, revisionInteraction, revision, taskEnded, taskReopened,
         dependentIntegrationStarted, dependentIntegrationPrepared, dependentIntegrationEvidence,
+        dependentIntegrationBuildEvidence, dependentIntegrationSuiteEvidence, dependentIntegrationSelfReview,
         dependentIntegrationAccepted, dependentCompletionAfterRevision, thirdTaskAdmissionAfterInvalidation],
     )]));
     expect(transitiveInvalidationProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-admission");
@@ -1232,8 +1356,8 @@ describe("Construction history projection", () => {
       activity: "code-integration",
       activity_attempt_id: ids.resumeActivityAttempt,
       inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
-      checkpoints: [],
-    }, "journal-integration", [admission.id, resumeTaskReopened.id]);
+      checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
+    }, "journal-integration", [admission.id, validationCompleted.id, resumeTaskReopened.id]);
     const resumeIntegrationWaiting = event("event-resume-integration-waiting", "construction.activity-waiting", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -1253,7 +1377,7 @@ describe("Construction history projection", () => {
       activity: "code-integration",
       activity_attempt_id: ids.resumeActivityAttempt,
       inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
-      checkpoints: [],
+      checkpoints: [{ repository_id: "repo-main", commit: "generated-commit" }],
     }, "journal-integration", [resumeIntegrationWaiting.id]);
     const resumePrepared = event("event-resume-integration-prepared", "construction.integration-prepared", {
       mission_id: missionId,
@@ -1263,7 +1387,7 @@ describe("Construction history projection", () => {
       task_id: ids.task,
       activity: "code-integration",
       activity_attempt_id: ids.resumeActivityAttempt,
-      captured_inputs: [],
+      captured_inputs: [{ repository_id: "repo-main", commit: "generated-commit" }],
       candidate_checkpoints: [{ repository_id: "repo-main", commit: "resumed-candidate" }],
       task_output_refs: ["opaque: task output"],
       source_evidence_ids: [ids.sourceEvidence],
@@ -1281,11 +1405,26 @@ describe("Construction history projection", () => {
       artifact_bindings: [{ artifact_id: ids.artifact, content_version: "resumed-candidate-version" }],
       checkpoints: [{ repository_id: "repo-main", commit: "resumed-candidate" }],
       inputs: [{ reference: "opaque: candidate input", purpose: "Candidate input" }],
-      check: "Run checks after resuming Integration",
+      check: "code-integration-typecheck",
       executor: "agent:integrator",
       result: { status: "passed", summary: "The resumed candidate passed" },
       output_refs: ["opaque: resumed integration output"],
       conditions: [],
+    }, "journal-integration", [resumePrepared.id]);
+    const resumeBuildEvidence = event("event-resume-integration-build-evidence", "construction.evidence-recorded", {
+      ...resumeEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000019",
+      check: "code-integration-build",
+    }, "journal-integration", [resumePrepared.id]);
+    const resumeSuiteEvidence = event("event-resume-integration-suite-evidence", "construction.evidence-recorded", {
+      ...resumeEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000020",
+      check: "code-integration-full-test-suite",
+    }, "journal-integration", [resumePrepared.id]);
+    const resumeSelfReview = event("event-resume-integration-self-review", "construction.evidence-recorded", {
+      ...resumeEvidence.data,
+      evidence_id: "60000000-0000-4000-8000-000000000021",
+      check: "code-integration-self-review",
     }, "journal-integration", [resumePrepared.id]);
     const resumeAccepted = event("event-resume-integration-accepted", "construction.integration-accepted", {
       mission_id: missionId,
@@ -1297,9 +1436,10 @@ describe("Construction history projection", () => {
       activity_attempt_id: ids.resumeActivityAttempt,
       prepared_event_id: resumePrepared.id,
       candidate_checkpoints: [{ repository_id: "repo-main", commit: "resumed-candidate" }],
-      repository_results: [{ repository_id: "repo-main", evidence_ids: [ids.resumeEvidence] }],
-      authority_event_ids: [],
-    }, "journal-integration", [resumePrepared.id, resumeEvidence.id]);
+      repository_results: [{ repository_id: "repo-main", evidence_ids: [ids.resumeEvidence, "60000000-0000-4000-8000-000000000019", "60000000-0000-4000-8000-000000000020"] }],
+      authority_event_ids: [resumeSelfReview.id],
+    }, "journal-integration", [resumePrepared.id, resumeEvidence.id, resumeBuildEvidence.id,
+      resumeSuiteEvidence.id, resumeSelfReview.id]);
     const resumeCompleted = event("event-resume-integration-completed", "construction.activity-attempt-completed", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -1308,9 +1448,10 @@ describe("Construction history projection", () => {
       task_id: ids.task,
       activity: "code-integration",
       activity_attempt_id: ids.resumeActivityAttempt,
-      evidence_ids: [ids.resumeEvidence],
+      evidence_ids: [ids.resumeEvidence, "60000000-0000-4000-8000-000000000019", "60000000-0000-4000-8000-000000000020", "60000000-0000-4000-8000-000000000021"],
       checkpoints: [{ repository_id: "repo-main", commit: "resumed-candidate" }],
-    }, "journal-integration", [resumeIntegration.id, resumeAccepted.id, resumeEvidence.id]);
+    }, "journal-integration", [resumeIntegration.id, resumeAccepted.id, resumeEvidence.id, resumeBuildEvidence.id,
+      resumeSuiteEvidence.id, resumeSelfReview.id]);
     const resumeTaskCompleted = event("event-resume-task-completed", "construction.task-completed", {
       mission_id: missionId,
       unit_id: ids.unit,
@@ -1334,6 +1475,9 @@ describe("Construction history projection", () => {
         resumeIntegration,
         resumePrepared,
         resumeEvidence,
+        resumeBuildEvidence,
+        resumeSuiteEvidence,
+        resumeSelfReview,
         resumeAccepted,
         resumeCompleted,
         resumeTaskCompleted,
@@ -1433,7 +1577,7 @@ describe("Construction history projection", () => {
       task_id: ids.dependentTask,
       graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
       task_definition_ref: { graph_id: ids.graph, task_id: ids.dependentTask, content_version: "dependent-task-version" },
-      admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      admission_baseline: [{ repository_id: "repo-main", commit: "candidate-commit" }],
       predecessor_provenance: [{
         task_id: ids.task,
         integration_event_id: accepted.id,
@@ -1461,7 +1605,7 @@ describe("Construction history projection", () => {
         activity: "code-integration",
         original_stage_attempt_id: ids.stageAttempt,
         original_activity_attempt_id: ids.activityAttempt,
-        original_evidence_ids: [ids.evidence],
+        original_evidence_ids: [ids.evidence, "60000000-0000-4000-8000-000000000013", "60000000-0000-4000-8000-000000000014"],
         applicable: true,
         reason: "The predecessor Integration output remains applicable under the new parent",
         checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
@@ -1502,7 +1646,7 @@ describe("Construction history projection", () => {
           activity: "code-integration",
           original_stage_attempt_id: ids.stageAttempt,
           original_activity_attempt_id: ids.dependentIntegrationAttempt,
-          original_evidence_ids: [ids.dependentIntegrationEvidence],
+          original_evidence_ids: [ids.dependentIntegrationEvidence, "60000000-0000-4000-8000-000000000016", "60000000-0000-4000-8000-000000000017"],
           applicable: true,
           reason: "The dependent Integration output remains applicable",
           checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
@@ -1518,7 +1662,7 @@ describe("Construction history projection", () => {
         task_id: ids.thirdTask,
         graph_ref: { graph_id: ids.graph, content_version: "graph-version-1" },
         task_definition_ref: { graph_id: ids.graph, task_id: ids.thirdTask, content_version: "third-task-version" },
-        admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+        admission_baseline: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
         predecessor_provenance: [{
           task_id: ids.dependentTask,
           integration_event_id: dependentIntegrationAccepted.id,
@@ -1529,16 +1673,19 @@ describe("Construction history projection", () => {
         dependentIntegrationAccepted.id, retainedAssessment]);
     const thirdTaskAdmissionWithoutAncestorRetention = thirdTaskAdmissionAfterRestart(
       "event-third-task-admission-without-ancestor-retention", retainedDependentIntegrationOnly.id);
-    const transitiveRetentionMissingProjection = projectConstruction(collectHistory(missionId, [source(
+    const transitiveRetentionHistory = collectHistory(missionId, [source(
       "origin://transitive-retention-missing",
       "journal-integration",
-      [...records, dependentAdmissionBeforeRevision, dependentValidationStarted, dependentValidationEvidence,
+      [...records, dependentAdmissionBeforeRevision, dependentGenerationStarted, dependentGenerationEvidence,
+        dependentGenerationCompleted, dependentValidationStarted, dependentValidationEvidence,
         dependentValidationCompleted, dependentIntegrationStarted, dependentIntegrationPrepared,
-        dependentIntegrationEvidence, dependentIntegrationAccepted, dependentCompletionAfterRevision,
+        dependentIntegrationEvidence, dependentIntegrationBuildEvidence, dependentIntegrationSuiteEvidence,
+        dependentIntegrationSelfReview, dependentIntegrationAccepted, dependentCompletionAfterRevision,
         revisionInteraction, revision, taskEnded, taskReopened, parentRevisionInteraction, parentRevision,
         parentEnded, parentReopened, nextImplementationStarted, retainedDependentIntegrationOnly,
         thirdTaskAdmissionWithoutAncestorRetention],
-    )]));
+    )]);
+    const transitiveRetentionMissingProjection = projectConstruction(transitiveRetentionHistory);
     expect(transitiveRetentionMissingProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-admission");
     expect(transitiveRetentionMissingProjection.units[0]?.blocked).toBe(true);
     const retainedDependentAndAncestor = event("event-retained-dependent-and-ancestor", "construction.retained-scope-assessed", {
@@ -1552,7 +1699,7 @@ describe("Construction history projection", () => {
           activity: "code-integration",
           original_stage_attempt_id: ids.stageAttempt,
           original_activity_attempt_id: ids.activityAttempt,
-          original_evidence_ids: [ids.evidence],
+          original_evidence_ids: [ids.evidence, "60000000-0000-4000-8000-000000000013", "60000000-0000-4000-8000-000000000014"],
           applicable: true,
           reason: "The predecessor Integration output remains applicable",
           checkpoints: [{ repository_id: "repo-main", commit: "candidate-commit" }],
@@ -1562,7 +1709,7 @@ describe("Construction history projection", () => {
           activity: "code-integration",
           original_stage_attempt_id: ids.stageAttempt,
           original_activity_attempt_id: ids.dependentIntegrationAttempt,
-          original_evidence_ids: [ids.dependentIntegrationEvidence],
+          original_evidence_ids: [ids.dependentIntegrationEvidence, "60000000-0000-4000-8000-000000000016", "60000000-0000-4000-8000-000000000017"],
           applicable: true,
           reason: "The dependent Integration output remains applicable with its retained input",
           checkpoints: [{ repository_id: "repo-main", commit: "dependent-candidate" }],
@@ -1575,9 +1722,11 @@ describe("Construction history projection", () => {
     const transitiveRetentionCompleteProjection = projectConstruction(collectHistory(missionId, [source(
       "origin://transitive-retention-complete",
       "journal-integration",
-      [...records, dependentAdmissionBeforeRevision, dependentValidationStarted, dependentValidationEvidence,
+      [...records, dependentAdmissionBeforeRevision, dependentGenerationStarted, dependentGenerationEvidence,
+        dependentGenerationCompleted, dependentValidationStarted, dependentValidationEvidence,
         dependentValidationCompleted, dependentIntegrationStarted, dependentIntegrationPrepared,
-        dependentIntegrationEvidence, dependentIntegrationAccepted, dependentCompletionAfterRevision,
+        dependentIntegrationEvidence, dependentIntegrationBuildEvidence, dependentIntegrationSuiteEvidence,
+        dependentIntegrationSelfReview, dependentIntegrationAccepted, dependentCompletionAfterRevision,
         revisionInteraction, revision, taskEnded, taskReopened, parentRevisionInteraction, parentRevision,
         parentEnded, parentReopened, nextImplementationStarted, retainedDependentAndAncestor,
         thirdTaskAdmissionWithAncestorRetention],
@@ -1617,9 +1766,9 @@ describe("Construction history projection", () => {
     )]));
     const restartedIntegration = parentActivityRestartProjection.units[0]?.tasks.find((task) => task.taskId === ids.task)
       ?.activities.find((activity) => activity.activity === "code-integration");
-    expect(parentActivityRestartProjection.projectionIssues).toEqual([]);
-    expect(restartedIntegration?.currentAttemptId).toBe(ids.resumeActivityAttempt);
-    expect(restartedIntegration?.attempts.find((attempt) => attempt.attemptId === ids.activityAttempt)?.state).toBe("ended_by_revision");
+    expect(parentActivityRestartProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-activity-start");
+    expect(restartedIntegration?.currentAttemptId).toBe(ids.activityAttempt);
+    expect(restartedIntegration?.attempts.find((attempt) => attempt.attemptId === ids.activityAttempt)?.state).toBe("completed");
     const lateParentScopeProjection = projectConstruction(collectHistory(missionId, [source(
       "origin://late-parent-scope-transition",
       "journal-integration",
@@ -1631,8 +1780,8 @@ describe("Construction history projection", () => {
       ?.activities.find((activity) => activity.activity === "code-integration");
     expect(lateParentScopeProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-revision-transition");
     expect(lateParentScopeProjection.units[0]?.blocked).toBe(true);
-    expect(lateParentIntegration?.currentAttemptId).toBe(ids.resumeActivityAttempt);
-    expect(lateParentIntegration?.attempts.find((attempt) => attempt.attemptId === ids.resumeActivityAttempt)?.state).toBe("running");
+    expect(lateParentIntegration?.currentAttemptId).toBe(ids.activityAttempt);
+    expect(lateParentIntegration?.attempts.find((attempt) => attempt.attemptId === ids.resumeActivityAttempt)).toBeUndefined();
     const lateActivityStart = event("event-late-activity-start", "construction.activity-attempt-started", {
       mission_id: missionId,
       unit_id: ids.unit,
