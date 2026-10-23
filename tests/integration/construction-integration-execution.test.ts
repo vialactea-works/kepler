@@ -380,6 +380,26 @@ describe("Construction Integration execution", () => {
     expect(released).toMatchObject({ kind: "success", data: { aborted: true, lock_released: true } });
   });
 
+  it("continues preparation and release with a new CLI process identity", async () => {
+    const fixture = await setup();
+    const firstProcess = fixture.execution(41002);
+    const secondProcess = fixture.execution(41006);
+    const acquired = await firstProcess.lock(fixture.selectors);
+    expect(acquired.kind).toBe("success");
+    if (acquired.kind !== "success") return;
+
+    const prepared = await secondProcess.prepare(fixture.selectors, acquired.data.lock_token as string, {
+      captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+    });
+    expect(prepared.kind).toBe("success");
+    if (prepared.kind !== "success") return;
+
+    const released = await secondProcess.release(fixture.selectors, acquired.data.lock_token as string);
+
+    expect(released).toMatchObject({ kind: "success", data: { aborted: true, lock_released: true } });
+  });
+
   it("rejects a candidate that omits the current Generation output from its ancestry", async () => {
     const fixture = await setup();
     const execution = fixture.execution(41003);
