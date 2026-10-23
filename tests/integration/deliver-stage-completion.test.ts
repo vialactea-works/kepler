@@ -5,7 +5,7 @@ import * as Os from "node:os";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../../packages/cli/src/audit/context.js";
-import { CONSTRUCTION_PHASE, CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, validateConstructionEvent, type ConstructionEventRecord, type StageAttemptId } from "../../packages/cli/src/construction/events.js";
+import { CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION, CONSTRUCTION_PHASE, CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, validateConstructionEvent, type ConstructionEventRecord, type DeliverOutcome, type StageAttemptId } from "../../packages/cli/src/construction/events.js";
 import { DeliverStageCompletion, createNodeDeliverStageCompletionRuntime } from "../../packages/cli/src/construction/deliver-stage-completion.js";
 import { missionWorkspaceKey } from "../../packages/cli/src/construction/mission-workspace.js";
 import type { ScopeSelectors } from "../../packages/cli/src/cli/scope-selectors.js";
@@ -63,7 +63,7 @@ const record = (event: ConstructionEventRecord) => ({
   issues: [],
 });
 
-const deliverySource = (unitId: string, artifactId: string): string => `---
+const deliverySource = (unitId: string, artifactId: string, outcome: DeliverOutcome): string => `---
 id: ${artifactId}
 type: delivery-plan
 schema_version: 3
@@ -74,11 +74,11 @@ author: Ada Lovelace <ada@example.com>
 
 ## Outcome and destination
 
-Hand the reviewed repository to the requester with the selected source checkpoint and acceptance conditions identified.
+${outcome === "repository-handoff" ? "Hand the reviewed repository to the requester with the selected source checkpoint and acceptance conditions identified." : "Deploy the reviewed material to the staging environment with the selected source checkpoint and acceptance conditions identified."}
 
 ## Operations and prerequisites
 
-No external operation is required for a repository handoff. The requester receives the reviewed material and delivery references.
+${outcome === "repository-handoff" ? "No external operation is required for a repository handoff. The requester receives the reviewed material and delivery references." : "Deploy the reviewed material to the staging environment after confirming the required permission."}
 
 ## Verification and recovery
 
@@ -86,7 +86,7 @@ Verify that the recipient can identify the reviewed repository checkpoint and re
 
 ## Decisions and open questions
 
-The repository handoff is the agreed outcome. No consequential delivery choice remains open.
+The ${outcome} outcome is the agreed result. No consequential delivery choice remains open.
 `;
 
 interface DeliverFixture {
@@ -100,17 +100,27 @@ interface DeliverFixture {
   readonly reviewCheckpoint: readonly { readonly repository_id: string; readonly commit: string }[];
   readonly currentCheckpoint: readonly { readonly repository_id: string; readonly commit: string }[];
   readonly artifactBindings: readonly { readonly artifact_id: string; readonly content_version: string }[];
-  readonly evidenceIds: Readonly<Record<string, string>>;
+  readonly evidenceIds: {
+    readonly preparation: string;
+    readonly selfReview: string;
+    readonly operation?: string;
+    readonly verification: string;
+    readonly handoff: string;
+  };
   readonly evidenceEvents: readonly ConstructionEventRecord[];
-  readonly operationEvidenceId: string;
+  readonly operationEvidenceId?: string;
   readonly operationRequestEventId: string;
+  readonly outcome: DeliverOutcome;
+  readonly requestedOutcome: string;
+  readonly destination: string;
+  readonly recipient: string;
   readonly approvalEventId?: string;
   readonly service: DeliverStageCompletion;
   readonly historyDirectory: string;
   readonly cleanup: () => Promise<void>;
 }
 
-const createDeliverFixture = async (options: { readonly handoffIncludesVerification?: boolean; readonly withApproval?: boolean; readonly verificationFollowsOperation?: boolean } = {}): Promise<DeliverFixture> => {
+const createDeliverFixture = async (options: { readonly handoffIncludesVerification?: boolean; readonly withApproval?: boolean; readonly verificationFollowsOperation?: boolean; readonly verificationFollowsOutcome?: boolean; readonly outcome?: DeliverOutcome } = {}): Promise<DeliverFixture> => {
   const parent = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-deliver-completion-"));
   temporaryRoots.push(parent);
   const root = Path.join(parent, "project");
@@ -131,7 +141,13 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
   const unitRoot = Path.join(root, persistedDirectory);
   await Fs.mkdir(unitRoot, { recursive: true });
   const deliveryArtifactId = randomUUID();
-  const source = deliverySource(unitId, deliveryArtifactId);
+  const outcome: DeliverOutcome = options.outcome ?? "deployment";
+  const requestedOutcome = outcome === "repository-handoff"
+    ? "Hand the reviewed repository to the requester with its retained source checkpoint."
+    : "Deploy the reviewed material to the approved staging target.";
+  const destination = outcome === "repository-handoff" ? "repository:main" : "environment:staging";
+  const recipient = outcome === "repository-handoff" ? "Requester" : "Release operator";
+  const source = deliverySource(unitId, deliveryArtifactId, outcome);
   await Fs.writeFile(Path.join(unitRoot, "delivery.md"), source, "utf8");
   git(root, "add", persistedDirectory);
   git(root, "commit", "-q", "-m", "Record delivery instructions");
@@ -332,13 +348,19 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
     stage: "deliver",
     stage_attempt_id: attemptId,
     participants: ["Requester"],
-    content: "Deploy the reviewed material to the approved target.",
-    references: ["request:deployment-target"],
+    content: requestedOutcome,
+    references: ["request:delivery-outcome"],
+    delivery_outcome: { outcome, requested_outcome: requestedOutcome, destination, recipient },
   }, [start.id]);
   allEvents.push(operationRequestEvent);
-  const operation = makeEvidence("deliver-operation-result", [start.id, operationRequestEvent.id]);
-  const verification = makeEvidence("deliver-outcome-verification", options.verificationFollowsOperation === false ? [start.id] : [start.id, operation.event.id]);
-  const handoffCauses = [start.id, reviewCompletion.id, preparation.event.id, selfReview.event.id, operation.event.id,
+  const operation = outcome === "repository-handoff" ? undefined : makeEvidence("deliver-operation-result", [start.id, operationRequestEvent.id]);
+  const verificationCauses = [
+    start.id,
+    ...(options.verificationFollowsOutcome === false ? [] : [operationRequestEvent.id]),
+    ...(options.verificationFollowsOperation === false || !operation ? [] : [operation.event.id]),
+  ];
+  const verification = makeEvidence("deliver-outcome-verification", verificationCauses);
+  const handoffCauses = [start.id, preparation.event.id, selfReview.event.id, ...(operation ? [operation.event.id] : []),
     ...(options.handoffIncludesVerification === false ? [] : [verification.event.id])];
   const handoff = makeEvidence("deliver-recipient-handoff", handoffCauses);
   const approvalEvent = options.withApproval ? createEvent("construction.approval-recorded", {
@@ -353,7 +375,7 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
     decision_reference: "approval:repository-handoff",
   }, [start.id]) : undefined;
   if (approvalEvent) allEvents.push(approvalEvent);
-  const evidenceFacts = [preparation.event, selfReview.event, operationRequestEvent, operation.event, verification.event, handoff.event].map(fact);
+  const evidenceFacts = [preparation.event, selfReview.event, operationRequestEvent, ...(operation ? [operation.event] : []), verification.event, handoff.event].map(fact);
   const factHistory = allEvents.map(record);
   const unit = {
     unitId,
@@ -392,13 +414,17 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
     evidenceIds: {
       preparation: preparation.evidenceId,
       selfReview: selfReview.evidenceId,
-      operation: operation.evidenceId,
+      ...(operation ? { operation: operation.evidenceId } : {}),
       verification: verification.evidenceId,
       handoff: handoff.evidenceId,
     },
     evidenceEvents: evidenceFacts.filter((item) => item.event.type === "construction.evidence-recorded").map((item) => item.event),
-    operationEvidenceId: operation.evidenceId,
+    ...(operation ? { operationEvidenceId: operation.evidenceId } : {}),
     operationRequestEventId: operationRequestEvent.id,
+    outcome,
+    requestedOutcome,
+    destination,
+    recipient,
     ...(approvalEvent ? { approvalEventId: approvalEvent.id } : {}),
     service,
     historyDirectory,
@@ -408,26 +434,27 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
 
 const deliveryRequest = (fixture: DeliverFixture, operationStatus: "succeeded" | "partial" = "succeeded") => ({
   review_completion_event_id: fixture.reviewCompletionId,
-  outcome: "deployment",
-  requested_outcome: "Deploy the reviewed material to the approved target.",
-  destination: "environment:staging",
-  recipient: "Release operator",
+  outcome_request_event_id: fixture.operationRequestEventId,
+  outcome: fixture.outcome,
+  requested_outcome: fixture.requestedOutcome,
+  destination: fixture.destination,
+  recipient: fixture.recipient,
   artifact_bindings: fixture.artifactBindings,
   reviewed_checkpoints: fixture.reviewCheckpoint,
   preparation_evidence_id: fixture.evidenceIds.preparation,
   self_review_evidence_id: fixture.evidenceIds.selfReview,
-  operation_results: [{
+  operation_results: fixture.operationEvidenceId ? [{
     operation: "Deploy the reviewed material",
     status: operationStatus,
     evidence_id: fixture.operationEvidenceId,
     source_checkpoints: fixture.reviewCheckpoint,
     authority: { kind: "requester-instruction", event_id: fixture.operationRequestEventId },
-  }],
+  }] : [],
   verification_evidence_ids: [fixture.evidenceIds.verification],
   handoff_evidence_id: fixture.evidenceIds.handoff,
   additional_review: { requested: false },
   approval_required: false,
-  handoff: { status: "ready", summary: "The recipient received the actual deployment reference, evidence, and recovery information." },
+  handoff: { status: "ready", summary: fixture.outcome === "repository-handoff" ? "The requester received the reviewed repository and retained evidence." : "The recipient received the actual deployment reference, evidence, and recovery information." },
 });
 
 afterEach(async () => {
@@ -479,9 +506,20 @@ describe("Deliver stage completion", () => {
     expect(validateConstructionEvent(records[0]).status).toBe("valid");
     expect(records[0]).toMatchObject({
       type: "construction.stage-attempt-completed",
-      event_version: CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
-      data: { stage: "deliver", deliver_assessment: { outcome: "deployment" } },
+      event_version: CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION,
+      data: { stage: "deliver", deliver_assessment: { outcome: "deployment", outcome_request_event_id: fixture.operationRequestEventId } },
     });
+  });
+
+  it("rejects an unfinished deployment when the assessment relabels the requester-selected outcome as a handoff", async () => {
+    const fixture = await createDeliverFixture({ outcome: "deployment" });
+    const request = { ...deliveryRequest(fixture), outcome: "repository-handoff", operation_results: [] };
+    const before = (await Fs.readdir(fixture.historyDirectory)).sort();
+
+    const result = await fixture.service.execute(fixture.selectors, request);
+
+    expect(result).toMatchObject({ kind: "failed", data: { code: "deliver_outcome_request_invalid" } });
+    expect((await Fs.readdir(fixture.historyDirectory)).sort()).toEqual(before);
   });
 
   it("rejects an operation that identifies source material newer than the reviewed checkpoint", async () => {
@@ -506,6 +544,16 @@ describe("Deliver stage completion", () => {
     expect((await Fs.readdir(fixture.historyDirectory)).sort()).toEqual(before);
   });
 
+  it("rejects repository-handoff verification that predates the selected outcome", async () => {
+    const fixture = await createDeliverFixture({ outcome: "repository-handoff", verificationFollowsOutcome: false });
+    const before = (await Fs.readdir(fixture.historyDirectory)).sort();
+
+    const result = await fixture.service.execute(fixture.selectors, deliveryRequest(fixture));
+
+    expect(result).toMatchObject({ kind: "failed", data: { code: "deliver_verification_provenance_invalid" } });
+    expect((await Fs.readdir(fixture.historyDirectory)).sort()).toEqual(before);
+  });
+
   it("keeps a partial deployment incomplete and does not append a completion", async () => {
     const fixture = await createDeliverFixture();
     const before = (await Fs.readdir(fixture.historyDirectory)).sort();
@@ -519,7 +567,8 @@ describe("Deliver stage completion", () => {
   it("rejects an operation whose requester authority is absent from current history", async () => {
     const fixture = await createDeliverFixture();
     const request = deliveryRequest(fixture);
-    request.operation_results[0]!.authority.event_id = randomUUID();
+    const authority = request.operation_results[0]!.authority;
+    if (authority.kind === "requester-instruction") authority.event_id = randomUUID();
     const before = (await Fs.readdir(fixture.historyDirectory)).sort();
 
     const result = await fixture.service.execute(fixture.selectors, request);
@@ -541,7 +590,7 @@ describe("Deliver stage completion", () => {
   });
 
   it("completes a repository handoff with its applicable requester approval", async () => {
-    const fixture = await createDeliverFixture({ withApproval: true });
+    const fixture = await createDeliverFixture({ withApproval: true, outcome: "repository-handoff" });
     const request = {
       ...deliveryRequest(fixture),
       outcome: "repository-handoff",
@@ -558,7 +607,7 @@ describe("Deliver stage completion", () => {
   });
 
   it("rejects a recipient handoff that omits outcome-verification provenance", async () => {
-    const fixture = await createDeliverFixture({ handoffIncludesVerification: false });
+    const fixture = await createDeliverFixture({ handoffIncludesVerification: false, outcome: "repository-handoff" });
     const request = { ...deliveryRequest(fixture), outcome: "repository-handoff", operation_results: [] };
     const before = (await Fs.readdir(fixture.historyDirectory)).sort();
 
@@ -569,7 +618,7 @@ describe("Deliver stage completion", () => {
   });
 
   it("requires the applicable approval record when the typed assessment says approval is required", async () => {
-    const fixture = await createDeliverFixture();
+    const fixture = await createDeliverFixture({ outcome: "repository-handoff" });
     const request = {
       ...deliveryRequest(fixture),
       outcome: "repository-handoff",

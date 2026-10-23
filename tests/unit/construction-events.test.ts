@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION,
   CONSTRUCTION_EVENT_REQUIRED_FIELDS,
   CONSTRUCTION_EVENT_TYPES,
   CONSTRUCTION_PHASE,
@@ -72,7 +73,7 @@ const payload = (type: (typeof CONSTRUCTION_EVENT_TYPES)[number]): Record<string
     implementation_assessment: { assessment_event_id: identities.revision },
   };
   if (type === "construction.stage-attempt-ended-by-revision") return { ...stage, revision_id: identities.revision, reason: "Authorized revision" };
-  if (type === "construction.stage-reopened") return { ...base, stage: "implementation", revision_id: identities.revision, reason: "Authorized revision" };
+  if (type === "construction.stage-reopened") return { ...stage, revision_id: identities.revision, reason: "Authorized revision" };
   if (type === "construction.task-admitted") {
     return {
       ...task,
@@ -270,6 +271,26 @@ describe("Construction event contracts", () => {
       ...deliverEvent,
       data: { ...deliverEvent.data, deliver_assessment: { ...deliver, approval_required: true } },
     }).status).toBe("invalid");
+    const currentDeliver = {
+      ...deliver,
+      outcome_request_event_id: identities.graph,
+      operation_results: [{
+        ...deliver.operation_results[0],
+        authority: { kind: "project-authority", reference: "release-policy:stable" },
+      }],
+    };
+    const currentDeliverEvent = envelope("construction.stage-attempt-completed", {
+      ...stage,
+      stage: "deliver",
+      evidence_ids: [identities.evidence, identities.activityAttempt, identities.revision, identities.graph, identities.artifact],
+      checkpoints: [checkpoint],
+      deliver_assessment: currentDeliver,
+    }, CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION);
+    expect(validateConstructionEvent(currentDeliverEvent).status).toBe("valid");
+    expect(validateConstructionEvent({
+      ...currentDeliverEvent,
+      data: { ...currentDeliverEvent.data, deliver_assessment: { ...currentDeliver, outcome_request_event_id: undefined } },
+    }).status).toBe("invalid");
   });
 
   it("rejects each catalog event when any declared required payload field is absent", () => {
@@ -346,7 +367,10 @@ describe("Construction event contracts", () => {
     }
   });
 
-  it("requires evidence and approval to keep their applicable attempt scope", () => {
+  it("requires stage reopens, evidence, and approval to name their applicable attempt scope", () => {
+    const reopened = payload("construction.stage-reopened");
+    delete reopened.stage_attempt_id;
+    expect(validateConstructionEvent(envelope("construction.stage-reopened", reopened)).status).toBe("invalid");
     const evidence = payload("construction.evidence-recorded");
     delete evidence.stage_attempt_id;
     expect(validateConstructionEvent(envelope("construction.evidence-recorded", evidence)).status).toBe("invalid");

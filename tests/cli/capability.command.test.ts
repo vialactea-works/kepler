@@ -335,6 +335,7 @@ describe("v3 root command tree", () => {
     };
     const deliverRequest = {
       review_completion_event_id: "10000000-0000-4000-8000-000000000002",
+      outcome_request_event_id: "10000000-0000-4000-8000-000000000003",
       outcome: "repository-handoff",
       requested_outcome: "Hand the reviewed repository to the recipient",
       destination: "repository:main",

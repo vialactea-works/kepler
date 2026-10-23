@@ -1378,6 +1378,51 @@ describe("Construction history projection", () => {
       revision_id: ids.nextRevision,
       reason: "Open the new Implementation parent",
     }, "journal-integration", [parentEnded.id, parentRevision.id]);
+    const parentReopenedWithoutAttempt = event("event-parent-reopened-without-attempt", "construction.stage-reopened", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      revision_id: ids.nextRevision,
+      reason: "Omit the ended Implementation attempt",
+    }, "journal-integration", [parentEnded.id, parentRevision.id]);
+    const missingParentAttemptHistory = collectHistory(missionId, [source(
+      "origin://parent-reopen-without-attempt",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopenedWithoutAttempt],
+    )]);
+    const missingParentAttemptProjection = projectConstruction(missingParentAttemptHistory);
+    expect(missingParentAttemptProjection.historyIssues.map((issue) => issue.code)).toContain("invalid-event");
+    expect(missingParentAttemptProjection.units[0]?.blocked).toBe(true);
+    const parentReopenedForWrongAttempt = event("event-parent-reopened-for-wrong-attempt", "construction.stage-reopened", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.nextStageAttempt,
+      revision_id: ids.nextRevision,
+      reason: "Target a different ended Implementation attempt",
+    }, "journal-integration", [parentEnded.id, parentRevision.id]);
+    const wrongParentAttemptProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://parent-reopen-wrong-attempt",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopenedForWrongAttempt],
+    )]));
+    expect(wrongParentAttemptProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-revision-transition");
+    expect(wrongParentAttemptProjection.units[0]?.blocked).toBe(true);
+    const parentReopenedWithoutEndCause = event("event-parent-reopened-without-end-cause", "construction.stage-reopened", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      revision_id: ids.nextRevision,
+      reason: "Omit the matching revision-end event as a direct cause",
+    }, "journal-integration", [parentRevision.id]);
+    const missingEndCauseProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://parent-reopen-without-end-cause",
+      "journal-integration",
+      [...records, parentRevisionInteraction, parentRevision, parentEnded, parentReopenedWithoutEndCause],
+    )]));
+    expect(missingEndCauseProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-revision-transition");
+    expect(missingEndCauseProjection.units[0]?.blocked).toBe(true);
     const nextImplementationStarted = stageStart("event-next-implementation-start", ids.nextStageAttempt, ids.unit,
       "journal-integration", [parentReopened.id]);
     const crossParentAdmission = (id: string, causedBy: readonly string[]) => event(id, "construction.task-admitted", {

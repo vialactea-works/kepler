@@ -2,12 +2,15 @@ import {
   CONSTRUCTION_ACTIVITIES,
   CONSTRUCTION_STAGES,
   CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
+  CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION,
   isActivityAttemptCompletedData,
   isImplementationCompletionAssessedData,
   isRetainedScopeAssessment,
   isRetainedScopeAssessedData,
   isUnitOfWorkReviewCompletionRecord,
   isDeliverCompletionRecord,
+  isLegacyDeliverCompletionRecord,
+  isDeliverOutcomeSelection,
   type ActivityAttemptCompletedData,
   type ActivityAttemptId,
   type ConstructionActivity,
@@ -370,6 +373,7 @@ const reduceAttemptScope = (
   let currentAttemptId: string | undefined;
   let currentStageAttemptId: StageAttemptId | undefined;
   let parentReopened = false;
+  let endedParentAttemptId: StageAttemptId | undefined;
   const attempts = new Map<string, MutableAttempt>();
   const addIssue = (
     code: ConstructionProjectionIssue["code"],
@@ -412,6 +416,7 @@ const reduceAttemptScope = (
           target?.state === "completed" && target.stageAttemptId === transition.stageAttemptId) {
         target.facts.push(fact);
         currentStageAttemptId = transition.stageAttemptId;
+        endedParentAttemptId = transition.stageAttemptId;
         continue;
       }
       if (target) {
@@ -425,21 +430,26 @@ const reduceAttemptScope = (
       }
       state = "ended_by_revision";
       currentStageAttemptId = transition.stageAttemptId;
+      if (scope === "activity" && fact.event.type === "construction.stage-attempt-ended-by-revision") {
+        endedParentAttemptId = transition.stageAttemptId;
+      }
       continue;
     }
     if (transition.action === "parent_reopen") {
       const active = currentAttemptId ? attempts.get(currentAttemptId) : undefined;
       const currentParent = currentStageAttemptId ?? active?.stageAttemptId;
-      if (currentParent !== undefined &&
-          (transition.stageAttemptId === undefined
-            ? state !== "ended_by_revision"
-            : currentParent !== transition.stageAttemptId)) {
+      const parentEnded = scope === "activity"
+        ? endedParentAttemptId !== undefined && currentParent === endedParentAttemptId
+        : state === "ended_by_revision";
+      if ((scope === "activity" && !parentEnded) ||
+          (transition.stageAttemptId === undefined ? !parentEnded : currentParent !== transition.stageAttemptId)) {
         addIssue("invalid-revision-transition", "Stage reopen does not target the ended current Activity parent", fact,
           active?.facts[0]);
         continue;
       }
       if (scope === "activity" && active?.state === "completed" && currentParent === active.stageAttemptId) {
         parentReopened = true;
+        endedParentAttemptId = undefined;
         continue;
       }
       if (active && activeStates.has(active.state as ConstructionStageActivityState)) {
@@ -449,6 +459,7 @@ const reduceAttemptScope = (
       currentAttemptId = undefined;
       currentStageAttemptId = undefined;
       parentReopened = false;
+      endedParentAttemptId = undefined;
       continue;
     }
     if (transition.action === "reopen") {
@@ -1317,6 +1328,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           const evidence = evidenceMatches.length === 1 ? evidenceMatches[0] : undefined;
           if (!evidence || evidence.event.type !== "construction.evidence-recorded" ||
               !evidenceBindingMatches(evidence, activityCompletion, true, order.uniqueFacts, order.hasPath) ||
+              !sameArtifactBindings(evidence.event.data.artifact_bindings, assessment.reviewed_material_bindings) ||
               checkpointKey(evidence.event.data.checkpoints) !== selectedCheckpointKey ||
               !hasDirectCause(activityCompletion, evidence)) return false;
           activityEvidenceIds.push(String(evidenceId));
@@ -1496,15 +1508,20 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     completion: ConstructionHistoryFact,
     evidenceIds: readonly unknown[],
   ): boolean => {
-    if (completion.event.event_version !== 2 || completion.event.data.stage !== "deliver" ||
-        !isDeliverCompletionRecord(completion.event.data.deliver_assessment)) return false;
+    if (completion.event.data.stage !== "deliver") return false;
+    const assessment = completion.event.data.deliver_assessment;
+    const currentAssessment = completion.event.event_version === CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION &&
+      isDeliverCompletionRecord(assessment) ? assessment : undefined;
+    const legacyAssessment = completion.event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION &&
+      isLegacyDeliverCompletionRecord(assessment) ? assessment : undefined;
+    const deliverAssessment = currentAssessment ?? legacyAssessment;
+    if (!deliverAssessment) return false;
     const unitId = factUnitId(completion);
     const attemptId = completion.event.data.stage_attempt_id;
-    const assessment = completion.event.data.deliver_assessment;
-    if (!unitId || !attemptId || assessment.handoff.status !== "ready" ||
-        (assessment.outcome !== "repository-handoff" && assessment.operation_results.length === 0) ||
-        assessment.operation_results.some((operation) => operation.status !== "succeeded") ||
-        assessment.verification_evidence_ids.length === 0) return false;
+    if (!unitId || !attemptId || deliverAssessment.handoff.status !== "ready" ||
+        (deliverAssessment.outcome !== "repository-handoff" && deliverAssessment.operation_results.length === 0) ||
+        deliverAssessment.operation_results.some((operation) => operation.status !== "succeeded") ||
+        deliverAssessment.verification_evidence_ids.length === 0) return false;
     const starts = order.uniqueFacts.filter((fact) =>
       ["construction.stage-attempt-started", "construction.stage-resumed"].includes(fact.event.type) &&
       factUnitId(fact) === unitId && fact.event.data.stage === "deliver" &&
@@ -1554,30 +1571,30 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const reviewCompletion = upstreamCompletions.at(-1);
     if (authority.kind !== "valid" || !reviewCompletion || reviewCompletion.event.type !== "construction.stage-attempt-completed" ||
         !isUnitOfWorkReviewCompletionRecord(reviewCompletion.event.data.unit_of_work_review_assessment) ||
-        assessment.review_completion_event_id !== reviewCompletion.event.id || !hasDirectCause(completion, reviewCompletion)) return false;
+        deliverAssessment.review_completion_event_id !== reviewCompletion.event.id || !hasDirectCause(completion, reviewCompletion)) return false;
     const reviewAssessment = reviewCompletion.event.data.unit_of_work_review_assessment;
-    if (new Set(assessment.artifact_bindings.map((binding) => binding.artifact_id)).size !== assessment.artifact_bindings.length ||
-        !reviewAssessment.reviewed_material_bindings.every((reviewed) => assessment.artifact_bindings.some((binding) =>
+    if (new Set(deliverAssessment.artifact_bindings.map((binding) => binding.artifact_id)).size !== deliverAssessment.artifact_bindings.length ||
+        !reviewAssessment.reviewed_material_bindings.every((reviewed) => deliverAssessment.artifact_bindings.some((binding) =>
           binding.artifact_id === reviewed.artifact_id && binding.content_version === reviewed.content_version,
-        )) || checkpointKey(assessment.reviewed_checkpoints) !== checkpointKey(reviewAssessment.final_checkpoints) ||
-        checkpointKey(assessment.reviewed_checkpoints) !== checkpointKey(reviewCompletion.event.data.checkpoints) ||
+        )) || checkpointKey(deliverAssessment.reviewed_checkpoints) !== checkpointKey(reviewAssessment.final_checkpoints) ||
+        checkpointKey(deliverAssessment.reviewed_checkpoints) !== checkpointKey(reviewCompletion.event.data.checkpoints) ||
         reviewAssessment.handoff.status !== "ready") return false;
     const expectedEvidenceIds = [
-      String(assessment.preparation_evidence_id), String(assessment.self_review_evidence_id),
-      ...assessment.operation_results.map((operation) => String(operation.evidence_id)),
-      ...assessment.verification_evidence_ids.map(String), String(assessment.handoff_evidence_id),
-      ...(assessment.additional_review?.requested ? [String(assessment.additional_review.evidence_id)] : []),
+      String(deliverAssessment.preparation_evidence_id), String(deliverAssessment.self_review_evidence_id),
+      ...deliverAssessment.operation_results.map((operation) => String(operation.evidence_id)),
+      ...deliverAssessment.verification_evidence_ids.map(String), String(deliverAssessment.handoff_evidence_id),
+      ...(deliverAssessment.additional_review?.requested ? [String(deliverAssessment.additional_review.evidence_id)] : []),
     ];
-    if (!sameStringSet(evidenceIds.map(String), expectedEvidenceIds)) return false;
+    if (new Set(expectedEvidenceIds).size !== expectedEvidenceIds.length || !sameStringSet(evidenceIds.map(String), expectedEvidenceIds)) return false;
     const currentCheckpointsKey = checkpointKey(completion.event.data.checkpoints);
     const stageEvidence = new Map<string, string>([
-      [String(assessment.preparation_evidence_id), "deliver-preparation"],
-      [String(assessment.self_review_evidence_id), "deliver-self-review"],
-      ...assessment.operation_results.map((operation) => [String(operation.evidence_id), "deliver-operation-result"] as const),
-      ...assessment.verification_evidence_ids.map((id) => [String(id), "deliver-outcome-verification"] as const),
-      [String(assessment.handoff_evidence_id), "deliver-recipient-handoff"],
-      ...(assessment.additional_review?.requested
-        ? [[String(assessment.additional_review.evidence_id), "deliver-additional-review"] as const]
+      [String(deliverAssessment.preparation_evidence_id), "deliver-preparation"],
+      [String(deliverAssessment.self_review_evidence_id), "deliver-self-review"],
+      ...deliverAssessment.operation_results.map((operation) => [String(operation.evidence_id), "deliver-operation-result"] as const),
+      ...deliverAssessment.verification_evidence_ids.map((id) => [String(id), "deliver-outcome-verification"] as const),
+      [String(deliverAssessment.handoff_evidence_id), "deliver-recipient-handoff"],
+      ...(deliverAssessment.additional_review?.requested
+        ? [[String(deliverAssessment.additional_review.evidence_id), "deliver-additional-review"] as const]
         : []),
     ]);
     const stageEvidenceFacts = new Map<string, ConstructionHistoryFact>();
@@ -1588,53 +1605,72 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           evidence.event.data.stage !== "deliver" || evidence.event.data.stage_attempt_id !== attemptId ||
           evidence.event.data.task_id !== undefined || evidence.event.data.activity !== undefined ||
           evidence.event.data.check !== check || !isRecord(evidence.event.data.result) || evidence.event.data.result.status !== "passed" ||
-          !sameArtifactBindings(evidence.event.data.artifact_bindings, assessment.artifact_bindings) ||
+          !sameArtifactBindings(evidence.event.data.artifact_bindings, deliverAssessment.artifact_bindings) ||
           checkpointKey(evidence.event.data.checkpoints) !== currentCheckpointsKey ||
           !hasDirectCause(evidence, currentStart) || !hasDirectCause(completion, evidence)) return false;
       stageEvidenceFacts.set(id, evidence);
     }
-    const handoff = stageEvidenceFacts.get(String(assessment.handoff_evidence_id));
+    let outcomeRequest: ConstructionHistoryFact | undefined;
+    if (currentAssessment) {
+      outcomeRequest = factsById.get(String(currentAssessment.outcome_request_event_id));
+      const recordedOutcome = outcomeRequest?.event.type === "construction.interaction-recorded"
+        ? outcomeRequest.event.data.delivery_outcome
+        : undefined;
+      if (!outcomeRequest || outcomeRequest.event.type !== "construction.interaction-recorded" || factUnitId(outcomeRequest) !== unitId ||
+          outcomeRequest.event.data.stage !== "deliver" || outcomeRequest.event.data.stage_attempt_id !== attemptId ||
+          outcomeRequest.event.data.task_id !== undefined || outcomeRequest.event.data.activity !== undefined ||
+          outcomeRequest.event.data.activity_attempt_id !== undefined || !hasRequesterParticipant(outcomeRequest.event.data.participants) ||
+          !isDeliverOutcomeSelection(recordedOutcome) || recordedOutcome.outcome !== deliverAssessment.outcome ||
+          recordedOutcome.requested_outcome !== deliverAssessment.requested_outcome || recordedOutcome.destination !== deliverAssessment.destination ||
+          recordedOutcome.recipient !== deliverAssessment.recipient || !hasDirectCause(outcomeRequest, currentStart) ||
+          !hasDirectCause(completion, outcomeRequest)) return false;
+    }
+    const handoff = stageEvidenceFacts.get(String(deliverAssessment.handoff_evidence_id));
     if (!handoff || !Array.isArray(handoff.event.data.output_refs) || handoff.event.data.output_refs.length === 0 ||
-        !hasDirectCause(handoff, reviewCompletion) || !hasDirectCause(handoff, stageEvidenceFacts.get(String(assessment.preparation_evidence_id))!) ||
-        !hasDirectCause(handoff, stageEvidenceFacts.get(String(assessment.self_review_evidence_id))!)) return false;
-    for (const operation of assessment.operation_results) {
+        !hasDirectCause(handoff, stageEvidenceFacts.get(String(deliverAssessment.preparation_evidence_id))!) ||
+        !hasDirectCause(handoff, stageEvidenceFacts.get(String(deliverAssessment.self_review_evidence_id))!)) return false;
+    for (const operation of deliverAssessment.operation_results) {
+      const operationAuthority = operation.authority;
       const evidence = stageEvidenceFacts.get(String(operation.evidence_id));
-      if (!evidence || checkpointKey(operation.source_checkpoints) !== checkpointKey(assessment.reviewed_checkpoints) ||
+      if (!evidence || checkpointKey(operation.source_checkpoints) !== checkpointKey(deliverAssessment.reviewed_checkpoints) ||
           !Array.isArray(evidence.event.data.output_refs) || evidence.event.data.output_refs.length === 0 ||
-          !hasDirectCause(handoff, evidence)) return false;
-      if (operation.authority.kind === "requester-instruction") {
-        const request = factsById.get(String(operation.authority.event_id));
+          !hasDirectCause(handoff, evidence) || (currentAssessment && (!outcomeRequest || !hasDirectCause(evidence, outcomeRequest)))) return false;
+      if (operationAuthority.kind === "requester-instruction") {
+        const request = factsById.get(String(operationAuthority.event_id));
         if (!request || request.event.type !== "construction.interaction-recorded" || factUnitId(request) !== unitId ||
             request.event.data.stage !== "deliver" || request.event.data.stage_attempt_id !== attemptId ||
-            !hasRequesterParticipant(request.event.data.participants) || !hasDirectCause(request, currentStart) ||
+            !hasRequesterParticipant(request.event.data.participants) || !Array.isArray(request.event.data.references) ||
+            request.event.data.references.length === 0 || !hasDirectCause(request, currentStart) ||
             !hasDirectCause(evidence, request) || !hasDirectCause(completion, request)) return false;
       }
     }
-    for (const evidenceId of assessment.verification_evidence_ids) {
+    for (const evidenceId of deliverAssessment.verification_evidence_ids) {
       const evidence = stageEvidenceFacts.get(String(evidenceId));
       if (!evidence || !Array.isArray(evidence.event.data.output_refs) || evidence.event.data.output_refs.length === 0 ||
-          !hasDirectCause(handoff, evidence) || assessment.operation_results.some((operation) => {
+          !hasDirectCause(handoff, evidence) ||
+          (currentAssessment && (!outcomeRequest || !hasDirectCause(evidence, outcomeRequest))) ||
+          deliverAssessment.operation_results.some((operation) => {
             const operationEvidence = stageEvidenceFacts.get(String(operation.evidence_id));
             return !operationEvidence || !hasDirectCause(evidence, operationEvidence);
           })) return false;
     }
-    if (assessment.additional_review?.requested) {
-      const request = factsById.get(String(assessment.additional_review.request_event_id));
-      const evidence = stageEvidenceFacts.get(String(assessment.additional_review.evidence_id));
+    if (deliverAssessment.additional_review?.requested) {
+      const request = factsById.get(String(deliverAssessment.additional_review.request_event_id));
+      const evidence = stageEvidenceFacts.get(String(deliverAssessment.additional_review.evidence_id));
       if (!request || request.event.type !== "construction.interaction-recorded" || factUnitId(request) !== unitId ||
           request.event.data.stage !== "deliver" || request.event.data.stage_attempt_id !== attemptId ||
           !hasRequesterParticipant(request.event.data.participants) || !hasDirectCause(request, currentStart) ||
-          !evidence || !hasDirectCause(evidence, request) || evidence.event.data.executor !== assessment.additional_review.reviewer ||
-          assessment.additional_review.findings.length > 0) return false;
+          !evidence || !hasDirectCause(evidence, request) || evidence.event.data.executor !== deliverAssessment.additional_review.reviewer ||
+          deliverAssessment.additional_review.findings.length > 0) return false;
     }
-    const approval = assessment.approval_required ? factsById.get(String(assessment.approval_event_id)) : undefined;
-    if (assessment.approval_required) {
+    const approval = deliverAssessment.approval_required ? factsById.get(String(deliverAssessment.approval_event_id)) : undefined;
+    if (deliverAssessment.approval_required) {
       if (!approval || approval.event.type !== "construction.approval-recorded" || factUnitId(approval) !== unitId ||
           approval.event.data.stage !== "deliver" || approval.event.data.stage_attempt_id !== attemptId ||
-          !sameArtifactBindings(approval.event.data.artifact_bindings, assessment.artifact_bindings) ||
+          !sameArtifactBindings(approval.event.data.artifact_bindings, deliverAssessment.artifact_bindings) ||
           checkpointKey(approval.event.data.checkpoints) !== currentCheckpointsKey || !hasDirectCause(approval, currentStart) ||
           !hasDirectCause(completion, approval)) return false;
-    } else if (assessment.approval_event_id !== undefined) return false;
+    } else if (deliverAssessment.approval_event_id !== undefined) return false;
     return true;
   };
   const validCompletionEvents = new Set<string>();
@@ -1768,8 +1804,18 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const revisionId = stringField(fact.event.data, "revision_id");
     const candidates = revisionId ? revisionFactsByRevisionId.get(revisionId) ?? [] : [];
     const authorization = candidates.length === 1 ? candidates[0] : undefined;
+    const matchingStageEndings = fact.event.type === "construction.stage-reopened" && authorization
+      ? order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.stage-attempt-ended-by-revision" &&
+        factUnitId(candidate) === factUnitId(fact) && candidate.event.data.stage === fact.event.data.stage &&
+        candidate.event.data.revision_id === revisionId && candidate.event.data.stage_attempt_id === fact.event.data.stage_attempt_id &&
+        candidate.event.data.stage_attempt_id === authorization.event.data.stage_attempt_id &&
+        hasDirectCause(candidate, authorization) && hasDirectCause(fact, candidate))
+      : [];
+    const stageReopenBound = fact.event.type !== "construction.stage-reopened" ||
+      (typeof fact.event.data.stage_attempt_id === "string" &&
+        typeof authorization?.event.data.stage_attempt_id === "string" && matchingStageEndings.length === 1);
     const scopeMatches = authorization !== undefined && validRevisionAuthorizations.has(authorization.event.id) &&
-      factUnitId(authorization) === factUnitId(fact) &&
+      factUnitId(authorization) === factUnitId(fact) && stageReopenBound &&
       ["stage", "stage_attempt_id", "task_id", "activity", "activity_attempt_id"].every((field) =>
         authorization.event.data[field] === fact.event.data[field],
       ) && hasDirectCause(fact, authorization);

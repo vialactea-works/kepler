@@ -237,6 +237,59 @@ describe("audit recording with real journals", () => {
     expect(scan.lines[0]?.event?.caused_by).toContain(operation.data.id);
   });
 
+  it("records a typed Deliver outcome in the current requester interaction event", async () => {
+    const root = await createProject();
+    const deliverAttemptId = "f1000000-0000-4000-8000-000000000001";
+    const deliverStartId = "f2000000-0000-4000-8000-000000000002";
+    const journal = createEventJournal({ recordHome: root, missionId, journalId: initialJournalId, phase: CONSTRUCTION_PHASE });
+    await journal.append({
+      id: deliverStartId,
+      phase: CONSTRUCTION_PHASE,
+      type: "construction.stage-attempt-started",
+      envelope_version: 1,
+      event_version: CONSTRUCTION_EVENT_VERSION,
+      journal_id: initialJournalId,
+      recorded_at: "2026-10-21T12:01:55Z",
+      producer: { name: "kepler", version: "0.10.3" },
+      caused_by: [],
+      data: {
+        mission_id: missionId,
+        unit_id: unitId,
+        stage: "deliver",
+        stage_attempt_id: deliverAttemptId,
+        inputs: [],
+        checkpoints: [],
+        authority_event_ids: [],
+      },
+    });
+
+    const result = await createRecorder(root).execute("interaction", {
+      unit: unitId,
+      stage: "deliver",
+      attempt: deliverAttemptId,
+    }, {
+      participants: ["Requester"],
+      content: "The requester selected deployment.",
+      delivery_outcome: {
+        outcome: "deployment",
+        requested_outcome: "Deploy the reviewed output.",
+        destination: "environment:staging",
+        recipient: "Release operator",
+      },
+    });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    const recordedJournal = createEventJournal({ recordHome: root, missionId, journalId: String(result.data.journal_id), phase: CONSTRUCTION_PHASE });
+    const scan = await recordedJournal.read();
+    const event = scan.lines[0]?.event;
+    expect(event).toMatchObject({
+      type: "construction.interaction-recorded",
+      caused_by: [deliverStartId],
+      data: { delivery_outcome: { outcome: "deployment", destination: "environment:staging" } },
+    });
+  });
+
   it("records task and Activity events through their phase-owned selectors without requiring --stage", async () => {
     const root = await createProject();
     const recorder = createRecorder(root);

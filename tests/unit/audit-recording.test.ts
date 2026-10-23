@@ -193,6 +193,31 @@ describe("audit record creation", () => {
     if (result.kind === "valid") expect(result.event.data).toHaveProperty("effort_selection");
   });
 
+  it("records a typed Deliver outcome only in a requester-scoped Deliver interaction", () => {
+    const delivery_outcome = {
+      outcome: "deployment",
+      requested_outcome: "Deploy the reviewed output.",
+      destination: "environment:staging",
+      recipient: "Release operator",
+    };
+    const result = createAuditRecord("interaction", {
+      participants: ["Requester"],
+      content: "The requester selected deployment.",
+      delivery_outcome,
+    }, scope, journalId, runtime());
+
+    expect(result.kind).toBe("invalid");
+
+    const currentDeliver = createAuditRecord("interaction", {
+      participants: [" requester "],
+      content: "The requester selected deployment.",
+      delivery_outcome,
+    }, { ...scope, stage: "deliver", stageAttemptId: "70000000-0000-4000-8000-000000000007" }, journalId, runtime());
+
+    expect(currentDeliver.kind).toBe("valid");
+    if (currentDeliver.kind === "valid") expect(currentDeliver.event.data).toMatchObject({ delivery_outcome });
+  });
+
   it("rejects interactions without required participants and content", () => {
     const result = createAuditRecord("interaction", {
       participants: [],

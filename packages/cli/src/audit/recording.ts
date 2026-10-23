@@ -8,11 +8,13 @@ import {
   CONSTRUCTION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
   validateConstructionEvent,
+  isDeliverOutcomeSelection,
   type ConstructionEventType,
   type ConstructionStage,
   type EvidenceId,
   type MaterialInput,
 } from "../construction/events.js";
+import { hasRequesterParticipant } from "./participants.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import type { EventJournal } from "../history/journal.js";
 
@@ -63,7 +65,7 @@ const validInputs = (value: unknown): value is readonly MaterialInput[] =>
 const requestKeys: Readonly<Record<AuditRecordKind, readonly string[]>> = {
   evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "result", "output_refs", "conditions", "related_request_event_id", "related_event_ids"],
   approval: ["requester", "inputs", "artifact_bindings", "checkpoints", "decision_reference"],
-  interaction: ["participants", "content", "references", "reply_reference", "effort_selection"],
+  interaction: ["participants", "content", "references", "reply_reference", "effort_selection", "delivery_outcome"],
 };
 
 export type AuditRecordKind = "evidence" | "approval" | "interaction";
@@ -135,6 +137,9 @@ const validateRequest = (
     }
     if (request.effort_selection !== undefined && !isRecord(request.effort_selection)) {
       issues.push({ pointer: "/effort_selection", message: "Expected a structured effort selection." });
+    }
+    if (request.delivery_outcome !== undefined && !isDeliverOutcomeSelection(request.delivery_outcome)) {
+      issues.push({ pointer: "/delivery_outcome", message: "Expected a typed Deliver outcome selection." });
     }
   }
   return issues;
@@ -235,6 +240,11 @@ export const createAuditRecord = (
       request.effort_selection.stage !== scope.stage) {
     issues.push({ pointer: "/effort_selection/stage", message: "A stage effort selection must match the explicit audit stage scope." });
   }
+  if (kind === "interaction" && request.delivery_outcome !== undefined &&
+      (scope.stage !== "deliver" || !scope.stageAttemptId || scope.taskId !== undefined || scope.activity !== undefined ||
+        scope.activityAttemptId !== undefined || !hasRequesterParticipant(request.participants))) {
+    issues.push({ pointer: "/delivery_outcome", message: "A typed Deliver outcome selection requires a requester interaction scoped to a Deliver attempt." });
+  }
   const eventId = runtime.identities.next();
   const evidenceId = kind === "evidence" ? runtime.identities.next() : undefined;
   if (kind === "evidence" && eventId === evidenceId) {
@@ -278,6 +288,7 @@ export const createAuditRecord = (
           references: request.references ?? [],
           ...(request.reply_reference === undefined ? {} : { reply_reference: request.reply_reference }),
           ...(request.effort_selection === undefined ? {} : { effort_selection: request.effort_selection }),
+          ...(request.delivery_outcome === undefined ? {} : { delivery_outcome: request.delivery_outcome }),
         };
   const event: EventEnvelope = {
     id: eventId as EventId,

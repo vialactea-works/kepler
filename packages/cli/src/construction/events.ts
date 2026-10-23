@@ -36,6 +36,7 @@ export type ArtifactId = Identity<"ArtifactId">;
 export const CONSTRUCTION_PHASE = "construction";
 export const CONSTRUCTION_EVENT_VERSION = 1;
 export const CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION = 2;
+export const CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION = 3;
 
 export const CONSTRUCTION_STAGES = [
   "functional-design",
@@ -91,6 +92,7 @@ export type ConstructionStage = (typeof CONSTRUCTION_STAGES)[number];
 export type ConstructionActivity = (typeof CONSTRUCTION_ACTIVITIES)[number];
 export type ConstructionEventType = (typeof CONSTRUCTION_EVENT_TYPES)[number];
 export type EffortLevel = "minimal" | "standard" | "comprehensive";
+export type DeliverOutcome = "repository-handoff" | "review-request" | "publication" | "deployment" | "other";
 
 export const CONSTRUCTION_STAGE_ACTIVITY_STATES = [
   "not_started",
@@ -344,9 +346,17 @@ export interface UnitOfWorkReviewCompletionRecord {
   readonly handoff: { readonly status: "ready" | "blocked"; readonly recipient: "deliver"; readonly summary: string };
 }
 
-export interface DeliverCompletionRecord {
+export interface DeliverOutcomeSelection {
+  readonly outcome: DeliverOutcome;
+  readonly requested_outcome: string;
+  readonly destination: string;
+  readonly recipient: string;
+}
+
+export interface LegacyDeliverCompletionRecord {
   readonly review_completion_event_id: EventId;
-  readonly outcome: "repository-handoff" | "review-request" | "publication" | "deployment" | "other";
+  readonly outcome_request_event_id?: EventId;
+  readonly outcome: DeliverOutcome;
   readonly requested_outcome: string;
   readonly destination: string;
   readonly recipient: string;
@@ -369,6 +379,17 @@ export interface DeliverCompletionRecord {
   readonly handoff: { readonly status: "ready" | "blocked"; readonly summary: string };
 }
 
+export interface DeliverCompletionRecord extends Omit<LegacyDeliverCompletionRecord, "operation_results"> {
+  readonly outcome_request_event_id: EventId;
+  readonly operation_results: readonly {
+    readonly operation: string;
+    readonly status: "succeeded" | "failed" | "partial";
+    readonly evidence_id: EvidenceId;
+    readonly source_checkpoints: readonly RepositoryCheckpoint[];
+    readonly authority: { readonly kind: "requester-instruction"; readonly event_id: EventId } | { readonly kind: "project-authority"; readonly reference: string };
+  }[];
+}
+
 export interface StageAttemptCompletedData extends StageAttemptData {
   readonly evidence_ids: readonly EvidenceId[];
   readonly checkpoints: readonly RepositoryCheckpoint[];
@@ -387,7 +408,7 @@ export interface StageAttemptEndedData extends StageAttemptData {
 
 export interface StageReopenedData extends ConstructionBaseData {
   readonly stage: ConstructionStage;
-  readonly stage_attempt_id?: StageAttemptId;
+  readonly stage_attempt_id: StageAttemptId;
   readonly revision_id: RevisionId;
   readonly reason: string;
 }
@@ -507,6 +528,7 @@ export interface InteractionRecordedData extends ConstructionBaseData {
   readonly references: readonly string[];
   readonly reply_reference?: string;
   readonly effort_selection?: EffortSelection;
+  readonly delivery_outcome?: DeliverOutcomeSelection;
 }
 
 export interface IntegrationPreparedData extends ActivityAttemptData {
@@ -733,7 +755,12 @@ export const isUnitOfWorkReviewCompletionRecord = (value: unknown): value is Uni
   return externalReviewValid && (value.acceptance_required ? isUuidV4(value.approval_event_id) : value.approval_event_id === undefined);
 };
 
-export const isDeliverCompletionRecord = (value: unknown): value is DeliverCompletionRecord => {
+export const isDeliverOutcomeSelection = (value: unknown): value is DeliverOutcomeSelection =>
+  isRecord(value) && Object.keys(value).every((key) => ["outcome", "requested_outcome", "destination", "recipient"].includes(key)) &&
+  isOneOf(value.outcome, new Set(["repository-handoff", "review-request", "publication", "deployment", "other"])) &&
+  isNonEmptyString(value.requested_outcome) && isNonEmptyString(value.destination) && isNonEmptyString(value.recipient);
+
+export const isLegacyDeliverCompletionRecord = (value: unknown): value is LegacyDeliverCompletionRecord => {
   if (!isRecord(value) || !isUuidV4(value.review_completion_event_id) ||
       !isOneOf(value.outcome, new Set(["repository-handoff", "review-request", "publication", "deployment", "other"])) ||
       !isNonEmptyString(value.requested_outcome) || !isNonEmptyString(value.destination) || !isNonEmptyString(value.recipient) ||
@@ -751,6 +778,9 @@ export const isDeliverCompletionRecord = (value: unknown): value is DeliverCompl
       !isOneOf(value.handoff.status, new Set(["ready", "blocked"])) || !isNonEmptyString(value.handoff.summary)) return false;
   return value.approval_required ? isUuidV4(value.approval_event_id) : value.approval_event_id === undefined;
 };
+
+export const isDeliverCompletionRecord = (value: unknown): value is DeliverCompletionRecord =>
+  isLegacyDeliverCompletionRecord(value) && isUuidV4(value.outcome_request_event_id);
 
 const isBaseData = (data: Record<string, unknown>): boolean =>
   isUuidV4(data.mission_id) && isNonEmptyString(data.unit_id);
@@ -865,7 +895,7 @@ export const CONSTRUCTION_EVENT_REQUIRED_FIELDS: Readonly<Record<ConstructionEve
   "construction.stage-resumed": ["stage", "stage_attempt_id", "inputs", "checkpoints", "authority_event_ids"],
   "construction.stage-attempt-completed": ["stage", "stage_attempt_id", "evidence_ids", "checkpoints"],
   "construction.stage-attempt-ended-by-revision": ["stage", "stage_attempt_id", "revision_id", "reason"],
-  "construction.stage-reopened": ["stage", "revision_id", "reason"],
+  "construction.stage-reopened": ["stage", "stage_attempt_id", "revision_id", "reason"],
   "construction.task-admitted": ["stage", "stage_attempt_id", "task_id", "graph_ref", "task_definition_ref", "admission_baseline", "predecessor_provenance", "prerequisite_evidence"],
   "construction.task-scope-ended-by-revision": ["stage", "stage_attempt_id", "task_id", "revision_id", "reason", "affected_activities"],
   "construction.task-scope-reopened": ["stage", "stage_attempt_id", "task_id", "revision_id", "reason", "affected_activities"],
@@ -918,7 +948,7 @@ const validatePayload = (
     invalid("task_id", isUuidV4(data.task_id));
   }
   if (activity) invalid("activity", isOneOf(data.activity, activityStates));
-  if (stage && !["construction.stage-reopened", "construction.revision-authorized"].includes(type)) {
+  if (stage && type !== "construction.revision-authorized") {
     invalid("stage_attempt_id", isUuidV4(data.stage_attempt_id));
   }
   if (task) invalid("stage_attempt_id", isUuidV4(data.stage_attempt_id));
@@ -1036,6 +1066,15 @@ const validatePayload = (
     invalid("checkpoints", isCheckpointSet(data.checkpoints) && data.checkpoints.length > 0);
   }
   if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION && data.stage === "deliver") {
+    invalid("deliver_assessment", isLegacyDeliverCompletionRecord(data.deliver_assessment));
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
+    invalid("implementation_planning_assessment", data.implementation_planning_assessment === undefined);
+    invalid("implementation_assessment", data.implementation_assessment === undefined);
+    invalid("unit_of_work_review_assessment", data.unit_of_work_review_assessment === undefined);
+    invalid("checkpoints", isCheckpointSet(data.checkpoints) && data.checkpoints.length > 0);
+  }
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION && data.stage === "deliver") {
     invalid("deliver_assessment", isDeliverCompletionRecord(data.deliver_assessment));
     invalid("functional_design_assessment", data.functional_design_assessment === undefined);
     invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
@@ -1103,6 +1142,9 @@ const validatePayload = (
       ? data.stage === "implementation" && isUuidV4(data.stage_attempt_id) && isUuidV4(data.task_id) &&
         isOneOf(data.activity, activityStates)
       : isExecutionBinding(data);
+    const requesterParticipant = Array.isArray(data.participants) && data.participants.some((participant) =>
+      typeof participant === "string" && participant.trim().toLowerCase() === "requester",
+    );
     invalid("scope_binding", (data.stage === undefined || isOneOf(data.stage, stageStates)) &&
       (!hasAttemptScope || scopeBindingValid));
     invalid("participants", isStringArray(data.participants, true));
@@ -1110,6 +1152,9 @@ const validatePayload = (
     invalid("references", isStringArray(data.references));
     invalid("reply_reference", data.reply_reference === undefined || isNonEmptyString(data.reply_reference));
     invalid("effort_selection", data.effort_selection === undefined || isEffortSelection(data.effort_selection));
+    invalid("delivery_outcome", data.delivery_outcome === undefined || (data.stage === "deliver" && isUuidV4(data.stage_attempt_id) &&
+      data.task_id === undefined && data.activity === undefined && data.activity_attempt_id === undefined && requesterParticipant &&
+      isDeliverOutcomeSelection(data.delivery_outcome)));
   }
   if (type === "construction.integration-prepared") {
     invalid("activity", data.activity === "code-integration");
@@ -1192,7 +1237,9 @@ export const validateConstructionEvent = (value: unknown): ConstructionEventVali
   }
   const type = envelope.event.type as ConstructionEventType;
   const supportedVersion = type === "construction.stage-attempt-completed"
-    ? envelope.event.event_version === CONSTRUCTION_EVENT_VERSION || envelope.event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION
+    ? envelope.event.event_version === CONSTRUCTION_EVENT_VERSION ||
+      envelope.event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION ||
+      (envelope.event.event_version === CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION && envelope.event.data.stage === "deliver")
     : envelope.event.event_version === CONSTRUCTION_EVENT_VERSION;
   if (!supportedVersion) return { status: "unsupported", event: envelope.event, reason: "event-version" };
   const issues = validatePayload(type, envelope.event, envelope.event.data);

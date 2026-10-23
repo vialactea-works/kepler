@@ -5,7 +5,7 @@ import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/cont
 import { hasRequesterParticipant } from "../audit/participants.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
-import { CONSTRUCTION_PHASE, CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, isDeliverCompletionRecord, isUnitOfWorkReviewCompletionRecord, validateConstructionEvent, type DeliverCompletionRecord, type MissionId, type StageAttemptId, type UnitId } from "./events.js";
+import { CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION, CONSTRUCTION_PHASE, isDeliverCompletionRecord, isUnitOfWorkReviewCompletionRecord, validateConstructionEvent, type DeliverCompletionRecord, type MissionId, type StageAttemptId, type UnitId } from "./events.js";
 import { sameArtifactBindings } from "./functional-design-completion.js";
 import { readStageArtifactMaterial } from "./stage-artifact-material.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
@@ -118,6 +118,18 @@ export class DeliverStageCompletion {
     if (!reviewCompletion || reviewCompletion.event.type !== "construction.stage-attempt-completed" ||
         reviewCompletion.event.data.stage !== "unit-of-work-review" ||
         !isUnitOfWorkReviewCompletionRecord(reviewCompletion.event.data.unit_of_work_review_assessment)) return fail("deliver_review_completion_missing", "Deliver requires the current typed Unit of Work Review completion.");
+    const outcomeRequests = loaded.unit.interactions.filter((fact) => fact.event.id === request.outcome_request_event_id);
+    const outcomeRequest = outcomeRequests.length === 1 ? outcomeRequests[0] : undefined;
+    const recordedOutcome = outcomeRequest ? dataOf(outcomeRequest).delivery_outcome : undefined;
+    if (!outcomeRequest || outcomeRequest.event.type !== "construction.interaction-recorded" ||
+        dataOf(outcomeRequest).stage !== "deliver" || dataOf(outcomeRequest).stage_attempt_id !== attemptId ||
+        dataOf(outcomeRequest).task_id !== undefined || dataOf(outcomeRequest).activity !== undefined ||
+        dataOf(outcomeRequest).activity_attempt_id !== undefined || !hasRequesterParticipant(dataOf(outcomeRequest).participants) ||
+        !outcomeRequest.event.caused_by.includes(start.event.id) || !isRecord(recordedOutcome) ||
+        recordedOutcome.outcome !== request.outcome || recordedOutcome.requested_outcome !== request.requested_outcome ||
+        recordedOutcome.destination !== request.destination || recordedOutcome.recipient !== request.recipient) {
+      return fail("deliver_outcome_request_invalid", "The typed outcome, destination, and recipient must match the current requester interaction recorded before delivery.", { outcome_request_event_id: request.outcome_request_event_id });
+    }
     const reviewAssessment = reviewCompletion.event.data.unit_of_work_review_assessment;
     if (request.review_completion_event_id !== reviewCompletion.event.id || request.handoff.status !== "ready" ||
         checkpointKey(request.reviewed_checkpoints) !== checkpointKey(reviewAssessment.final_checkpoints) ||
@@ -171,7 +183,8 @@ export class DeliverStageCompletion {
       if (operation.status !== "succeeded") return fail("deliver_operation_incomplete", "Failed or partial delivery operations cannot complete the Deliver stage.", { operation: operation.operation, status: operation.status });
       const operationEvidence = getEvidence(String(operation.evidence_id), "deliver-operation-result");
       const operationEvidenceData = operationEvidence ? dataOf(operationEvidence) : {};
-      if (!operationEvidence || !Array.isArray(operationEvidenceData.output_refs) || operationEvidenceData.output_refs.length === 0) return fail("deliver_operation_evidence_invalid", "Each successful delivery operation requires retained evidence of its actual effect.", { operation: operation.operation, evidence_id: operation.evidence_id });
+      if (!operationEvidence || !Array.isArray(operationEvidenceData.output_refs) || operationEvidenceData.output_refs.length === 0 ||
+          !operationEvidence.event.caused_by.includes(outcomeRequest.event.id)) return fail("deliver_operation_evidence_invalid", "Each successful delivery operation requires retained effect evidence that follows the requested outcome.", { operation: operation.operation, evidence_id: operation.evidence_id });
       operationFacts.push(operationEvidence);
       const authorityRecord = operation.authority;
       if (authorityRecord.kind === "requester-instruction") {
@@ -191,8 +204,9 @@ export class DeliverStageCompletion {
     const verificationFacts = verificationIds.map((id) => getEvidence(id, "deliver-outcome-verification"));
     if (verificationFacts.some((fact) => fact === undefined)) return fail("deliver_verification_invalid", "Every delivery outcome verification must pass against current material and checkpoints.");
     for (const verification of verificationFacts) {
-      if (!verification || operationFacts.some((operation) => !verification.event.caused_by.includes(operation.event.id))) {
-        return fail("deliver_verification_provenance_invalid", "Every outcome verification must causally follow each delivery operation result it verifies.");
+      if (!verification || !verification.event.caused_by.includes(outcomeRequest.event.id) ||
+          operationFacts.some((operation) => !verification.event.caused_by.includes(operation.event.id))) {
+        return fail("deliver_verification_provenance_invalid", "Every outcome verification must causally follow the selected outcome and each delivery operation result it verifies.");
       }
     }
     const additionalReviewFacts: ConstructionHistoryFact[] = [];
@@ -225,7 +239,7 @@ export class DeliverStageCompletion {
     });
     if (operationFacts.some((fact) => !handoff.event.caused_by.includes(fact.event.id)) ||
         verificationFacts.some((fact) => fact && !handoff.event.caused_by.includes(fact.event.id)) ||
-        !handoff.event.caused_by.includes(reviewCompletion.event.id) || !handoff.event.caused_by.includes(preparation.event.id) ||
+        !handoff.event.caused_by.includes(preparation.event.id) ||
         !handoff.event.caused_by.includes(selfReview.event.id) || !Array.isArray(handoffOutputRefs) ||
         handoffOutputRefs.length === 0 || !verificationOutputsValid) return fail("deliver_handoff_provenance_invalid", "Recipient handoff evidence must retain the actual result and depend on preparation, every operation, and every outcome verification.");
     for (const fact of [preparation, selfReview, handoff, ...operationFacts, ...verificationFacts.filter((fact): fact is ConstructionHistoryFact => fact !== undefined)]) {
@@ -245,14 +259,14 @@ export class DeliverStageCompletion {
     const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") return fail("stage_completion_journal_identity_conflict", "The allocated stage journal identity already has a filesystem entry.", { journal_id: journalId });
     const causeIds = [
-      start.event.id, ...priorCompletions.map((fact) => fact.event.id), reviewCompletion.event.id,
+      start.event.id, ...priorCompletions.map((fact) => fact.event.id), reviewCompletion.event.id, outcomeRequest.event.id,
       preparation.event.id, selfReview.event.id, handoff.event.id, ...operationFacts.map((fact) => fact.event.id),
       ...verificationFacts.flatMap((fact) => fact ? [fact.event.id] : []), ...authorityFacts.map((fact) => fact.event.id),
       ...additionalReviewFacts.map((fact) => fact.event.id), ...additionalEvidenceIds.map((id) => (evidenceById.get(id) ?? [])[0]?.event.id).filter((id): id is EventId => id !== undefined),
     ];
     const candidate = {
       id: eventId, phase: CONSTRUCTION_PHASE, type: "construction.stage-attempt-completed", envelope_version: 1,
-      event_version: CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, journal_id: journalId, recorded_at: this.runtime.now(),
+      event_version: CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION, journal_id: journalId, recorded_at: this.runtime.now(),
       producer: this.runtime.producer, caused_by: [...new Set(causeIds)],
       data: { mission_id: loaded.missionId as MissionId, unit_id: loaded.unit.unitId as UnitId, stage: "deliver", stage_attempt_id: attemptId as StageAttemptId, evidence_ids: evidenceIds, checkpoints: actualCheckpoints.checkpoints, deliver_assessment: request },
     };

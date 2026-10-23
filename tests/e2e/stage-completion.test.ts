@@ -87,7 +87,7 @@ const createQualityArtifacts = async (harness: E2EHarness) => {
 const appendStageStart = async (
   harness: E2EHarness,
   authorityEventIds: string | readonly string[] | undefined,
-  stage: "quality-requirements" | "implementation-planning" | "implementation" | "unit-of-work-review",
+  stage: "quality-requirements" | "implementation-planning" | "implementation" | "unit-of-work-review" | "deliver",
 ): Promise<{ readonly attemptId: string; readonly eventId: string }> => {
   const stageAttemptId = randomUUID();
   const eventId = randomUUID();
@@ -143,6 +143,14 @@ const encodeHistorySource = (source: HistoryJournalSource, events: readonly unkn
   ...source,
   bytes: new TextEncoder().encode(`${events.map((record) => JSON.stringify(record)).join("\n")}\n`),
 });
+
+const rewriteHistoryEvent = (
+  sources: readonly HistoryJournalSource[],
+  eventId: string,
+  rewrite: (event: Record<string, unknown>) => Record<string, unknown>,
+): HistoryJournalSource[] => sources.map((source) => encodeHistorySource(source,
+  parseHistorySource(source).map((event) => event.id === eventId ? rewrite(event) : event),
+));
 
 const appendTypedConstructionEvent = async (
   harness: E2EHarness,
@@ -767,7 +775,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(await audit.journalSnapshot()).toBe(before);
   }, 120_000);
 
-  it("completes Standard stages through Unit of Work Review via the stage CLI", async () => {
+  it("completes Standard stages through Deliver via the stage CLI", async () => {
     const harness = await createE2EHarness({ application: "native" });
     harnesses.push(harness);
     await createAuditHistory(harness.resources.repositoryDirectory, undefined, { includeImplementationFacts: false });
@@ -1270,6 +1278,27 @@ describe("Functional Design stage completion CLI E2E", () => {
       code: "invalid-completion-evidence",
       eventIds: [String(implementationCompletionRecord.id)],
     }));
+    let materialEvidenceChanged = false;
+    const materialMismatchSources = implementationHistorySources.map((source) => encodeHistorySource(
+      source,
+      parseHistorySource(source).map((record) => {
+        const data = record.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data as Record<string, unknown> : undefined;
+        if (record.type === "construction.evidence-recorded" && data?.stage === "implementation" &&
+            data.stage_attempt_id === implementationAttempt && data.activity === "code-integration") {
+          materialEvidenceChanged = true;
+          return { ...record, data: { ...data, artifact_bindings: [{ artifact_id: randomUUID(), content_version: "sha256:altered-material" }] } };
+        }
+        return record;
+      }),
+    ));
+    expect(materialEvidenceChanged).toBe(true);
+    const materialMismatchProjection = projectConstruction(collectHistoryFromSources(
+      auditFixture.missionId, materialMismatchSources, { completeness: "complete" },
+    ));
+    expect(materialMismatchProjection.projectionIssues).toContainEqual(expect.objectContaining({
+      code: "invalid-completion-evidence",
+      eventIds: [String(implementationCompletionRecord.id)],
+    }));
     const makeProjectionEvent = (type: string, data: Record<string, unknown>, causedBy: readonly string[]) => {
       const candidate = {
         id: randomUUID(), phase: "construction", type, envelope_version: 1, event_version: 1, journal_id: randomUUID(),
@@ -1462,6 +1491,125 @@ describe("Functional Design stage completion CLI E2E", () => {
       stage: "unit-of-work-review",
       state: "completed",
     }));
+    const deliveryArtifactId = randomUUID();
+    const deliveryInstructions = `---\nid: ${deliveryArtifactId}\ntype: delivery-plan\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Delivery plan\n\n## Outcome and destination\n\nHand the reviewed repository to the requester with the selected checkpoint and retained evidence identified.\n\n## Operations and prerequisites\n\nPrepare a handoff package from the reviewed checkpoint and retained evidence. No external service is required.\n\n## Verification and recovery\n\nVerify that the requester can identify the reviewed checkpoint and retained evidence in the package. Preserve handoff references if interrupted.\n\n## Decisions and open questions\n\nThe repository handoff is the agreed outcome. No consequential delivery choice remains open.\n`;
+    await Fs.writeFile(Path.join(harness.resources.repositoryDirectory, unitDirectory, "delivery.md"), deliveryInstructions, "utf8");
+    harness.resources.runGit(harness.resources.repositoryDirectory, "add", unitDirectory);
+    harness.resources.runGit(harness.resources.repositoryDirectory, "commit", "-q", "-m", "Record approved delivery instructions");
+    const deliveryCheckpoint = harness.resources.runGit(harness.resources.repositoryDirectory, "rev-parse", "HEAD");
+    const deliveryBindings = [
+      ...planningMaterial.reviewedBindings,
+      { artifact_id: deliveryArtifactId, content_version: `sha256:${createHash("sha256").update(deliveryInstructions, "utf8").digest("hex")}` },
+    ];
+    const deliveryStart = await appendStageStart(harness, [
+      String(functionalCompletion.result.data.id),
+      String(result.result.data.id),
+      String(planningResult.result.data.id),
+      String(implementationResult.result.data.id),
+      String(reviewResult.result.data.id),
+    ], "deliver");
+    const deliveryOutcome = {
+      outcome: "repository-handoff",
+      requested_outcome: "Hand the reviewed repository to the requester with retained evidence. I authorize preparation of the handoff package.",
+      destination: "repository:main",
+      recipient: "Requester",
+    };
+    const outcomeRequest = audit.record("interaction", {
+      unit: auditFixture.unitId,
+      stage: "deliver",
+      attempt: deliveryStart.attemptId,
+    }, {
+      participants: ["Requester"],
+      content: deliveryOutcome.requested_outcome,
+      references: ["request:delivery-outcome", "request:prepare-handoff-package"],
+      delivery_outcome: deliveryOutcome,
+    });
+    expect(outcomeRequest.exitCode, JSON.stringify(outcomeRequest.result)).toBe(0);
+    const recordDeliveryEvidence = (
+      check: string,
+      relatedEventIds: readonly string[] = [],
+      relatedRequestEventId?: string,
+    ) => {
+      const evidence = audit.record("evidence", {
+        unit: auditFixture.unitId,
+        stage: "deliver",
+        attempt: deliveryStart.attemptId,
+      }, {
+        inputs: deliveryBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Reviewed delivery material" })),
+        artifact_bindings: deliveryBindings,
+        checkpoints: [{ repository_id: repositoryId, commit: deliveryCheckpoint }],
+        check,
+        executor: "agent:delivery-owner",
+        result: { status: "passed", summary: `${check} passed for the selected repository handoff.` },
+        output_refs: [`delivery-output:${check}`],
+        ...(relatedRequestEventId ? { related_request_event_id: relatedRequestEventId } : {}),
+        ...(relatedEventIds.length > 0 ? { related_event_ids: relatedEventIds } : {}),
+      });
+      expect(evidence.exitCode, JSON.stringify(evidence.result)).toBe(0);
+      return { evidenceId: String(evidence.result.data.evidence_id), eventId: String(evidence.result.data.id) };
+    };
+    const preparation = recordDeliveryEvidence("deliver-preparation");
+    const selfReview = recordDeliveryEvidence("deliver-self-review");
+    const operation = recordDeliveryEvidence("deliver-operation-result", [], String(outcomeRequest.result.data.id));
+    const verification = recordDeliveryEvidence("deliver-outcome-verification", [operation.eventId], String(outcomeRequest.result.data.id));
+    const handoff = recordDeliveryEvidence("deliver-recipient-handoff", [preparation.eventId, selfReview.eventId, operation.eventId, verification.eventId]);
+    const deliverRequest = {
+      review_completion_event_id: String(reviewResult.result.data.id),
+      outcome_request_event_id: String(outcomeRequest.result.data.id),
+      ...deliveryOutcome,
+      artifact_bindings: deliveryBindings,
+      reviewed_checkpoints: planningMaterial.checkpoints,
+      preparation_evidence_id: preparation.evidenceId,
+      self_review_evidence_id: selfReview.evidenceId,
+      operation_results: [{
+        operation: "Prepare the reviewed repository handoff package",
+        status: "succeeded",
+        evidence_id: operation.evidenceId,
+        source_checkpoints: planningMaterial.checkpoints,
+        authority: { kind: "requester-instruction", event_id: String(outcomeRequest.result.data.id) },
+      }],
+      verification_evidence_ids: [verification.evidenceId],
+      handoff_evidence_id: handoff.evidenceId,
+      additional_review: { requested: false },
+      approval_required: false,
+      handoff: { status: "ready", summary: "The requester received the reviewed repository, prepared package, and retained evidence." },
+    };
+    const deliverDriver = new StageCompletionCliDriver(harness.cli);
+    const beforeOutcomeMismatch = await audit.journalSnapshot();
+    const mismatchedOutcome = deliverDriver.complete(auditFixture.unitId, deliveryStart.attemptId, {
+      ...deliverRequest,
+      outcome: "deployment",
+    }, "deliver");
+    expect(mismatchedOutcome.exitCode).toBe(1);
+    expect(mismatchedOutcome.result).toMatchObject({ status: "failed", data: { code: "deliver_outcome_request_invalid" } });
+    expect(await audit.journalSnapshot()).toBe(beforeOutcomeMismatch);
+    const deliveryResult = deliverDriver.complete(auditFixture.unitId, deliveryStart.attemptId, deliverRequest, "deliver");
+    expect(deliveryResult.exitCode, JSON.stringify(deliveryResult.result)).toBe(0);
+    expect(deliveryResult.result).toMatchObject({
+      status: "success",
+      data: { stage: "deliver", attempt_id: deliveryStart.attemptId, outcome: "repository-handoff" },
+    });
+    const deliveredUnit = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    expect(deliveredUnit.exitCode).toBe(0);
+    const deliveredUnitData = JSON.parse(deliveredUnit.stdout).data.unit;
+    expect(deliveredUnitData.blocked).toBe(false);
+    expect(deliveredUnitData.stages).toContainEqual(expect.objectContaining({ stage: "deliver", state: "completed" }));
+    const deliveredHistory = await readConstructionSources(harness);
+    const outcomeRequestId = String(outcomeRequest.result.data.id);
+    const invalidAuthorityHistory = rewriteHistoryEvent(deliveredHistory, outcomeRequestId, (event) => ({
+      ...event,
+      data: { ...(event.data as Record<string, unknown>), references: [] },
+    }));
+    const invalidAuthorityProjection = projectConstruction(collectHistoryFromSources(auditFixture.missionId, invalidAuthorityHistory, { completeness: "complete" }));
+    expect(invalidAuthorityProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-completion-evidence");
+    expect(invalidAuthorityProjection.units[0]?.blocked).toBe(true);
+    const verificationBeforeOutcomeHistory = rewriteHistoryEvent(deliveredHistory, verification.eventId, (event) => ({
+      ...event,
+      caused_by: (event.caused_by as string[]).filter((cause) => cause !== outcomeRequestId),
+    }));
+    const verificationBeforeOutcomeProjection = projectConstruction(collectHistoryFromSources(auditFixture.missionId, verificationBeforeOutcomeHistory, { completeness: "complete" }));
+    expect(verificationBeforeOutcomeProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-completion-evidence");
+    expect(verificationBeforeOutcomeProjection.units[0]?.blocked).toBe(true);
   }, 240_000);
 
   it("rejects a Quality Requirements attempt without Functional Design authority in completion and replay", async () => {
