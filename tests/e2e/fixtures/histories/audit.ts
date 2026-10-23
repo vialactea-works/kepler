@@ -30,7 +30,11 @@ const event = (id: string, type: string, data: Record<string, unknown>, causedBy
   recorded_at: "2026-10-21T12:00:00Z",
   producer: { name: "fixture", version: "1" },
   caused_by: [...causedBy],
-  data,
+  data: type === "construction.task-admitted" && data.task_contract === undefined
+    ? { ...data, task_contract: {
+        outputs: ["output:task"], acceptance_criteria: ["Complete the task"], dependency_task_ids: [], implementation_prerequisites: [],
+      } }
+    : data,
 });
 
 export const createAuditHistory = async (
@@ -140,7 +144,7 @@ export const createAuditHistory = async (
       mission_id: auditFixture.missionId,
       unit_id: auditFixture.unitId,
       review_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
-      integration_targets: [{ repository_id: "repo-main", target: "main" }],
+      integration_targets: [{ repository_id: "repo-main", target: "refs/heads/main" }],
     }, [auditFixture.eventIds[0]]),
     event("90000000-0000-4000-8000-000000000009", "construction.stage-attempt-started", {
       mission_id: auditFixture.missionId,

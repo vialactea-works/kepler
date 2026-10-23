@@ -59,6 +59,7 @@ export interface MissionCoordinationIdentitySource {
 
 export interface MissionCoordination {
   readonly acquire: (request: MissionCoordinationRequest) => Promise<MissionCoordinationAcquireResult>;
+  readonly release: (request: MissionCoordinationRequest, token: string) => Promise<MissionCoordinationReleaseResult>;
 }
 
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -122,6 +123,19 @@ const matchesOwner = (
   observed.machine_id === expected.machine_id &&
   observed.process_id === expected.process_id &&
   observed.process_incarnation_id === expected.process_incarnation_id &&
+  observed.mission_id === expected.mission_id &&
+  observed.resource_scope === expected.resource_scope &&
+  observed.attempt_context === expected.attempt_context;
+
+const matchesReleaseRequest = (
+  observed: MissionCoordinationOwner | undefined,
+  token: string,
+  expected: Omit<MissionCoordinationOwner, "token">,
+): observed is MissionCoordinationOwner => observed !== undefined &&
+  Number.isInteger(observed.process_id) && observed.process_id > 0 &&
+  uuidV4.test(observed.process_incarnation_id) &&
+  observed.token === token &&
+  observed.machine_id === expected.machine_id &&
   observed.mission_id === expected.mission_id &&
   observed.resource_scope === expected.resource_scope &&
   observed.attempt_context === expected.attempt_context;
@@ -205,6 +219,188 @@ export const createMissionCoordination = (
   fileSystem: MissionCoordinationFileSystem,
   identities: MissionCoordinationIdentitySource,
 ): MissionCoordination => {
+  const releaseOwnedLock = async (
+    directory: string,
+    resourceKey: string,
+    lockPath: string,
+    lockIdentity: MissionCoordinationPathIdentity,
+    owner: MissionCoordinationOwner,
+  ): Promise<MissionCoordinationReleaseResult> => {
+    const markerPath = `${lockPath}.releasing`;
+    const currentOwner = await readOwner(fileSystem, lockPath);
+    const currentIdentity = await fileSystem.pathIdentity(lockPath);
+    if (!samePathIdentity(currentIdentity, lockIdentity) || !matchesOwner(currentOwner, owner)) {
+      return failed(
+        "coordination_owner_replaced",
+        "The canonical lock path no longer contains this operation's owner; the replacement remains available to its holder.",
+        {
+          resource_key: resourceKey,
+          expected_token: owner.token,
+          ...(currentOwner ? { observed_token: currentOwner.token } : {}),
+          lock_path: lockPath,
+        },
+        "Preserve the current owner record and release only through the matching holder.",
+      );
+    }
+    let releaseToken: string;
+    try {
+      releaseToken = identities.next();
+    } catch (error) {
+      return failed("coordination_identity_failed", "Kepler could not allocate a release ownership token.", {
+        resource_key: resourceKey,
+        message: error instanceof Error ? error.message : String(error),
+      }, "Reconcile the held lock manually after confirming its owner.");
+    }
+    const markerOwner: MissionCoordinationOwner = { ...owner, token: releaseToken };
+    if (!uuidV4.test(markerOwner.token)) {
+      return failed("coordination_identity_failed", "Kepler could not allocate a release ownership token.", { resource_key: resourceKey }, "Reconcile the held lock manually after confirming its owner.");
+    }
+    let markerIdentity: MissionCoordinationPathIdentity | undefined;
+    try {
+      await fileSystem.mkdir(markerPath);
+      markerIdentity = await fileSystem.pathIdentity(markerPath);
+      if (!markerIdentity) throw new Error("Release marker identity is unavailable");
+      await fileSystem.writeFileExclusive(Path.join(markerPath, "owner.json"), `${JSON.stringify(markerOwner)}\n`);
+    } catch (error) {
+      return failed(
+        "coordination_release_marker_failed",
+        "Kepler could not establish a safe release boundary; the resource remains unavailable.",
+        { resource_key: resourceKey, message: error instanceof Error ? error.message : String(error) },
+        "Reconcile the release marker and owner artifact before retrying.",
+      );
+    }
+
+    const releasePath = Path.join(directory, `${resourceKey}.owner-moving-${markerOwner.token}`);
+    const markerReleasePath = Path.join(directory, `${resourceKey}.releasing-${markerOwner.token}`);
+    const lockRemoval = await removeOwnedDirectory(fileSystem, lockPath, releasePath, lockIdentity, owner);
+    if (lockRemoval.kind === "replaced") {
+      const markerRemoval = await removeOwnedDirectory(fileSystem, markerPath, markerReleasePath, markerIdentity, markerOwner);
+      if (markerRemoval.kind !== "removed") {
+        return failed(
+          "coordination_release_incomplete",
+          "A replacement claim remains preserved, but Kepler could not clear its own release marker.",
+          {
+            resource_key: resourceKey,
+            preserved_at: lockRemoval.preservedPath,
+            release_marker: markerRemoval.kind === "failed" ? markerRemoval.path : markerRemoval.preservedPath,
+            ...(lockRemoval.restorationError ? { restoration_error: lockRemoval.restorationError } : {}),
+            ...(markerRemoval.kind === "failed" ? { message: markerRemoval.message } : {}),
+          },
+          "Keep the resource unavailable and reconcile the replacement and release marker before retrying.",
+        );
+      }
+      return failed(
+        "coordination_owner_replaced",
+        "The replacement claim remains at its canonical path and was not released by the stale holder.",
+        {
+          resource_key: resourceKey,
+          expected_token: owner.token,
+          ...(lockRemoval.observedToken ? { observed_token: lockRemoval.observedToken } : {}),
+          preserved_at: lockRemoval.preservedPath,
+          ...(lockRemoval.restorationError ? { restoration_error: lockRemoval.restorationError } : {}),
+        },
+        "Preserve the current owner record and release only through the matching holder.",
+      );
+    }
+    if (lockRemoval.kind === "failed") {
+      return failed(
+        "coordination_release_incomplete",
+        "Kepler could not safely remove the owned lock directory.",
+        { resource_key: resourceKey, release_path: lockRemoval.path, message: lockRemoval.message },
+        "Keep the resource unavailable and reconcile the release artifact before retrying.",
+      );
+    }
+
+    const markerRemoval = await removeOwnedDirectory(fileSystem, markerPath, markerReleasePath, markerIdentity, markerOwner);
+    if (markerRemoval.kind !== "removed") {
+      return failed(
+        markerRemoval.kind === "replaced" ? "coordination_release_marker_replaced" : "coordination_release_incomplete",
+        markerRemoval.kind === "replaced"
+          ? "The release boundary changed owner and was preserved."
+          : "The resource lock was removed, but its release marker could not be cleared.",
+        {
+          resource_key: resourceKey,
+          release_marker: markerRemoval.kind === "failed" ? markerRemoval.path : markerRemoval.preservedPath,
+          ...(markerRemoval.kind === "failed" ? { message: markerRemoval.message } : {}),
+          ...(markerRemoval.kind === "replaced" && markerRemoval.restorationError
+            ? { restoration_error: markerRemoval.restorationError }
+            : {}),
+        },
+        "Keep the resource unavailable and reconcile the release marker before retrying.",
+      );
+    }
+    return { kind: "released" };
+  };
+
+  const release = async (
+    request: MissionCoordinationRequest,
+    token: string,
+  ): Promise<MissionCoordinationReleaseResult> => {
+    if (!Path.isAbsolute(request.commonDirectory) || !workspaceKey.test(request.resourceKey) ||
+      !uuidV4.test(request.owner.process_incarnation_id) || !uuidV4.test(request.owner.mission_id) ||
+      (request.location.kind === "mission" && request.location.missionId !== request.owner.mission_id) ||
+      (request.location.kind === "mission" && !uuidV4.test(request.location.missionId)) ||
+      !Number.isInteger(request.owner.process_id) || request.owner.process_id < 1 ||
+      request.owner.machine_id.trim().length === 0 || request.owner.resource_scope.trim().length === 0) {
+      return failed(
+        "invalid_coordination_scope",
+        "The selected coordination resource or owner identity is invalid.",
+        { resource_key: request.resourceKey },
+        "Resolve the repository identity and process owner before releasing the selected resource.",
+      );
+    }
+    if (!uuidV4.test(token)) {
+      return failed(
+        "invalid_coordination_owner_token",
+        "The coordination ownership token is invalid.",
+        { resource_key: request.resourceKey },
+        "Use the random ownership token returned by the acquiring operation.",
+      );
+    }
+
+    const resourceSegments = request.location.kind === "mission"
+      ? ["kepler", "missions", request.location.missionId, "coordination"]
+      : ["kepler", "workspaces"];
+    let directory = request.commonDirectory;
+    try {
+      if (await fileSystem.realpath(directory) !== directory) {
+        return failed("coordination_root_invalid", "The Git common directory is not canonical.", { common_directory: directory }, "Resolve the actual Git common directory before releasing local coordination data.");
+      }
+      for (const segment of resourceSegments) {
+        const next = Path.join(directory, segment);
+        const kind = await fileSystem.pathKind(next);
+        if (kind !== "directory" || await fileSystem.realpath(next) !== next) {
+          return failed("coordination_path_invalid", "A Git common-directory coordination path contains a non-directory or symbolic link.", { path: next, path_kind: kind }, "Preserve the path and resolve it explicitly before releasing this resource.");
+        }
+        directory = next;
+      }
+    } catch (error) {
+      return failed("coordination_storage_failed", "Kepler could not inspect the selected common-directory coordination path.", { common_directory: request.commonDirectory, message: error instanceof Error ? error.message : String(error) }, "Check local Git common-directory access and preserve any partial coordination artifacts.");
+    }
+
+    const lockPath = Path.join(directory, request.resourceKey);
+    try {
+      const observedOwner = await readOwner(fileSystem, lockPath);
+      const lockIdentity = await fileSystem.pathIdentity(lockPath);
+      if (!lockIdentity || !matchesReleaseRequest(observedOwner, token, request.owner)) {
+        return failed(
+          "coordination_owner_mismatch",
+          "The canonical lock does not match the supplied owner token and identity; it remains untouched.",
+          {
+            resource_key: request.resourceKey,
+            expected_token: token,
+            ...(observedOwner ? { observed_token: observedOwner.token } : {}),
+            lock_path: lockPath,
+          },
+          "Preserve the current owner record and release only with the matching request and token.",
+        );
+      }
+      return await releaseOwnedLock(directory, request.resourceKey, lockPath, lockIdentity, observedOwner);
+    } catch (error) {
+      return failed("coordination_storage_failed", "Kepler could not inspect the selected coordination owner.", { resource_key: request.resourceKey, message: error instanceof Error ? error.message : String(error) }, "Check local Git common-directory access and preserve any partial coordination artifacts.");
+    }
+  };
+
   const acquire = async (request: MissionCoordinationRequest): Promise<MissionCoordinationAcquireResult> => {
     if (!Path.isAbsolute(request.commonDirectory) || !workspaceKey.test(request.resourceKey) ||
       !uuidV4.test(request.owner.process_incarnation_id) || !uuidV4.test(request.owner.mission_id) ||
@@ -348,111 +544,8 @@ export const createMissionCoordination = (
         );
       }
 
-      const release = async (): Promise<MissionCoordinationReleaseResult> => {
-        const currentOwner = await readOwner(fileSystem, lockPath);
-        const currentIdentity = await fileSystem.pathIdentity(lockPath);
-        if (!samePathIdentity(currentIdentity, lockIdentity) || !matchesOwner(currentOwner, owner)) {
-          return failed(
-            "coordination_owner_replaced",
-            "The canonical lock path no longer contains this operation's owner; the replacement remains available to its holder.",
-            {
-              resource_key: request.resourceKey,
-              expected_token: owner.token,
-              ...(currentOwner ? { observed_token: currentOwner.token } : {}),
-              lock_path: lockPath,
-            },
-            "Preserve the current owner record and release only through the matching holder.",
-          );
-        }
-        let releaseToken: string;
-        try {
-          releaseToken = identities.next();
-        } catch (error) {
-          return failed("coordination_identity_failed", "Kepler could not allocate a release ownership token.", {
-            resource_key: request.resourceKey,
-            message: error instanceof Error ? error.message : String(error),
-          }, "Reconcile the held lock manually after confirming its owner.");
-        }
-        const markerOwner: MissionCoordinationOwner = { ...owner, token: releaseToken };
-        if (!uuidV4.test(markerOwner.token)) {
-          return failed("coordination_identity_failed", "Kepler could not allocate a release ownership token.", { resource_key: request.resourceKey }, "Reconcile the held lock manually after confirming its owner.");
-        }
-        let markerIdentity: MissionCoordinationPathIdentity | undefined;
-        try {
-          await fileSystem.mkdir(markerPath);
-          markerIdentity = await fileSystem.pathIdentity(markerPath);
-          if (!markerIdentity) throw new Error("Release marker identity is unavailable");
-          await fileSystem.writeFileExclusive(Path.join(markerPath, "owner.json"), `${JSON.stringify(markerOwner)}\n`);
-        } catch (error) {
-          return failed(
-            "coordination_release_marker_failed",
-            "Kepler could not establish a safe release boundary; the resource remains unavailable.",
-            { resource_key: request.resourceKey, message: error instanceof Error ? error.message : String(error) },
-            "Reconcile the release marker and owner artifact before retrying.",
-          );
-        }
-
-        const releasePath = Path.join(directory, `${request.resourceKey}.owner-moving-${markerOwner.token}`);
-        const markerReleasePath = Path.join(directory, `${request.resourceKey}.releasing-${markerOwner.token}`);
-        const lockRemoval = await removeOwnedDirectory(fileSystem, lockPath, releasePath, lockIdentity, owner);
-        if (lockRemoval.kind === "replaced") {
-          const markerRemoval = await removeOwnedDirectory(fileSystem, markerPath, markerReleasePath, markerIdentity, markerOwner);
-          if (markerRemoval.kind !== "removed") {
-            return failed(
-              "coordination_release_incomplete",
-              "A replacement claim remains preserved, but Kepler could not clear its own release marker.",
-              {
-                resource_key: request.resourceKey,
-                preserved_at: lockRemoval.preservedPath,
-                release_marker: markerRemoval.kind === "failed" ? markerRemoval.path : markerRemoval.preservedPath,
-                ...(lockRemoval.restorationError ? { restoration_error: lockRemoval.restorationError } : {}),
-                ...(markerRemoval.kind === "failed" ? { message: markerRemoval.message } : {}),
-              },
-              "Keep the resource unavailable and reconcile the replacement and release marker before retrying.",
-            );
-          }
-          return failed(
-            "coordination_owner_replaced",
-            "The replacement claim remains at its canonical path and was not released by the stale holder.",
-            {
-              resource_key: request.resourceKey,
-              expected_token: owner.token,
-              ...(lockRemoval.observedToken ? { observed_token: lockRemoval.observedToken } : {}),
-              preserved_at: lockRemoval.preservedPath,
-              ...(lockRemoval.restorationError ? { restoration_error: lockRemoval.restorationError } : {}),
-            },
-            "Preserve the current owner record and release only through the matching holder.",
-          );
-        }
-        if (lockRemoval.kind === "failed") {
-          return failed(
-            "coordination_release_incomplete",
-            "Kepler could not safely remove the owned lock directory.",
-            { resource_key: request.resourceKey, release_path: lockRemoval.path, message: lockRemoval.message },
-            "Keep the resource unavailable and reconcile the release artifact before retrying.",
-          );
-        }
-
-        const markerRemoval = await removeOwnedDirectory(fileSystem, markerPath, markerReleasePath, markerIdentity, markerOwner);
-        if (markerRemoval.kind !== "removed") {
-          return failed(
-            markerRemoval.kind === "replaced" ? "coordination_release_marker_replaced" : "coordination_release_incomplete",
-            markerRemoval.kind === "replaced"
-              ? "The release boundary changed owner and was preserved."
-              : "The resource lock was removed, but its release marker could not be cleared.",
-            {
-              resource_key: request.resourceKey,
-              release_marker: markerRemoval.kind === "failed" ? markerRemoval.path : markerRemoval.preservedPath,
-              ...(markerRemoval.kind === "failed" ? { message: markerRemoval.message } : {}),
-              ...(markerRemoval.kind === "replaced" && markerRemoval.restorationError
-                ? { restoration_error: markerRemoval.restorationError }
-                : {}),
-            },
-            "Keep the resource unavailable and reconcile the release marker before retrying.",
-          );
-        }
-        return { kind: "released" };
-      };
+      const release = (): Promise<MissionCoordinationReleaseResult> =>
+        releaseOwnedLock(directory, request.resourceKey, lockPath, lockIdentity, owner);
 
       return { kind: "acquired", lease: { lockPath, owner, release } };
     } catch (error) {
@@ -465,5 +558,5 @@ export const createMissionCoordination = (
     }
   };
 
-  return { acquire };
+  return { acquire, release };
 };

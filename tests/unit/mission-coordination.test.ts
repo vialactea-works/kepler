@@ -55,6 +55,73 @@ describe("mission local coordination", () => {
     expect(await coordinator.acquire(request)).toMatchObject({ kind: "acquired" });
   });
 
+  it("releases a durable owner token through a fresh coordinator instance", async () => {
+    const { root, coordinator, request } = await setup();
+    const acquired = await coordinator.acquire(request);
+
+    expect(acquired.kind).toBe("acquired");
+    if (acquired.kind !== "acquired") return;
+    const freshCoordinator = createMissionCoordination(nodeMissionCoordinationFileSystem, { next: randomUUID });
+    const releaseRequest = {
+      ...request,
+      owner: {
+        ...request.owner,
+        process_id: 456,
+        process_incarnation_id: "30000000-0000-4000-8000-000000000003",
+      },
+    };
+
+    expect(await freshCoordinator.release(releaseRequest, acquired.lease.owner.token)).toEqual({ kind: "released" });
+    expect(await nodeMissionCoordinationFileSystem.pathKind(acquired.lease.lockPath)).toBe("missing");
+    expect(await nodeMissionCoordinationFileSystem.pathKind(Path.join(root, "kepler", "workspaces", `${resourceKey}.releasing`))).toBe("missing");
+  });
+
+  it("does not release a lock for a wrong token or mismatched request identity and scope", async () => {
+    const { coordinator, request } = await setup();
+    const acquired = await coordinator.acquire(request);
+
+    expect(acquired.kind).toBe("acquired");
+    if (acquired.kind !== "acquired") return;
+    const freshCoordinator = createMissionCoordination(nodeMissionCoordinationFileSystem, { next: randomUUID });
+    const mismatches = [
+      { ...request, resourceKey: "b".repeat(64) },
+      { ...request, owner: { ...request.owner, machine_id: "other-host" } },
+      { ...request, owner: { ...request.owner, mission_id: "10000000-0000-4000-8000-000000000002" } },
+      { ...request, owner: { ...request.owner, resource_scope: "other-scope" } },
+      { ...request, owner: { ...request.owner, attempt_context: "other-attempt" } },
+    ];
+
+    expect(await freshCoordinator.release(request, randomUUID())).toMatchObject({ kind: "failed", code: "coordination_owner_mismatch" });
+    for (const mismatchedRequest of mismatches) {
+      expect(await freshCoordinator.release(mismatchedRequest, acquired.lease.owner.token))
+        .toMatchObject({ kind: "failed", code: "coordination_owner_mismatch" });
+    }
+    expect(JSON.parse(await readFile(Path.join(acquired.lease.lockPath, "owner.json"), "utf8"))).toEqual(acquired.lease.owner);
+    expect(await nodeMissionCoordinationFileSystem.pathKind(`${acquired.lease.lockPath}.releasing`)).toBe("missing");
+  });
+
+  it("preserves a replacement owner when a durable release presents the stale token", async () => {
+    const { coordinator, request } = await setup();
+    const acquired = await coordinator.acquire(request);
+
+    expect(acquired.kind).toBe("acquired");
+    if (acquired.kind !== "acquired") return;
+    await rm(acquired.lease.lockPath, { recursive: true });
+    const replacement = await coordinator.acquire({
+      ...request,
+      owner: { ...request.owner, process_id: 124, resource_scope: "replacement-owner" },
+    });
+    expect(replacement.kind).toBe("acquired");
+    if (replacement.kind !== "acquired") return;
+
+    const freshCoordinator = createMissionCoordination(nodeMissionCoordinationFileSystem, { next: randomUUID });
+    expect(await freshCoordinator.release(request, acquired.lease.owner.token))
+      .toMatchObject({ kind: "failed", code: "coordination_owner_mismatch" });
+    expect(JSON.parse(await readFile(Path.join(acquired.lease.lockPath, "owner.json"), "utf8"))).toEqual(replacement.lease.owner);
+    expect(await nodeMissionCoordinationFileSystem.pathKind(`${acquired.lease.lockPath}.releasing`)).toBe("missing");
+    expect(await replacement.lease.release()).toEqual({ kind: "released" });
+  });
+
   it("keeps the acquired lock intact when release-token allocation fails", async () => {
     const { request } = await setup();
     let calls = 0;
@@ -73,6 +140,33 @@ describe("mission local coordination", () => {
     expect(await nodeMissionCoordinationFileSystem.pathKind(acquired.lease.lockPath)).toBe("directory");
     expect(JSON.parse(await readFile(Path.join(acquired.lease.lockPath, "owner.json"), "utf8"))).toEqual(acquired.lease.owner);
     expect(await coordinator.acquire(request)).toMatchObject({ kind: "failed", code: "resource_contended" });
+  });
+
+  it("allows another unit to acquire its Integration lock while this unit remains locked", async () => {
+    const { coordinator, request } = await setup();
+    const first = await coordinator.acquire({
+      ...request,
+      location: { kind: "mission", missionId },
+      owner: { ...request.owner, resource_scope: "construction/integration/unit-one" },
+    });
+    expect(first.kind).toBe("acquired");
+    if (first.kind !== "acquired") return;
+
+    const second = await coordinator.acquire({
+      ...request,
+      location: { kind: "mission", missionId },
+      resourceKey: "b".repeat(64),
+      owner: { ...request.owner, process_id: 124, resource_scope: "construction/integration/unit-two" },
+    });
+
+    expect(second.kind).toBe("acquired");
+    if (second.kind === "acquired") expect(await second.lease.release()).toEqual({ kind: "released" });
+    expect(await coordinator.acquire({
+      ...request,
+      location: { kind: "mission", missionId },
+      owner: { ...request.owner, resource_scope: "construction/integration/unit-one" },
+    })).toMatchObject({ kind: "failed", code: "resource_contended" });
+    expect(await first.lease.release()).toEqual({ kind: "released" });
   });
 
   it("allows exactly one concurrent acquisition of a contended resource", async () => {
@@ -193,7 +287,7 @@ describe("mission local coordination", () => {
     if (acquired.kind !== "acquired") return;
     replaceDuringRename = true;
 
-    const released = await acquired.lease.release();
+    const released = await coordinator.release(request, acquired.lease.owner.token);
 
     expect(released).toMatchObject({ kind: "failed", code: "coordination_owner_replaced" });
     expect(JSON.parse(await readFile(Path.join(lockPath, "owner.json"), "utf8"))).toEqual(replacement);

@@ -323,6 +323,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
           await Fs.writeFile(unexpectedWork, "preserve this concurrent work\n");
           return actualRuntime.coordination.acquire(request);
         },
+        release: (request, token) => actualRuntime.coordination.release(request, token),
       },
     });
     const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
@@ -570,6 +571,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
           if (acquisitions === 2) await Fs.writeFile(destination, "pre-existing racer content\n");
           return actualRuntime.coordination.acquire(request);
         },
+        release: (request, token) => actualRuntime.coordination.release(request, token),
       },
     });
     const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));

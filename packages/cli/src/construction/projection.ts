@@ -33,6 +33,8 @@ import {
   isQualityRequirementsCompletionRecord,
   qualityRequirementsEvidenceIds,
   readQualityRequirementsCompletionRecord,
+  type LegacyQualityRequirementsCompletionRecord,
+  type QualityRequirementsCompletionRecord,
 } from "./quality-requirements-completion.js";
 import {
   isImplementationPlanningCompletionRecord,
@@ -223,6 +225,9 @@ const asFact = (record: CollectedHistoryEvent): ConstructionHistoryFact | undefi
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isStringArray = (value: unknown): value is readonly string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string" && item.trim().length > 0);
 
 const stringField = (data: Record<string, unknown>, field: string): string | undefined =>
   typeof data[field] === "string" ? data[field] : undefined;
@@ -612,6 +617,9 @@ const sameStringSet = (left: unknown, right: readonly string[]): boolean =>
   Array.isArray(left) && left.every((item) => typeof item === "string") &&
   new Set(left).size === left.length && new Set(right).size === right.length &&
   JSON.stringify([...left].sort(compareString)) === JSON.stringify([...right].sort(compareString));
+const sameStringMultiset = (left: unknown, right: readonly string[]): boolean =>
+  Array.isArray(left) && left.every((item) => typeof item === "string") && left.length === right.length &&
+  JSON.stringify([...left].sort(compareString)) === JSON.stringify([...right].sort(compareString));
 
 const functionalDesignRecordFor = (fact: ConstructionHistoryFact | undefined) => {
   if (!fact || fact.event.type !== "construction.stage-attempt-completed" || fact.event.data.stage !== "functional-design") return undefined;
@@ -668,9 +676,11 @@ const evidenceBindingMatches = (
   const targetCheckpoints = Array.isArray(targetCheckpointValues) ? targetCheckpointValues.filter(isRecord) : [];
   const allowStageEvidenceCheckpointDifference = !activitySpecific && completion.event.type === "construction.stage-attempt-completed" &&
     completion.event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION;
-  const checkpointsMatch = allowStageEvidenceCheckpointDifference || sourceCheckpoints.every((sourceCheckpoint) => targetCheckpoints.some((targetCheckpoint) =>
-    sourceCheckpoint.repository_id === targetCheckpoint.repository_id && sourceCheckpoint.commit === targetCheckpoint.commit,
-  ));
+  const checkpointsMatch = allowStageEvidenceCheckpointDifference || (activitySpecific
+    ? checkpointKey(sourceCheckpoints) === checkpointKey(targetCheckpoints)
+    : sourceCheckpoints.every((sourceCheckpoint) => targetCheckpoints.some((targetCheckpoint) =>
+      sourceCheckpoint.repository_id === targetCheckpoint.repository_id && sourceCheckpoint.commit === targetCheckpoint.commit,
+    )));
   const result = source.result;
   return isRecord(result) && result.status === "passed" && checkpointsMatch;
 };
@@ -765,11 +775,14 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
   ): boolean => {
     const legacy = completion.event.event_version === 1;
     const rawRecord = completion.event.data.functional_design_assessment;
-    const record = legacy
-      ? isLegacyFunctionalDesignCompletionRecord(rawRecord)
-        ? { ...rawRecord, artifact_paths: rawRecord.assessments.handoff.artifacts }
-        : undefined
-      : isFunctionalDesignCompletionRecord(rawRecord) ? rawRecord : undefined;
+    let record: ReturnType<typeof functionalDesignRecordFor>;
+    if (legacy && isLegacyFunctionalDesignCompletionRecord(rawRecord)) {
+      record = { ...rawRecord, artifact_paths: rawRecord.assessments.handoff.artifacts };
+    } else if (!legacy && isFunctionalDesignCompletionRecord(rawRecord)) {
+      record = rawRecord;
+    } else {
+      record = undefined;
+    }
     if (!record || (!legacy && !sameStringSet(record.artifact_paths, record.assessments.handoff.artifacts))) return false;
     const expectedIds = functionalDesignEvidenceIds(record.assessments).slice().sort();
     const actualIds = evidenceIds.filter((id): id is string => typeof id === "string").sort();
@@ -809,9 +822,10 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
   ): boolean => {
     const legacy = completion.event.event_version === 1;
     const rawRecord = completion.event.data.quality_requirements_assessment;
-    const record = legacy
-      ? isLegacyQualityRequirementsCompletionRecord(rawRecord) ? rawRecord : undefined
-      : isQualityRequirementsCompletionRecord(rawRecord) ? rawRecord : undefined;
+    let record: LegacyQualityRequirementsCompletionRecord | QualityRequirementsCompletionRecord | undefined;
+    if (legacy && isLegacyQualityRequirementsCompletionRecord(rawRecord)) record = rawRecord;
+    else if (!legacy && isQualityRequirementsCompletionRecord(rawRecord)) record = rawRecord;
+    else record = undefined;
     if (!record) return false;
     const expectedIds = qualityRequirementsEvidenceIds(record.assessments).slice().sort();
     const actualIds = evidenceIds.filter((id): id is string => typeof id === "string").sort();
@@ -912,9 +926,10 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
   ): boolean => {
     const legacy = completion.event.event_version === 1;
     const rawRecord = completion.event.data.implementation_planning_assessment;
-    const record = legacy
-      ? isLegacyImplementationPlanningCompletionRecord(rawRecord) ? readImplementationPlanningCompletionRecord(rawRecord) : undefined
-      : isImplementationPlanningCompletionRecord(rawRecord) ? readImplementationPlanningCompletionRecord(rawRecord) : undefined;
+    let record: ReturnType<typeof readImplementationPlanningCompletionRecord> | undefined;
+    if (legacy && isLegacyImplementationPlanningCompletionRecord(rawRecord)) record = readImplementationPlanningCompletionRecord(rawRecord);
+    else if (!legacy && isImplementationPlanningCompletionRecord(rawRecord)) record = readImplementationPlanningCompletionRecord(rawRecord);
+    else record = undefined;
     if (!record || !record.assessments.handoff.artifacts.includes("tasks-dag.json") ||
         (!legacy && !sameStringSet([...record.artifact_paths, record.task_graph_path], record.assessments.handoff.artifacts))) return false;
     const expectedIds = planningEvidenceIds(record.assessments).slice().sort();
@@ -939,9 +954,13 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     ));
     const qualityCompletion = latestQualityCompletions.length === 1 ? latestQualityCompletions[0] : undefined;
     const qualityAssessment = qualityCompletion?.event.data.quality_requirements_assessment;
-    const qualityRecord = qualityCompletion?.event.event_version === 1
-      ? isLegacyQualityRequirementsCompletionRecord(qualityAssessment) ? qualityAssessment : undefined
-      : isQualityRequirementsCompletionRecord(qualityAssessment) ? qualityAssessment : undefined;
+    let qualityRecord: LegacyQualityRequirementsCompletionRecord | QualityRequirementsCompletionRecord | undefined;
+    if (qualityCompletion?.event.event_version === 1 && isLegacyQualityRequirementsCompletionRecord(qualityAssessment)) {
+      qualityRecord = qualityAssessment;
+    } else if (qualityCompletion && qualityCompletion.event.event_version !== 1 &&
+        isQualityRequirementsCompletionRecord(qualityAssessment)) {
+      qualityRecord = qualityAssessment;
+    }
     const authorizedFunctionalCompletions = order.uniqueFacts.filter((candidate) =>
       candidate.event.type === "construction.stage-attempt-completed" &&
       factUnitId(candidate) === factUnitId(completion) && candidate.event.data.stage === "functional-design" &&
@@ -1703,6 +1722,60 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         ),
       ));
     if (!checkpointCoverage) evidenceValid = false;
+    if (activityCompletion) {
+      const activity = stringField(fact.event.data, "activity");
+      const starts = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-started" &&
+        sameActivityScope(candidate, fact) && order.hasPath(candidate.event.id, fact.event.id));
+      const admissions = starts.length === 1 ? order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.task-admitted" &&
+        factUnitId(candidate) === factUnitId(fact) && stringField(candidate.event.data, "task_id") === stringField(fact.event.data, "task_id") &&
+        stringField(candidate.event.data, "stage_attempt_id") === stringField(fact.event.data, "stage_attempt_id") &&
+        hasDirectCause(starts[0]!, candidate) && order.hasPath(candidate.event.id, fact.event.id)) : [];
+      const admission = admissions.length === 1 ? admissions[0] : undefined;
+      const taskContract = admission?.event.type === "construction.task-admitted" && isRecord(admission.event.data.task_contract)
+        ? admission.event.data.task_contract
+        : undefined;
+      if (starts.length !== 1 || admissions.length !== 1 ||
+          validEvidence.some((item) => checkpointKey(item.event.data.checkpoints) !== checkpointKey(fact.event.data.checkpoints)) ||
+          (activity === "code-validation" && checkpointKey(starts[0]?.event.data.checkpoints) !== checkpointKey(fact.event.data.checkpoints))) {
+        evidenceValid = false;
+      }
+      if (activity === "code-generation" || activity === "code-validation") {
+        const requiredChecks = activity === "code-generation"
+          ? ["code-generation-typecheck", "code-generation-related-tests", "code-generation-self-review"]
+          : ["code-validation-typecheck", "code-validation-build", "code-validation-full-test-suite", "code-validation-independent-review", "code-validation-self-review"];
+        const actualChecks = validEvidence.map((item) => stringField(item.event.data, "check") ?? "");
+        const outputRefs = new Set(validEvidence.flatMap((item) => Array.isArray(item.event.data.output_refs)
+          ? item.event.data.output_refs.filter((reference): reference is string => typeof reference === "string")
+          : []));
+        const workerContexts = validEvidence.flatMap((item) => typeof item.event.data.worker_context_id === "string"
+          ? [item.event.data.worker_context_id] : []);
+        if (taskContract && (!Array.isArray(taskContract.outputs) ||
+            !sameStringSet(actualChecks, requiredChecks) ||
+            !taskContract.outputs.every((output) => typeof output === "string" && outputRefs.has(output)) ||
+            workerContexts.length !== validEvidence.length || (activity === "code-generation" && new Set(workerContexts).size !== 1))) evidenceValid = false;
+      }
+      if (activity === "code-validation") {
+        const generations = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+          validCompletionEvents.has(candidate.event.id) && factUnitId(candidate) === factUnitId(fact) &&
+          stringField(candidate.event.data, "task_id") === stringField(fact.event.data, "task_id") &&
+          stringField(candidate.event.data, "stage_attempt_id") === stringField(fact.event.data, "stage_attempt_id") &&
+          stringField(candidate.event.data, "activity") === "code-generation" && order.hasPath(candidate.event.id, fact.event.id));
+        const generationContexts = generations.flatMap((generation) =>
+          (Array.isArray(generation.event.data.evidence_ids) ? generation.event.data.evidence_ids : []).flatMap((id) => {
+            const matches = typeof id === "string" ? evidenceById.get(id) ?? [] : [];
+            const evidence = matches.length === 1 ? matches[0] : undefined;
+            return evidence?.event.type === "construction.evidence-recorded" && typeof evidence.event.data.worker_context_id === "string"
+              ? [evidence.event.data.worker_context_id] : [];
+          }),
+        );
+        const validationContexts = validEvidence.flatMap((item) => typeof item.event.data.worker_context_id === "string"
+          ? [item.event.data.worker_context_id] : []);
+        const reviewers = validEvidence.filter((item) => item.event.data.check === "code-validation-independent-review");
+        const reviewerContext = reviewers.length === 1 ? reviewers[0]?.event.data.worker_context_id : undefined;
+        if (taskContract && (generations.length !== 1 || reviewers.length !== 1 || new Set(generationContexts).size !== 1 ||
+            typeof reviewerContext !== "string" || generationContexts.some((context) => validationContexts.includes(context)))) evidenceValid = false;
+      }
+    }
     if (stageCompletion && fact.event.data.stage === "functional-design" &&
         !functionalDesignCompletionValid(fact, evidenceIds)) evidenceValid = false;
     if (stageCompletion && fact.event.data.stage === "quality-requirements" &&
@@ -1836,6 +1909,56 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     Array.isArray(fact.event.data.affected_activities)
       ? fact.event.data.affected_activities.filter((activity): activity is string => typeof activity === "string")
       : [];
+  const activityCompletionCurrentAt = (
+    completion: ConstructionHistoryFact,
+    boundary: ConstructionHistoryFact,
+  ): boolean => {
+    const activity = stringField(completion.event.data, "activity");
+    const taskId = stringField(completion.event.data, "task_id");
+    const stageAttemptId = stringField(completion.event.data, "stage_attempt_id");
+    if (!activity || !taskId || !stageAttemptId) return false;
+    return !order.uniqueFacts.some((candidate) => {
+      if (!validRevisionTransitions.has(candidate.event.id) || factUnitId(candidate) !== factUnitId(completion) ||
+          stringField(candidate.event.data, "stage_attempt_id") !== stageAttemptId ||
+          !order.hasPath(completion.event.id, candidate.event.id) || !order.hasPath(candidate.event.id, boundary.event.id)) return false;
+      if (["construction.activity-attempt-ended-by-revision", "construction.activity-reopened"].includes(candidate.event.type)) {
+        return stringField(candidate.event.data, "task_id") === taskId && stringField(candidate.event.data, "activity") === activity;
+      }
+      if (["construction.task-scope-ended-by-revision", "construction.task-scope-reopened"].includes(candidate.event.type)) {
+        return stringField(candidate.event.data, "task_id") === taskId && affectedActivitiesFor(candidate).includes(activity);
+      }
+      return candidate.event.type === "construction.stage-attempt-ended-by-revision" && candidate.event.data.stage === "implementation";
+    });
+  };
+  const activityStartRouteCurrentAt = (start: ConstructionHistoryFact, boundary: ConstructionHistoryFact): boolean => {
+    const activity = stringField(start.event.data, "activity");
+    const taskId = stringField(start.event.data, "task_id");
+    const stageAttemptId = stringField(start.event.data, "stage_attempt_id");
+    const unitId = factUnitId(start);
+    let previousActivity: string | undefined;
+    if (activity === "code-validation") previousActivity = "code-generation";
+    if (activity === "code-integration") previousActivity = "code-validation";
+    if (!activity || !taskId || !stageAttemptId || !unitId) return false;
+    if (!previousActivity) return activity === "code-generation";
+    const initialStart = start.event.type === "construction.activity-attempt-started"
+      ? start
+      : order.uniqueFacts.find((candidate) => candidate.event.type === "construction.activity-attempt-started" &&
+        sameActivityScope(candidate, start) && order.hasPath(candidate.event.id, start.event.id));
+    if (!initialStart) return false;
+    const previous = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+      validCompletionEvents.has(candidate.event.id) && activityCompletionCurrentAt(candidate, boundary) &&
+      factUnitId(candidate) === unitId && stringField(candidate.event.data, "task_id") === taskId &&
+      stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+      stringField(candidate.event.data, "activity") === previousActivity && hasDirectCause(initialStart, candidate) &&
+      checkpointKey(candidate.event.data.checkpoints) === checkpointKey(start.event.data.checkpoints));
+    if (previous.length !== 1) return false;
+    if (activity !== "code-integration") return true;
+    return order.uniqueFacts.some((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+      validCompletionEvents.has(candidate.event.id) && activityCompletionCurrentAt(candidate, boundary) &&
+      factUnitId(candidate) === unitId && stringField(candidate.event.data, "task_id") === taskId &&
+      stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+      stringField(candidate.event.data, "activity") === "code-generation" && order.hasPath(candidate.event.id, previous[0]!.event.id));
+  };
   for (const fact of order.uniqueFacts) {
     if (!validRevisionTransitions.has(fact.event.id) ||
         !["construction.task-scope-ended-by-revision", "construction.task-scope-reopened"].includes(fact.event.type)) continue;
@@ -1919,7 +2042,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const stageAttemptId = stringField(data, "stage_attempt_id");
     const starts = order.uniqueFacts.filter((candidate) =>
       ["construction.activity-attempt-started", "construction.activity-resumed"].includes(candidate.event.type) &&
-      sameActivityScope(candidate, fact) && hasDirectCause(fact, candidate),
+      sameActivityScope(candidate, fact) && hasDirectCause(fact, candidate) && activityStartRouteCurrentAt(candidate, fact),
     );
     const admissions = order.uniqueFacts.filter((candidate) =>
       candidate.event.type === "construction.task-admitted" && factUnitId(candidate) === unitId &&
@@ -1928,9 +2051,19 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     );
     const sourceEvidenceIds = Array.isArray(data.source_evidence_ids) ? data.source_evidence_ids : [];
     const taskOutputRefs = Array.isArray(data.task_output_refs) ? data.task_output_refs : [];
+    const taskContract = admissions.length === 1 && admissions[0]?.event.type === "construction.task-admitted" &&
+      isRecord(admissions[0].event.data.task_contract) ? admissions[0].event.data.task_contract : undefined;
+    const capturedRepositoryIds = Array.isArray(data.captured_inputs)
+      ? data.captured_inputs.flatMap((item) => isRecord(item) && typeof item.repository_id === "string" ? [item.repository_id] : [])
+      : [];
+    const candidateRepositoryIds = Array.isArray(data.candidate_checkpoints)
+      ? data.candidate_checkpoints.flatMap((item) => isRecord(item) && typeof item.repository_id === "string" ? [item.repository_id] : [])
+      : [];
     const sourceEvidence: ConstructionHistoryFact[] = [];
     const retainedAssessments: ConstructionHistoryFact[] = [];
-    let sourcesValid = sourceEvidenceIds.length > 0 && taskOutputRefs.length > 0;
+    let sourcesValid = sourceEvidenceIds.length > 0 && taskOutputRefs.length > 0 && capturedRepositoryIds.length > 0 &&
+      admissions.length === 1 && taskContract !== undefined && Array.isArray(taskContract.outputs) &&
+      sameStringSet(taskOutputRefs, taskContract.outputs) && sameStringSet(capturedRepositoryIds, candidateRepositoryIds);
     for (const sourceEvidenceId of sourceEvidenceIds) {
       const candidates = typeof sourceEvidenceId === "string" ? evidenceById.get(sourceEvidenceId) ?? [] : [];
       const evidence = candidates.length === 1 ? candidates[0] : undefined;
@@ -1958,15 +2091,18 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         continue;
       }
       const evidenceId = stringField(evidenceData, "evidence_id");
-      const validationCompleted = order.uniqueFacts.some((candidate) =>
-        candidate.event.type === "construction.activity-attempt-completed" &&
-        stringField(candidate.event.data, "task_id") === taskId &&
-        stringField(candidate.event.data, "activity") === "code-validation" &&
-        stringField(candidate.event.data, "activity_attempt_id") === stringField(evidenceData, "activity_attempt_id") &&
-        stringField(candidate.event.data, "stage_attempt_id") === stringField(evidenceData, "stage_attempt_id") &&
-        Array.isArray(candidate.event.data.evidence_ids) && candidate.event.data.evidence_ids.includes(evidenceId) &&
-        validCompletionEvents.has(candidate.event.id) && hasDirectCause(fact, candidate),
-      );
+      const validationCompleted = order.uniqueFacts.some((candidate) => {
+        if (candidate.event.type !== "construction.activity-attempt-completed" ||
+            stringField(candidate.event.data, "task_id") !== taskId ||
+            stringField(candidate.event.data, "activity") !== "code-validation" ||
+            stringField(candidate.event.data, "activity_attempt_id") !== stringField(evidenceData, "activity_attempt_id") ||
+            stringField(candidate.event.data, "stage_attempt_id") !== stringField(evidenceData, "stage_attempt_id") ||
+            !Array.isArray(candidate.event.data.evidence_ids) || !candidate.event.data.evidence_ids.includes(evidenceId) ||
+            !validCompletionEvents.has(candidate.event.id) || !activityCompletionCurrentAt(candidate, fact) || !hasDirectCause(fact, candidate)) return false;
+        const validationStart = order.uniqueFacts.find((start) => start.event.type === "construction.activity-attempt-started" &&
+          sameActivityScope(start, candidate));
+        return validationStart !== undefined && activityStartRouteCurrentAt(validationStart, fact);
+      });
       if (!validationCompleted) sourcesValid = false;
       sourceEvidence.push(evidence);
     }
@@ -1975,7 +2111,8 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         ? evidence.event.data.output_refs.filter((reference): reference is string => typeof reference === "string")
         : [],
     ));
-    if (!taskOutputRefs.every((reference) => typeof reference === "string" && producedOutputs.has(reference))) {
+    const typedTaskOutputRefs = taskOutputRefs.filter((reference): reference is string => typeof reference === "string");
+    if (typedTaskOutputRefs.length !== taskOutputRefs.length || !sameStringSet([...producedOutputs], typedTaskOutputRefs)) {
       sourcesValid = false;
     }
     if (starts.length === 0 || (admissions.length === 0 && retainedAssessments.length === 0) || !sourcesValid) {
@@ -2011,6 +2148,14 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       });
       continue;
     }
+    const preparedAdmissions = prepared && prepared.event.type === "construction.integration-prepared"
+      ? order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.task-admitted" &&
+        factUnitId(candidate) === factUnitId(fact) && stringField(candidate.event.data, "task_id") === stringField(fact.event.data, "task_id") &&
+        stringField(candidate.event.data, "stage_attempt_id") === stringField(fact.event.data, "stage_attempt_id") &&
+        hasDirectCause(prepared, candidate))
+      : [];
+    const integrationTaskContract = preparedAdmissions.length === 1 && preparedAdmissions[0]?.event.type === "construction.task-admitted" &&
+      isRecord(preparedAdmissions[0].event.data.task_contract) ? preparedAdmissions[0].event.data.task_contract : undefined;
     const repositoryResults = Array.isArray(data.repository_results) ? data.repository_results : [];
     const candidates = Array.isArray(data.candidate_checkpoints) ? data.candidate_checkpoints.filter(isRecord) : [];
     const authorityEventIds = Array.isArray(data.authority_event_ids) ? data.authority_event_ids : [];
@@ -2040,6 +2185,53 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         }
       }
     }
+    const candidateRepositoryIds = candidates.flatMap((checkpoint) =>
+      typeof checkpoint.repository_id === "string" ? [checkpoint.repository_id] : []);
+    if (!sameStringSet([...resultRepositories], candidateRepositoryIds)) resultsValid = false;
+    const requiredRepositoryChecks = ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite"];
+    for (const repositoryId of candidateRepositoryIds) {
+      const result = repositoryResults.find((item) => isRecord(item) && item.repository_id === repositoryId);
+      const repositoryEvidence = isRecord(result) && Array.isArray(result.evidence_ids)
+        ? result.evidence_ids.flatMap((evidenceId) => {
+          const matches = typeof evidenceId === "string" ? evidenceById.get(evidenceId) ?? [] : [];
+          const evidence = matches.length === 1 ? matches[0] : undefined;
+          return evidence?.event.type === "construction.evidence-recorded" ? [evidence] : [];
+        })
+        : [];
+      const repositoryChecks = repositoryEvidence.map((evidence) => stringField(evidence.event.data, "check") ?? "");
+      const commandKeys = repositoryEvidence.flatMap((evidence) => {
+        const command = evidence.event.data.check_command;
+        const check = stringField(evidence.event.data, "check");
+        if (!isRecord(command) || command.repository_id !== repositoryId || typeof command.executable !== "string" ||
+            command.executable.trim().length === 0 || !Array.isArray(command.argv) ||
+            !command.argv.every((argument) => typeof argument === "string" && argument.trim().length > 0)) return [];
+        const plannedCommands = integrationTaskContract?.planned_integration_commands;
+        const commandIsPlanned = plannedCommands === undefined || Array.isArray(plannedCommands) && plannedCommands.some((planned) =>
+          isRecord(planned) && planned.check === check && planned.repository_id === command.repository_id &&
+          planned.executable === command.executable && JSON.stringify(planned.argv) === JSON.stringify(command.argv));
+        if (!commandIsPlanned) return [];
+        return [JSON.stringify([command.repository_id, command.executable, command.argv])];
+      });
+      if (!sameStringSet(repositoryChecks, requiredRepositoryChecks) || commandKeys.length !== repositoryEvidence.length) resultsValid = false;
+    }
+    if (preparedAdmissions.length !== 1 || !integrationTaskContract || !Array.isArray(integrationTaskContract.acceptance_criteria)) resultsValid = false;
+    const selfReviewEvidence = authorityEventIds.flatMap((eventId) => {
+      const evidence = typeof eventId === "string" ? factsById.get(eventId) : undefined;
+      const matchingCheckpoints = evidence && evidence.event.type === "construction.evidence-recorded" &&
+        checkpointKey(evidence.event.data.checkpoints) === checkpointKey(data.candidate_checkpoints);
+      const selfReviewConditions = evidence?.event.type === "construction.evidence-recorded" &&
+        isStringArray(evidence.event.data.conditions) ? evidence.event.data.conditions : undefined;
+      const acceptanceCriteria = integrationTaskContract && isStringArray(integrationTaskContract.acceptance_criteria)
+        ? integrationTaskContract.acceptance_criteria : undefined;
+      const matchingConditions = selfReviewConditions !== undefined && acceptanceCriteria !== undefined &&
+        selfReviewConditions.includes("Integration bindings match the accepted candidate and actual inputs.") &&
+        acceptanceCriteria.every((criterion) => selfReviewConditions.includes(criterion));
+      return evidence?.event.type === "construction.evidence-recorded" &&
+        evidence.event.data.check === "code-integration-self-review" && isRecord(evidence.event.data.result) &&
+        evidence.event.data.result.status === "passed" && sameActivityScope(evidence, fact) && matchingCheckpoints && matchingConditions &&
+        fact.event.caused_by.includes(evidence.event.id) && order.hasPath(evidence.event.id, fact.event.id) ? [evidence] : [];
+    });
+    if (selfReviewEvidence.length !== 1) resultsValid = false;
     if (!resultsValid) {
       const unitId = factUnitId(fact);
       addIssue({
@@ -2052,7 +2244,34 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     }
     validIntegrationAcceptances.add(fact.event.id);
   }
-
+  const integrationActivityCompletions = order.uniqueFacts.filter((fact) => fact.event.type === "construction.activity-attempt-completed" &&
+    stringField(fact.event.data, "activity") === "code-integration");
+  for (const completion of integrationActivityCompletions) {
+    const completionEvidenceIds = Array.isArray(completion.event.data.evidence_ids)
+      ? completion.event.data.evidence_ids.filter((id): id is string => typeof id === "string") : [];
+    const matchingAcceptances = [...validIntegrationAcceptances].flatMap((acceptanceId) => {
+      const acceptance = factsById.get(acceptanceId);
+      if (!acceptance || acceptance.event.type !== "construction.integration-accepted" ||
+          !sameActivityScope(acceptance, completion) || !hasDirectCause(completion, acceptance) ||
+          checkpointKey(acceptance.event.data.candidate_checkpoints) !== checkpointKey(completion.event.data.checkpoints)) return [];
+      const repositoryEvidenceIds = Array.isArray(acceptance.event.data.repository_results)
+        ? acceptance.event.data.repository_results.flatMap((result) => isRecord(result) && Array.isArray(result.evidence_ids)
+          ? result.evidence_ids.filter((id): id is string => typeof id === "string") : []) : [];
+      const selfReviewIds = Array.isArray(acceptance.event.data.authority_event_ids)
+        ? acceptance.event.data.authority_event_ids.flatMap((eventId) => {
+          const evidence = typeof eventId === "string" ? factsById.get(eventId) : undefined;
+          return evidence?.event.type === "construction.evidence-recorded" && evidence.event.data.check === "code-integration-self-review" &&
+            typeof evidence.event.data.evidence_id === "string" ? [evidence.event.data.evidence_id] : [];
+        }) : [];
+      return sameStringSet(completionEvidenceIds, [...repositoryEvidenceIds, ...selfReviewIds]) ? [acceptance] : [];
+    });
+    if (!validCompletionEvents.has(completion.event.id) || matchingAcceptances.length !== 1) {
+      validCompletionEvents.delete(completion.event.id);
+      const unitId = factUnitId(completion);
+      addIssue({ code: "invalid-completion-evidence", message: "Integration Activity completion requires the exact accepted repository checks and self-review.",
+        scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId }, eventIds: [completion.event.id, ...matchingAcceptances.map((item) => item.event.id)] });
+    }
+  }
   const integrationAcceptanceFollowsReopen = (
     acceptance: ConstructionHistoryFact,
     reopening: ConstructionHistoryFact,
@@ -2169,13 +2388,39 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const baselines = order.uniqueFacts.filter((candidate) =>
       candidate.event.type === "construction.unit-baseline-selected" && factUnitId(candidate) === unitId,
     );
-    const baseline = baselines.length === 1 && baselines[0] && hasDirectCause(fact, baselines[0]) &&
-      checkpointKey(data.admission_baseline) === checkpointKey(baselines[0].event.data.review_baseline)
+    const baseline = baselines.length === 1 && baselines[0] && hasDirectCause(fact, baselines[0])
       ? baselines[0]
       : undefined;
+    const priorIntegrations = [...validIntegrationAcceptances].flatMap((eventId) => {
+      const candidate = factsById.get(eventId);
+      return candidate && order.hasPath(candidate.event.id, fact.event.id) ? [candidate] : [];
+    });
+    const latestPriorIntegrations = priorIntegrations.filter((candidate) =>
+      !priorIntegrations.some((other) => other.event.id !== candidate.event.id &&
+        order.hasPath(candidate.event.id, other.event.id) && order.hasPath(other.event.id, fact.event.id)),
+    );
+    const latestIntegration = latestPriorIntegrations.length === 1 ? latestPriorIntegrations[0] : undefined;
+    let expectedAdmissionBaseline: unknown;
+    if (latestIntegration?.event.type === "construction.integration-accepted") {
+      expectedAdmissionBaseline = latestIntegration.event.data.candidate_checkpoints;
+    } else if (baseline?.event.type === "construction.unit-baseline-selected") {
+      expectedAdmissionBaseline = baseline.event.data.review_baseline;
+    }
+    const admissionBaselineValid = expectedAdmissionBaseline !== undefined &&
+      (priorIntegrations.length === 0 || latestPriorIntegrations.length === 1) &&
+      checkpointKey(data.admission_baseline) === checkpointKey(expectedAdmissionBaseline) &&
+      (latestIntegration === undefined || hasDirectCause(fact, latestIntegration));
     if (!baseline) related.push(...baselines);
+    if (!admissionBaselineValid) related.push(...latestPriorIntegrations);
     const predecessorProvenance = Array.isArray(data.predecessor_provenance) ? data.predecessor_provenance : [];
-    let dependenciesValid = true;
+    const taskContract = isRecord(data.task_contract) ? data.task_contract : undefined;
+    const expectedDependencyIds = taskContract && Array.isArray(taskContract.dependency_task_ids)
+      ? taskContract.dependency_task_ids.filter((id): id is string => typeof id === "string") : [];
+    const actualDependencyIds = predecessorProvenance.flatMap((predecessor) =>
+      isRecord(predecessor) && typeof predecessor.task_id === "string" ? [predecessor.task_id] : []);
+    let dependenciesValid = taskContract
+      ? sameStringSet(expectedDependencyIds, actualDependencyIds)
+      : actualDependencyIds.length === predecessorProvenance.length && new Set(actualDependencyIds).size === actualDependencyIds.length;
     for (const predecessor of predecessorProvenance) {
       if (!isRecord(predecessor) || typeof predecessor.integration_event_id !== "string") {
         dependenciesValid = false;
@@ -2200,19 +2445,32 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       const candidates = typeof evidenceId === "string" ? evidenceById.get(evidenceId) ?? [] : [];
       const evidence = candidates.length === 1 ? candidates[0] : undefined;
       const result = evidence?.event.data.result;
-      if (!evidence || factUnitId(evidence) !== unitId || !isRecord(result) || result.status !== "passed" ||
+      if (!evidence || factUnitId(evidence) !== unitId || stringField(evidence.event.data, "stage") !== "implementation" ||
+          stringField(evidence.event.data, "stage_attempt_id") !== stageAttemptId || stringField(evidence.event.data, "task_id") !== stringField(data, "task_id") ||
+          evidence.event.data.activity !== undefined || evidence.event.data.check !== "task-prerequisite" || !isRecord(result) || result.status !== "passed" ||
           !hasDirectCause(fact, evidence)) {
         dependenciesValid = false;
         related.push(...candidates);
       }
     }
-    if (start && baseline && dependenciesValid) {
+    const requiredPrerequisites = taskContract && Array.isArray(taskContract.implementation_prerequisites)
+      ? taskContract.implementation_prerequisites.filter(isRecord) : [];
+    const prerequisitesCovered = requiredPrerequisites.every((prerequisite) => prerequisiteEvidence.some((evidenceId) => {
+      const evidence = typeof evidenceId === "string" ? evidenceById.get(evidenceId)?.[0] : undefined;
+      const inputs = evidence?.event.data.inputs;
+      return evidence?.event.type === "construction.evidence-recorded" && Array.isArray(inputs) && inputs.some((input) =>
+        isRecord(input) && [prerequisite.description, prerequisite.condition].includes(input.reference as string));
+    }));
+    const admissionsForTaskAttempt = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.task-admitted" &&
+      factUnitId(candidate) === unitId && stringField(candidate.event.data, "task_id") === stringField(data, "task_id") &&
+      stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId);
+    if (start && baseline && dependenciesValid && admissionBaselineValid && prerequisitesCovered && admissionsForTaskAttempt.length === 1) {
       validTaskAdmissions.add(fact.event.id);
       continue;
     }
     addIssue({
       code: "invalid-task-admission",
-      message: "Task admission lacks its current Implementation start, unit baseline, or validated predecessor evidence causes",
+      message: "Task admission lacks its current Implementation start, fixed unit Review baseline, current integrated admission baseline, or validated predecessor evidence causes",
       scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId },
       eventIds: [fact.event.id, ...related.map((cause) => cause.event.id)],
     });
@@ -2384,7 +2642,50 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     });
     const retained = retainedAssessments.some((candidate) => hasDirectCause(fact, candidate));
     if (admitted || (admissionCauses.length === 0 && retained)) {
-      validActivityStarts.add(fact.event.id);
+      const requiredPreviousActivity = activity === "code-validation"
+        ? "code-generation"
+        : activity === "code-integration"
+          ? "code-validation"
+          : undefined;
+      const previousCompletions = requiredPreviousActivity
+        ? order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+          validCompletionEvents.has(candidate.event.id) && activityCompletionCurrentAt(candidate, fact) && factUnitId(candidate) === unitId &&
+          stringField(candidate.event.data, "task_id") === taskId &&
+          stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+          stringField(candidate.event.data, "activity") === requiredPreviousActivity &&
+          hasDirectCause(fact, candidate))
+        : [];
+      const previousRetained = requiredPreviousActivity
+        ? retainedAssessments.filter((candidate) => {
+          const assessments = candidate.event.type === "construction.retained-scope-assessed" && Array.isArray(candidate.event.data.assessments)
+            ? candidate.event.data.assessments
+            : [];
+          return assessments.some((assessment) => isRecord(assessment) && assessment.applicable === true &&
+            assessment.task_id === taskId && assessment.activity === requiredPreviousActivity &&
+            checkpointKey(assessment.checkpoints) === checkpointKey(data.checkpoints));
+        })
+        : [];
+      const generationCurrent = activity !== "code-integration" || order.uniqueFacts.some((candidate) =>
+        candidate.event.type === "construction.activity-attempt-completed" && validCompletionEvents.has(candidate.event.id) &&
+        activityCompletionCurrentAt(candidate, fact) && factUnitId(candidate) === unitId &&
+        stringField(candidate.event.data, "task_id") === taskId &&
+        stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
+        stringField(candidate.event.data, "activity") === "code-generation" &&
+        previousCompletions.some((previous) => order.hasPath(candidate.event.id, previous.event.id)));
+      const routeValid = requiredPreviousActivity === undefined ||
+        (previousCompletions.length === 1 && checkpointKey(previousCompletions[0]!.event.data.checkpoints) === checkpointKey(data.checkpoints) && generationCurrent) ||
+        (previousRetained.length === 1 && hasDirectCause(fact, previousRetained[0]!) && generationCurrent);
+      if (routeValid) {
+        validActivityStarts.add(fact.event.id);
+        continue;
+      }
+      staleActivityStarts.add(fact.event.id);
+      addIssue({
+        code: "invalid-activity-start",
+        message: "Activity start does not follow exactly one completed predecessor Activity on its output checkpoints",
+        scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId },
+        eventIds: [fact.event.id, ...previousCompletions.map((candidate) => candidate.event.id)],
+      });
       continue;
     }
     if (admissionCauses.length > 0) {
@@ -2512,9 +2813,22 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
             stringField(accepted.event.data, "task_id") === taskId &&
             stringField(accepted.event.data, "stage_attempt_id") === stringField(data, "stage_attempt_id") &&
             fact.event.caused_by.includes(accepted.event.id) && order.hasPath(accepted.event.id, fact.event.id);
+          const integrationCompletions = accepted && accepted.event.type === "construction.integration-accepted"
+            ? order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+              validCompletionEvents.has(candidate.event.id) && sameActivityScope(candidate, accepted) &&
+              stringField(candidate.event.data, "activity") === "code-integration" && hasDirectCause(fact, candidate) &&
+              hasDirectCause(candidate, accepted) &&
+              checkpointKey(candidate.event.data.checkpoints) === checkpointKey(accepted.event.data.candidate_checkpoints))
+            : [];
+          const activityCompletion = integrationCompletions.length === 1 ? integrationCompletions[0] : undefined;
+          const admittedContract = admission?.event.type === "construction.task-admitted" && isRecord(admission.event.data.task_contract)
+            ? admission.event.data.task_contract : undefined;
+          const conditionsMatch = admittedContract && isStringArray(admittedContract.acceptance_criteria) &&
+            isStringArray(data.conditions) && sameStringMultiset(data.conditions, admittedContract.acceptance_criteria);
+          const admissionCaused = admission !== undefined && hasDirectCause(fact, admission);
           const staleIntegration = matchingAcceptance && !currentIntegrationAcceptances.has(accepted.event.id);
           if (staleIntegration) continue;
-          if (matchingAcceptance && currentIntegrationAcceptances.has(accepted.event.id) &&
+          if (matchingAcceptance && currentIntegrationAcceptances.has(accepted.event.id) && activityCompletion && conditionsMatch && admissionCaused &&
               taskStageAttemptId === stringField(data, "stage_attempt_id")) {
             taskState = "complete";
             completion = fact;

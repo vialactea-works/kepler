@@ -17,7 +17,7 @@ The task graph is [`tasks-dag.json`](tasks-dag.json). Explain the decomposition,
 
 ## Verification strategy
 
-State task and unit checks, repository-qualified commands, required environments, expected results, and missing verification infrastructure. Keep typechecking, the project build, and the full application test suite as separate duties where required.
+State task and unit checks, repository-qualified commands, required environments, expected results, and missing verification infrastructure. Keep typechecking, the project build, and the full application test suite as separate duties where required. For each Integration typecheck, build, and full-test-suite command, include the exact command as a backticked line in both this section and the task's `verification.method`, using `<repository_id>: <executable> <argument> ...` with one space between words (for example, `kepler: bun run typecheck`). The repository ID must match the prepared workspace; the CLI records and validates this declaration but does not execute it.
 
 ## Decisions and open questions
 

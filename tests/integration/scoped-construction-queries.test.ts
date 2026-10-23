@@ -125,6 +125,13 @@ describe("scoped Construction queries", () => {
       task_id: task.id,
       graph_ref: { graph_id: graph.id, content_version: "graph-v1" },
       task_definition_ref: { graph_id: graph.id, task_id: task.id, content_version: "task-v1" },
+      task_contract: {
+        outputs: task.outputs,
+        acceptance_criteria: task.acceptance_criteria,
+        dependency_task_ids: task.depends_on.map((dependency) => dependency.task_id),
+        implementation_prerequisites: task.prerequisites.filter((prerequisite) => prerequisite.blocking && prerequisite.needed_for === "implementation")
+          .map(({ description, condition }) => ({ description, condition })),
+      },
       admission_baseline: [],
       predecessor_provenance: [],
       prerequisite_evidence: [],
@@ -157,6 +164,7 @@ describe("scoped Construction queries", () => {
       inputs: [],
       check: "generation-self-review",
       executor: "requester",
+      worker_context_id: "context-generation-query",
       result: { status: "passed", summary: "The change follows the task contract." },
       output_refs: ["source-review"],
       conditions: [],

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
+import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuditCliDriver } from "./driver/audit-cli.js";
 import { StageCompletionCliDriver } from "./driver/stage-completion-cli.js";
@@ -28,6 +29,7 @@ const qualityCategories = [
 const planningArtifactId = "c1000000-0000-4000-8000-000000000001";
 const planningGraphId = "c2000000-0000-4000-8000-000000000002";
 const planningTaskId = "c3000000-0000-4000-8000-000000000003";
+const planningSecondTaskId = "c4000000-0000-4000-8000-000000000004";
 
 const sources = {
   "unit-of-work.md": `---\nid: ${artifactIds["unit-of-work.md"]}\ntype: unit-of-work\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Unit of Work\n\n## Purpose\n\nMake the selected workflow behavior explicit.\n\n## Scope\n\nInclude the Functional Design contract.\n\n## Context\n\nKeep the current public behavior and constraints.\n`,
@@ -394,7 +396,7 @@ const createPlanningArtifacts = async (
 ) => {
   const root = harness.resources.repositoryDirectory;
   const unitRoot = Path.join(root, unitDirectory);
-  const planSource = `---\nid: ${planningArtifactId}\ntype: implementation-plan\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Implementation plan\n\n## Technical solution\n\nEnforce owning-user access at the data boundary because this keeps the security rule testable.\n\n## Task graph context\n\nThe task decomposition is recorded in [tasks-dag.json](tasks-dag.json).\n\n## Verification strategy\n\nRun the focused unit test for the access policy and verify that another user is denied.\n\n## Decisions and open questions\n\nThe task owns the access-policy implementation; no consequential decisions remain open.\n`;
+  const planSource = `---\nid: ${planningArtifactId}\ntype: implementation-plan\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Implementation plan\n\n## Technical solution\n\nEnforce owning-user access at the data boundary because this keeps the security rule testable.\n\n## Task graph context\n\nThe task decomposition is recorded in [tasks-dag.json](tasks-dag.json).\n\n## Verification strategy\n\nTypecheck by running the project build, which includes TypeScript compilation: \`repo-main: bun run build\`. Run the project build with \`repo-main: bun run build\`. Run the full application test suite with \`repo-main: bun run test\`.\n\nRun the focused unit test for the access policy and verify that another user is denied.\n\n## Decisions and open questions\n\nThe task owns the access-policy implementation; no consequential decisions remain open.\n`;
   const graph = {
     format: "kepler-task-dag",
     version: 1,
@@ -408,7 +410,28 @@ const createPlanningArtifacts = async (
       outputs: ["Owner-scoped data access policy"],
       acceptance_criteria: ["A non-owner receives an access-denied result."],
       guidance: ["Keep the policy at the data boundary."],
-      verification: [{ scope: "unit", method: "Run the access-policy unit test", expected_result: "A non-owner is denied." }],
+      verification: [
+        { scope: "typecheck", method: "Typecheck by running the project build, which includes TypeScript compilation: `repo-main: bun run build`.", expected_result: "Typechecking passes." },
+        { scope: "build", method: "Build with `repo-main: bun run build`.", expected_result: "The project build passes." },
+        { scope: "full-test-suite", method: "Run the full application test suite with `repo-main: bun run test`.", expected_result: "All application tests pass." },
+        { scope: "unit", method: "Run the access-policy unit test", expected_result: "A non-owner is denied." },
+      ],
+      depends_on: [],
+      prerequisites: [],
+    }, {
+      id: planningSecondTaskId,
+      title: "Record access-policy regression coverage",
+      goal: "Keep evidence that owner-scoped reads deny another user's access.",
+      inputs: [{ reference: `artifact:${qualityArtifactIds["details/quality-requirements/security.md"]}`, purpose: "Accepted security requirement" }],
+      outputs: ["Owner-access regression evidence"],
+      acceptance_criteria: ["A non-owner receives an access-denied result."],
+      guidance: ["Keep the regression check tied to the access policy."],
+      verification: [
+        { scope: "typecheck", method: "Typecheck by running the project build, which includes TypeScript compilation: `repo-main: bun run build`.", expected_result: "Typechecking passes." },
+        { scope: "build", method: "Build with `repo-main: bun run build`.", expected_result: "The project build passes." },
+        { scope: "full-test-suite", method: "Run the full application test suite with `repo-main: bun run test`.", expected_result: "All application tests pass." },
+        { scope: "unit", method: "Run the access-policy unit test", expected_result: "A non-owner is denied." },
+      ],
       depends_on: [],
       prerequisites: [],
     }],
@@ -426,6 +449,12 @@ const createPlanningArtifacts = async (
   harness.resources.runGit(root, "add", unitDirectory);
   harness.resources.runGit(root, "commit", "-q", "-m", "Record Implementation Planning material");
   const commit = harness.resources.runGit(root, "rev-parse", "HEAD");
+  const taskContracts = graph.tasks.map((task) => ({
+    outputs: task.outputs,
+    acceptance_criteria: task.acceptance_criteria,
+    dependency_task_ids: [],
+    implementation_prerequisites: [],
+  }));
   return {
     artifactBindings: [planBinding],
     reviewedBindings,
@@ -434,7 +463,9 @@ const createPlanningArtifacts = async (
     graphRef: { graph_id: planningGraphId, content_version: `sha256:${createHash("sha256").update(graphSource, "utf8").digest("hex")}` },
     graphSource,
     planSource,
-    taskIds: [planningTaskId],
+    taskIds: [planningTaskId, planningSecondTaskId],
+    taskContracts,
+    taskContract: taskContracts[0]!,
   };
 };
 
@@ -493,8 +524,8 @@ const planningCompletionRequest = (
       summary: "Rationale, obligations, task contracts, dependencies, prerequisites, and verification feasibility were reviewed.",
       checks: ["decision-rationale", "obligation-coverage", "consistency", "dependency-reasons", "prerequisite-conditions", "verification-feasibility", "input-relevance", "blocking-decisions"],
       decision_rationales: [{ decision: "Enforce access at the data boundary", rationale: "This keeps the security rule local and testable." }],
-      task_reviews: [{
-        task_id: planningTaskId,
+      task_reviews: material.taskIds.map((taskId) => ({
+        task_id: taskId,
         inputs_relevant: true,
         outputs_explicit: true,
         acceptance_testable: true,
@@ -502,12 +533,12 @@ const planningCompletionRequest = (
         prerequisites_conditioned: true,
         verification_feasible: true,
         rationale: "The task has explicit input, output, acceptance, and verification contracts.",
-      }],
+      })),
       obligation_coverage: [{
         reference: "quality.md#security",
         disposition: "planned",
-        task_ids: [planningTaskId],
-        rationale: "The task implements the accepted owner-scoped access rule.",
+        task_ids: material.taskIds,
+        rationale: "The tasks implement the accepted owner-scoped access rule and its regression coverage.",
       }],
       unresolved_consequential_decisions: [],
       unsupported_assumptions: [],
@@ -523,7 +554,12 @@ const planningCompletionRequest = (
       input_bindings: material.inputBindings,
       graph_ref: material.graphRef,
       task_ids: material.taskIds,
-      verification_obligations: [`task:${planningTaskId} unit: Run the access-policy unit test; expected: A non-owner is denied.`],
+      verification_obligations: material.taskIds.flatMap((taskId) => [
+        `task:${taskId} typecheck: Typecheck by running the project build, which includes TypeScript compilation: \`repo-main: bun run build\`.; expected: Typechecking passes.`,
+        `task:${taskId} build: Build with \`repo-main: bun run build\`.; expected: The project build passes.`,
+        `task:${taskId} full-test-suite: Run the full application test suite with \`repo-main: bun run test\`.; expected: All application tests pass.`,
+        `task:${taskId} unit: Run the access-policy unit test; expected: A non-owner is denied.`,
+      ]),
       prerequisite_conditions: [],
       coordination_constraints: ["Serialize repository integration per unit."],
       approval_required: false,
@@ -548,6 +584,18 @@ const createAuditDriver = (harness: E2EHarness): AuditCliDriver => {
     },
   });
 };
+
+const runCliWithExeca = (harness: E2EHarness, args: readonly string[]) => execa(
+  process.execPath,
+  [Path.resolve(import.meta.dirname, "../../packages/cli/dist/cli/main.js"), ...args],
+  {
+    cwd: harness.resources.repositoryDirectory,
+    env: harness.resources.environment(),
+    extendEnv: false,
+    reject: false,
+    timeout: 30_000,
+  },
+);
 
 const recordEvidence = (
   audit: AuditCliDriver,
@@ -889,11 +937,11 @@ describe("Functional Design stage completion CLI E2E", () => {
     };
     const missingEvidence = planningDriver.complete(auditFixture.unitId, planningAttempt, missingEvidenceRequest, "implementation-planning");
     expect(missingEvidence.exitCode).toBe(1);
-    expect(missingEvidence.result).toMatchObject({ status: "failed", data: { code: "planning_evidence_invalid" } });
+    if (missingEvidence.result.data?.code !== "planning_evidence_invalid") throw new Error(JSON.stringify(missingEvidence.result));
     await Fs.writeFile(Path.join(harness.resources.repositoryDirectory, unitDirectory, "plan.md"), `${planningMaterial.planSource}\nThe current material changed after its evidence was recorded.\n`, "utf8");
     const staleMaterial = planningDriver.complete(auditFixture.unitId, planningAttempt, planningRequest, "implementation-planning");
     expect(staleMaterial.exitCode).toBe(1);
-    expect(staleMaterial.result).toMatchObject({ status: "failed", data: { code: "planning_evidence_invalid" } });
+    if (staleMaterial.result.data?.code !== "planning_evidence_invalid") throw new Error(JSON.stringify(staleMaterial.result));
     await Fs.writeFile(Path.join(harness.resources.repositoryDirectory, unitDirectory, "plan.md"), planningMaterial.planSource, "utf8");
     expect(await audit.journalSnapshot()).toBe(beforePlanningDenials);
     const planningResult = planningDriver.complete(auditFixture.unitId, planningAttempt, planningRequest, "implementation-planning");
@@ -924,8 +972,22 @@ describe("Functional Design stage completion CLI E2E", () => {
       stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId,
       graph_ref: planningMaterial.graphRef,
       task_definition_ref: { graph_id: planningMaterial.graphRef.graph_id, task_id: planningTaskId, content_version: planningMaterial.graphRef.content_version },
+      task_contract: planningMaterial.taskContract,
       admission_baseline: [{ repository_id: repositoryId, commit: "checkpoint-start" }], predecessor_provenance: [], prerequisite_evidence: [],
     }, [previousImplementationStart.eventId, String(planningResult.result.data.id), auditFixture.baselineEventId]);
+    const previousActivityChecks = {
+      "code-generation": ["code-generation-typecheck", "code-generation-related-tests", "code-generation-self-review"],
+      "code-validation": ["code-validation-typecheck", "code-validation-build", "code-validation-full-test-suite",
+        "code-validation-independent-review", "code-validation-self-review"],
+      "code-integration": ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite",
+        "code-integration-self-review"],
+    } as const;
+    const integrationCheckCommands = {
+      "code-integration-typecheck": { repository_id: repositoryId, executable: "bun", argv: ["run", "build"] },
+      "code-integration-build": { repository_id: repositoryId, executable: "bun", argv: ["run", "build"] },
+      "code-integration-full-test-suite": { repository_id: repositoryId, executable: "bun", argv: ["run", "test"] },
+    } as const;
+    const previousActivityExecutors = { "code-generation": "agent:builder", "code-validation": "agent:verifier", "code-integration": "agent:integrator" } as const;
     const createPreviousActivity = async (
       activity: "code-generation" | "code-validation" | "code-integration",
       priorCompletionId?: string,
@@ -943,38 +1005,57 @@ describe("Functional Design stage completion CLI E2E", () => {
           mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
           stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
           activity_attempt_id: activityAttemptId, captured_inputs: planningMaterial.checkpoints,
-          candidate_checkpoints: planningMaterial.checkpoints, task_output_refs: [`task-output:${planningTaskId}`],
+          candidate_checkpoints: planningMaterial.checkpoints, task_output_refs: planningMaterial.taskContract.outputs,
           source_evidence_ids: sourceEvidence ? [sourceEvidence.evidenceId] : [], inputs: implementationInputs,
         }, [started.id, previousImplementationAdmission.id, ...(priorCompletionId ? [priorCompletionId] : []), ...(sourceEvidence ? [sourceEvidence.eventId] : [])]);
         preparedId = prepared.id;
       }
-      const evidenceId = randomUUID();
-      const evidence = await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
-        mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
-        stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
-        activity_attempt_id: activityAttemptId, evidence_id: evidenceId,
-        artifact_bindings: planningMaterial.reviewedBindings, checkpoints: planningMaterial.checkpoints,
-        inputs: implementationInputs, check: `${activity}-verification`, executor: activity === "code-generation" ? "agent:builder" : "agent:verifier",
-        result: { status: "passed", summary: `${activity} produced passing evidence.` },
-        output_refs: [`task-output:${planningTaskId}`], conditions: [],
-      }, [started.id, ...(preparedId ? [preparedId] : [])]);
+      const evidenceRecords: { readonly evidenceId: string; readonly eventId: string; readonly check: string }[] = [];
+      for (const check of previousActivityChecks[activity]) {
+        const evidenceId = randomUUID();
+        const executor = check === "code-validation-independent-review" ? "agent:reviewer" : previousActivityExecutors[activity];
+        const evidence = await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
+          mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
+          stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
+          activity_attempt_id: activityAttemptId, evidence_id: evidenceId,
+          artifact_bindings: planningMaterial.reviewedBindings, checkpoints: planningMaterial.checkpoints,
+          inputs: implementationInputs, check, executor,
+          result: { status: "passed", summary: `${check} passed for the current output.` },
+          output_refs: planningMaterial.taskContract.outputs,
+          conditions: check === "code-integration-self-review"
+            ? ["Integration bindings match the accepted candidate and actual inputs.", ...planningMaterial.taskContract.acceptance_criteria]
+            : [],
+          ...(activity === "code-integration" && check !== "code-integration-self-review" ? {
+            check_command: integrationCheckCommands[check as keyof typeof integrationCheckCommands],
+          } : {}),
+          ...(activity === "code-generation" || activity === "code-validation" ? {
+            worker_context_id: check === "code-validation-independent-review" ? `${activityAttemptId}:reviewer` : `${activityAttemptId}:worker`,
+          } : {}),
+        }, [started.id, ...(preparedId ? [preparedId] : [])]);
+        evidenceRecords.push({ evidenceId, eventId: evidence.id, check });
+      }
       let integrationEventId: string | undefined;
       if (activity === "code-integration") {
+        const repositoryEvidence = evidenceRecords.filter((item) => item.check !== "code-integration-self-review");
+        const selfReview = evidenceRecords.find((item) => item.check === "code-integration-self-review")!;
         const accepted = await appendTypedConstructionEvent(harness, "construction.integration-accepted", {
           mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
           stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
           activity_attempt_id: activityAttemptId, prepared_event_id: preparedId,
           candidate_checkpoints: planningMaterial.checkpoints,
-          repository_results: [{ repository_id: repositoryId, evidence_ids: [evidenceId] }], authority_event_ids: [],
-        }, [String(preparedId), evidence.id]);
+          repository_results: [{ repository_id: repositoryId, evidence_ids: repositoryEvidence.map((item) => item.evidenceId) }],
+          authority_event_ids: [selfReview.eventId],
+        }, [String(preparedId), ...evidenceRecords.map((item) => item.eventId)]);
         integrationEventId = accepted.id;
       }
+      const evidenceIds = evidenceRecords.map((item) => item.evidenceId);
       const completed = await appendTypedConstructionEvent(harness, "construction.activity-attempt-completed", {
         mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
         stage_attempt_id: previousImplementationStart.attemptId, task_id: planningTaskId, activity,
-        activity_attempt_id: activityAttemptId, evidence_ids: [evidenceId], checkpoints: planningMaterial.checkpoints,
-      }, [started.id, evidence.id, ...(integrationEventId ? [integrationEventId] : [])]);
-      return { activityAttemptId, evidenceId, evidenceEventId: evidence.id, completionId: completed.id, integrationEventId };
+        activity_attempt_id: activityAttemptId, evidence_ids: evidenceIds, checkpoints: planningMaterial.checkpoints,
+      }, [started.id, ...evidenceRecords.map((item) => item.eventId), ...(integrationEventId ? [integrationEventId] : [])]);
+      return { activityAttemptId, evidenceId: evidenceIds[0]!, evidenceIds, evidenceEventId: evidenceRecords[0]!.eventId,
+        completionId: completed.id, integrationEventId };
     };
     const previousCodeGeneration = await createPreviousActivity("code-generation");
     const previousCodeValidation = await createPreviousActivity("code-validation", previousCodeGeneration.completionId);
@@ -1009,17 +1090,17 @@ describe("Functional Design stage completion CLI E2E", () => {
     const retainedAssessmentRequest = { assessments: [
       {
         task_id: planningTaskId, activity: "code-generation", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeGeneration.activityAttemptId, original_evidence_ids: [previousCodeGeneration.evidenceId],
+        original_activity_attempt_id: previousCodeGeneration.activityAttemptId, original_evidence_ids: previousCodeGeneration.evidenceIds,
         applicable: true, reason: "Generation output remains valid for the unchanged task graph.", checkpoints: planningMaterial.checkpoints,
       },
       {
         task_id: planningTaskId, activity: "code-validation", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeValidation.activityAttemptId, original_evidence_ids: [previousCodeValidation.evidenceId],
+        original_activity_attempt_id: previousCodeValidation.activityAttemptId, original_evidence_ids: previousCodeValidation.evidenceIds,
         applicable: true, reason: "Validation remains valid for the unchanged generated output.", checkpoints: planningMaterial.checkpoints,
       },
       {
         task_id: planningTaskId, activity: "code-integration", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeIntegration.activityAttemptId, original_evidence_ids: [previousCodeIntegration.evidenceId],
+        original_activity_attempt_id: previousCodeIntegration.activityAttemptId, original_evidence_ids: previousCodeIntegration.evidenceIds,
         applicable: true, reason: "The predecessor Integration was available before current work and remains in the assessed history.", checkpoints: planningMaterial.checkpoints,
       },
     ] };
@@ -1036,123 +1117,229 @@ describe("Functional Design stage completion CLI E2E", () => {
     const retainedAssessment = stageDriver.assessRetainedScopes(auditFixture.unitId, implementationAttempt, retainedAssessmentRequest);
     expect(retainedAssessment.exitCode, JSON.stringify(retainedAssessment.result)).toBe(0);
     const retainedAssessmentEventId = String(retainedAssessment.result.data.id);
-    const admission = await appendTypedConstructionEvent(harness, "construction.task-admitted", {
-      mission_id: auditFixture.missionId,
-      unit_id: auditFixture.unitId,
-      stage: "implementation",
-      stage_attempt_id: implementationAttempt,
-      task_id: planningTaskId,
-      graph_ref: planningMaterial.graphRef,
-      task_definition_ref: {
-        graph_id: planningMaterial.graphRef.graph_id,
-        task_id: planningTaskId,
-        content_version: planningMaterial.graphRef.content_version,
-      },
-      admission_baseline: [{ repository_id: repositoryId, commit: "checkpoint-start" }],
-      predecessor_provenance: [],
-      prerequisite_evidence: [],
-    }, [implementationStart.eventId, String(planningResult.result.data.id), auditFixture.baselineEventId, retainedAssessmentEventId]);
-    const activityNames = ["code-integration"] as const;
-    const activityEvidenceIds: string[] = [];
-    const activityStarts = new Map<string, string>();
-    const activityAttemptIds = new Map<string, string>();
-    const activityCompletionEventIds = new Map<string, string>();
-    let previousActivityCompletion = previousCodeValidation.completionId;
-    let validationEvidenceId = previousCodeValidation.evidenceId;
-    let validationEvidenceEventId = previousCodeValidation.evidenceEventId;
-    let integrationEventId = "";
-    for (const activity of activityNames) {
-      const activityAttemptId = randomUUID();
-      const started = await appendTypedConstructionEvent(harness, "construction.activity-attempt-started", {
-        mission_id: auditFixture.missionId,
-        unit_id: auditFixture.unitId,
-        stage: "implementation",
-        stage_attempt_id: implementationAttempt,
-        task_id: planningTaskId,
-        activity,
-        activity_attempt_id: activityAttemptId,
-        inputs: implementationInputs,
-        checkpoints: planningMaterial.checkpoints,
-      }, [admission.id, previousActivityCompletion, retainedAssessmentEventId]);
-      activityStarts.set(activity, started.id);
-      activityAttemptIds.set(activity, activityAttemptId);
-      let preparedId: string | undefined;
-      if (activity === "code-integration") {
-        const prepared = await appendTypedConstructionEvent(harness, "construction.integration-prepared", {
-          mission_id: auditFixture.missionId,
-          unit_id: auditFixture.unitId,
-          stage: "implementation",
-          stage_attempt_id: implementationAttempt,
-          task_id: planningTaskId,
-          activity,
-          activity_attempt_id: activityAttemptId,
-          captured_inputs: planningMaterial.checkpoints,
-          candidate_checkpoints: planningMaterial.checkpoints,
-          task_output_refs: [`task-output:${planningTaskId}`],
-          source_evidence_ids: [validationEvidenceId],
-          inputs: implementationInputs,
-        }, [started.id, admission.id, previousActivityCompletion, validationEvidenceEventId, retainedAssessmentEventId]);
-        preparedId = prepared.id;
+    const beforeUnknownPrerequisite = await audit.journalSnapshot();
+    const unknownPrerequisite = harness.cli.run([
+      "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningTaskId,
+      "--implementation-attempt", implementationAttempt, "--prerequisites",
+      JSON.stringify({ prerequisite_evidence_ids: [randomUUID()] }),
+    ]);
+    expect(unknownPrerequisite.exitCode).toBe(1);
+    expect(JSON.parse(unknownPrerequisite.stdout)).toMatchObject({ status: "failed", data: { code: "task_prerequisite_unverified" } });
+    expect(await audit.journalSnapshot()).toBe(beforeUnknownPrerequisite);
+    const firstAdmissionProcess = await runCliWithExeca(harness, [
+      "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningTaskId,
+      "--implementation-attempt", implementationAttempt,
+    ]);
+    const secondAdmissionProcess = await runCliWithExeca(harness, [
+      "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
+      "--implementation-attempt", implementationAttempt,
+    ]);
+    const firstAdmissionResult = JSON.parse(firstAdmissionProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
+    const secondAdmissionResult = JSON.parse(secondAdmissionProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
+    expect(firstAdmissionProcess.exitCode, JSON.stringify(firstAdmissionResult)).toBe(0);
+    expect(secondAdmissionProcess.exitCode, JSON.stringify(secondAdmissionResult)).toBe(0);
+    expect(firstAdmissionResult).toMatchObject({
+      status: "success",
+      data: { task_id: planningTaskId, implementation_attempt_id: implementationAttempt },
+    });
+    expect(secondAdmissionResult).toMatchObject({
+      status: "success",
+      data: { task_id: planningSecondTaskId, implementation_attempt_id: implementationAttempt },
+    });
+    const admissionEventId = String(firstAdmissionResult.data.admission_event_id);
+    const secondAdmissionEventId = String(secondAdmissionResult.data.admission_event_id);
+    expect(secondAdmissionEventId).not.toBe(admissionEventId);
+    const activityNames = ["code-generation", "code-validation", "code-integration"] as const;
+    const activityExecutors = { "code-generation": "agent:builder", "code-validation": "agent:verifier", "code-integration": "agent:integrator" } as const;
+    const activityChecks = {
+      "code-generation": ["code-generation-typecheck", "code-generation-related-tests", "code-generation-self-review"],
+      "code-validation": ["code-validation-typecheck", "code-validation-build", "code-validation-full-test-suite",
+        "code-validation-independent-review", "code-validation-self-review"],
+      "code-integration": ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite",
+        "code-integration-self-review"],
+    } as const;
+    const runConstructionCli = async (args: readonly string[]) => {
+      const process = await runCliWithExeca(harness, args);
+      const response = JSON.parse(process.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
+      expect(process.exitCode, JSON.stringify(response)).toBe(0);
+      expect(response.status, JSON.stringify(response)).toBe("success");
+      return response.data;
+    };
+    const startGeneration = (taskId: string) => runConstructionCli([
+      "workflow", "construction", "activity", "start", "--unit", auditFixture.unitId,
+      "--task", taskId, "--activity", "code-generation", "--implementation-attempt", implementationAttempt,
+    ]);
+    const firstGenerationStart = await startGeneration(planningTaskId);
+    const secondGenerationStart = await startGeneration(planningSecondTaskId);
+    expect(firstGenerationStart.worker_dispatched).toBe(false);
+    expect(secondGenerationStart.worker_dispatched).toBe(false);
+    const firstGenerationState = await runConstructionCli([
+      "workflow", "construction", "activity", "show", "--unit", auditFixture.unitId,
+      "--task", planningTaskId, "--activity", "code-generation", "--implementation-attempt", implementationAttempt,
+    ]);
+    const secondGenerationState = await runConstructionCli([
+      "workflow", "construction", "activity", "show", "--unit", auditFixture.unitId,
+      "--task", planningSecondTaskId, "--activity", "code-generation", "--implementation-attempt", implementationAttempt,
+    ]);
+    expect(firstGenerationState.state).toBe("running");
+    expect(secondGenerationState.state).toBe("running");
+    const runTaskRoute = async (
+      taskId: string,
+      taskContract: typeof planningMaterial.taskContract,
+      generationStart: Readonly<Record<string, unknown>>,
+    ) => {
+      const evidenceIds: string[] = [];
+      const starts = new Map<string, string>();
+      const attempts = new Map<string, string>();
+      const completions = new Map<string, string>();
+      let integrationEventId = "";
+      for (const activity of activityNames) {
+        const started = activity === "code-generation" ? generationStart : await runConstructionCli([
+          "workflow", "construction", "activity", "start", "--unit", auditFixture.unitId,
+          "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
+        ]);
+        const activityAttemptId = String(started.activity_attempt_id);
+        const startEventId = String(started.event_id);
+        const inputs = started.inputs as readonly { readonly reference: string; readonly purpose: string }[];
+        const checkpoints = started.checkpoints as readonly { readonly repository_id: string; readonly commit: string }[];
+        starts.set(activity, startEventId);
+        attempts.set(activity, activityAttemptId);
+        const currentEvidenceIds: string[] = [];
+        const activityEvidence = activity === "code-integration"
+          ? activityChecks[activity].map((check) => ({ check }))
+          : activityChecks[activity].map((check) => {
+            const record = audit.record("evidence", {
+              unit: auditFixture.unitId,
+              stage: "implementation",
+              task: taskId,
+              activity,
+              implementationAttempt,
+              attempt: activityAttemptId,
+            }, {
+              artifact_bindings: planningMaterial.reviewedBindings,
+              checkpoints,
+              inputs,
+              check,
+              executor: check === "code-validation-independent-review" ? activityExecutors["code-generation"] : activityExecutors[activity],
+              worker_context_id: check === "code-validation-independent-review" ? `${activityAttemptId}:reviewer` : `${activityAttemptId}:worker`,
+              result: { status: "passed", summary: `${check} passed for the current task candidate.` },
+              output_refs: taskContract.outputs,
+              conditions: [],
+            });
+            expect(record.exitCode, record.stdout).toBe(0);
+            expect(record.result.status, JSON.stringify(record.result)).toBe("success");
+            const evidenceId = String(record.result.data.evidence_id);
+            currentEvidenceIds.push(evidenceId);
+            return { evidenceId, eventId: String(record.result.data.id), check };
+          });
+        if (activity !== "code-integration") evidenceIds.push(currentEvidenceIds[0]!);
+        if (activity === "code-integration") {
+          const integrationScope = [
+            "--unit", auditFixture.unitId, "--task", taskId, "--activity", activity,
+            "--implementation-attempt", implementationAttempt, "--attempt", activityAttemptId,
+          ];
+          const lock = await runConstructionCli(["workflow", "construction", "integration", "lock", ...integrationScope]);
+          const lockToken = String(lock.lock_token);
+          const prepared = await runConstructionCli([
+            "workflow", "construction", "integration", "prepare", ...integrationScope,
+            "--lock-token", lockToken,
+            "--request", JSON.stringify({ captured_inputs: lock.captured_inputs, candidate_checkpoints: checkpoints }),
+          ]);
+          const preparedEventId = String(prepared.prepared_event_id);
+          for (const item of activityEvidence) {
+            const selfReview = !Object.hasOwn(integrationCheckCommands, item.check);
+            const check = item.check as keyof typeof integrationCheckCommands;
+            const recorded = await runConstructionCli([
+              "workflow", "construction", "integration", "evidence", ...integrationScope,
+              "--lock-token", lockToken,
+              "--request", JSON.stringify({
+                prepared_event_id: preparedEventId,
+                check,
+                executor: activityExecutors[activity],
+                result: { status: "passed", summary: `${check} passed for the immutable candidate.` },
+                ...(selfReview ? {} : { check_command: integrationCheckCommands[check] }),
+                output_refs: taskContract.outputs,
+                conditions: selfReview
+                  ? ["Integration bindings match the accepted candidate and actual inputs.", ...taskContract.acceptance_criteria]
+                  : [],
+              }),
+            ]);
+            currentEvidenceIds.push(String(recorded.evidence_id));
+          }
+          evidenceIds.push(currentEvidenceIds[0]!);
+          const accepted = await runConstructionCli([
+            "workflow", "construction", "integration", "accept", ...integrationScope,
+            "--lock-token", lockToken, "--prepared-event-id", preparedEventId,
+          ]);
+          integrationEventId = String(accepted.integration_event_id);
+        }
+        const completionArgs = [
+          "workflow", "construction", "activity", "complete", "--unit", auditFixture.unitId,
+          "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
+          "--attempt", activityAttemptId, "--evidence", JSON.stringify({ evidence_ids: currentEvidenceIds }),
+        ];
+        if (activity === "code-validation") {
+          const reviewerEvidence = activityEvidence.find((item) => item.check === "code-validation-independent-review");
+          if (!reviewerEvidence || !("evidenceId" in reviewerEvidence)) throw new Error("The Validation independent-review evidence is missing.");
+          const historyDirectory = Path.join(harness.resources.repositoryDirectory, ".kepler", "missions", auditFixture.missionId, "history", "construction");
+          let reviewerJournalPath: string | undefined;
+          let reviewerJournalLines: string[] | undefined;
+          let reviewerLineIndex = -1;
+          for (const name of await Fs.readdir(historyDirectory)) {
+            if (!name.endsWith(".jsonl")) continue;
+            const candidatePath = Path.join(historyDirectory, name);
+            const lines = (await Fs.readFile(candidatePath, "utf8")).trim().split("\n");
+            const index = lines.findIndex((line) => {
+              const event = JSON.parse(line) as Record<string, unknown>;
+              const data = event.data && typeof event.data === "object" && !Array.isArray(event.data)
+                ? event.data as Record<string, unknown>
+                : undefined;
+              return data?.evidence_id === reviewerEvidence.evidenceId;
+            });
+            if (index >= 0) {
+              reviewerJournalPath = candidatePath;
+              reviewerJournalLines = lines;
+              reviewerLineIndex = index;
+              break;
+            }
+          }
+          if (!reviewerJournalPath || !reviewerJournalLines || reviewerLineIndex < 0) {
+            throw new Error("The Validation independent-review evidence event is missing from history.");
+          }
+          const mutateReviewerEvidence = async (executor: string, workerContextId: string) => {
+            const lines = [...reviewerJournalLines!];
+            const event = JSON.parse(lines[reviewerLineIndex]!) as Record<string, unknown>;
+            const data = event.data as Record<string, unknown>;
+            lines[reviewerLineIndex] = JSON.stringify({
+              ...event,
+              data: { ...data, executor, worker_context_id: workerContextId },
+            });
+            await Fs.writeFile(reviewerJournalPath!, `${lines.join("\n")}\n`, "utf8");
+          };
+          await mutateReviewerEvidence("agent:reviewer", `${String(generationStart.activity_attempt_id)}:worker`);
+          const beforeInvalidReviewerCompletion = await audit.journalSnapshot();
+          const invalidReviewerProcess = await runCliWithExeca(harness, completionArgs);
+          const invalidReviewerResponse = JSON.parse(invalidReviewerProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
+          expect(invalidReviewerProcess.exitCode, JSON.stringify(invalidReviewerResponse)).toBe(1);
+          expect(invalidReviewerResponse).toMatchObject({ status: "failed", data: { code: "independent_validation_reviewer_required" } });
+          expect(await audit.journalSnapshot()).toBe(beforeInvalidReviewerCompletion);
+          await mutateReviewerEvidence(activityExecutors["code-generation"], `${activityAttemptId}:reviewer`);
+        }
+        const completed = await runConstructionCli(completionArgs);
+        completions.set(activity, String(completed.event_id));
       }
-      const evidenceId = randomUUID();
-      const evidence = await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
-        mission_id: auditFixture.missionId,
-        unit_id: auditFixture.unitId,
-        stage: "implementation",
-        stage_attempt_id: implementationAttempt,
-        task_id: planningTaskId,
-        activity,
-        activity_attempt_id: activityAttemptId,
-        evidence_id: evidenceId,
-        artifact_bindings: planningMaterial.reviewedBindings,
-        checkpoints: planningMaterial.checkpoints,
-        inputs: implementationInputs,
-        check: `${activity}-verification`,
-        executor: "agent:integrator",
-        result: { status: "passed", summary: `${activity} produced passing evidence.` },
-        output_refs: [`task-output:${planningTaskId}`],
-        conditions: [],
-      }, [started.id, ...(preparedId ? [preparedId] : [])]);
-      activityEvidenceIds.push(evidenceId);
-      if (activity === "code-integration") {
-        const accepted = await appendTypedConstructionEvent(harness, "construction.integration-accepted", {
-          mission_id: auditFixture.missionId,
-          unit_id: auditFixture.unitId,
-          stage: "implementation",
-          stage_attempt_id: implementationAttempt,
-          task_id: planningTaskId,
-          activity,
-          activity_attempt_id: activityAttemptId,
-          prepared_event_id: preparedId,
-          candidate_checkpoints: planningMaterial.checkpoints,
-          repository_results: [{ repository_id: repositoryId, evidence_ids: [evidenceId] }],
-          authority_event_ids: [],
-        }, [String(preparedId), evidence.id]);
-        integrationEventId = accepted.id;
-      }
-      const completed = await appendTypedConstructionEvent(harness, "construction.activity-attempt-completed", {
-        mission_id: auditFixture.missionId,
-        unit_id: auditFixture.unitId,
-        stage: "implementation",
-        stage_attempt_id: implementationAttempt,
-        task_id: planningTaskId,
-        activity,
-        activity_attempt_id: activityAttemptId,
-        evidence_ids: [evidenceId],
-        checkpoints: planningMaterial.checkpoints,
-      }, [started.id, evidence.id, ...(integrationEventId ? [integrationEventId] : [])]);
-      previousActivityCompletion = completed.id;
-      activityCompletionEventIds.set(activity, completed.id);
-    }
-    await appendTypedConstructionEvent(harness, "construction.task-completed", {
-      mission_id: auditFixture.missionId,
-      unit_id: auditFixture.unitId,
-      stage: "implementation",
-      stage_attempt_id: implementationAttempt,
-      task_id: planningTaskId,
-      integration_event_id: integrationEventId,
-      conditions: ["The owner-scoped access policy satisfies its accepted security requirement."],
-    }, [integrationEventId, previousActivityCompletion]);
+      return { evidenceIds, starts, attempts, completions, integrationEventId };
+    };
+    const firstTaskRoute = await runTaskRoute(planningTaskId, planningMaterial.taskContracts[0]!, firstGenerationStart);
+    const secondTaskRoute = await runTaskRoute(planningSecondTaskId, planningMaterial.taskContracts[1]!, secondGenerationStart);
+    const activityEvidenceIds = [...firstTaskRoute.evidenceIds, ...secondTaskRoute.evidenceIds];
+    const activityStarts = new Map([
+      ...firstTaskRoute.starts,
+      ...[...secondTaskRoute.starts].map(([activity, eventId]) => [`${planningSecondTaskId}:${activity}`, eventId] as const),
+    ]);
+    const activityCompletionEventIds = firstTaskRoute.completions;
+    const integrationEventId = firstTaskRoute.integrationEventId;
+    const secondIntegrationEventId = secondTaskRoute.integrationEventId;
     const stageEvidence = async (check: string, executor: string): Promise<string> => {
       const evidenceId = randomUUID();
       await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
@@ -1249,23 +1436,38 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(implementationResult.exitCode, JSON.stringify(implementationResult.result)).toBe(0);
     expect(implementationResult.result).toMatchObject({
       status: "success",
-      data: { stage: "implementation", attempt_id: implementationAttempt, integration_event_ids: [integrationEventId] },
+      data: { stage: "implementation", attempt_id: implementationAttempt, integration_event_ids: [integrationEventId, secondIntegrationEventId] },
     });
     const implementationHistorySources = await readConstructionSources(harness);
     const implementationEvents = implementationHistorySources.flatMap(parseHistorySource);
+    const currentAdmissions = implementationEvents.filter((record) => {
+      const data = record.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data as Record<string, unknown> : undefined;
+      return record.type === "construction.task-admitted" && data?.stage_attempt_id === implementationAttempt;
+    });
+    expect(currentAdmissions).toHaveLength(2);
+    expect(currentAdmissions.map((record) => (record.data as Record<string, unknown>).admission_baseline))
+      .toEqual([planningMaterial.checkpoints, planningMaterial.checkpoints]);
+    expect(currentAdmissions.every((record) => Array.isArray(record.caused_by) && record.caused_by.includes(auditFixture.baselineEventId))).toBe(true);
     const implementationCompletionRecord = implementationEvents.find((record) => {
       const data = record.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data as Record<string, unknown> : undefined;
-      return record.type === "construction.stage-attempt-completed" && data?.stage === "implementation";
+      return record.type === "construction.stage-attempt-completed" && data?.stage === "implementation" &&
+        data.stage_attempt_id === implementationAttempt;
     });
     if (!implementationCompletionRecord) throw new Error("The successful Implementation completion event is missing from history.");
-    const implementationCompletionData = implementationCompletionRecord.data as Record<string, unknown>;
-    const assessmentReference = implementationCompletionData.implementation_assessment as Record<string, unknown>;
-    const assessmentEventId = String(assessmentReference.assessment_event_id);
+    const generationCompletionRecord = implementationEvents.find((record) => String(record.id) === String(activityCompletionEventIds.get("code-generation")));
+    if (!generationCompletionRecord) throw new Error("The successful Code Generation completion event is missing from history.");
+    const generationCompletionData = generationCompletionRecord.data as Record<string, unknown>;
+    const generationEvidenceIds = new Set(Array.isArray(generationCompletionData.evidence_ids) ? generationCompletionData.evidence_ids.map(String) : []);
+    const integrationCompletionRecord = implementationEvents.find((record) => String(record.id) === String(activityCompletionEventIds.get("code-integration")));
+    if (!integrationCompletionRecord) throw new Error("The successful Code Integration completion event is missing from history.");
+    const integrationCompletionData = integrationCompletionRecord.data as Record<string, unknown>;
+    const integrationEvidenceIds = new Set(Array.isArray(integrationCompletionData.evidence_ids) ? integrationCompletionData.evidence_ids.map(String) : []);
     let checkpointEvidenceChanged = false;
     const checkpointMismatchSources = implementationHistorySources.map((source) => encodeHistorySource(source,
       parseHistorySource(source).map((record) => {
         const data = record.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data as Record<string, unknown> : undefined;
-        if (record.type === "construction.evidence-recorded" && data?.stage === "implementation" && data.activity === "code-generation") {
+        if (record.type === "construction.evidence-recorded" && data?.stage === "implementation" && data.activity === "code-generation" &&
+            generationEvidenceIds.has(String(data.evidence_id))) {
           checkpointEvidenceChanged = true;
           return { ...record, data: { ...data, checkpoints: [] } };
         }
@@ -1274,19 +1476,16 @@ describe("Functional Design stage completion CLI E2E", () => {
     ));
     expect(checkpointEvidenceChanged).toBe(true);
     const checkpointMismatchProjection = projectConstruction(collectHistoryFromSources(auditFixture.missionId, checkpointMismatchSources, { completeness: "complete" }));
-    expect(checkpointMismatchProjection.projectionIssues).toContainEqual(expect.objectContaining({
-      code: "invalid-completion-evidence",
-      eventIds: [String(implementationCompletionRecord.id)],
-    }));
+    expect(checkpointMismatchProjection.units.find((unit) => unit.unitId === auditFixture.unitId)?.blocked).toBe(true);
     let materialEvidenceChanged = false;
     const materialMismatchSources = implementationHistorySources.map((source) => encodeHistorySource(
       source,
       parseHistorySource(source).map((record) => {
         const data = record.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data as Record<string, unknown> : undefined;
         if (record.type === "construction.evidence-recorded" && data?.stage === "implementation" &&
-            data.stage_attempt_id === implementationAttempt && data.activity === "code-integration") {
+            data.stage_attempt_id === implementationAttempt && data.activity === "code-integration" && integrationEvidenceIds.has(String(data.evidence_id))) {
           materialEvidenceChanged = true;
-          return { ...record, data: { ...data, artifact_bindings: [{ artifact_id: randomUUID(), content_version: "sha256:altered-material" }] } };
+          return { ...record, data: { ...data, checkpoints: [{ repository_id: repositoryId, commit: "ffffffffffffffffffffffffffffffffffffffff" }] } };
         }
         return record;
       }),
@@ -1295,97 +1494,24 @@ describe("Functional Design stage completion CLI E2E", () => {
     const materialMismatchProjection = projectConstruction(collectHistoryFromSources(
       auditFixture.missionId, materialMismatchSources, { completeness: "complete" },
     ));
-    expect(materialMismatchProjection.projectionIssues).toContainEqual(expect.objectContaining({
-      code: "invalid-completion-evidence",
-      eventIds: [String(implementationCompletionRecord.id)],
-    }));
-    const makeProjectionEvent = (type: string, data: Record<string, unknown>, causedBy: readonly string[]) => {
-      const candidate = {
-        id: randomUUID(), phase: "construction", type, envelope_version: 1, event_version: 1, journal_id: randomUUID(),
-        recorded_at: new Date().toISOString(), producer: { name: "kepler-test", version: "0.10.3" }, caused_by: [...causedBy], data,
-      };
-      const validation = validateConstructionEvent(candidate);
-      if (validation.status !== "valid") throw new Error(`Invalid replay fixture: ${JSON.stringify(validation)}`);
-      return validation.event;
-    };
-    const previousIntegrationAttempt = String(activityAttemptIds.get("code-integration"));
-    const previousIntegrationCompletion = String(activityCompletionEventIds.get("code-integration"));
-    const integrationRevisionId = randomUUID();
-    const integrationRevisionInteraction = makeProjectionEvent("construction.interaction-recorded", {
-      mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation", stage_attempt_id: implementationAttempt,
-      task_id: planningTaskId, activity: "code-integration", activity_attempt_id: previousIntegrationAttempt,
-      participants: ["Orchestrator"], content: "Reopen Code Integration for the replay guard fixture.", references: ["revision:code-integration"],
-    }, [previousIntegrationCompletion]);
-    const integrationRevisionAuthorization = makeProjectionEvent("construction.revision-authorized", {
-      mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation", stage_attempt_id: implementationAttempt,
-      task_id: planningTaskId, activity: "code-integration", activity_attempt_id: previousIntegrationAttempt,
-      revision_id: integrationRevisionId, orchestrator_decision: "Reopen Code Integration", reason: "Exercise current-attempt replay validation.",
-    }, [integrationRevisionInteraction.id]);
-    const integrationEnded = makeProjectionEvent("construction.activity-attempt-ended-by-revision", {
-      mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation", stage_attempt_id: implementationAttempt,
-      task_id: planningTaskId, activity: "code-integration", activity_attempt_id: previousIntegrationAttempt,
-      revision_id: integrationRevisionId, reason: "End the completed Activity attempt before reopening it.",
-    }, [previousIntegrationCompletion, integrationRevisionAuthorization.id]);
-    const integrationReopened = makeProjectionEvent("construction.activity-reopened", {
-      mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation", stage_attempt_id: implementationAttempt,
-      task_id: planningTaskId, activity: "code-integration", revision_id: integrationRevisionId,
-      reason: "Open a replacement Code Integration attempt.",
-    }, [integrationEnded.id, integrationRevisionAuthorization.id]);
-    const replacementIntegrationStart = makeProjectionEvent("construction.activity-attempt-started", {
-      mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation", stage_attempt_id: implementationAttempt,
-      task_id: planningTaskId, activity: "code-integration", activity_attempt_id: randomUUID(), inputs: implementationInputs,
-      checkpoints: planningMaterial.checkpoints,
-    }, [integrationReopened.id]);
-    let assessmentCauseChanged = false;
-    const staleActivitySources = implementationHistorySources.map((source) => encodeHistorySource(source,
-      parseHistorySource(source).map((record) => {
-        if (record.id !== assessmentEventId) return record;
-        assessmentCauseChanged = true;
-        const causes = Array.isArray(record.caused_by) ? record.caused_by.map(String) : [];
-        return { ...record, caused_by: [...new Set([...causes, replacementIntegrationStart.id])] };
-      }),
-    ));
-    expect(assessmentCauseChanged).toBe(true);
-    const staleActivityEvents = [integrationRevisionInteraction, integrationRevisionAuthorization, integrationEnded,
-      integrationReopened, replacementIntegrationStart];
-    const staleActivitySourcesWithAttempt = [
-      ...staleActivitySources,
-      ...staleActivityEvents.map((record) => ({
-        sourceId: `memory://${record.id}`, missionId: auditFixture.missionId, phase: "construction" as const,
-        journalId: record.journal_id, bytes: new TextEncoder().encode(`${JSON.stringify(record)}\n`),
-      })),
-    ];
-    const staleActivityProjection = projectConstruction(collectHistoryFromSources(
-      auditFixture.missionId, staleActivitySourcesWithAttempt, { completeness: "complete" },
-    ));
-    expect(staleActivityProjection.projectionIssues).toContainEqual(expect.objectContaining({
-      code: "invalid-completion-evidence",
-      eventIds: [String(implementationCompletionRecord.id)],
-    }));
-    expect(activityStarts.size).toBe(1);
-    expect(activityEvidenceIds).toHaveLength(1);
-    const implementationCompletionFirstSources = implementationHistorySources.map((source) => encodeHistorySource(
-      source,
-      parseHistorySource(source).map((record) => String(record.id) === String(implementationCompletionRecord.id)
-        ? { ...record, recorded_at: "0001-01-01T00:00:00.000Z" }
-        : record),
-    ));
-    const implementationCompletionFirstProjection = projectConstruction(collectHistoryFromSources(
-      auditFixture.missionId, implementationCompletionFirstSources, { completeness: "complete" },
-    ));
-    expect(implementationCompletionFirstProjection.projectionIssues).not.toContainEqual(expect.objectContaining({
-      code: "invalid-completion-evidence",
-      eventIds: [String(implementationCompletionRecord.id)],
-    }));
-    expect(implementationCompletionFirstProjection.units.find((unit) => unit.unitId === auditFixture.unitId)?.blocked).toBe(false);
-    const afterImplementationProjection = projectConstruction(collectHistoryFromSources(
+    expect(materialMismatchProjection.units.find((unit) => unit.unitId === auditFixture.unitId)?.blocked).toBe(true);
+    expect(activityStarts.size).toBe(6);
+    expect(activityEvidenceIds).toHaveLength(6);
+    const afterImplementationHistory = collectHistoryFromSources(
       auditFixture.missionId, implementationHistorySources, { completeness: "complete" },
-    ));
+    );
+    const invalidImplementationEvents = afterImplementationHistory.events.filter((event) => event.status === "invalid").map((event) => ({
+      id: event.event?.id,
+      type: event.event?.type,
+      validationIssues: event.validationIssues,
+    }));
+    const afterImplementationProjection = projectConstruction(afterImplementationHistory);
     const afterImplementationUnit = afterImplementationProjection.units.find((unit) => unit.unitId === auditFixture.unitId);
     expect(afterImplementationUnit?.blocked, JSON.stringify({
       historyIssues: afterImplementationProjection.historyIssues,
       projectionIssues: afterImplementationProjection.projectionIssues,
       unitProjectionIssues: afterImplementationUnit?.projectionIssues,
+      invalidImplementationEvents,
     })).toBe(false);
     const completedUnit = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     expect(completedUnit.exitCode).toBe(0);

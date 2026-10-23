@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import * as Path from "node:path";
 import { markdownArtifactReader } from "@vialactea-works/kepler-core";
 import { CONSTRUCTION_ACTIVITIES, CONSTRUCTION_STAGES, type ConstructionActivity, type ConstructionStage } from "./events.js";
 import { readTaskGraph, type TaskGraph, type TaskGraphTask } from "./task-graph.js";
 import type { ConstructionActivityProjection, ConstructionTaskProjection, ConstructionUnitProjection } from "./projection.js";
+import type { GraphReference, TaskDefinitionReference } from "./events.js";
 import type { UnitQueryContextResult, UnitQueryFailure, UnitQueryFileSystem, UnitQueries } from "./unit-queries.js";
 
 export interface ConstructionEventReference {
@@ -121,6 +123,19 @@ export type ActivityShowResult =
 interface LoadedGraph {
   readonly kind: "loaded";
   readonly graph: TaskGraph;
+  readonly graphSource: string;
+  readonly planSource: string;
+  readonly planArtifactId: string;
+  readonly context: Extract<UnitQueryContextResult, { readonly kind: "context" }>;
+}
+
+export interface TaskExecutionContext {
+  readonly kind: "execution-context";
+  readonly graph: TaskGraph;
+  readonly task: TaskGraphTask;
+  readonly graphRef: GraphReference;
+  readonly taskDefinitionRef: TaskDefinitionReference;
+  readonly planSource: string;
   readonly context: Extract<UnitQueryContextResult, { readonly kind: "context" }>;
 }
 
@@ -332,6 +347,29 @@ export class ConstructionQueries {
     };
   }
 
+  async taskExecutionContext(unitId: string, taskId: string, project?: string): Promise<TaskExecutionContext | ConstructionScopedQueryFailure> {
+    const loaded = await this.loadGraph(unitId, project);
+    if (loaded.kind === "failed") return loaded;
+    const task = loaded.graph.tasks.find((item) => item.id === taskId);
+    if (!task) return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId });
+    return {
+      kind: "execution-context",
+      graph: loaded.graph,
+      task,
+      graphRef: {
+        graph_id: loaded.graph.id as GraphReference["graph_id"],
+        content_version: `sha256:${createHash("sha256").update(loaded.graphSource, "utf8").digest("hex")}`,
+      },
+      taskDefinitionRef: {
+        graph_id: loaded.graph.id as TaskDefinitionReference["graph_id"],
+        task_id: task.id as TaskDefinitionReference["task_id"],
+        content_version: `sha256:${createHash("sha256").update(JSON.stringify(task), "utf8").digest("hex")}`,
+      },
+      planSource: loaded.planSource,
+      context: loaded.context,
+    };
+  }
+
   async taskReady(unitId: string, taskId: string, project?: string): Promise<TaskReadyResult> {
     const loaded = await this.loadGraph(unitId, project);
     if (loaded.kind === "failed") return loaded;
@@ -443,7 +481,10 @@ export class ConstructionQueries {
         executionIdentities,
       });
       if (parsed.kind === "invalid") return failed("task_graph_invalid", "The canonical unit task graph is invalid for its recorded scope.", { path: graphPath, diagnostics: parsed.diagnostics });
-      return { kind: "loaded", graph: parsed.graph, context };
+      return {
+        kind: "loaded", graph: parsed.graph, graphSource, planSource,
+        planArtifactId: plan.artifact.metadata.id, context,
+      };
     } catch (error) {
       return failed("task_graph_unavailable", "Kepler could not read the canonical mission-owned task graph and plan safely.", {
         graph_path: graphPath,
@@ -482,7 +523,7 @@ export class ConstructionQueries {
       };
     });
     for (const prerequisite of definition.prerequisites) {
-      if (prerequisite.blocking) blockers.push(`blocking-prerequisite-unverified:${prerequisite.description}`);
+      if (prerequisite.needed_for === "implementation" && prerequisite.blocking) blockers.push(`blocking-prerequisite-unverified:${prerequisite.description}`);
     }
     if (projected?.state === "blocked" && blockers.length === 0) blockers.push("task-runtime-state-blocked");
     let readiness: ReadinessDetails["readiness"];

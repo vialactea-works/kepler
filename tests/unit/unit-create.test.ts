@@ -90,6 +90,7 @@ const createRuntime = (overrides: {
             },
           };
         },
+        release: async () => ({ kind: "released" }),
       },
       identity: {
         machine_id: "unit-test",

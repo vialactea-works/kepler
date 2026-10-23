@@ -25,6 +25,7 @@ export interface AuditContextRuntime {
   readonly fileSystem: AuditContextFileSystem;
   readonly journals: AuditJournalFactory;
   readonly identities: { readonly next: () => string };
+  readonly taskExists?: (unitId: string, taskId: string, project?: string) => Promise<boolean>;
 }
 
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -240,12 +241,34 @@ export class AuditContextResolver implements AuditRecordContextResolver {
     kind: AuditRecordKind = "evidence",
     relatedRequestEventId?: string,
     relatedEventIds?: readonly string[],
+    preAdmissionTaskEvidence = false,
   ) {
     if (!selectors.unit) return invalidScope("Audit recording requires an explicit --unit selector.");
     if (selectors.attempt && !selectors.stage && !selectors.activity) return invalidScope("--attempt requires --stage unless it selects an Activity attempt.");
     const loaded = await this.readUnit(selectors.unit, project);
     if (loaded.kind === "failed") return loaded;
-    const bound = attemptContext(kind, selectors, loaded.unit);
+    let bound = attemptContext(kind, selectors, loaded.unit);
+    if (!bound.ok && preAdmissionTaskEvidence && selectors.task && selectors.implementationAttempt &&
+        !selectors.activity && !selectors.attempt && (selectors.stage === undefined || selectors.stage === "implementation")) {
+      const selectedTask = loaded.unit.tasks.find((candidate) => candidate.taskId === selectors.task);
+      const stage = loaded.unit.stages.find((candidate) => candidate.stage === "implementation");
+      const attempt = stage?.attempts.find((candidate) => candidate.attemptId === selectors.implementationAttempt && candidate.state === "running");
+      const start = attempt?.facts.filter((fact) => ["construction.stage-attempt-started", "construction.stage-resumed"].includes(fact.event.type)).at(-1);
+      let taskExists = false;
+      try {
+        taskExists = await this.runtime.taskExists?.(selectors.unit, selectors.task, project) ?? false;
+      } catch {
+        taskExists = false;
+      }
+      if (!taskExists) return invalidScope("Pre-admission prerequisite evidence must name a task in the current authored task graph.", { task_id: selectors.task });
+      if ((selectedTask?.admissions.length ?? 0) > 0 || stage?.state !== "running" ||
+          stage.currentAttemptId !== selectors.implementationAttempt || !start) {
+        return invalidScope("Pre-admission prerequisite evidence requires a graph task without prior admission under the current running Implementation attempt.", {
+          task_id: selectors.task, implementation_attempt_id: selectors.implementationAttempt,
+        });
+      }
+      bound = { ok: true, stage: "implementation", stageAttemptId: selectors.implementationAttempt, taskId: selectors.task, causedBy: [start.event.id] };
+    }
     if (!bound.ok) return invalidScope(bound.message, { mission_id: loaded.missionId, unit_id: loaded.unit.unitId });
     let causedBy = bound.causedBy;
     if (relatedRequestEventId !== undefined) {
@@ -306,9 +329,13 @@ export class AuditContextResolver implements AuditRecordContextResolver {
   }
 }
 
-export const createNodeAuditContextRuntime = (projects: ProjectResolver): AuditContextRuntime => ({
+export const createNodeAuditContextRuntime = (
+  projects: ProjectResolver,
+  taskExists?: AuditContextRuntime["taskExists"],
+): AuditContextRuntime => ({
   projects,
   fileSystem: createNodeAuditContextFileSystem(),
   journals: createNodeAuditJournalFactory(),
   identities: { next: randomUUID },
+  ...(taskExists ? { taskExists } : {}),
 });

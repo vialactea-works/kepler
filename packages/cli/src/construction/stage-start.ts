@@ -104,7 +104,7 @@ const commonDirectory = async (
 };
 
 export type CapturedCheckpoints =
-  | { readonly kind: "valid"; readonly checkpoints: readonly { readonly repository_id: string; readonly commit: string }[]; readonly repositoryRoots: readonly { readonly repository_id: string; readonly repositoryRoot: string }[] }
+  | { readonly kind: "valid"; readonly checkpoints: readonly { readonly repository_id: string; readonly commit: string }[]; readonly repositoryRoots: readonly { readonly repository_id: string; readonly repositoryRoot: string; readonly integrationTarget: string }[] }
   | { readonly kind: "failed"; readonly code: string; readonly message: string; readonly details: Readonly<Record<string, unknown>> };
 
 const pathContains = (parent: string, child: string): boolean => {
@@ -194,7 +194,7 @@ export const captureStageCheckpoints = async (
   }
   const seenRepositories = new Set<string>();
   const checkpoints: { repository_id: string; commit: string }[] = [];
-  const repositoryRoots: { repository_id: string; repositoryRoot: string }[] = [];
+  const repositoryRoots: { repository_id: string; repositoryRoot: string; integrationTarget: string }[] = [];
   for (const name of names) {
     const attachmentPath = Path.join(canonicalDirectory, name);
     if (await runtime.workspace.fileSystem.pathKind(attachmentPath) !== "file") {
@@ -276,7 +276,7 @@ export const captureStageCheckpoints = async (
         current_branch: branch || undefined,
       });
     }
-    repositoryRoots.push({ repository_id: attachment.repository_id, repositoryRoot: actualRoot });
+    repositoryRoots.push({ repository_id: attachment.repository_id, repositoryRoot: actualRoot, integrationTarget: attachment.integration_target });
     const head = await runtime.workspace.git.run(actualRoot, ["rev-parse", "--verify", "HEAD^{commit}"]);
     if (head.status === 0 && commitId(head.stdout.trim())) {
       checkpoints.push({ repository_id: attachment.repository_id, commit: head.stdout.trim() });

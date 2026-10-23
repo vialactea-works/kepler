@@ -135,6 +135,11 @@ export interface RepositoryCheckpoint {
   readonly commit: string;
 }
 
+export type IntegrationInputCheckpoint = RepositoryCheckpoint | {
+  readonly repository_id: string;
+  readonly no_commit: true;
+};
+
 export interface ArtifactBinding {
   readonly artifact_id: ArtifactId;
   readonly content_version?: string;
@@ -413,11 +418,27 @@ export interface StageReopenedData extends ConstructionBaseData {
   readonly reason: string;
 }
 
+export interface PlannedIntegrationCommand {
+  readonly check: "code-integration-typecheck" | "code-integration-build" | "code-integration-full-test-suite";
+  readonly repository_id: string;
+  readonly executable: string;
+  readonly argv: readonly string[];
+}
+
+export interface AdmittedTaskContract {
+  readonly outputs: readonly string[];
+  readonly acceptance_criteria: readonly string[];
+  readonly dependency_task_ids: readonly TaskId[];
+  readonly implementation_prerequisites: readonly { readonly description: string; readonly condition: string }[];
+  readonly planned_integration_commands?: readonly PlannedIntegrationCommand[];
+}
+
 export interface TaskAdmissionData extends StageAttemptData {
   readonly stage: "implementation";
   readonly task_id: TaskId;
   readonly graph_ref: GraphReference;
   readonly task_definition_ref: TaskDefinitionReference;
+  readonly task_contract?: AdmittedTaskContract;
   readonly admission_baseline: readonly RepositoryCheckpoint[];
   readonly predecessor_provenance: readonly {
     readonly task_id: TaskId;
@@ -483,6 +504,8 @@ export interface ActivityReopenedData extends ConstructionBaseData {
 }
 
 export interface EvidenceRecordedData extends ConstructionBaseData {
+  readonly check_command?: { readonly repository_id: string; readonly executable: string; readonly argv: readonly string[] };
+  readonly worker_context_id?: string;
   readonly evidence_id: EvidenceId;
   readonly stage: ConstructionStage;
   readonly stage_attempt_id: StageAttemptId;
@@ -533,7 +556,7 @@ export interface InteractionRecordedData extends ConstructionBaseData {
 
 export interface IntegrationPreparedData extends ActivityAttemptData {
   readonly activity: "code-integration";
-  readonly captured_inputs: readonly RepositoryCheckpoint[];
+  readonly captured_inputs: readonly IntegrationInputCheckpoint[];
   readonly candidate_checkpoints: readonly RepositoryCheckpoint[];
   readonly task_output_refs: readonly string[];
   readonly source_evidence_ids: readonly EvidenceId[];
@@ -685,6 +708,15 @@ const isCheckpointSet = (value: unknown): value is readonly RepositoryCheckpoint
   Array.isArray(value) && value.every(isCheckpoint) &&
   new Set(value.map((checkpoint) => checkpoint.repository_id)).size === value.length;
 
+const isIntegrationInputCheckpoint = (value: unknown): value is IntegrationInputCheckpoint =>
+  isRecord(value) && isNonEmptyString(value.repository_id) &&
+  ((isNonEmptyString(value.commit) && value.no_commit === undefined) ||
+    (value.no_commit === true && value.commit === undefined));
+
+const isIntegrationInputSet = (value: unknown): value is readonly IntegrationInputCheckpoint[] =>
+  Array.isArray(value) && value.every(isIntegrationInputCheckpoint) &&
+  new Set(value.map((checkpoint) => checkpoint.repository_id)).size === value.length;
+
 const isInputs = (value: unknown): value is readonly MaterialInput[] =>
   Array.isArray(value) && value.every((input) =>
     isRecord(input) && isNonEmptyString(input.reference) && isNonEmptyString(input.purpose),
@@ -714,6 +746,22 @@ const isTaskDefinitionReference = (value: unknown): value is TaskDefinitionRefer
   isRecord(value) && isUuidV4(value.graph_id) && isUuidV4(value.task_id) &&
   isNonEmptyString(value.content_version) &&
   (value.checkpoint === undefined || isCheckpoint(value.checkpoint));
+
+const isSafeCommandWord = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_./:@+=,-]+$/.test(value);
+
+const isPlannedIntegrationCommand = (value: unknown): value is PlannedIntegrationCommand =>
+  isRecord(value) && Object.keys(value).every((key) => ["check", "repository_id", "executable", "argv"].includes(key)) &&
+  ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite"].includes(String(value.check)) &&
+  isNonEmptyString(value.repository_id) && isSafeCommandWord(value.executable) && Array.isArray(value.argv) && value.argv.every(isSafeCommandWord);
+
+const isAdmittedTaskContract = (value: unknown): value is AdmittedTaskContract =>
+  isRecord(value) && Object.keys(value).every((key) => ["outputs", "acceptance_criteria", "dependency_task_ids", "implementation_prerequisites", "planned_integration_commands"].includes(key)) &&
+  isUniqueStringArray(value.outputs, true) && isStringArray(value.acceptance_criteria, true) &&
+  Array.isArray(value.dependency_task_ids) && value.dependency_task_ids.every(isUuidV4) && new Set(value.dependency_task_ids).size === value.dependency_task_ids.length &&
+  Array.isArray(value.implementation_prerequisites) && value.implementation_prerequisites.every((item) => isRecord(item) &&
+    Object.keys(item).every((key) => ["description", "condition"].includes(key)) && isNonEmptyString(item.description) && isNonEmptyString(item.condition)) &&
+  (value.planned_integration_commands === undefined || Array.isArray(value.planned_integration_commands) &&
+    value.planned_integration_commands.every(isPlannedIntegrationCommand));
 
 const isEvidenceIdArray = (value: unknown): boolean =>
   Array.isArray(value) && value.every(isUuidV4) && new Set(value).size === value.length;
@@ -1097,6 +1145,7 @@ const validatePayload = (
   if (type === "construction.task-admitted") {
     invalid("graph_ref", isGraphReference(data.graph_ref));
     invalid("task_definition_ref", isTaskDefinitionReference(data.task_definition_ref));
+    if (data.task_contract !== undefined) invalid("task_contract", isAdmittedTaskContract(data.task_contract));
     invalid("admission_baseline", isCheckpointSet(data.admission_baseline));
     invalid("predecessor_provenance", Array.isArray(data.predecessor_provenance) && data.predecessor_provenance.every((item) =>
       isRecord(item) && isUuidV4(item.task_id) && isNonEmptyString(item.integration_event_id) && isCheckpointSet(item.checkpoints),
@@ -1115,6 +1164,11 @@ const validatePayload = (
     invalid("checkpoints", isCheckpointSet(data.checkpoints));
   }
   if (type === "construction.evidence-recorded") {
+    invalid("worker_context_id", data.worker_context_id === undefined || isNonEmptyString(data.worker_context_id));
+    invalid("check_command", data.check_command === undefined || (isRecord(data.check_command) &&
+      Object.keys(data.check_command).every((key) => ["repository_id", "executable", "argv"].includes(key)) &&
+      isNonEmptyString(data.check_command.repository_id) && isNonEmptyString(data.check_command.executable) &&
+      Array.isArray(data.check_command.argv) && data.check_command.argv.every((item) => typeof item === "string")));
     invalid("attempt_binding", isExecutionBinding(data));
     invalid("evidence_id", isUuidV4(data.evidence_id));
     invalid("artifact_bindings", isArtifactBindings(data.artifact_bindings));
@@ -1158,7 +1212,7 @@ const validatePayload = (
   }
   if (type === "construction.integration-prepared") {
     invalid("activity", data.activity === "code-integration");
-    invalid("captured_inputs", isCheckpointSet(data.captured_inputs));
+    invalid("captured_inputs", isIntegrationInputSet(data.captured_inputs));
     invalid("candidate_checkpoints", isCheckpointSet(data.candidate_checkpoints));
     invalid("task_output_refs", isStringArray(data.task_output_refs, true));
     invalid("source_evidence_ids", isEvidenceIdArray(data.source_evidence_ids));
