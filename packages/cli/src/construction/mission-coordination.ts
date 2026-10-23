@@ -59,10 +59,6 @@ export interface MissionCoordinationIdentitySource {
 
 export interface MissionCoordination {
   readonly acquire: (request: MissionCoordinationRequest) => Promise<MissionCoordinationAcquireResult>;
-  readonly release?: (request: MissionCoordinationRequest, token: string) => Promise<MissionCoordinationReleaseResult>;
-}
-
-export interface MissionCoordinationWithRelease extends MissionCoordination {
   readonly release: (request: MissionCoordinationRequest, token: string) => Promise<MissionCoordinationReleaseResult>;
 }
 
@@ -222,7 +218,7 @@ const removeOwnedDirectory = async (
 export const createMissionCoordination = (
   fileSystem: MissionCoordinationFileSystem,
   identities: MissionCoordinationIdentitySource,
-): MissionCoordinationWithRelease => {
+): MissionCoordination => {
   const releaseOwnedLock = async (
     directory: string,
     resourceKey: string,

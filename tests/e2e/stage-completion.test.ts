@@ -1054,6 +1054,15 @@ describe("Functional Design stage completion CLI E2E", () => {
     const retainedAssessment = stageDriver.assessRetainedScopes(auditFixture.unitId, implementationAttempt, retainedAssessmentRequest);
     expect(retainedAssessment.exitCode, JSON.stringify(retainedAssessment.result)).toBe(0);
     const retainedAssessmentEventId = String(retainedAssessment.result.data.id);
+    const beforeUnknownPrerequisite = await audit.journalSnapshot();
+    const unknownPrerequisite = harness.cli.run([
+      "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningTaskId,
+      "--implementation-attempt", implementationAttempt, "--prerequisites",
+      JSON.stringify({ prerequisite_evidence_ids: [randomUUID()] }),
+    ]);
+    expect(unknownPrerequisite.exitCode).toBe(1);
+    expect(JSON.parse(unknownPrerequisite.stdout)).toMatchObject({ status: "failed", data: { code: "task_prerequisite_unverified" } });
+    expect(await audit.journalSnapshot()).toBe(beforeUnknownPrerequisite);
     const admitted = harness.cli.run([
       "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningTaskId,
       "--implementation-attempt", implementationAttempt,
