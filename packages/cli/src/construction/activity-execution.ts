@@ -8,6 +8,7 @@ import type { ConstructionHistoryFact, ConstructionTaskProjection } from "./proj
 import { ConstructionQueries, type TaskExecutionContext } from "./scoped-queries.js";
 import { createNodeStageStartRuntime, type StageStartRuntime } from "./stage-start.js";
 import { readImplementationPlanningCompletionRecord } from "./implementation-planning-completion.js";
+import { admittedTaskContract } from "./task-admission.js";
 
 export interface ActivityExecutionRuntime extends StageStartRuntime {
   readonly journals: {
@@ -31,16 +32,29 @@ const nonEmpty = (value: unknown): value is string => typeof value === "string" 
 const isCheckpoints = (value: unknown): value is readonly RepositoryCheckpoint[] =>
   Array.isArray(value) && value.every((item) => isRecord(item) && nonEmpty(item.repository_id) && nonEmpty(item.commit)) &&
   new Set(value.map((item) => isRecord(item) ? item.repository_id : undefined)).size === value.length;
-const checkpointKey = (value: readonly RepositoryCheckpoint[]): string => JSON.stringify(
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  if (isRecord(value)) {
+    const entries = Object.keys(value).sort((left, right) => left.localeCompare(right))
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+};
+const sameJson = (left: unknown, right: unknown): boolean => canonicalJson(left) === canonicalJson(right);
+const checkpointKey = (value: readonly RepositoryCheckpoint[]): string => canonicalJson(
   value.slice().sort((left, right) => left.repository_id.localeCompare(right.repository_id)),
 );
 const sameStringSet = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && new Set(left).size === left.length && new Set(right).size === right.length &&
   [...left].sort().join("\0") === [...right].sort().join("\0");
+const sameStringMultiset = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && JSON.stringify([...left].sort((a, b) => a.localeCompare(b))) ===
+  JSON.stringify([...right].sort((a, b) => a.localeCompare(b)));
 const sameInputs = (left: unknown, right: readonly MaterialInput[]): boolean =>
   Array.isArray(left) && left.every((item) => isRecord(item) && nonEmpty(item.reference) && nonEmpty(item.purpose)) &&
-  JSON.stringify([...left].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))) ===
-  JSON.stringify([...right].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+  [...left].map(canonicalJson).sort((a, b) => a.localeCompare(b)).join("\0") ===
+  right.map(canonicalJson).sort((a, b) => a.localeCompare(b)).join("\0");
 const failure = (
   code: string,
   message: string,
@@ -192,6 +206,13 @@ const selectedEvidence = (
   if (!checkpoints || checkpoints.length === 0 || checkpointSets.some((set) => !set || checkpointKey(set) !== checkpointKey(checkpoints))) invalid.push("checkpoint-binding");
   if ([...evidenceByCheck.values()].some((fact) => !sameInputs(fact.event.data.inputs, inputs))) invalid.push("input-binding");
   if (activity !== "code-integration") {
+    const workerEvidence = [...evidenceByCheck.values()].filter((fact) =>
+      fact.event.type === "construction.evidence-recorded" && nonEmpty(fact.event.data.worker_context_id));
+    const workerContexts = new Set(workerEvidence.flatMap((fact) =>
+      fact.event.type === "construction.evidence-recorded" && nonEmpty(fact.event.data.worker_context_id)
+        ? [fact.event.data.worker_context_id] : []));
+    if (workerEvidence.length !== evidenceByCheck.size ||
+        (activity === "code-generation" && workerContexts.size !== 1)) invalid.push("worker-context-binding");
     const coveredOutputs = new Set([...evidenceByCheck.values()].flatMap((fact) =>
       Array.isArray(fact.event.data.output_refs) ? fact.event.data.output_refs.filter((value): value is string => typeof value === "string") : []));
     const missingOutputs = declaredOutputs.filter((output) => !coveredOutputs.has(output));
@@ -234,16 +255,28 @@ export class ActivityExecution {
       if (!acceptedGraph || acceptedGraph.graph_id !== execution.graphRef.graph_id || acceptedGraph.content_version !== execution.graphRef.content_version) {
         return failure("task_graph_version_stale", "The current task graph differs from accepted Implementation Planning.", { accepted_graph_ref: acceptedGraph, current_graph_ref: execution.graphRef });
       }
-      const currentAdmission = task.admission?.event.id === admission.event.id && admission.event.type === "construction.task-admitted";
-      if (!currentAdmission) return failure("activity_task_admission_stale", "The task admission is not the current admitted scope.", { task_id: task.taskId });
+      const admissionIsCurrent = task.admission?.event.id === admission.event.id;
+      const definitionIsCurrent = admission.event.type === "construction.task-admitted" &&
+        sameJson(admission.event.data.task_definition_ref, execution.taskDefinitionRef);
+      const contractIsCurrent = admission.event.type === "construction.task-admitted" &&
+        sameJson(admission.event.data.task_contract, admittedTaskContract(execution.task, execution.planSource));
+      if (!admissionIsCurrent || !definitionIsCurrent || !contractIsCurrent) return failure("activity_task_admission_stale", "The task admission is not the current admitted scope.", {
+        task_id: task.taskId,
+        admission_event_id: admission.event.id,
+        current_admission_event_id: task.admission?.event.id,
+        definition_is_current: definitionIsCurrent,
+        contract_is_current: contractIsCurrent,
+      });
       const activity = selectors.activity!;
       const currentActivity = task.activities.find((item) => item.activity === activity);
-      if (!currentActivity || ["running", "waiting", "pausing", "paused"].includes(currentActivity.state)) {
-        return failure("activity_attempt_already_active", "The selected Activity already has an active attempt.", {
-          activity, state: currentActivity?.state, attempt_id: currentActivity?.currentAttemptId,
-        });
+      const parentAttempts = currentActivity?.attempts.filter((attempt) => attempt.stageAttemptId === parentAttemptId) ?? [];
+      const activeAttempt = parentAttempts.find((attempt) => ["running", "waiting", "pausing", "paused"].includes(attempt.state));
+      if (activeAttempt) return failure("activity_attempt_already_active", "The selected Activity already has an active attempt in this Implementation scope.", {
+        activity, state: activeAttempt.state, attempt_id: activeAttempt.attemptId,
+      });
+      if (parentAttempts.some((attempt) => attempt.state === "completed")) {
+        return failure("activity_already_completed", "A completed Activity requires a revision before it can be reopened in this Implementation scope.", { activity });
       }
-      if (currentActivity.state === "completed") return failure("activity_already_completed", "A completed Activity requires a revision before it can be reopened.", { activity });
       const previousActivity = activity === "code-validation" ? "code-generation" : activity === "code-integration" ? "code-validation" : undefined;
       const previous = previousActivity ? latestCompleted(task, previousActivity, parentAttemptId) : undefined;
       if (previousActivity && !previous) return failure("activity_route_blocked", "The preceding Activity must complete with current evidence before this Activity can start.", {
@@ -319,17 +352,58 @@ export class ActivityExecution {
       const start = attempt?.facts.filter((fact) => fact.event.type === "construction.activity-attempt-started").at(-1);
       const parentStart = currentParentStart(unit, parentAttemptId);
       const admission = task && admissionFact(task, parentAttemptId);
-      if (!task || !attempt || attempt.state !== "running" || !start || !parentStart || !admission ||
+      const integrationRecovery = selectors.activity === "code-integration" && attempt?.state === "completed";
+      if (!task || !attempt || (attempt.state !== "running" && !integrationRecovery) || !start || !parentStart || !admission ||
           start.event.type !== "construction.activity-attempt-started") {
         return failure("activity_attempt_not_current", "Activity completion requires the exact running Activity attempt and current admitted task scope.", {
           task_id: selectors.task, activity: selectors.activity, attempt_id: selectors.attempt, implementation_attempt_id: parentAttemptId,
         });
+      }
+      if (admission.event.type !== "construction.task-admitted" ||
+          !sameJson(admission.event.data.task_definition_ref, execution.taskDefinitionRef) ||
+          !sameJson(admission.event.data.task_contract, admittedTaskContract(execution.task, execution.planSource))) {
+        return failure("task_admission_stale", "The admitted task contract differs from the current graph task definition.", { task_id: task.taskId });
       }
       if (!planningGraphRef(unit) || planningGraphRef(unit)?.graph_id !== execution.graphRef.graph_id ||
           planningGraphRef(unit)?.content_version !== execution.graphRef.content_version) {
         return failure("task_graph_version_stale", "The current task graph differs from accepted Implementation Planning.", { graph_ref: execution.graphRef });
       }
       if (!activityProjection) return failure("activity_attempt_not_current", "The selected Activity occurrence is absent from the current task projection.");
+      if (integrationRecovery) {
+        const completions = attempt.facts.filter((fact) => fact.event.type === "construction.activity-attempt-completed");
+        const acceptances = activityProjection.accepted.filter((fact) => fact.event.type === "construction.integration-accepted" &&
+          fact.event.data.activity_attempt_id === selectors.attempt && fact.event.data.stage_attempt_id === parentAttemptId);
+        if (activityProjection.currentAttemptId !== selectors.attempt || completions.length !== 1 || acceptances.length !== 1 ||
+            completions[0]?.event.type !== "construction.activity-attempt-completed" || acceptances[0]?.event.type !== "construction.integration-accepted") {
+          return failure("integration_completion_recovery_ambiguous", "The completed Integration attempt does not establish one current acceptance and Activity completion.", {
+            attempt_id: selectors.attempt, completion_event_ids: completions.map((fact) => fact.event.id), acceptance_event_ids: acceptances.map((fact) => fact.event.id),
+          });
+        }
+        const completion = completions[0];
+        const accepted = acceptances[0];
+        const repositoryEvidenceIds = Array.isArray(accepted.event.data.repository_results)
+          ? accepted.event.data.repository_results.flatMap((result) => isRecord(result) && Array.isArray(result.evidence_ids)
+            ? result.evidence_ids.filter((id): id is string => typeof id === "string") : []) : [];
+        const selfReviewIds = Array.isArray(accepted.event.data.authority_event_ids)
+          ? accepted.event.data.authority_event_ids.flatMap((eventId) => {
+            const evidence = loaded.history.events.find((record) => record.event?.id === eventId)?.event;
+            return evidence?.type === "construction.evidence-recorded" && evidence.data.check === "code-integration-self-review" &&
+              evidence.data.activity_attempt_id === selectors.attempt && typeof evidence.data.evidence_id === "string"
+              ? [evidence.data.evidence_id] : [];
+          }) : [];
+        const expectedEvidenceIds = [...repositoryEvidenceIds, ...selfReviewIds];
+        const completionEvidenceIds = Array.isArray(completion.event.data.evidence_ids)
+          ? completion.event.data.evidence_ids.filter((id): id is string => typeof id === "string") : [];
+        if (!sameStringSet(completionEvidenceIds, expectedEvidenceIds) ||
+            (parsed.request.evidence_ids.length > 0 && !sameStringSet(parsed.request.evidence_ids, expectedEvidenceIds)) ||
+            !isCheckpoints(accepted.event.data.candidate_checkpoints)) {
+          return failure("integration_completion_recovery_invalid", "The recorded Integration completion does not match its accepted checks and candidate.", {
+            completion_event_id: completion.event.id, expected_evidence_ids: expectedEvidenceIds,
+          });
+        }
+        return this.recordTaskCompletion(loaded, task, parentStart, admission, accepted, completion.event.id, completion.event.journal_id,
+          execution.task.acceptance_criteria);
+      }
       const inputs = Array.isArray(start.event.data.inputs) ? start.event.data.inputs as MaterialInput[] : [];
       const evidence = selectedEvidence(loaded, parsed.request.evidence_ids, selectors.activity!, execution.task.outputs, selectors.attempt!, parentAttemptId, task.taskId, inputs, start);
       if (selectors.activity === "code-integration") {
@@ -337,7 +411,8 @@ export class ActivityExecution {
           fact.event.data.activity_attempt_id === selectors.attempt && fact.event.data.stage_attempt_id === parentAttemptId);
         if (!integrationAccepted || integrationAccepted.event.type !== "construction.integration-accepted") {
           return failure("integration_acceptance_required", "Integration Activity completion requires an accepted checked Integration result for this exact occurrence.", {
-            task_id: task.taskId, integration_attempt_id: selectors.attempt,
+            task_id: task.taskId,
+            integration_attempt_id: selectors.attempt,
           });
         }
         const repositoryResults: { readonly evidence_ids: readonly unknown[] }[] =
@@ -373,17 +448,28 @@ export class ActivityExecution {
       });
       if (selectors.activity === "code-validation") {
         const generation = latestCompleted(task, "code-generation", parentAttemptId);
-        const generationExecutors = generation?.event.type === "construction.activity-attempt-completed"
+        const generationWorkerContexts = generation?.event.type === "construction.activity-attempt-completed"
           ? (Array.isArray(generation.event.data.evidence_ids) ? generation.event.data.evidence_ids : []).flatMap((id) => {
             const fact = loaded.unit.evidence.map((item) => item.fact).find((candidate) => candidate.event.type === "construction.evidence-recorded" && candidate.event.data.evidence_id === id);
-            return fact?.event.type === "construction.evidence-recorded" ? [fact.event.data.executor] : [];
+            return fact?.event.type === "construction.evidence-recorded" && nonEmpty(fact.event.data.worker_context_id)
+              ? [fact.event.data.worker_context_id]
+              : [];
           })
           : [];
         const reviewer = evidence.facts.find((fact) => fact.event.type === "construction.evidence-recorded" && fact.event.data.check === "code-validation-independent-review");
-        if (!reviewer || reviewer.event.type !== "construction.evidence-recorded" || generationExecutors.includes(reviewer.event.data.executor)) {
-          return failure("independent_validation_reviewer_required", "Code Validation's independent reviewer must use a worker context distinct from Code Generation.", {
-            generation_executors: generationExecutors,
-            validation_reviewer: reviewer?.event.type === "construction.evidence-recorded" ? reviewer.event.data.executor : undefined,
+        const reviewerWorkerContext = reviewer?.event.type === "construction.evidence-recorded" && nonEmpty(reviewer.event.data.worker_context_id)
+          ? reviewer.event.data.worker_context_id
+          : undefined;
+        const validationWorkerContexts = evidence.facts.flatMap((fact) =>
+          fact.event.type === "construction.evidence-recorded" && nonEmpty(fact.event.data.worker_context_id)
+            ? [fact.event.data.worker_context_id]
+            : []);
+        if (!reviewer || reviewer.event.type !== "construction.evidence-recorded" || !reviewerWorkerContext ||
+            generationWorkerContexts.length === 0 || generationWorkerContexts.some((context) => validationWorkerContexts.includes(context))) {
+          return failure("independent_validation_reviewer_required", "Code Validation must use worker contexts distinct from Code Generation.", {
+            generation_worker_contexts: generationWorkerContexts,
+            validation_worker_contexts: validationWorkerContexts,
+            validation_reviewer_worker_context: reviewerWorkerContext,
           });
         }
         const generationOutput = generation?.event.type === "construction.activity-attempt-completed" ? generation.event.data.checkpoints : undefined;
@@ -530,12 +616,52 @@ export class ActivityExecution {
     if (activity !== "code-integration" || !accepted || accepted.event.type !== "construction.integration-accepted") {
       return { kind: "success", data: { event_id: completionId, journal_id: completionJournalId, activity, activity_attempt_id: activityAttemptId, checkpoints } };
     }
-    const existingTaskCompletion = task.completion?.event.type === "construction.task-completed" && task.completion.event.data.integration_event_id === accepted.event.id;
-    if (existingTaskCompletion) return { kind: "success", data: { event_id: completionId, journal_id: completionJournalId, activity, activity_attempt_id: activityAttemptId, integration_event_id: accepted.event.id, task_completion_event_id: task.completion!.event.id, checkpoints } };
+    return this.recordTaskCompletion(loaded, task, parentStart, admission, accepted, completionId, completionJournalId, acceptanceCriteria);
+  }
+
+  private async recordTaskCompletion(
+    loaded: Extract<AuditHistoryReadResult, { readonly kind: "loaded" }>,
+    task: ConstructionTaskProjection,
+    parentStart: ConstructionHistoryFact,
+    admission: ConstructionHistoryFact,
+    accepted: ConstructionHistoryFact,
+    activityCompletionId: string,
+    activityCompletionJournalId: string,
+    acceptanceCriteria: readonly string[],
+  ): Promise<ActivityExecutionResult> {
+    if (accepted.event.type !== "construction.integration-accepted") {
+      return failure("integration_acceptance_required", "Task completion requires a typed accepted Integration result.");
+    }
+    const acceptedData = accepted.event.data;
+    const acceptedActivityAttemptId = acceptedData.activity_attempt_id;
+    const acceptedStageAttemptId = acceptedData.stage_attempt_id;
+    const candidateCheckpoints = acceptedData.candidate_checkpoints;
+    if (typeof acceptedActivityAttemptId !== "string" || typeof acceptedStageAttemptId !== "string" || !isCheckpoints(candidateCheckpoints)) {
+      return failure("integration_acceptance_invalid", "The accepted Integration result lacks typed task completion bindings.");
+    }
+    const existingConditions = task.completion?.event.type === "construction.task-completed" ? task.completion.event.data.conditions : undefined;
+    const existing = task.completion?.event.type === "construction.task-completed" &&
+      task.completion.event.data.integration_event_id === accepted.event.id &&
+      task.completion.event.caused_by.some((id) => String(id) === activityCompletionId) &&
+      task.completion.event.caused_by.includes(admission.event.id) && Array.isArray(existingConditions) &&
+      existingConditions.every((condition) => typeof condition === "string") && sameStringMultiset(existingConditions, acceptanceCriteria)
+      ? task.completion : undefined;
+    if (existing) return { kind: "success", data: {
+      event_id: activityCompletionId, journal_id: activityCompletionJournalId, activity: "code-integration",
+      activity_attempt_id: acceptedActivityAttemptId, integration_event_id: accepted.event.id,
+      task_completion_event_id: existing.event.id, checkpoints: candidateCheckpoints,
+    } };
+    const existingRecords = loaded.history.events.flatMap((record) => record.event?.type === "construction.task-completed" &&
+      record.event.data.unit_id === loaded.unit.unitId && record.event.data.task_id === task.taskId &&
+      record.event.data.stage_attempt_id === acceptedStageAttemptId &&
+      record.event.data.integration_event_id === accepted.event.id ? [record.event] : []);
+    if (existingRecords.length > 0) return failure("task_completion_record_conflict", "A task completion record already exists but does not match the accepted Integration and current Activity completion.", {
+      task_completion_event_ids: existingRecords.map((event) => event.id), activity_completion_event_id: activityCompletionId,
+    }, "Inspect the recorded task completion and preserve it; do not append a duplicate completion.");
     const completedTaskId = this.runtime.identities.next();
     const taskCompletionJournalId = this.runtime.identities.next();
     if (![completedTaskId, taskCompletionJournalId].every(uuidV4) || new Set([completedTaskId, taskCompletionJournalId]).size !== 2) {
-      return failure("task_completion_identity_invalid", "Task completion event identities are invalid or reused.", { activity_completion_event_id: completionId });
+      return failure("task_completion_identity_invalid", "Task completion event identities are invalid or reused.", { activity_completion_event_id: activityCompletionId });
     }
     const taskCompletionEvent = {
       id: completedTaskId,
@@ -546,12 +672,12 @@ export class ActivityExecution {
       journal_id: taskCompletionJournalId,
       recorded_at: this.runtime.now(),
       producer: this.runtime.producer,
-      caused_by: [accepted.event.id, completionId, parentStart.event.id],
+      caused_by: [accepted.event.id, activityCompletionId, parentStart.event.id, admission.event.id],
       data: {
         mission_id: loaded.missionId,
         unit_id: loaded.unit.unitId,
         stage: "implementation",
-        stage_attempt_id: stageAttemptId,
+        stage_attempt_id: acceptedStageAttemptId,
         task_id: task.taskId,
         integration_event_id: accepted.event.id,
         conditions: acceptanceCriteria,
@@ -559,20 +685,24 @@ export class ActivityExecution {
     };
     const taskCompletionValidation = validateConstructionEvent(taskCompletionEvent);
     if (taskCompletionValidation.status !== "valid") return failure("task_completion_event_invalid", "The typed task completion event failed Construction validation.", {
-      activity_completion_event_id: completionId,
+      activity_completion_event_id: activityCompletionId,
       issues: taskCompletionValidation.status === "invalid" ? taskCompletionValidation.issues : [taskCompletionValidation.reason],
     });
     const taskCompletionPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${taskCompletionJournalId}.jsonl`);
-    if (await this.runtime.workspace.fileSystem.pathKind(taskCompletionPath) !== "missing") return failure("task_completion_journal_identity_conflict", "The selected task completion journal identity already has a filesystem entry.", { journal_id: taskCompletionJournalId, activity_completion_event_id: completionId });
+    if (await this.runtime.workspace.fileSystem.pathKind(taskCompletionPath) !== "missing") return failure("task_completion_journal_identity_conflict", "The selected task completion journal identity already has a filesystem entry.", { journal_id: taskCompletionJournalId, activity_completion_event_id: activityCompletionId });
     try {
       await this.runtime.journals.create(loaded.root, loaded.missionId, taskCompletionJournalId).append(taskCompletionValidation.event);
     } catch (error) {
       return failure("task_completion_append_failed", "Activity completion was recorded, but task completion could not be durably appended.", {
-        activity_completion_event_id: completionId, event_id: completedTaskId, journal_id: taskCompletionJournalId,
+        activity_completion_event_id: activityCompletionId, event_id: completedTaskId, journal_id: taskCompletionJournalId,
         message: error instanceof Error ? error.message : String(error),
-      }, "Preserve the accepted Integration and Activity completion; inspect history before retrying task completion.");
+      }, "Retry Integration completion with the same accepted attempt. Kepler will preserve the Activity completion and append only the missing task completion.");
     }
-    return { kind: "success", data: { event_id: completionId, journal_id: completionJournalId, activity, activity_attempt_id: activityAttemptId, integration_event_id: accepted.event.id, task_completion_event_id: completedTaskId, checkpoints } };
+    return { kind: "success", data: {
+      event_id: activityCompletionId, journal_id: activityCompletionJournalId, activity: "code-integration",
+      activity_attempt_id: acceptedActivityAttemptId, integration_event_id: accepted.event.id,
+      task_completion_event_id: completedTaskId, checkpoints: candidateCheckpoints,
+    } };
   }
 }
 

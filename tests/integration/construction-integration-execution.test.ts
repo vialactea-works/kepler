@@ -12,6 +12,8 @@ import { IntegrationExecution, createNodeIntegrationExecutionRuntime } from "../
 import type { ConstructionActivityProjection, ConstructionHistoryFact, ConstructionTaskProjection, ConstructionUnitProjection } from "../../packages/cli/src/construction/projection.js";
 import type { ScopeSelectors } from "../../packages/cli/src/cli/scope-selectors.js";
 import type { ConstructionQueries, TaskExecutionContext } from "../../packages/cli/src/construction/scoped-queries.js";
+import { admittedTaskContract } from "../../packages/cli/src/construction/task-admission.js";
+import type { TaskGraphTask } from "../../packages/cli/src/construction/task-graph.js";
 
 const temporaryRoots: string[] = [];
 const unitId = "2026-10-22-integration-fixture";
@@ -26,12 +28,24 @@ const inputReferences = {
   validation: [{ reference: `output:${taskOutput}`, purpose: "Validate the generated task output" }],
   integration: [{ reference: "plan:integration", purpose: "Check the prepared candidate against the plan" }],
 };
-const verification = [
-  { scope: "Integration typecheck", method: "Run typecheck with `repo-main: bun run typecheck`." },
-  { scope: "Integration build", method: "Run build with `repo-main: bun run build`." },
-  { scope: "Full test suite", method: "Run the full test suite with `repo-main: bun run test`." },
+const verification: TaskGraphTask["verification"] = [
+  { scope: "Integration typecheck", method: "Run typecheck with `repo-main: bun run typecheck`.", expected_result: "Typechecking passes." },
+  { scope: "Integration build", method: "Run build with `repo-main: bun run build`.", expected_result: "The build passes." },
+  { scope: "Full test suite", method: "Run the full test suite with `repo-main: bun run test`.", expected_result: "All tests pass." },
 ];
 const planSource = `# Plan\n\n## Verification strategy\n\nTypecheck: \`repo-main: bun run typecheck\`\nBuild: \`repo-main: bun run build\`\nFull test suite: \`repo-main: bun run test\`\n`;
+const taskDefinition: TaskGraphTask = {
+  id: taskId,
+  title: "Integration execution fixture",
+  goal: "Integrate and verify the declared task output.",
+  inputs: inputReferences.generation,
+  outputs: [taskOutput],
+  acceptance_criteria: ["The Integration candidate preserves the declared task output."],
+  guidance: [],
+  verification,
+  depends_on: [],
+  prerequisites: [],
+};
 
 const git = (cwd: string, ...args: string[]): string => execFileSync("git", args, {
   cwd,
@@ -60,7 +74,7 @@ const fact = (event: ConstructionEventRecord): ConstructionHistoryFact => ({
   event,
 });
 
-const setup = async () => {
+const setup = async (includeSecondPreparedRepository = false, includeExtraValidationOutput = false) => {
   const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-integration-execution-"));
   temporaryRoots.push(root);
   git(root, "init", "-q", "-b", "main");
@@ -99,7 +113,12 @@ const setup = async () => {
       branch: "feature",
       integration_target: "refs/heads/main",
       starting_checkpoint: { kind: "commit", commit: baseline },
-    }],
+    }, ...(includeSecondPreparedRepository ? [{
+      repository_id: "repo-secondary",
+      branch: "feature",
+      integration_target: "refs/heads/main",
+      starting_checkpoint: { kind: "commit", commit: baseline },
+    }] : [])],
   }, [missionCreated.id]);
   const workspaceDirectory = Path.join(commonDirectory, "kepler", "missions", missionId, "workspaces");
   await Fs.mkdir(workspaceDirectory, { recursive: true });
@@ -137,6 +156,7 @@ const setup = async () => {
     task_id: taskId,
     graph_ref: graphRef,
     task_definition_ref: taskDefinitionRef,
+    task_contract: admittedTaskContract(taskDefinition, planSource),
     admission_baseline: [{ repository_id: "repo-main", commit: baseline }],
     predecessor_provenance: [],
     prerequisite_evidence: [],
@@ -167,6 +187,7 @@ const setup = async () => {
     inputs: inputReferences.generation,
     check,
     executor: "agent:generator",
+    worker_context_id: "context-generation",
     result: { status: "passed", summary: "Generation evidence is current" },
     output_refs: [taskOutput],
     conditions: [],
@@ -208,8 +229,9 @@ const setup = async () => {
     inputs: inputReferences.validation,
     check,
     executor: "agent:validator",
+    worker_context_id: "context-validation",
     result: { status: "passed", summary: "Validation evidence is current" },
-    output_refs: [taskOutput],
+    output_refs: includeExtraValidationOutput ? [taskOutput, "output:unplanned"] : [taskOutput],
     conditions: [],
   }, [validationStarted.id]));
   const validationCompleted = historyEvent("construction.activity-attempt-completed", {
@@ -317,13 +339,7 @@ const setup = async () => {
     projection: { missionId, blocked: false, projectionIssues: [], units: [unit] },
     unit,
   } as unknown as Extract<AuditHistoryReadResult, { readonly kind: "loaded" }>;
-  const taskDefinition = {
-    id: taskId,
-    outputs: [taskOutput],
-    verification,
-    acceptance_criteria: ["The Integration candidate preserves the declared task output."],
-  };
-  const executionContext = {
+  let executionContext = {
     kind: "execution-context",
     graph: { id: graphRef.graph_id, tasks: [taskDefinition] },
     task: taskDefinition,
@@ -352,7 +368,17 @@ const setup = async () => {
     };
     return new IntegrationExecution(contexts, queries, runtime);
   };
-  return { root, missionId, baseline, generated, diverged, commonDirectory, selectors, execution };
+  return {
+    root,
+    missionId,
+    baseline,
+    generated,
+    diverged,
+    commonDirectory,
+    selectors,
+    execution,
+    setPlanSource: (source: string) => { executionContext = { ...executionContext, planSource: source }; },
+  };
 };
 
 afterEach(async () => {
@@ -360,6 +386,46 @@ afterEach(async () => {
 });
 
 describe("Construction Integration execution", () => {
+  it("rejects a multi-repository workspace before acquiring the Integration lock", async () => {
+    const fixture = await setup(true);
+    const execution = fixture.execution(41000);
+
+    const result = await execution.lock(fixture.selectors);
+
+    expect(result).toMatchObject({ kind: "failed", code: "multi_repository_integration_unsupported" });
+    await expect(Fs.stat(Path.join(fixture.commonDirectory, "kepler", "missions", fixture.missionId, "coordination")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects verification-plan changes after admission before acquiring the Integration lock", async () => {
+    const fixture = await setup();
+    fixture.setPlanSource(planSource.replace("bun run typecheck", "bun run changed-typecheck"));
+
+    const result = await fixture.execution(41008).lock(fixture.selectors);
+
+    expect(result).toMatchObject({ kind: "failed", code: "integration_task_definition_stale" });
+    await expect(Fs.stat(Path.join(fixture.commonDirectory, "kepler", "missions", fixture.missionId, "coordination")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects unplanned task outputs before writing an Integration preparation", async () => {
+    const fixture = await setup(false, true);
+    const execution = fixture.execution(41007);
+    const acquired = await execution.lock(fixture.selectors);
+    expect(acquired.kind).toBe("success");
+    if (acquired.kind !== "success") return;
+
+    const prepared = await execution.prepare(fixture.selectors, acquired.data.lock_token as string, {
+      captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+    });
+
+    expect(prepared).toMatchObject({ kind: "failed", code: "integration_task_output_unverified" });
+    expect(await execution.release(fixture.selectors, acquired.data.lock_token as string)).toMatchObject({
+      kind: "success", data: { aborted: true, lock_released: true },
+    });
+  });
+
   it("uses the durable common-directory lock across independent process owners", async () => {
     const fixture = await setup();
     const first = fixture.execution(41001);

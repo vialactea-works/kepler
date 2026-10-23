@@ -142,6 +142,33 @@ describe("mission local coordination", () => {
     expect(await coordinator.acquire(request)).toMatchObject({ kind: "failed", code: "resource_contended" });
   });
 
+  it("allows another unit to acquire its Integration lock while this unit remains locked", async () => {
+    const { coordinator, request } = await setup();
+    const first = await coordinator.acquire({
+      ...request,
+      location: { kind: "mission", missionId },
+      owner: { ...request.owner, resource_scope: "construction/integration/unit-one" },
+    });
+    expect(first.kind).toBe("acquired");
+    if (first.kind !== "acquired") return;
+
+    const second = await coordinator.acquire({
+      ...request,
+      location: { kind: "mission", missionId },
+      resourceKey: "b".repeat(64),
+      owner: { ...request.owner, process_id: 124, resource_scope: "construction/integration/unit-two" },
+    });
+
+    expect(second.kind).toBe("acquired");
+    if (second.kind === "acquired") expect(await second.lease.release()).toEqual({ kind: "released" });
+    expect(await coordinator.acquire({
+      ...request,
+      location: { kind: "mission", missionId },
+      owner: { ...request.owner, resource_scope: "construction/integration/unit-one" },
+    })).toMatchObject({ kind: "failed", code: "resource_contended" });
+    expect(await first.lease.release()).toEqual({ kind: "released" });
+  });
+
   it("allows exactly one concurrent acquisition of a contended resource", async () => {
     const { coordinator, request } = await setup();
     const [first, second] = await Promise.all([

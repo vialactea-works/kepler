@@ -7,6 +7,9 @@ import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE, validateConstructionEve
 import type { ConstructionHistoryFact, ConstructionUnitProjection } from "./projection.js";
 import { ConstructionQueries, type TaskExecutionContext } from "./scoped-queries.js";
 import { captureStageCheckpoints, createNodeStageStartRuntime, type StageStartRuntime } from "./stage-start.js";
+import { readImplementationPlanningCompletionRecord } from "./implementation-planning-completion.js";
+import { admittedTaskContract } from "./task-admission.js";
+import { isPlannedIntegrationCommand } from "./integration-command-contract.js";
 
 export interface IntegrationEvidenceRequest {
   readonly prepared_event_id: string;
@@ -87,13 +90,12 @@ const stable = (value: unknown): string => {
   if (!isRecord(value)) return JSON.stringify(value);
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stable(value[key])}`).join(",")}}`;
 };
-const checkpointKey = (value: readonly RepositoryCheckpoint[]): string => JSON.stringify(value.slice().sort((left, right) => left.repository_id.localeCompare(right.repository_id)));
-const integrationInputKey = (value: readonly IntegrationInputCheckpoint[]): string => JSON.stringify(value.slice().sort((left, right) => left.repository_id.localeCompare(right.repository_id)));
+const checkpointKey = (value: readonly RepositoryCheckpoint[]): string => stable(value.slice().sort((left, right) => left.repository_id.localeCompare(right.repository_id)));
+const integrationInputKey = (value: readonly IntegrationInputCheckpoint[]): string => stable(value.slice().sort((left, right) => left.repository_id.localeCompare(right.repository_id)));
 const sameStrings = (left: readonly string[], right: readonly string[]): boolean => left.length === right.length && new Set(left).size === left.length && new Set(right).size === right.length && [...left].sort().join("\0") === [...right].sort().join("\0");
 const sameInputs = (left: unknown, right: readonly MaterialInput[]): boolean => Array.isArray(left) && stable(left) === stable(right);
 const isMaterialInputSet = (value: unknown): value is readonly MaterialInput[] => Array.isArray(value) && value.every((item) =>
   isRecord(item) && nonEmpty(item.reference) && nonEmpty(item.purpose));
-const isEvidenceId = (value: unknown): value is EvidenceId => uuidV4(value);
 const fail = (code: string, message: string, details: Readonly<Record<string, unknown>> = {}, recovery = "Resolve the reported Integration condition and retry without discarding the lock, candidate, or evidence."): IntegrationExecutionFailure => ({ kind: "failed", code, message, details, recovery });
 const propagate = (result: Extract<AuditHistoryReadResult, { readonly kind: "failed" }>): IntegrationExecutionFailure => fail(result.code, result.message, result.details, result.recovery);
 const uuidIdentity = (runtime: IntegrationExecutionRuntime, existing: ReadonlySet<string>): string | undefined => {
@@ -214,6 +216,16 @@ const factForEvent = (loaded: Extract<AuditHistoryReadResult, { readonly kind: "
     loaded.unit.evidence.map((item) => item.fact),
   ).find((fact) => fact.event.id === eventId);
 
+const acceptedPlanningBindings = (unit: ConstructionUnitProjection) => {
+  const stage = unit.stages.find((item) => item.stage === "implementation-planning");
+  const attempt = stage?.attempts.find((item) => item.attemptId === stage.currentAttemptId && item.state === "completed");
+  const completions = attempt?.facts.filter((fact) => fact.event.type === "construction.stage-attempt-completed") ?? [];
+  const completion = completions.length === 1 ? completions[0] : undefined;
+  return completion?.event.type === "construction.stage-attempt-completed"
+    ? readImplementationPlanningCompletionRecord(completion.event.data.implementation_planning_assessment)?.reviewed_material_bindings
+    : undefined;
+};
+
 const hasCausalPath = (events: ReadonlyMap<string, { readonly caused_by: readonly string[] }>, before: string, after: string): boolean => {
   const pending = [...(events.get(after)?.caused_by ?? [])];
   const seen = new Set<string>();
@@ -269,33 +281,6 @@ const isIntegrationInputSet = (value: unknown): value is readonly IntegrationInp
 const isRepositoryCheckpointSet = (value: unknown): value is readonly RepositoryCheckpoint[] => Array.isArray(value) && value.every((item) =>
   isRecord(item) && nonEmpty(item.repository_id) && commitId(item.commit)) &&
   new Set(value.map((item) => isRecord(item) ? item.repository_id : undefined)).size === value.length;
-
-const checkTerms = (check: IntegrationEvidenceCheck): readonly RegExp[] => {
-  if (check === "code-integration-typecheck") return [/type[ -]?check/i, /typechecking/i];
-  if (check === "code-integration-build") return [/\bbuild\b/i];
-  if (check === "code-integration-full-test-suite") return [/\b(full|complete|entire|application)\b/i, /\btests?\b/i];
-  return [];
-};
-const mentionsCheck = (value: string, check: IntegrationEvidenceCheck): boolean => {
-  const terms = checkTerms(check);
-  return terms.length > 0 && terms.every((term) => term.test(value));
-};
-const isPlannedIntegrationCommand = (
-  execution: TaskExecutionContext,
-  check: IntegrationEvidenceCheck,
-  command: NonNullable<IntegrationEvidenceRequest["check_command"]>,
-  planSource: string,
-): boolean => {
-  const words = [command.executable, ...command.argv];
-  if (!words.every(safeCommandWord)) return false;
-  const exact = `\`${command.repository_id}: ${words.join(" ")}\``;
-  const methodMatches = execution.task.verification.some((verification) => {
-    const source = `${verification.scope}\n${verification.method}`;
-    return source.includes(exact) && source.includes(command.repository_id) && mentionsCheck(source, check);
-  });
-  const planMatches = planSource.split(/\r?\n/).some((line) => line.includes(exact) && line.includes(command.repository_id) && mentionsCheck(line, check));
-  return methodMatches && planMatches;
-};
 
 const validateScope = (selectors: ScopeSelectors): IntegrationScope | undefined => {
   if (!selectors.unit || !selectors.task || !selectors.implementationAttempt || !selectors.attempt || selectors.activity !== "code-integration" ||
@@ -507,9 +492,8 @@ export class IntegrationExecution {
     const sourceIds = state.state.validationEvidence.map((fact) => fact.event.data.evidence_id).filter((id): id is string => typeof id === "string");
     const outputRefs = [...new Set(state.state.validationEvidence.flatMap((fact) => Array.isArray(fact.event.data.output_refs)
       ? fact.event.data.output_refs.filter((value): value is string => typeof value === "string") : []))].sort((left, right) => left.localeCompare(right));
-    if (sourceIds.length !== state.state.validationEvidence.length || outputRefs.length === 0 ||
-        !state.state.execution.task.outputs.every((output) => outputRefs.includes(output))) {
-      return fail("integration_task_output_unverified", "Current Code Validation evidence does not identify every declared task output.", {
+    if (sourceIds.length !== state.state.validationEvidence.length || !sameStrings(outputRefs, state.state.execution.task.outputs)) {
+      return fail("integration_task_output_unverified", "Current Code Validation evidence must identify exactly the declared task outputs.", {
         declared_outputs: state.state.execution.task.outputs, validated_output_refs: outputRefs,
       });
     }
@@ -598,7 +582,8 @@ export class IntegrationExecution {
         supplied_repository_id: parsed.request.check_command?.repository_id,
       });
     }
-    if (commandCheck && !isPlannedIntegrationCommand(state.state.execution, parsed.request.check, parsed.request.check_command!, state.state.execution.planSource)) {
+    if (commandCheck && !isPlannedIntegrationCommand(state.state.execution.task, state.state.execution.planSource,
+      parsed.request.check as Exclude<IntegrationEvidenceCheck, "code-integration-self-review">, parsed.request.check_command!)) {
       return fail("integration_check_command_unbound", "The caller-supplied command is not an exact repository-qualified command in both plan.md and the task verification method; it is not verified for acceptance.", {
         repository_id: parsed.request.check_command?.repository_id,
         check: parsed.request.check,
@@ -621,6 +606,8 @@ export class IntegrationExecution {
     const evidenceId = uuidIdentity(this.runtime, new Set([...existing, ...(eventId ? [eventId] : [])]));
     const journalId = uuidIdentity(this.runtime, new Set([...existing, ...(eventId ? [eventId] : []), ...(evidenceId ? [evidenceId] : [])]));
     if (!eventId || !evidenceId || !journalId) return fail("integration_identity_conflict", "Kepler could not allocate unique Integration evidence identities.");
+    const artifactBindings = acceptedPlanningBindings(state.state.loaded.unit);
+    if (!artifactBindings) return fail("integration_planning_bindings_unknown", "Current Integration evidence requires the accepted Planning material bindings.");
     const data: Record<string, unknown> = {
       mission_id: state.state.loaded.missionId,
       unit_id: scope.unitId,
@@ -630,7 +617,7 @@ export class IntegrationExecution {
       activity: "code-integration",
       activity_attempt_id: scope.activityAttemptId,
       evidence_id: evidenceId as EvidenceId,
-      artifact_bindings: [],
+      artifact_bindings: artifactBindings,
       checkpoints: candidate,
       inputs: prepared.fact.event.data.inputs,
       check: parsed.request.check,
@@ -823,13 +810,13 @@ export class IntegrationExecution {
   }
 
   private integrationEvidenceCommandsBound(execution: TaskExecutionContext, evidence: ReadonlyMap<string, ConstructionHistoryFact>): boolean {
-    const checks: readonly IntegrationEvidenceCheck[] = ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite"];
+    const checks: readonly Exclude<IntegrationEvidenceCheck, "code-integration-self-review">[] = ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite"];
     return checks.every((check) => {
       const fact = evidence.get(check);
       if (!fact || fact.event.type !== "construction.evidence-recorded" || !isRepositoryCheckpointSet(fact.event.data.checkpoints)) return false;
       const command = fact.event.data.check_command;
       return isIntegrationEvidenceCommand(command) && command.repository_id === fact.event.data.checkpoints[0]?.repository_id &&
-        isPlannedIntegrationCommand(execution, check, command, execution.planSource);
+        isPlannedIntegrationCommand(execution.task, execution.planSource, check, command);
     });
   }
 
@@ -858,7 +845,8 @@ export class IntegrationExecution {
       });
     }
     if (admission.event.type !== "construction.task-admitted" || stable(admission.event.data.graph_ref) !== stable(execution.graphRef) ||
-        stable(admission.event.data.task_definition_ref) !== stable(execution.taskDefinitionRef)) {
+        stable(admission.event.data.task_definition_ref) !== stable(execution.taskDefinitionRef) ||
+        stable(admission.event.data.task_contract) !== stable(admittedTaskContract(execution.task, execution.planSource))) {
       return fail("integration_task_definition_stale", "The current task definition differs from the admitted task output contract.", {
         admitted_graph_ref: admission.event.data.graph_ref,
         current_graph_ref: execution.graphRef,

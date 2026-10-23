@@ -123,6 +123,7 @@ const createProject = async (): Promise<string> => {
       task_id: taskId,
       graph_ref: { graph_id: "c0000000-0000-4000-8000-00000000000c", content_version: "graph-1" },
       task_definition_ref: { graph_id: "c0000000-0000-4000-8000-00000000000c", task_id: taskId, content_version: "task-1" },
+      task_contract: { outputs: ["task-output"], acceptance_criteria: ["Task output is valid"], dependency_task_ids: [], implementation_prerequisites: [] },
       admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
       predecessor_provenance: [],
       prerequisite_evidence: [],

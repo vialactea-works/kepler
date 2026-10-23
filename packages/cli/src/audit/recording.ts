@@ -63,7 +63,7 @@ const validInputs = (value: unknown): value is readonly MaterialInput[] =>
     nonEmptyString(item.reference) && nonEmptyString(item.purpose));
 
 const requestKeys: Readonly<Record<AuditRecordKind, readonly string[]>> = {
-  evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "result", "output_refs", "conditions", "related_request_event_id", "related_event_ids"],
+  evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "worker_context_id", "result", "output_refs", "conditions", "related_request_event_id", "related_event_ids"],
   approval: ["requester", "inputs", "artifact_bindings", "checkpoints", "decision_reference"],
   interaction: ["participants", "content", "references", "reply_reference", "effort_selection", "delivery_outcome"],
 };
@@ -112,6 +112,9 @@ const validateRequest = (
   if (kind === "evidence") {
     requireText("check");
     requireText("executor");
+    if (request.worker_context_id !== undefined && !nonEmptyString(request.worker_context_id)) {
+      issues.push({ pointer: "/worker_context_id", message: "Expected a non-empty worker context identity." });
+    }
     if (!isRecord(request.result) || !["passed", "failed", "inconclusive"].includes(String(request.result.status)) || !nonEmptyString(request.result.summary)) {
       issues.push({ pointer: "/result", message: "Expected a check result status and non-empty summary." });
     }
@@ -243,6 +246,10 @@ export const createAuditRecord = (
 ): AuditRecordResult => {
   const issues = [...validateRequest(kind, request)];
   if (!isRecord(request)) return { kind: "invalid", issues };
+  if (kind === "evidence" && (scope.activity === "code-generation" || scope.activity === "code-validation") &&
+      !nonEmptyString(request.worker_context_id)) {
+    issues.push({ pointer: "/worker_context_id", message: "Generation and Validation evidence require an explicit worker context identity." });
+  }
   if (kind === "interaction" && isRecord(request.effort_selection) && request.effort_selection.target === "stage" &&
       request.effort_selection.stage !== scope.stage) {
     issues.push({ pointer: "/effort_selection/stage", message: "A stage effort selection must match the explicit audit stage scope." });
@@ -275,6 +282,7 @@ export const createAuditRecord = (
         inputs: request.inputs,
         check: request.check,
         executor: request.executor,
+        ...(request.worker_context_id === undefined ? {} : { worker_context_id: request.worker_context_id }),
         result: request.result,
         output_refs: request.output_refs ?? [],
         conditions: request.conditions ?? [],

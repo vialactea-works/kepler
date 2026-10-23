@@ -8,10 +8,12 @@ import { readImplementationPlanningCompletionRecord } from "./implementation-pla
 import { type ConstructionHistoryFact, type ConstructionUnitProjection } from "./projection.js";
 import { ConstructionQueries, type TaskExecutionContext } from "./scoped-queries.js";
 import { captureStageCheckpoints, createNodeStageStartRuntime, type StageStartRuntime } from "./stage-start.js";
+import { plannedIntegrationCommands } from "./integration-command-contract.js";
 import {
   CONSTRUCTION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
   validateConstructionEvent,
+  type AdmittedTaskContract,
   type ConstructionEventRecord,
   type EvidenceId,
   type GraphReference,
@@ -22,6 +24,15 @@ import {
 export interface TaskAdmissionRequest {
   readonly prerequisite_evidence_ids: readonly string[];
 }
+
+export const admittedTaskContract = (task: TaskExecutionContext["task"], planSource: string): AdmittedTaskContract => ({
+  outputs: task.outputs,
+  acceptance_criteria: task.acceptance_criteria,
+  dependency_task_ids: task.depends_on.map((dependency) => dependency.task_id as TaskId),
+  implementation_prerequisites: task.prerequisites.filter((prerequisite) => prerequisite.blocking && prerequisite.needed_for === "implementation")
+    .map(({ description, condition }) => ({ description, condition })),
+  planned_integration_commands: plannedIntegrationCommands(task, planSource),
+});
 
 export interface TaskAdmissionRuntime extends StageStartRuntime {
   readonly journals: {
@@ -421,6 +432,7 @@ export class TaskAdmission {
         task_id: taskId,
         graph_ref: execution.graphRef,
         task_definition_ref: execution.taskDefinitionRef,
+        task_contract: admittedTaskContract(execution.task, execution.planSource),
         admission_baseline: admissionBaseline,
         predecessor_provenance: provenance.values,
         prerequisite_evidence: request.prerequisite_evidence_ids as EvidenceId[],

@@ -79,6 +79,7 @@ const payload = (type: (typeof CONSTRUCTION_EVENT_TYPES)[number]): Record<string
       ...task,
       graph_ref: graphReference,
       task_definition_ref: { graph_id: identities.graph, task_id: identities.task, content_version: "task-revision-1" },
+      task_contract: { outputs: ["output:task"], acceptance_criteria: ["Complete the task"], dependency_task_ids: [], implementation_prerequisites: [] },
       admission_baseline: [],
       predecessor_provenance: [],
       prerequisite_evidence: [],
@@ -349,6 +350,14 @@ describe("Construction event contracts", () => {
 
     const admission = payload("construction.task-admitted");
     expect(admission).toHaveProperty("admission_baseline");
+    const contract = admission.task_contract as Record<string, unknown>;
+    expect(validateConstructionEvent(envelope("construction.task-admitted", {
+      ...admission,
+      task_contract: { ...contract, acceptance_criteria: ["Complete the task", "Complete the task"] },
+    })).status).toBe("valid");
+    const legacyAdmission = { ...admission };
+    delete legacyAdmission.task_contract;
+    expect(validateConstructionEvent(envelope("construction.task-admitted", legacyAdmission)).status).toBe("valid");
     expect(admission).not.toHaveProperty("review_baseline");
     expect(admission).not.toHaveProperty("captured_inputs");
 
