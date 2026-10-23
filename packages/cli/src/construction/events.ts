@@ -135,7 +135,7 @@ export interface RepositoryCheckpoint {
   readonly commit: string;
 }
 
-type IntegrationInputCheckpoint = RepositoryCheckpoint | {
+export type IntegrationInputCheckpoint = RepositoryCheckpoint | {
   readonly repository_id: string;
   readonly no_commit: true;
 };
@@ -488,6 +488,7 @@ export interface ActivityReopenedData extends ConstructionBaseData {
 }
 
 export interface EvidenceRecordedData extends ConstructionBaseData {
+  readonly check_command?: { readonly repository_id: string; readonly executable: string; readonly argv: readonly string[] };
   readonly evidence_id: EvidenceId;
   readonly stage: ConstructionStage;
   readonly stage_attempt_id: StageAttemptId;
@@ -1129,6 +1130,10 @@ const validatePayload = (
     invalid("checkpoints", isCheckpointSet(data.checkpoints));
   }
   if (type === "construction.evidence-recorded") {
+    invalid("check_command", data.check_command === undefined || (isRecord(data.check_command) &&
+      Object.keys(data.check_command).every((key) => ["repository_id", "executable", "argv"].includes(key)) &&
+      isNonEmptyString(data.check_command.repository_id) && isNonEmptyString(data.check_command.executable) &&
+      Array.isArray(data.check_command.argv) && data.check_command.argv.every((item) => typeof item === "string")));
     invalid("attempt_binding", isExecutionBinding(data));
     invalid("evidence_id", isUuidV4(data.evidence_id));
     invalid("artifact_bindings", isArtifactBindings(data.artifact_bindings));

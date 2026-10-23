@@ -12,6 +12,7 @@ import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
 import { TaskAdmission, createNodeTaskAdmissionRuntime } from "../../construction/task-admission.js";
 import { ActivityExecution, createNodeActivityExecutionRuntime } from "../../construction/activity-execution.js";
+import { IntegrationExecution, createNodeIntegrationExecutionRuntime } from "../../construction/integration-execution.js";
 import { ConstructionLint } from "../../construction/construction-lint.js";
 import { createNodeUnitQueryFileSystem } from "../../construction/unit-queries-runtime.js";
 import { createNodeUnitCreateRecords, machineLocalDate } from "../../construction/unit-create-runtime.js";
@@ -77,6 +78,12 @@ import {
   ConstructionActivityStartCommand,
   ConstructionActivityCompleteCommand,
   ConstructionActivityShowCommand,
+  ConstructionIntegrationCommand,
+  ConstructionIntegrationLockCommand,
+  ConstructionIntegrationPrepareCommand,
+  ConstructionIntegrationEvidenceCommand,
+  ConstructionIntegrationAcceptCommand,
+  ConstructionIntegrationReleaseCommand,
   ConstructionLintCommand,
   ConstructionUnitCommand,
   ConstructionUnitCreateCommand,
@@ -129,6 +136,12 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionActivityStartCommand,
     ConstructionActivityCompleteCommand,
     ConstructionActivityShowCommand,
+    ConstructionIntegrationCommand,
+    ConstructionIntegrationLockCommand,
+    ConstructionIntegrationPrepareCommand,
+    ConstructionIntegrationEvidenceCommand,
+    ConstructionIntegrationAcceptCommand,
+    ConstructionIntegrationReleaseCommand,
     ConstructionLintCommand,
     ConstructionUnitCommand,
     ConstructionUnitCreateCommand,
@@ -282,6 +295,15 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
         contexts,
         queries,
         createNodeActivityExecutionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver, ConstructionQueries],
+    },
+    {
+      provide: IntegrationExecution,
+      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries) => new IntegrationExecution(
+        contexts,
+        queries,
+        createNodeIntegrationExecutionRuntime({ name: "kepler", version: cliVersion }),
       ),
       inject: [AuditContextResolver, ConstructionQueries],
     },

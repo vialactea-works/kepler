@@ -11,6 +11,7 @@ import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
 import { TaskAdmission } from "../../construction/task-admission.js";
 import { ActivityExecution } from "../../construction/activity-execution.js";
+import { IntegrationExecution } from "../../construction/integration-execution.js";
 import { ConstructionLint } from "../../construction/construction-lint.js";
 import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
 import { QualityRequirementsStageCompletion } from "../../construction/quality-stage-completion.js";
@@ -874,6 +875,85 @@ export class ConstructionActivityCommand extends CommandRunner {
   async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction activity")); }
 }
 
+abstract class ConstructionIntegrationExecutionCommand extends CommandRunner {
+  constructor(protected readonly reporter: ResultReporter, private readonly execution: IntegrationExecution, private readonly operation: "lock" | "prepare" | "evidence" | "accept" | "release") { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--lock-token <token>" }) parseLockToken(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--prepared-event-id <event-id>" }) parsePreparedEventId(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--request <json>" }) parseRequest(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "task", "activity", "implementationAttempt", "attempt"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide the exact unit, task, code-integration Activity, Implementation attempt, and Activity attempt selectors."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const token = optionValue(values, "lockToken");
+    if (typeof token === "object") { reportFailure(this.reporter, token); return; }
+    const requestValue = optionValue(values, "request");
+    if (typeof requestValue === "object") { reportFailure(this.reporter, requestValue); return; }
+    let request: unknown;
+    if (typeof requestValue === "string") {
+      const decoded = parseStrictJson(requestValue);
+      if (decoded.kind === "invalid") {
+        reportFailure(this.reporter, { code: "invalid_integration_request_json", message: "The Integration request is not valid strict JSON.",
+          details: { code: decoded.code, pointer: decoded.pointer, message: decoded.message }, recovery: "Correct the typed Integration JSON request and retry without changing the selected attempt." });
+        return;
+      }
+      request = decoded.value;
+    }
+    const preparedEventId = optionValue(values, "preparedEventId");
+    if (typeof preparedEventId === "object") { reportFailure(this.reporter, preparedEventId); return; }
+    const result = this.operation === "lock"
+      ? await this.execution.lock(parsed.selectors, selected.project)
+      : this.operation === "prepare"
+        ? await this.execution.prepare(parsed.selectors, typeof token === "string" ? token : undefined, request, selected.project)
+        : this.operation === "evidence"
+          ? await this.execution.recordEvidence(parsed.selectors, typeof token === "string" ? token : undefined, request, selected.project)
+          : this.operation === "accept"
+            ? await this.execution.accept(parsed.selectors, typeof token === "string" ? token : undefined, typeof preparedEventId === "string" ? preparedEventId : undefined, selected.project)
+            : await this.execution.release(parsed.selectors, typeof token === "string" ? token : undefined, selected.project);
+    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
+      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+    } });
+  }
+}
+
+@SubCommand({ name: "lock", description: "Acquire and capture the unit Integration lock" })
+export class ConstructionIntegrationLockCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "lock"); }
+}
+
+@SubCommand({ name: "prepare", description: "Record the immutable Integration candidate and actual input set" })
+export class ConstructionIntegrationPrepareCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "prepare"); }
+}
+
+@SubCommand({ name: "evidence", description: "Record repository-qualified Integration checks and self-review" })
+export class ConstructionIntegrationEvidenceCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "evidence"); }
+}
+
+@SubCommand({ name: "accept", description: "Accept the checked Integration candidate and release its lock" })
+export class ConstructionIntegrationAcceptCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "accept"); }
+}
+
+@SubCommand({ name: "release", description: "Abort incomplete Integration work and release only if the target is unchanged" })
+export class ConstructionIntegrationReleaseCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "release"); }
+}
+
+@SubCommand({ name: "integration", description: "Execute the checked Construction Integration lifecycle", subCommands: [ConstructionIntegrationLockCommand, ConstructionIntegrationPrepareCommand, ConstructionIntegrationEvidenceCommand, ConstructionIntegrationAcceptCommand, ConstructionIntegrationReleaseCommand] })
+export class ConstructionIntegrationCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction integration")); }
+}
+
 @SubCommand({ name: "lint", description: "Validate the canonical Construction task graph" })
 export class ConstructionLintCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter, private readonly lint: ConstructionLint) { super(); }
@@ -1018,7 +1098,7 @@ export class ConstructionUnitCommand extends CommandRunner {
 @SubCommand({
   name: "construction",
   description: "Run Construction workflow operations",
-  subCommands: [ConstructionUnitCommand, ConstructionStageCommand, ConstructionTaskCommand, ConstructionActivityCommand, ConstructionLintCommand],
+  subCommands: [ConstructionUnitCommand, ConstructionStageCommand, ConstructionTaskCommand, ConstructionActivityCommand, ConstructionIntegrationCommand, ConstructionLintCommand],
 })
 export class ConstructionCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) {
