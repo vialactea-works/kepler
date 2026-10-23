@@ -158,12 +158,16 @@ const readTargetCheckpoints = async (
   return checkpoints.sort((left, right) => left.repository_id.localeCompare(right.repository_id));
 };
 
-const acceptedIntegrations = (projectionUnits: readonly ConstructionUnitProjection[]): ConstructionHistoryFact[] =>
-  projectionUnits.flatMap((unit) => unit.tasks.flatMap((task) => task.activities.flatMap((activity) =>
+const acceptedIntegrations = (
+  projectionUnits: readonly ConstructionUnitProjection[],
+  unitId: string,
+): ConstructionHistoryFact[] => projectionUnits.filter((unit) => unit.unitId === unitId).flatMap((unit) =>
+  unit.tasks.flatMap((task) => task.activities.flatMap((activity) =>
     activity.activity === "code-integration"
       ? activity.accepted.filter((fact) => fact.event.type === "construction.integration-accepted")
       : [],
-  )));
+  )),
+);
 
 const hasCausalPath = (events: ReadonlyMap<string, { readonly caused_by: readonly string[] }>, before: string, after: string): boolean => {
   const pending = [...(events.get(after)?.caused_by ?? [])];
@@ -180,8 +184,9 @@ const hasCausalPath = (events: ReadonlyMap<string, { readonly caused_by: readonl
 
 const currentIntegration = (
   loaded: Extract<AuditHistoryReadResult, { readonly kind: "loaded" }>,
+  unitId: string,
 ): ConstructionHistoryFact | undefined => {
-  const acceptances = acceptedIntegrations(loaded.projection.units);
+  const acceptances = acceptedIntegrations(loaded.projection.units, unitId);
   const events = new Map(loaded.history.events.flatMap((record) => record.event
     ? [[String(record.event.id), record.event] as const]
     : [],
@@ -330,8 +335,8 @@ export class TaskAdmission {
     if (priorBaseline && JSON.stringify(priorBaseline.event.data.integration_targets) !== JSON.stringify(baselineTargets)) {
       return failure("unit_integration_targets_changed", "Prepared Integration targets differ from the fixed unit Review baseline.");
     }
-    const acceptedHistory = acceptedIntegrations(loaded.projection.units);
-    const latestIntegration = currentIntegration(loaded);
+    const acceptedHistory = acceptedIntegrations(loaded.projection.units, unit.unitId);
+    const latestIntegration = currentIntegration(loaded, unit.unitId);
     if (acceptedHistory.length > 0 && !latestIntegration) return failure("task_admission_integration_history_ambiguous", "Mission Integration acceptances do not establish one causally latest candidate set.", {
       accepted_event_ids: acceptedHistory.map((fact) => fact.event.id),
     });

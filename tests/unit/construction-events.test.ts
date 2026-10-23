@@ -353,6 +353,12 @@ describe("Construction event contracts", () => {
     expect(admission).not.toHaveProperty("captured_inputs");
 
     const integration = payload("construction.integration-prepared");
+    const greenfieldIntegration = { ...integration, captured_inputs: [{ repository_id: "repo-main", no_commit: true }] };
+    expect(validateConstructionEvent(envelope("construction.integration-prepared", greenfieldIntegration)).status).toBe("valid");
+    expect(validateConstructionEvent(envelope("construction.integration-prepared", {
+      ...integration,
+      captured_inputs: [{ repository_id: "repo-main", commit: "checkpoint", no_commit: true }],
+    })).status).toBe("invalid");
     expect(integration).toHaveProperty("captured_inputs");
     expect(integration).toHaveProperty("candidate_checkpoints");
     expect(integration).not.toHaveProperty("review_baseline");

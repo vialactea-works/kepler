@@ -1054,23 +1054,17 @@ describe("Functional Design stage completion CLI E2E", () => {
     const retainedAssessment = stageDriver.assessRetainedScopes(auditFixture.unitId, implementationAttempt, retainedAssessmentRequest);
     expect(retainedAssessment.exitCode, JSON.stringify(retainedAssessment.result)).toBe(0);
     const retainedAssessmentEventId = String(retainedAssessment.result.data.id);
-    const admission = await appendTypedConstructionEvent(harness, "construction.task-admitted", {
-      mission_id: auditFixture.missionId,
-      unit_id: auditFixture.unitId,
-      stage: "implementation",
-      stage_attempt_id: implementationAttempt,
-      task_id: planningTaskId,
-      graph_ref: planningMaterial.graphRef,
-      task_definition_ref: {
-        graph_id: planningMaterial.graphRef.graph_id,
-        task_id: planningTaskId,
-        content_version: planningMaterial.graphRef.content_version,
-      },
-      admission_baseline: planningMaterial.checkpoints,
-      predecessor_provenance: [],
-      prerequisite_evidence: [],
-    }, [implementationStart.eventId, String(planningResult.result.data.id), auditFixture.baselineEventId,
-      retainedAssessmentEventId, String(previousCodeIntegration.integrationEventId)]);
+    const admitted = harness.cli.run([
+      "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningTaskId,
+      "--implementation-attempt", implementationAttempt,
+    ]);
+    const admissionResult = JSON.parse(admitted.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
+    expect(admitted.exitCode, JSON.stringify({ result: admissionResult, stderr: admitted.stderr })).toBe(0);
+    expect(admissionResult).toMatchObject({
+      status: "success",
+      data: { task_id: planningTaskId, implementation_attempt_id: implementationAttempt },
+    });
+    const admissionEventId = String(admissionResult.data.admission_event_id);
     const activityNames = ["code-generation", "code-validation", "code-integration"] as const;
     const activityExecutors = { "code-generation": "agent:builder", "code-validation": "agent:verifier", "code-integration": "agent:integrator" } as const;
     const activityChecks = {
@@ -1100,7 +1094,7 @@ describe("Functional Design stage completion CLI E2E", () => {
         activity_attempt_id: activityAttemptId,
         inputs: implementationInputs,
         checkpoints: planningMaterial.checkpoints,
-      }, [admission.id, previousActivityCompletion, retainedAssessmentEventId]);
+      }, [admissionEventId, previousActivityCompletion, retainedAssessmentEventId]);
       activityStarts.set(activity, started.id);
       activityAttemptIds.set(activity, activityAttemptId);
       let preparedId: string | undefined;
@@ -1118,7 +1112,7 @@ describe("Functional Design stage completion CLI E2E", () => {
           task_output_refs: [`task-output:${planningTaskId}`],
           source_evidence_ids: [validationEvidenceId],
           inputs: implementationInputs,
-        }, [started.id, admission.id, previousActivityCompletion, validationEvidenceEventId, retainedAssessmentEventId]);
+        }, [started.id, admissionEventId, previousActivityCompletion, validationEvidenceEventId, retainedAssessmentEventId]);
         preparedId = prepared.id;
       }
       const activityEvidence: { readonly evidenceId: string; readonly eventId: string; readonly check: string }[] = [];

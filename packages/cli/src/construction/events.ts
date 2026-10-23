@@ -135,6 +135,11 @@ export interface RepositoryCheckpoint {
   readonly commit: string;
 }
 
+type IntegrationInputCheckpoint = RepositoryCheckpoint | {
+  readonly repository_id: string;
+  readonly no_commit: true;
+};
+
 export interface ArtifactBinding {
   readonly artifact_id: ArtifactId;
   readonly content_version?: string;
@@ -533,7 +538,7 @@ export interface InteractionRecordedData extends ConstructionBaseData {
 
 export interface IntegrationPreparedData extends ActivityAttemptData {
   readonly activity: "code-integration";
-  readonly captured_inputs: readonly RepositoryCheckpoint[];
+  readonly captured_inputs: readonly IntegrationInputCheckpoint[];
   readonly candidate_checkpoints: readonly RepositoryCheckpoint[];
   readonly task_output_refs: readonly string[];
   readonly source_evidence_ids: readonly EvidenceId[];
@@ -683,6 +688,15 @@ const isCheckpoint = (value: unknown): value is RepositoryCheckpoint =>
 
 const isCheckpointSet = (value: unknown): value is readonly RepositoryCheckpoint[] =>
   Array.isArray(value) && value.every(isCheckpoint) &&
+  new Set(value.map((checkpoint) => checkpoint.repository_id)).size === value.length;
+
+const isIntegrationInputCheckpoint = (value: unknown): value is IntegrationInputCheckpoint =>
+  isRecord(value) && isNonEmptyString(value.repository_id) &&
+  ((isNonEmptyString(value.commit) && value.no_commit === undefined) ||
+    (value.no_commit === true && value.commit === undefined));
+
+const isIntegrationInputSet = (value: unknown): value is readonly IntegrationInputCheckpoint[] =>
+  Array.isArray(value) && value.every(isIntegrationInputCheckpoint) &&
   new Set(value.map((checkpoint) => checkpoint.repository_id)).size === value.length;
 
 const isInputs = (value: unknown): value is readonly MaterialInput[] =>
@@ -1158,7 +1172,7 @@ const validatePayload = (
   }
   if (type === "construction.integration-prepared") {
     invalid("activity", data.activity === "code-integration");
-    invalid("captured_inputs", isCheckpointSet(data.captured_inputs));
+    invalid("captured_inputs", isIntegrationInputSet(data.captured_inputs));
     invalid("candidate_checkpoints", isCheckpointSet(data.candidate_checkpoints));
     invalid("task_output_refs", isStringArray(data.task_output_refs, true));
     invalid("source_evidence_ids", isEvidenceIdArray(data.source_evidence_ids));

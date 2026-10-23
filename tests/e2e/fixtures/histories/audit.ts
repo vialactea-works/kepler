@@ -140,7 +140,7 @@ export const createAuditHistory = async (
       mission_id: auditFixture.missionId,
       unit_id: auditFixture.unitId,
       review_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
-      integration_targets: [{ repository_id: "repo-main", target: "main" }],
+      integration_targets: [{ repository_id: "repo-main", target: "refs/heads/main" }],
     }, [auditFixture.eventIds[0]]),
     event("90000000-0000-4000-8000-000000000009", "construction.stage-attempt-started", {
       mission_id: auditFixture.missionId,
