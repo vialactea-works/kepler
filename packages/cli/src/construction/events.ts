@@ -8,6 +8,16 @@ import {
   functionalDesignEvidenceIds,
   isFunctionalDesignCompletionRecord,
 } from "./functional-design-completion.js";
+import {
+  isQualityRequirementsCompletionRecord,
+  qualityRequirementsEvidenceIds,
+  type QualityRequirementsCompletionRecord,
+} from "./quality-requirements-completion.js";
+import {
+  isImplementationPlanningCompletionRecord,
+  planningEvidenceIds,
+  type ImplementationPlanningCompletionRecord,
+} from "./implementation-planning-completion.js";
 
 const identityBrand: unique symbol = Symbol("ConstructionIdentity");
 
@@ -25,6 +35,8 @@ export type ArtifactId = Identity<"ArtifactId">;
 
 export const CONSTRUCTION_PHASE = "construction";
 export const CONSTRUCTION_EVENT_VERSION = 1;
+export const CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION = 2;
+export const CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION = 3;
 
 export const CONSTRUCTION_STAGES = [
   "functional-design",
@@ -80,6 +92,7 @@ export type ConstructionStage = (typeof CONSTRUCTION_STAGES)[number];
 export type ConstructionActivity = (typeof CONSTRUCTION_ACTIVITIES)[number];
 export type ConstructionEventType = (typeof CONSTRUCTION_EVENT_TYPES)[number];
 export type EffortLevel = "minimal" | "standard" | "comprehensive";
+export type DeliverOutcome = "repository-handoff" | "review-request" | "publication" | "deployment" | "other";
 
 export const CONSTRUCTION_STAGE_ACTIVITY_STATES = [
   "not_started",
@@ -284,13 +297,108 @@ export interface FunctionalDesignCompletionAssessments {
 export interface FunctionalDesignCompletionRecord {
   readonly approval_event_id: EventId;
   readonly artifact_bindings: readonly ArtifactBinding[];
+  readonly artifact_paths: readonly string[];
   readonly assessments: FunctionalDesignCompletionAssessments;
+}
+
+export interface ImplementationAdditionalReview {
+  readonly requested: false;
+}
+
+export interface ImplementationRequestedReview {
+  readonly requested: true;
+  readonly request_event_id: EventId;
+  readonly evidence_id: EvidenceId;
+  readonly reviewer: string;
+  readonly findings: readonly string[];
+}
+
+export interface ImplementationCompletionHandoff {
+  readonly status: "ready" | "blocked";
+  readonly reason: string;
+  readonly recipient: "unit-of-work-review";
+  readonly artifacts: readonly string[];
+}
+
+export interface ImplementationCompletionReference {
+  readonly assessment_event_id: EventId;
+}
+
+export interface UnitOfWorkReviewCompletionRecord {
+  readonly implementation_completion_event_id: EventId;
+  readonly reviewed_material_bindings: readonly ArtifactBinding[];
+  readonly final_checkpoints: readonly RepositoryCheckpoint[];
+  readonly reviewer: string;
+  readonly implementation_authors: readonly string[];
+  readonly implementation_evidence_assessment_id: EvidenceId;
+  readonly review_evidence_id: EvidenceId;
+  readonly self_review_evidence_id: EvidenceId;
+  readonly findings: { readonly blocking: readonly string[]; readonly limitations: readonly { readonly finding: string; readonly rationale: string }[] };
+  readonly additional_review: { readonly requested: false } | {
+    readonly requested: true;
+    readonly request_event_id: EventId;
+    readonly evidence_id: EvidenceId;
+    readonly reviewer: string;
+    readonly findings: readonly string[];
+  };
+  readonly acceptance_required: boolean;
+  readonly approval_event_id?: EventId;
+  readonly handoff: { readonly status: "ready" | "blocked"; readonly recipient: "deliver"; readonly summary: string };
+}
+
+export interface DeliverOutcomeSelection {
+  readonly outcome: DeliverOutcome;
+  readonly requested_outcome: string;
+  readonly destination: string;
+  readonly recipient: string;
+}
+
+export interface LegacyDeliverCompletionRecord {
+  readonly review_completion_event_id: EventId;
+  readonly outcome_request_event_id?: EventId;
+  readonly outcome: DeliverOutcome;
+  readonly requested_outcome: string;
+  readonly destination: string;
+  readonly recipient: string;
+  readonly artifact_bindings: readonly ArtifactBinding[];
+  readonly reviewed_checkpoints: readonly RepositoryCheckpoint[];
+  readonly preparation_evidence_id: EvidenceId;
+  readonly self_review_evidence_id: EvidenceId;
+  readonly operation_results: readonly {
+    readonly operation: string;
+    readonly status: "succeeded" | "failed" | "partial";
+    readonly evidence_id: EvidenceId;
+    readonly source_checkpoints: readonly RepositoryCheckpoint[];
+    readonly authority: { readonly kind: "requester-instruction"; readonly event_id: EventId } | { readonly kind: "project-authority"; readonly reference: string };
+  }[];
+  readonly verification_evidence_ids: readonly EvidenceId[];
+  readonly handoff_evidence_id: EvidenceId;
+  readonly additional_review?: ImplementationAdditionalReview | ImplementationRequestedReview;
+  readonly approval_required: boolean;
+  readonly approval_event_id?: EventId;
+  readonly handoff: { readonly status: "ready" | "blocked"; readonly summary: string };
+}
+
+export interface DeliverCompletionRecord extends Omit<LegacyDeliverCompletionRecord, "operation_results"> {
+  readonly outcome_request_event_id: EventId;
+  readonly operation_results: readonly {
+    readonly operation: string;
+    readonly status: "succeeded" | "failed" | "partial";
+    readonly evidence_id: EvidenceId;
+    readonly source_checkpoints: readonly RepositoryCheckpoint[];
+    readonly authority: { readonly kind: "requester-instruction"; readonly event_id: EventId } | { readonly kind: "project-authority"; readonly reference: string };
+  }[];
 }
 
 export interface StageAttemptCompletedData extends StageAttemptData {
   readonly evidence_ids: readonly EvidenceId[];
   readonly checkpoints: readonly RepositoryCheckpoint[];
   readonly functional_design_assessment?: FunctionalDesignCompletionRecord;
+  readonly quality_requirements_assessment?: QualityRequirementsCompletionRecord;
+  readonly implementation_planning_assessment?: ImplementationPlanningCompletionRecord;
+  readonly implementation_assessment?: ImplementationCompletionReference;
+  readonly unit_of_work_review_assessment?: UnitOfWorkReviewCompletionRecord;
+  readonly deliver_assessment?: DeliverCompletionRecord;
 }
 
 export interface StageAttemptEndedData extends StageAttemptData {
@@ -300,7 +408,7 @@ export interface StageAttemptEndedData extends StageAttemptData {
 
 export interface StageReopenedData extends ConstructionBaseData {
   readonly stage: ConstructionStage;
-  readonly stage_attempt_id?: StageAttemptId;
+  readonly stage_attempt_id: StageAttemptId;
   readonly revision_id: RevisionId;
   readonly reason: string;
 }
@@ -420,6 +528,7 @@ export interface InteractionRecordedData extends ConstructionBaseData {
   readonly references: readonly string[];
   readonly reply_reference?: string;
   readonly effort_selection?: EffortSelection;
+  readonly delivery_outcome?: DeliverOutcomeSelection;
 }
 
 export interface IntegrationPreparedData extends ActivityAttemptData {
@@ -453,28 +562,39 @@ export interface RevisionAuthorizedData extends ConstructionBaseData {
   readonly activity_attempt_id?: ActivityAttemptId;
 }
 
+export interface RetainedScopeAssessment {
+  readonly task_id: TaskId;
+  readonly activity: ConstructionActivity;
+  readonly original_stage_attempt_id: StageAttemptId;
+  readonly original_activity_attempt_id: ActivityAttemptId;
+  readonly original_evidence_ids: readonly EvidenceId[];
+  readonly applicable: boolean;
+  readonly reason: string;
+  readonly checkpoints: readonly RepositoryCheckpoint[];
+}
+
 export interface RetainedScopeAssessedData extends StageAttemptData {
   readonly stage: "implementation";
-  readonly assessments: readonly {
-    readonly task_id?: TaskId;
-    readonly activity?: ConstructionActivity;
-    readonly original_stage_attempt_id?: StageAttemptId;
-    readonly original_activity_attempt_id?: ActivityAttemptId;
-    readonly original_evidence_ids: readonly EvidenceId[];
-    readonly applicable: boolean;
-    readonly reason: string;
-    readonly checkpoints: readonly RepositoryCheckpoint[];
-  }[];
+  readonly assessments: readonly RetainedScopeAssessment[];
 }
 
 export interface ImplementationCompletionAssessedData extends StageAttemptData {
   readonly stage: "implementation";
   readonly final_checkpoints: readonly RepositoryCheckpoint[];
+  readonly artifact_paths: readonly string[];
+  readonly task_graph_path: string;
   readonly graph_ref: GraphReference;
+  readonly task_ids: readonly TaskId[];
+  readonly reviewed_material_bindings: readonly ArtifactBinding[];
+  readonly self_review_evidence_id: EvidenceId;
+  readonly handoff_evidence_id: EvidenceId;
+  readonly unit_check_evidence_ids: readonly EvidenceId[];
   readonly required_check_evidence_ids: readonly EvidenceId[];
   readonly integration_event_ids: readonly EventId[];
   readonly retained_assessment_event_ids: readonly EventId[];
-  readonly handoff_assessment: { readonly status: "ready" | "blocked"; readonly reason: string };
+  readonly additional_review: ImplementationAdditionalReview | ImplementationRequestedReview;
+  readonly blocking_findings: readonly string[];
+  readonly handoff_assessment: ImplementationCompletionHandoff;
 }
 
 export interface ConstructionEventDataMap {
@@ -552,6 +672,12 @@ const isStringArray = (value: unknown, nonEmpty = false): value is readonly stri
 const isUniqueStringArray = (value: unknown, nonEmpty = false): boolean =>
   isStringArray(value, nonEmpty) && new Set(value).size === value.length;
 
+const isRelativeArtifactPath = (value: unknown): value is string => isNonEmptyString(value) &&
+  !value.startsWith("/") && !value.includes("\\") && value.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+
+const isArtifactPathArray = (value: unknown): value is readonly string[] =>
+  Array.isArray(value) && value.length > 0 && value.every(isRelativeArtifactPath) && new Set(value).size === value.length;
+
 const isCheckpoint = (value: unknown): value is RepositoryCheckpoint =>
   isRecord(value) && isNonEmptyString(value.repository_id) && isNonEmptyString(value.commit);
 
@@ -595,8 +721,107 @@ const isEvidenceIdArray = (value: unknown): boolean =>
 const isEventIdArray = (value: unknown): boolean =>
   isUniqueStringArray(value);
 
+const isImplementationAdditionalReview = (value: unknown): boolean =>
+  isRecord(value) && value.requested === false && Object.keys(value).length === 1;
+
+const isImplementationRequestedReview = (value: unknown): boolean =>
+  isRecord(value) && value.requested === true && isUuidV4(value.request_event_id) &&
+  isUuidV4(value.evidence_id) && isNonEmptyString(value.reviewer) && isStringArray(value.findings);
+
+const isImplementationCompletionHandoff = (value: unknown): value is ImplementationCompletionHandoff =>
+  isRecord(value) && isOneOf(value.status, new Set(["ready", "blocked"])) && isNonEmptyString(value.reason) &&
+  value.recipient === "unit-of-work-review" && isStringArray(value.artifacts, true);
+
+const isImplementationCompletionReference = (value: unknown): boolean =>
+  isRecord(value) && Object.keys(value).length === 1 && isUuidV4(value.assessment_event_id);
+
+export const isUnitOfWorkReviewCompletionRecord = (value: unknown): value is UnitOfWorkReviewCompletionRecord => {
+  if (!isRecord(value) || !isUuidV4(value.implementation_completion_event_id) ||
+      !isArtifactBindings(value.reviewed_material_bindings) || !isCheckpointSet(value.final_checkpoints) ||
+      !isNonEmptyString(value.reviewer) || !isStringArray(value.implementation_authors, true) ||
+      value.implementation_authors.includes(value.reviewer) || !isUuidV4(value.implementation_evidence_assessment_id) ||
+      !isUuidV4(value.review_evidence_id) || !isUuidV4(value.self_review_evidence_id) || !isRecord(value.findings) ||
+      !isStringArray(value.findings.blocking) || !Array.isArray(value.findings.limitations) ||
+      !value.findings.limitations.every((item) => isRecord(item) && isNonEmptyString(item.finding) && isNonEmptyString(item.rationale)) ||
+      typeof value.acceptance_required !== "boolean" || !isRecord(value.handoff) ||
+      !isOneOf(value.handoff.status, new Set(["ready", "blocked"])) || value.handoff.recipient !== "deliver" ||
+      !isNonEmptyString(value.handoff.summary)) return false;
+  if (value.additional_review === undefined || !isRecord(value.additional_review)) return false;
+  const externalReviewValid = value.additional_review.requested === false
+    ? Object.keys(value.additional_review).length === 1
+    : value.additional_review.requested === true && isUuidV4(value.additional_review.request_event_id) &&
+      isUuidV4(value.additional_review.evidence_id) && isNonEmptyString(value.additional_review.reviewer) &&
+      isStringArray(value.additional_review.findings);
+  return externalReviewValid && (value.acceptance_required ? isUuidV4(value.approval_event_id) : value.approval_event_id === undefined);
+};
+
+export const isDeliverOutcomeSelection = (value: unknown): value is DeliverOutcomeSelection =>
+  isRecord(value) && Object.keys(value).every((key) => ["outcome", "requested_outcome", "destination", "recipient"].includes(key)) &&
+  isOneOf(value.outcome, new Set(["repository-handoff", "review-request", "publication", "deployment", "other"])) &&
+  isNonEmptyString(value.requested_outcome) && isNonEmptyString(value.destination) && isNonEmptyString(value.recipient);
+
+export const isLegacyDeliverCompletionRecord = (value: unknown): value is LegacyDeliverCompletionRecord => {
+  if (!isRecord(value) || !isUuidV4(value.review_completion_event_id) ||
+      !isOneOf(value.outcome, new Set(["repository-handoff", "review-request", "publication", "deployment", "other"])) ||
+      !isNonEmptyString(value.requested_outcome) || !isNonEmptyString(value.destination) || !isNonEmptyString(value.recipient) ||
+      !isArtifactBindings(value.artifact_bindings) || !isCheckpointSet(value.reviewed_checkpoints) ||
+      !isUuidV4(value.preparation_evidence_id) || !isUuidV4(value.self_review_evidence_id) ||
+      !Array.isArray(value.operation_results) || !value.operation_results.every((operation) =>
+        isRecord(operation) && isNonEmptyString(operation.operation) &&
+        isOneOf(operation.status, new Set(["succeeded", "failed", "partial"])) && isUuidV4(operation.evidence_id) &&
+        isCheckpointSet(operation.source_checkpoints) && operation.source_checkpoints.length > 0 && isRecord(operation.authority) && (operation.authority.kind === "requester-instruction"
+          ? isUuidV4(operation.authority.event_id)
+          : operation.authority.kind === "project-authority" && isNonEmptyString(operation.authority.reference)),
+      ) || !isEvidenceIdArray(value.verification_evidence_ids) || !isUuidV4(value.handoff_evidence_id) ||
+      (value.additional_review !== undefined && !(isImplementationAdditionalReview(value.additional_review) || isImplementationRequestedReview(value.additional_review))) ||
+      typeof value.approval_required !== "boolean" || !isRecord(value.handoff) ||
+      !isOneOf(value.handoff.status, new Set(["ready", "blocked"])) || !isNonEmptyString(value.handoff.summary)) return false;
+  return value.approval_required ? isUuidV4(value.approval_event_id) : value.approval_event_id === undefined;
+};
+
+export const isDeliverCompletionRecord = (value: unknown): value is DeliverCompletionRecord =>
+  isLegacyDeliverCompletionRecord(value) && isUuidV4(value.outcome_request_event_id);
+
 const isBaseData = (data: Record<string, unknown>): boolean =>
   isUuidV4(data.mission_id) && isNonEmptyString(data.unit_id);
+
+export const isActivityAttemptCompletedData = (value: unknown): value is ActivityAttemptCompletedData =>
+  isRecord(value) && isBaseData(value) && value.stage === "implementation" &&
+  isUuidV4(value.stage_attempt_id) && isUuidV4(value.task_id) && isOneOf(value.activity, activityStates) &&
+  isUuidV4(value.activity_attempt_id) && isEvidenceIdArray(value.evidence_ids) && isCheckpointSet(value.checkpoints);
+
+export const isRetainedScopeAssessment = (value: unknown): value is RetainedScopeAssessment =>
+  isRecord(value) && Object.keys(value).length === 8 && isUuidV4(value.task_id) &&
+  isOneOf(value.activity, activityStates) && isUuidV4(value.original_stage_attempt_id) &&
+  isUuidV4(value.original_activity_attempt_id) && Array.isArray(value.original_evidence_ids) &&
+  isEvidenceIdArray(value.original_evidence_ids) && value.original_evidence_ids.length > 0 && typeof value.applicable === "boolean" &&
+  isNonEmptyString(value.reason) && isCheckpointSet(value.checkpoints) && value.checkpoints.length > 0;
+
+export const isRetainedScopeAssessedData = (value: unknown): value is RetainedScopeAssessedData =>
+  isRecord(value) && isBaseData(value) && value.stage === "implementation" && isUuidV4(value.stage_attempt_id) &&
+  Array.isArray(value.assessments) && value.assessments.length > 0 &&
+  value.assessments.every(isRetainedScopeAssessment) &&
+  new Set(value.assessments.map((assessment) => JSON.stringify([assessment.task_id, assessment.activity]))).size === value.assessments.length;
+
+export const isImplementationCompletionAssessedData = (value: unknown): value is ImplementationCompletionAssessedData => {
+  if (!isRecord(value) || !isBaseData(value) || value.stage !== "implementation" || !isUuidV4(value.stage_attempt_id) ||
+      !isCheckpointSet(value.final_checkpoints) || value.final_checkpoints.length === 0 ||
+      !isArtifactPathArray(value.artifact_paths) || !isRelativeArtifactPath(value.task_graph_path) || value.task_graph_path !== "tasks-dag.json" ||
+      !isGraphReference(value.graph_ref) || !Array.isArray(value.task_ids) || !isUniqueStringArray(value.task_ids, true) ||
+      !value.task_ids.every(isUuidV4) || !isArtifactBindings(value.reviewed_material_bindings) ||
+      !isUuidV4(value.self_review_evidence_id) || !isUuidV4(value.handoff_evidence_id) ||
+      !Array.isArray(value.unit_check_evidence_ids) || !isEvidenceIdArray(value.unit_check_evidence_ids) || value.unit_check_evidence_ids.length === 0 ||
+      !Array.isArray(value.required_check_evidence_ids) || !isEvidenceIdArray(value.required_check_evidence_ids) ||
+      value.required_check_evidence_ids.length === 0 || !Array.isArray(value.integration_event_ids) ||
+      !isEventIdArray(value.integration_event_ids) || value.integration_event_ids.length === 0 ||
+      !value.integration_event_ids.every(isUuidV4) || !Array.isArray(value.retained_assessment_event_ids) ||
+      !isEventIdArray(value.retained_assessment_event_ids) || !value.retained_assessment_event_ids.every(isUuidV4) ||
+      !(isImplementationAdditionalReview(value.additional_review) || isImplementationRequestedReview(value.additional_review)) ||
+      !isStringArray(value.blocking_findings)) return false;
+  const expectedHandoffPaths = [...value.artifact_paths, value.task_graph_path].sort((left, right) => left.localeCompare(right));
+  return isImplementationCompletionHandoff(value.handoff_assessment) &&
+    JSON.stringify([...value.handoff_assessment.artifacts].sort((left, right) => left.localeCompare(right))) === JSON.stringify(expectedHandoffPaths);
+};
 
 const isMissionContext = (value: unknown): value is MissionWorkspaceContext =>
   isRecord(value) && (
@@ -670,7 +895,7 @@ export const CONSTRUCTION_EVENT_REQUIRED_FIELDS: Readonly<Record<ConstructionEve
   "construction.stage-resumed": ["stage", "stage_attempt_id", "inputs", "checkpoints", "authority_event_ids"],
   "construction.stage-attempt-completed": ["stage", "stage_attempt_id", "evidence_ids", "checkpoints"],
   "construction.stage-attempt-ended-by-revision": ["stage", "stage_attempt_id", "revision_id", "reason"],
-  "construction.stage-reopened": ["stage", "revision_id", "reason"],
+  "construction.stage-reopened": ["stage", "stage_attempt_id", "revision_id", "reason"],
   "construction.task-admitted": ["stage", "stage_attempt_id", "task_id", "graph_ref", "task_definition_ref", "admission_baseline", "predecessor_provenance", "prerequisite_evidence"],
   "construction.task-scope-ended-by-revision": ["stage", "stage_attempt_id", "task_id", "revision_id", "reason", "affected_activities"],
   "construction.task-scope-reopened": ["stage", "stage_attempt_id", "task_id", "revision_id", "reason", "affected_activities"],
@@ -690,7 +915,7 @@ export const CONSTRUCTION_EVENT_REQUIRED_FIELDS: Readonly<Record<ConstructionEve
   "construction.integration-accepted": ["stage", "stage_attempt_id", "task_id", "activity", "activity_attempt_id", "prepared_event_id", "candidate_checkpoints", "repository_results", "authority_event_ids"],
   "construction.revision-authorized": ["revision_id", "orchestrator_decision", "reason", "stage"],
   "construction.retained-scope-assessed": ["stage", "stage_attempt_id", "assessments"],
-  "construction.implementation-completion-assessed": ["stage", "stage_attempt_id", "final_checkpoints", "graph_ref", "required_check_evidence_ids", "integration_event_ids", "retained_assessment_event_ids", "handoff_assessment"],
+  "construction.implementation-completion-assessed": ["stage", "stage_attempt_id", "final_checkpoints", "graph_ref", "task_ids", "reviewed_material_bindings", "self_review_evidence_id", "handoff_evidence_id", "unit_check_evidence_ids", "required_check_evidence_ids", "integration_event_ids", "retained_assessment_event_ids", "additional_review", "blocking_findings", "handoff_assessment"],
 };
 
 const validatePayload = (
@@ -723,7 +948,7 @@ const validatePayload = (
     invalid("task_id", isUuidV4(data.task_id));
   }
   if (activity) invalid("activity", isOneOf(data.activity, activityStates));
-  if (stage && !["construction.stage-reopened", "construction.revision-authorized"].includes(type)) {
+  if (stage && type !== "construction.revision-authorized") {
     invalid("stage_attempt_id", isUuidV4(data.stage_attempt_id));
   }
   if (task) invalid("stage_attempt_id", isUuidV4(data.stage_attempt_id));
@@ -771,10 +996,12 @@ const validatePayload = (
     invalid("evidence_ids", isEvidenceIdArray(data.evidence_ids));
     invalid("checkpoints", isCheckpointSet(data.checkpoints));
   }
-  if (type === "construction.stage-attempt-completed" && data.stage === "functional-design") {
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION && data.stage === "functional-design") {
     const assessment = data.functional_design_assessment;
     const assessmentValid = isFunctionalDesignCompletionRecord(assessment);
     invalid("functional_design_assessment", assessmentValid);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
+    invalid("implementation_planning_assessment", data.implementation_planning_assessment === undefined);
     invalid("checkpoints", Array.isArray(data.checkpoints) && data.checkpoints.length > 0,
       "Functional Design completion requires a non-empty repository output checkpoint set");
     if (assessmentValid) {
@@ -785,6 +1012,84 @@ const validatePayload = (
         JSON.stringify([...actualEvidenceIds].sort()) === JSON.stringify(expectedEvidenceIds);
       invalid("evidence_ids", evidenceIdsMatch, "Functional Design evidence IDs must exactly match its typed assessments");
     }
+  }
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION && data.stage === "quality-requirements") {
+    const assessment = data.quality_requirements_assessment;
+    const assessmentValid = isQualityRequirementsCompletionRecord(assessment);
+    invalid("quality_requirements_assessment", assessmentValid);
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("implementation_planning_assessment", data.implementation_planning_assessment === undefined);
+    invalid("checkpoints", Array.isArray(data.checkpoints) && data.checkpoints.length > 0,
+      "Quality Requirements completion requires a non-empty repository output checkpoint set");
+    if (assessmentValid) {
+      const expectedEvidenceIds = qualityRequirementsEvidenceIds(assessment.assessments).slice().sort();
+      const actualEvidenceIds = data.evidence_ids;
+      const evidenceIdsMatch = Array.isArray(actualEvidenceIds) && actualEvidenceIds.every((id) => typeof id === "string") &&
+        actualEvidenceIds.length === expectedEvidenceIds.length &&
+        JSON.stringify([...actualEvidenceIds].sort()) === JSON.stringify(expectedEvidenceIds);
+      invalid("evidence_ids", evidenceIdsMatch, "Quality Requirements evidence IDs must exactly match its typed assessments");
+    }
+  }
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION && data.stage === "implementation-planning") {
+    const assessment = data.implementation_planning_assessment;
+    const assessmentValid = isImplementationPlanningCompletionRecord(assessment);
+    invalid("implementation_planning_assessment", assessmentValid);
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
+    invalid("checkpoints", Array.isArray(data.checkpoints) && data.checkpoints.length > 0,
+      "Implementation Planning completion requires a non-empty repository output checkpoint set");
+    if (assessmentValid) {
+      const expectedEvidenceIds = planningEvidenceIds(assessment.assessments).slice().sort();
+      const actualEvidenceIds = data.evidence_ids;
+      const evidenceIdsMatch = Array.isArray(actualEvidenceIds) && actualEvidenceIds.every((id) => typeof id === "string") &&
+        actualEvidenceIds.length === expectedEvidenceIds.length &&
+        JSON.stringify([...actualEvidenceIds].sort()) === JSON.stringify(expectedEvidenceIds);
+      invalid("evidence_ids", evidenceIdsMatch, "Implementation Planning evidence IDs must exactly match its typed assessments");
+    }
+  }
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION && data.stage === "implementation") {
+    invalid("implementation_assessment", isImplementationCompletionReference(data.implementation_assessment));
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
+    invalid("implementation_planning_assessment", data.implementation_planning_assessment === undefined);
+    invalid("unit_of_work_review_assessment", data.unit_of_work_review_assessment === undefined);
+    invalid("deliver_assessment", data.deliver_assessment === undefined);
+    invalid("checkpoints", isCheckpointSet(data.checkpoints) && data.checkpoints.length > 0);
+  }
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION && data.stage === "unit-of-work-review") {
+    invalid("unit_of_work_review_assessment", isUnitOfWorkReviewCompletionRecord(data.unit_of_work_review_assessment));
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
+    invalid("implementation_planning_assessment", data.implementation_planning_assessment === undefined);
+    invalid("implementation_assessment", data.implementation_assessment === undefined);
+    invalid("deliver_assessment", data.deliver_assessment === undefined);
+    invalid("checkpoints", isCheckpointSet(data.checkpoints) && data.checkpoints.length > 0);
+  }
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION && data.stage === "deliver") {
+    invalid("deliver_assessment", isLegacyDeliverCompletionRecord(data.deliver_assessment));
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
+    invalid("implementation_planning_assessment", data.implementation_planning_assessment === undefined);
+    invalid("implementation_assessment", data.implementation_assessment === undefined);
+    invalid("unit_of_work_review_assessment", data.unit_of_work_review_assessment === undefined);
+    invalid("checkpoints", isCheckpointSet(data.checkpoints) && data.checkpoints.length > 0);
+  }
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION && data.stage === "deliver") {
+    invalid("deliver_assessment", isDeliverCompletionRecord(data.deliver_assessment));
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
+    invalid("implementation_planning_assessment", data.implementation_planning_assessment === undefined);
+    invalid("implementation_assessment", data.implementation_assessment === undefined);
+    invalid("unit_of_work_review_assessment", data.unit_of_work_review_assessment === undefined);
+    invalid("checkpoints", isCheckpointSet(data.checkpoints) && data.checkpoints.length > 0);
+  }
+  if (type === "construction.stage-attempt-completed" && event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION && data.stage !== "functional-design" && data.stage !== "quality-requirements" && data.stage !== "implementation-planning" && data.stage !== "implementation" && data.stage !== "unit-of-work-review" && data.stage !== "deliver") {
+    invalid("functional_design_assessment", data.functional_design_assessment === undefined);
+    invalid("quality_requirements_assessment", data.quality_requirements_assessment === undefined);
+    invalid("implementation_planning_assessment", data.implementation_planning_assessment === undefined);
+    invalid("implementation_assessment", data.implementation_assessment === undefined);
+    invalid("unit_of_work_review_assessment", data.unit_of_work_review_assessment === undefined);
+    invalid("deliver_assessment", data.deliver_assessment === undefined);
   }
   if (type === "construction.stage-attempt-ended-by-revision" || type === "construction.stage-reopened" || type.includes("scope-ended-by-revision") || type.includes("scope-reopened") || type === "construction.activity-attempt-ended-by-revision" || type === "construction.activity-reopened" || type === "construction.revision-authorized") {
     invalid("revision_id", isUuidV4(data.revision_id));
@@ -837,6 +1142,9 @@ const validatePayload = (
       ? data.stage === "implementation" && isUuidV4(data.stage_attempt_id) && isUuidV4(data.task_id) &&
         isOneOf(data.activity, activityStates)
       : isExecutionBinding(data);
+    const requesterParticipant = Array.isArray(data.participants) && data.participants.some((participant) =>
+      typeof participant === "string" && participant.trim().toLowerCase() === "requester",
+    );
     invalid("scope_binding", (data.stage === undefined || isOneOf(data.stage, stageStates)) &&
       (!hasAttemptScope || scopeBindingValid));
     invalid("participants", isStringArray(data.participants, true));
@@ -844,6 +1152,9 @@ const validatePayload = (
     invalid("references", isStringArray(data.references));
     invalid("reply_reference", data.reply_reference === undefined || isNonEmptyString(data.reply_reference));
     invalid("effort_selection", data.effort_selection === undefined || isEffortSelection(data.effort_selection));
+    invalid("delivery_outcome", data.delivery_outcome === undefined || (data.stage === "deliver" && isUuidV4(data.stage_attempt_id) &&
+      data.task_id === undefined && data.activity === undefined && data.activity_attempt_id === undefined && requesterParticipant &&
+      isDeliverOutcomeSelection(data.delivery_outcome)));
   }
   if (type === "construction.integration-prepared") {
     invalid("activity", data.activity === "code-integration");
@@ -870,26 +1181,29 @@ const validatePayload = (
     if (data.activity_attempt_id !== undefined) invalid("activity_attempt_id", isUuidV4(data.activity_attempt_id));
   }
   if (type === "construction.retained-scope-assessed") {
-    invalid("assessments", Array.isArray(data.assessments) && data.assessments.every((item) =>
-      isRecord(item) &&
-      (item.task_id === undefined || isUuidV4(item.task_id)) &&
-      (item.activity === undefined || isOneOf(item.activity, activityStates)) &&
-      (item.original_stage_attempt_id === undefined || isUuidV4(item.original_stage_attempt_id)) &&
-      (item.original_activity_attempt_id === undefined || isUuidV4(item.original_activity_attempt_id)) &&
-      isEvidenceIdArray(item.original_evidence_ids) &&
-      typeof item.applicable === "boolean" &&
-      isNonEmptyString(item.reason) &&
-      isCheckpointSet(item.checkpoints),
-    ));
+    invalid("assessments", isRetainedScopeAssessedData(data));
   }
   if (type === "construction.implementation-completion-assessed") {
     invalid("stage", data.stage === "implementation");
-    invalid("final_checkpoints", isCheckpointSet(data.final_checkpoints));
+    invalid("final_checkpoints", isCheckpointSet(data.final_checkpoints) && data.final_checkpoints.length > 0);
+    invalid("artifact_paths", isArtifactPathArray(data.artifact_paths));
+    invalid("task_graph_path", isRelativeArtifactPath(data.task_graph_path) && data.task_graph_path === "tasks-dag.json");
     invalid("graph_ref", isGraphReference(data.graph_ref));
-    invalid("required_check_evidence_ids", isEvidenceIdArray(data.required_check_evidence_ids));
-    invalid("integration_event_ids", isEventIdArray(data.integration_event_ids));
-    invalid("retained_assessment_event_ids", isEventIdArray(data.retained_assessment_event_ids));
-    invalid("handoff_assessment", isRecord(data.handoff_assessment) && ["ready", "blocked"].includes(String(data.handoff_assessment.status)) && isNonEmptyString(data.handoff_assessment.reason));
+    invalid("task_ids", Array.isArray(data.task_ids) && isUniqueStringArray(data.task_ids, true) && data.task_ids.every(isUuidV4));
+    invalid("reviewed_material_bindings", isArtifactBindings(data.reviewed_material_bindings));
+    invalid("self_review_evidence_id", isUuidV4(data.self_review_evidence_id));
+    invalid("handoff_evidence_id", isUuidV4(data.handoff_evidence_id));
+    invalid("unit_check_evidence_ids", Array.isArray(data.unit_check_evidence_ids) && isEvidenceIdArray(data.unit_check_evidence_ids) && data.unit_check_evidence_ids.length > 0);
+    invalid("required_check_evidence_ids", Array.isArray(data.required_check_evidence_ids) && isEvidenceIdArray(data.required_check_evidence_ids) && data.required_check_evidence_ids.length > 0);
+    invalid("integration_event_ids", Array.isArray(data.integration_event_ids) && isEventIdArray(data.integration_event_ids) && data.integration_event_ids.length > 0 && data.integration_event_ids.every(isUuidV4));
+    invalid("retained_assessment_event_ids", Array.isArray(data.retained_assessment_event_ids) && isEventIdArray(data.retained_assessment_event_ids) && data.retained_assessment_event_ids.every(isUuidV4));
+    invalid("additional_review", isImplementationAdditionalReview(data.additional_review) || isImplementationRequestedReview(data.additional_review));
+    invalid("blocking_findings", isStringArray(data.blocking_findings));
+    const expectedHandoffPaths = isArtifactPathArray(data.artifact_paths) && isRelativeArtifactPath(data.task_graph_path)
+      ? [...data.artifact_paths, data.task_graph_path].sort((left, right) => left.localeCompare(right))
+      : [];
+    invalid("handoff_assessment", isImplementationCompletionHandoff(data.handoff_assessment) &&
+      JSON.stringify([...data.handoff_assessment.artifacts].sort((left, right) => left.localeCompare(right))) === JSON.stringify(expectedHandoffPaths));
   }
   if (data.stage_attempt_id !== undefined && data.stage_attempt_id === event.id) {
     issues.push({ path: "/data/stage_attempt_id", message: "Attempt identity must differ from event identity" });
@@ -921,10 +1235,13 @@ export const validateConstructionEvent = (value: unknown): ConstructionEventVali
   if (!eventTypes.has(envelope.event.type)) {
     return { status: "unsupported", event: envelope.event, reason: "event-type" };
   }
-  if (envelope.event.event_version !== CONSTRUCTION_EVENT_VERSION) {
-    return { status: "unsupported", event: envelope.event, reason: "event-version" };
-  }
   const type = envelope.event.type as ConstructionEventType;
+  const supportedVersion = type === "construction.stage-attempt-completed"
+    ? envelope.event.event_version === CONSTRUCTION_EVENT_VERSION ||
+      envelope.event.event_version === CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION ||
+      (envelope.event.event_version === CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION && envelope.event.data.stage === "deliver")
+    : envelope.event.event_version === CONSTRUCTION_EVENT_VERSION;
+  if (!supportedVersion) return { status: "unsupported", event: envelope.event, reason: "event-version" };
   const issues = validatePayload(type, envelope.event, envelope.event.data);
   if (issues.length > 0) return { status: "invalid", issues };
   return {

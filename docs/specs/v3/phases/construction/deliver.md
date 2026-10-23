@@ -110,11 +110,11 @@ These timing rules do not add completed Initialization or Inception as prerequis
 
 ## Delivery procedure
 
-1. **Identify the outcome.** Make sure that the request identifies the destination, recipient, acceptance conditions, reviewed material, and allowed operations.
+1. **Identify the outcome.** Make sure that the request identifies the destination, recipient, acceptance conditions, reviewed material, and allowed operations. Record the requester's typed outcome in a `construction.interaction-recorded` event scoped to the current Deliver attempt. Completion references that event and must match its outcome, destination, recipient, and requested-outcome text. This event records intent; it does not grant operation authority or final approval.
 2. **Prepare instructions.** Complete `delivery.md`, examine relevant target conditions, and identify material prerequisites and recovery constraints.
 3. **Do a check of readiness and authority.** Make sure that prerequisites and applicable permissions are in place before each affected operation. Stop only the affected work when a condition is missing.
 4. **Do authorized operations.** Execute the required actions against identified material and record actual effects through CLI-owned operations.
-5. **Do a check of the outcome.** Make sure that the resulting destination or recipient-facing material matches the requested outcome and retained source bindings.
+5. **Do a check of the outcome.** Make sure that the resulting destination or recipient-facing material matches the requested outcome and retained source bindings. Record verification as direct evidence after the typed outcome interaction and every operation it verifies.
 6. **Hand off and complete.** Supply actual result references, required instructions, limitations, evidence, and remaining recipient responsibilities.
 
 ### Material and verification

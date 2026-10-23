@@ -62,6 +62,41 @@ afterEach(async () => {
 });
 
 describe("persisted Construction history integration", () => {
+  it("collects a historical version 1 Quality completion without newer required fields", async () => {
+    const home = await createHome();
+    const journal = createEventJournal(coordinates(home));
+    const created = unitCreated("event-historical-unit", unitId);
+    const completed = event("event-historical-quality", "construction.stage-attempt-completed", {
+      mission_id: missionId,
+      unit_id: unitId,
+      stage: "quality-requirements",
+      stage_attempt_id: "20000000-0000-4000-8000-000000000002",
+      evidence_ids: [],
+      checkpoints: [],
+      quality_requirements_assessment: {
+        approval_event_id: "30000000-0000-4000-8000-000000000003",
+        artifact_bindings: [],
+        assessments: {},
+      },
+    }, [created.id], 1);
+    await journal.append(created);
+    await journal.append(completed);
+    const persisted = await journal.read();
+    const history = collectHistory(missionId, [{
+      sourceId: "origin://integration/historical-quality-v1",
+      missionId,
+      phase: "construction",
+      journalId,
+      bytes: persisted.bytes,
+    }]);
+    expect(history.issues).toEqual([]);
+    expect(history.events.map((fact) => fact.status)).toEqual(["valid", "valid"]);
+    expect(projectConstruction(history).projectionIssues).toContainEqual(expect.objectContaining({
+      code: "invalid-completion-evidence",
+      eventIds: [completed.id],
+    }));
+  });
+
   it("imports journal-local causal dependencies and rebuilds the same projection", async () => {
     const home = await createHome();
     const journal = createEventJournal(coordinates(home));
@@ -121,15 +156,17 @@ describe("persisted Construction history integration", () => {
       [completed.id, 4, source.sourceId],
     ]);
     expect(projection).toEqual(projectConstruction(rebuilt));
-    expect(projection.units[0]?.stages.find((stage) => stage.stage === "implementation")?.state).toBe("completed");
-    expect(projection.units[0]?.stages.find((stage) => stage.stage === "implementation")?.currentAttemptId)
-      .toBe("20000000-0000-4000-8000-000000000002");
+    expect(projection.units[0]?.stages.find((stage) => stage.stage === "implementation")?.state).toBe("unknown");
+    expect(projection.projectionIssues).toContainEqual(expect.objectContaining({
+      code: "invalid-completion-evidence",
+      eventIds: [completed.id],
+    }));
     expect(projection.units[0]?.progress).toEqual({
-      completedStages: 1,
+      completedStages: 0,
       totalStages: 6,
       completedTasks: 0,
       knownTasks: 0,
-      reliable: true,
+      reliable: false,
     });
     expect(await readdir(Path.dirname(journal.path))).toEqual([Path.basename(journal.path)]);
     const incompleteProjection = projectConstruction(collectHistory(missionId, [source], "incomplete"));

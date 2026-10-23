@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { hostname } from "node:os";
-import { open, lstat, mkdir, readFile, realpath } from "node:fs/promises";
+import { open, lstat, mkdir, readFile, readdir, realpath } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { MissionCoordination } from "./mission-coordination.js";
 import { createMissionCoordination } from "./mission-coordination.js";
@@ -119,6 +119,7 @@ const fileSystem: MissionWorkspaceFileSystem = {
     await mkdir(path);
   },
   readFile: async (path) => await readFile(path, "utf8"),
+  readDirectory: async (path) => await readdir(path),
   writeFileExclusive: async (path, content) => {
     const handle = await open(path, "wx", 0o600);
     try {

@@ -17,7 +17,32 @@ import {
   createNodeFunctionalDesignStageCompletionRuntime,
   FunctionalDesignStageCompletion,
 } from "../../construction/stage-completion.js";
+import {
+  createNodeQualityStageCompletionRuntime,
+  QualityRequirementsStageCompletion,
+} from "../../construction/quality-stage-completion.js";
+import {
+  createNodePlanningStageCompletionRuntime,
+  ImplementationPlanningStageCompletion,
+} from "../../construction/planning-stage-completion.js";
+import {
+  createNodeImplementationStageCompletionRuntime,
+  ImplementationStageCompletion,
+} from "../../construction/implementation-stage-completion.js";
+import {
+  createNodeImplementationRetainedScopeAssessmentRuntime,
+  ImplementationRetainedScopeAssessment,
+} from "../../construction/implementation-retained-scope-assessment.js";
+import {
+  createNodeUnitOfWorkReviewCompletionRuntime,
+  UnitOfWorkReviewStageCompletion,
+} from "../../construction/unit-of-work-review-completion.js";
+import {
+  createNodeDeliverStageCompletionRuntime,
+  DeliverStageCompletion,
+} from "../../construction/deliver-stage-completion.js";
 import { MissionHandoffPreflight } from "../../construction/mission-handoff-preflight.js";
+import { createNodeStageStartRuntime, StageStart } from "../../construction/stage-start.js";
 import { AuditContextResolver, createNodeAuditContextRuntime } from "../../audit/context.js";
 import { AuditRecording } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
@@ -53,6 +78,8 @@ import {
   ConstructionUnitListCommand,
   ConstructionUnitShowCommand,
   ConstructionStageCompleteCommand,
+  ConstructionStageStartCommand,
+  ConstructionStageAssessRetainedScopesCommand,
   GitAuthorCommand,
   GitCommand,
   MetadataLintCommand,
@@ -100,7 +127,15 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionUnitListCommand,
     ConstructionUnitShowCommand,
     ConstructionStageCompleteCommand,
+    ConstructionStageStartCommand,
+    ConstructionStageAssessRetainedScopesCommand,
     FunctionalDesignStageCompletion,
+    QualityRequirementsStageCompletion,
+    ImplementationPlanningStageCompletion,
+    ImplementationStageCompletion,
+    UnitOfWorkReviewStageCompletion,
+    DeliverStageCompletion,
+    StageStart,
     MissionCommand,
     MissionCreateCommand,
     {
@@ -118,6 +153,62 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
       useFactory: (contexts: AuditContextResolver) => new FunctionalDesignStageCompletion(
         contexts,
         createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: ImplementationPlanningStageCompletion,
+      useFactory: (contexts: AuditContextResolver) => new ImplementationPlanningStageCompletion(
+        contexts,
+        createNodePlanningStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: ImplementationStageCompletion,
+      useFactory: (contexts: AuditContextResolver) => new ImplementationStageCompletion(
+        contexts,
+        createNodeImplementationStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: ImplementationRetainedScopeAssessment,
+      useFactory: (contexts: AuditContextResolver) => new ImplementationRetainedScopeAssessment(
+        contexts,
+        createNodeImplementationRetainedScopeAssessmentRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: UnitOfWorkReviewStageCompletion,
+      useFactory: (contexts: AuditContextResolver) => new UnitOfWorkReviewStageCompletion(
+        contexts,
+        createNodeUnitOfWorkReviewCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: DeliverStageCompletion,
+      useFactory: (contexts: AuditContextResolver) => new DeliverStageCompletion(
+        contexts,
+        createNodeDeliverStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: QualityRequirementsStageCompletion,
+      useFactory: (contexts: AuditContextResolver) => new QualityRequirementsStageCompletion(
+        contexts,
+        createNodeQualityStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: StageStart,
+      useFactory: (contexts: AuditContextResolver) => new StageStart(
+        contexts,
+        createNodeStageStartRuntime({ name: "kepler", version: cliVersion }),
       ),
       inject: [AuditContextResolver],
     },

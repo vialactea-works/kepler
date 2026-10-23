@@ -8,11 +8,13 @@ import {
   CONSTRUCTION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
   validateConstructionEvent,
+  isDeliverOutcomeSelection,
   type ConstructionEventType,
   type ConstructionStage,
   type EvidenceId,
   type MaterialInput,
 } from "../construction/events.js";
+import { hasRequesterParticipant } from "./participants.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import type { EventJournal } from "../history/journal.js";
 
@@ -61,9 +63,9 @@ const validInputs = (value: unknown): value is readonly MaterialInput[] =>
     nonEmptyString(item.reference) && nonEmptyString(item.purpose));
 
 const requestKeys: Readonly<Record<AuditRecordKind, readonly string[]>> = {
-  evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "result", "output_refs", "conditions"],
+  evidence: ["inputs", "artifact_bindings", "checkpoints", "check", "executor", "result", "output_refs", "conditions", "related_request_event_id", "related_event_ids"],
   approval: ["requester", "inputs", "artifact_bindings", "checkpoints", "decision_reference"],
-  interaction: ["participants", "content", "references", "reply_reference", "effort_selection"],
+  interaction: ["participants", "content", "references", "reply_reference", "effort_selection", "delivery_outcome"],
 };
 
 export type AuditRecordKind = "evidence" | "approval" | "interaction";
@@ -88,6 +90,24 @@ const validateRequest = (
   if (kind !== "interaction") {
     if (!Array.isArray(request.artifact_bindings)) issues.push({ pointer: "/artifact_bindings", message: "Expected the bound artifact versions." });
     if (!Array.isArray(request.checkpoints)) issues.push({ pointer: "/checkpoints", message: "Expected the repository checkpoint set." });
+  }
+  if (request.related_request_event_id !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(String(request.related_request_event_id))) {
+    issues.push({ pointer: "/related_request_event_id", message: "Expected the related requester interaction event UUIDv4." });
+  }
+  if (request.related_request_event_id !== undefined && kind !== "evidence") {
+    issues.push({ pointer: "/related_request_event_id", message: "A related requester interaction is only valid on evidence." });
+  }
+  if (request.related_event_ids !== undefined && (!Array.isArray(request.related_event_ids) || request.related_event_ids.length === 0 ||
+      !request.related_event_ids.every((id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) ||
+      new Set(request.related_event_ids).size !== request.related_event_ids.length)) {
+    issues.push({ pointer: "/related_event_ids", message: "Expected distinct UUIDv4 references to related evidence events." });
+  }
+  if (request.related_event_ids !== undefined && kind !== "evidence") {
+    issues.push({ pointer: "/related_event_ids", message: "Related events are only valid on evidence." });
+  }
+  if (Array.isArray(request.related_event_ids) && typeof request.related_request_event_id === "string" &&
+      request.related_event_ids.includes(request.related_request_event_id)) {
+    issues.push({ pointer: "/related_event_ids", message: "A requester interaction must use related_request_event_id, not both relationship fields." });
   }
   if (kind === "evidence") {
     requireText("check");
@@ -118,6 +138,9 @@ const validateRequest = (
     if (request.effort_selection !== undefined && !isRecord(request.effort_selection)) {
       issues.push({ pointer: "/effort_selection", message: "Expected a structured effort selection." });
     }
+    if (request.delivery_outcome !== undefined && !isDeliverOutcomeSelection(request.delivery_outcome)) {
+      issues.push({ pointer: "/delivery_outcome", message: "Expected a typed Deliver outcome selection." });
+    }
   }
   return issues;
 };
@@ -132,7 +155,7 @@ export interface AuditRecordContext {
 }
 
 export interface AuditRecordContextResolver {
-  readonly resolve: (selectors: ScopeSelectors, project?: string, kind?: AuditRecordKind) => Promise<
+  readonly resolve: (selectors: ScopeSelectors, project?: string, kind?: AuditRecordKind, relatedRequestEventId?: string, relatedEventIds?: readonly string[]) => Promise<
     | { readonly kind: "resolved"; readonly context: AuditRecordContext }
     | { readonly kind: "failed"; readonly code: string; readonly message: string; readonly details: Readonly<Record<string, unknown>>; readonly recovery: string }
   >;
@@ -155,7 +178,13 @@ export class AuditRecording {
     request: unknown,
     project?: string,
   ): Promise<AuditRecordingResult> {
-    const context = await this.contexts.resolve(selectors, project, kind);
+    const relatedRequestEventId = isRecord(request) && typeof request.related_request_event_id === "string"
+      ? request.related_request_event_id
+      : undefined;
+    const relatedEventIds = isRecord(request) && Array.isArray(request.related_event_ids) && request.related_event_ids.every((id) => typeof id === "string")
+      ? request.related_event_ids as string[]
+      : undefined;
+    const context = await this.contexts.resolve(selectors, project, kind, relatedRequestEventId, relatedEventIds);
     if (context.kind === "failed") return { kind: "failed", data: {
       code: context.code,
       message: context.message,
@@ -211,6 +240,11 @@ export const createAuditRecord = (
       request.effort_selection.stage !== scope.stage) {
     issues.push({ pointer: "/effort_selection/stage", message: "A stage effort selection must match the explicit audit stage scope." });
   }
+  if (kind === "interaction" && request.delivery_outcome !== undefined &&
+      (scope.stage !== "deliver" || !scope.stageAttemptId || scope.taskId !== undefined || scope.activity !== undefined ||
+        scope.activityAttemptId !== undefined || !hasRequesterParticipant(request.participants))) {
+    issues.push({ pointer: "/delivery_outcome", message: "A typed Deliver outcome selection requires a requester interaction scoped to a Deliver attempt." });
+  }
   const eventId = runtime.identities.next();
   const evidenceId = kind === "evidence" ? runtime.identities.next() : undefined;
   if (kind === "evidence" && eventId === evidenceId) {
@@ -254,6 +288,7 @@ export const createAuditRecord = (
           references: request.references ?? [],
           ...(request.reply_reference === undefined ? {} : { reply_reference: request.reply_reference }),
           ...(request.effort_selection === undefined ? {} : { effort_selection: request.effort_selection }),
+          ...(request.delivery_outcome === undefined ? {} : { delivery_outcome: request.delivery_outcome }),
         };
   const event: EventEnvelope = {
     id: eventId as EventId,
@@ -264,7 +299,13 @@ export const createAuditRecord = (
     journal_id: journalId as JournalId,
     recorded_at: runtime.now(),
     producer: runtime.producer,
-    caused_by: [...scope.causedBy] as EventId[],
+    caused_by: [...new Set([
+      ...scope.causedBy,
+      ...(kind === "evidence" && typeof request.related_request_event_id === "string"
+        ? [request.related_request_event_id]
+        : []),
+      ...(kind === "evidence" && Array.isArray(request.related_event_ids) ? request.related_event_ids : []),
+    ])] as EventId[],
     data,
   };
   const validation = validateConstructionEvent(event);

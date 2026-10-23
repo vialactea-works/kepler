@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION,
   CONSTRUCTION_EVENT_REQUIRED_FIELDS,
   CONSTRUCTION_EVENT_TYPES,
   CONSTRUCTION_PHASE,
@@ -65,9 +66,14 @@ const payload = (type: (typeof CONSTRUCTION_EVENT_TYPES)[number]): Record<string
     return { ...stage, inputs: [], checkpoints: [], authority_event_ids: [] };
   }
   if (["construction.stage-waiting", "construction.stage-pause-requested", "construction.stage-paused"].includes(type)) return { ...stage, reason: "Awaiting a prerequisite" };
-  if (type === "construction.stage-attempt-completed") return { ...stage, evidence_ids: [identities.evidence], checkpoints: [] };
+  if (type === "construction.stage-attempt-completed") return {
+    ...stage,
+    evidence_ids: [identities.evidence],
+    checkpoints: [{ repository_id: workspace.repository_id, commit: "a".repeat(40) }],
+    implementation_assessment: { assessment_event_id: identities.revision },
+  };
   if (type === "construction.stage-attempt-ended-by-revision") return { ...stage, revision_id: identities.revision, reason: "Authorized revision" };
-  if (type === "construction.stage-reopened") return { ...base, stage: "implementation", revision_id: identities.revision, reason: "Authorized revision" };
+  if (type === "construction.stage-reopened") return { ...stage, revision_id: identities.revision, reason: "Authorized revision" };
   if (type === "construction.task-admitted") {
     return {
       ...task,
@@ -114,19 +120,48 @@ const payload = (type: (typeof CONSTRUCTION_EVENT_TYPES)[number]): Record<string
     return { ...activity, activity: "code-integration", prepared_event_id: "prepared-event", candidate_checkpoints: [], repository_results: [], authority_event_ids: [] };
   }
   if (type === "construction.revision-authorized") return { ...base, revision_id: identities.revision, orchestrator_decision: "Reopen implementation", reason: "Finding affects current work", stage: "implementation" };
-  if (type === "construction.retained-scope-assessed") return { ...stage, assessments: [] };
+  if (type === "construction.retained-scope-assessed") return {
+    ...stage,
+    assessments: [{
+      task_id: identities.task,
+      activity: "code-generation",
+      original_stage_attempt_id: identities.stageAttempt,
+      original_activity_attempt_id: identities.activityAttempt,
+      original_evidence_ids: [identities.evidence],
+      applicable: true,
+      reason: "The completed Activity remains applicable to the accepted task material",
+      checkpoints: [{ repository_id: workspace.repository_id, commit: "a".repeat(40) }],
+    }],
+  };
   if (type === "construction.implementation-completion-assessed") {
-    return { ...stage, final_checkpoints: [], graph_ref: graphReference, required_check_evidence_ids: [], integration_event_ids: [], retained_assessment_event_ids: [], handoff_assessment: { status: "ready", reason: "Required handoff conditions hold" } };
+    return {
+      ...stage,
+      final_checkpoints: [{ repository_id: workspace.repository_id, commit: "a".repeat(40) }],
+      artifact_paths: ["plan.md"],
+      task_graph_path: "tasks-dag.json",
+      graph_ref: graphReference,
+      task_ids: [identities.task],
+      reviewed_material_bindings: [],
+      self_review_evidence_id: identities.evidence,
+      handoff_evidence_id: identities.evidence,
+      unit_check_evidence_ids: [identities.evidence],
+      required_check_evidence_ids: [identities.evidence],
+      integration_event_ids: ["91000000-0000-4000-8000-000000000001"],
+      retained_assessment_event_ids: [],
+      additional_review: { requested: false },
+      blocking_findings: [],
+      handoff_assessment: { status: "ready", reason: "Required handoff conditions hold", recipient: "unit-of-work-review", artifacts: ["plan.md", "tasks-dag.json"] },
+    };
   }
   throw new Error(`No payload fixture for ${type}`);
 };
 
-const envelope = (type: string, data: Record<string, unknown>) => ({
+const envelope = (type: string, data: Record<string, unknown>, eventVersion = type === "construction.stage-attempt-completed" ? 2 : 1) => ({
   id: `event-${type}`,
   phase: CONSTRUCTION_PHASE,
   type,
   envelope_version: 1,
-  event_version: 1,
+  event_version: eventVersion,
   journal_id: "construction-journal",
   recorded_at: "2026-10-18T14:30:00Z",
   producer: { name: "kepler", version: "0.10.3" },
@@ -173,6 +208,89 @@ describe("Construction event contracts", () => {
       const result = validateConstructionEvent(envelope(type, payload(type)));
       expect(result.status, type).toBe("valid");
     }
+  });
+
+  it("validates typed whole-unit Review and Deliver completion records", () => {
+    const checkpoint = { repository_id: workspace.repository_id, commit: "b".repeat(40) };
+    const bindings = [{ artifact_id: identities.artifact, content_version: "sha256:reviewed-material" }];
+    const review = {
+      implementation_completion_event_id: identities.revision,
+      reviewed_material_bindings: bindings,
+      final_checkpoints: [checkpoint],
+      reviewer: "agent:reviewer",
+      implementation_authors: ["agent:builder"],
+      implementation_evidence_assessment_id: identities.evidence,
+      review_evidence_id: identities.activityAttempt,
+      self_review_evidence_id: identities.graph,
+      findings: { blocking: [], limitations: [] },
+      additional_review: { requested: false },
+      acceptance_required: false,
+      handoff: { status: "ready", recipient: "deliver", summary: "Reviewed result and limitations are ready for delivery" },
+    };
+    const reviewEvent = envelope("construction.stage-attempt-completed", {
+      ...stage,
+      stage: "unit-of-work-review",
+      evidence_ids: [identities.evidence, identities.activityAttempt, identities.graph],
+      checkpoints: [checkpoint],
+      unit_of_work_review_assessment: review,
+    });
+    expect(validateConstructionEvent(reviewEvent).status).toBe("valid");
+
+    const deliver = {
+      review_completion_event_id: identities.revision,
+      outcome: "publication",
+      requested_outcome: "Publish the reviewed artifact",
+      destination: "registry:stable",
+      recipient: "release operators",
+      artifact_bindings: bindings,
+      reviewed_checkpoints: [checkpoint],
+      preparation_evidence_id: identities.evidence,
+      self_review_evidence_id: identities.activityAttempt,
+      operation_results: [{
+        operation: "publish reviewed artifact",
+        status: "succeeded",
+        evidence_id: identities.revision,
+        source_checkpoints: [checkpoint],
+        authority: { kind: "project-authority", reference: "release-policy:stable" },
+      }],
+      verification_evidence_ids: [identities.graph],
+      handoff_evidence_id: identities.artifact,
+      additional_review: { requested: false },
+      approval_required: false,
+      handoff: { status: "ready", summary: "Published result and recovery details were handed to the release operators" },
+    };
+    const deliverEvent = envelope("construction.stage-attempt-completed", {
+      ...stage,
+      stage: "deliver",
+      evidence_ids: [identities.evidence, identities.activityAttempt, identities.revision, identities.graph, identities.artifact],
+      checkpoints: [checkpoint],
+      deliver_assessment: deliver,
+    });
+    expect(validateConstructionEvent(deliverEvent).status).toBe("valid");
+    expect(validateConstructionEvent({
+      ...deliverEvent,
+      data: { ...deliverEvent.data, deliver_assessment: { ...deliver, approval_required: true } },
+    }).status).toBe("invalid");
+    const currentDeliver = {
+      ...deliver,
+      outcome_request_event_id: identities.graph,
+      operation_results: [{
+        ...deliver.operation_results[0],
+        authority: { kind: "project-authority", reference: "release-policy:stable" },
+      }],
+    };
+    const currentDeliverEvent = envelope("construction.stage-attempt-completed", {
+      ...stage,
+      stage: "deliver",
+      evidence_ids: [identities.evidence, identities.activityAttempt, identities.revision, identities.graph, identities.artifact],
+      checkpoints: [checkpoint],
+      deliver_assessment: currentDeliver,
+    }, CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION);
+    expect(validateConstructionEvent(currentDeliverEvent).status).toBe("valid");
+    expect(validateConstructionEvent({
+      ...currentDeliverEvent,
+      data: { ...currentDeliverEvent.data, deliver_assessment: { ...currentDeliver, outcome_request_event_id: undefined } },
+    }).status).toBe("invalid");
   });
 
   it("rejects each catalog event when any declared required payload field is absent", () => {
@@ -249,7 +367,10 @@ describe("Construction event contracts", () => {
     }
   });
 
-  it("requires evidence and approval to keep their applicable attempt scope", () => {
+  it("requires stage reopens, evidence, and approval to name their applicable attempt scope", () => {
+    const reopened = payload("construction.stage-reopened");
+    delete reopened.stage_attempt_id;
+    expect(validateConstructionEvent(envelope("construction.stage-reopened", reopened)).status).toBe("invalid");
     const evidence = payload("construction.evidence-recorded");
     delete evidence.stage_attempt_id;
     expect(validateConstructionEvent(envelope("construction.evidence-recorded", evidence)).status).toBe("invalid");
@@ -297,6 +418,65 @@ describe("Construction event contracts", () => {
     expect(result.event.data.inputs).toEqual([{ reference: "opaque: source material ", purpose: "Reviewed input" }]);
   });
 
+  it("requires retained-scope events to contain distinct, fully identified applicable scopes", () => {
+    const valid = payload("construction.retained-scope-assessed");
+    const assessments = valid.assessments as Record<string, unknown>[];
+    expect(validateConstructionEvent(envelope("construction.retained-scope-assessed", valid)).status).toBe("valid");
+
+    const empty = { ...valid, assessments: [] };
+    expect(validateConstructionEvent(envelope("construction.retained-scope-assessed", empty)).status).toBe("invalid");
+
+    const incompleteAssessment = { ...assessments[0] };
+    delete incompleteAssessment.original_activity_attempt_id;
+    const incomplete = { ...valid, assessments: [incompleteAssessment] };
+    expect(validateConstructionEvent(envelope("construction.retained-scope-assessed", incomplete)).status).toBe("invalid");
+
+    const duplicate = {
+      ...valid,
+      assessments: [...assessments, { ...assessments[0] }],
+    };
+    expect(validateConstructionEvent(envelope("construction.retained-scope-assessed", duplicate)).status).toBe("invalid");
+  });
+
+  it("rejects generic Quality Requirements completion without its stage-specific assessment", () => {
+    const data = {
+      ...base,
+      stage: "quality-requirements",
+      stage_attempt_id: identities.stageAttempt,
+      evidence_ids: [],
+      checkpoints: [],
+    };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", data)).status).toBe("invalid");
+  });
+
+  it("rejects generic Implementation Planning completion without its typed assessment", () => {
+    const data = {
+      ...base,
+      stage: "implementation-planning",
+      stage_attempt_id: identities.stageAttempt,
+      evidence_ids: [],
+      checkpoints: [],
+    };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", data)).status).toBe("invalid");
+  });
+
+  it("keeps Quality Requirements event version 1 readable under its historical payload schema", () => {
+    const data = {
+      ...base,
+      stage: "quality-requirements",
+      stage_attempt_id: identities.stageAttempt,
+      evidence_ids: [identities.evidence],
+      checkpoints: [{ repository_id: "repo-main", commit: "a".repeat(40) }],
+      quality_requirements_assessment: {
+        approval_event_id: identities.revision,
+        artifact_bindings: [{ artifact_id: identities.artifact, content_version: "sha256:quality" }],
+        assessments: {},
+      },
+    };
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", data, 1)).status).toBe("valid");
+    expect(validateConstructionEvent(envelope("construction.stage-attempt-completed", data, 2)).status).toBe("invalid");
+  });
+
   it("requires a typed Functional Design assessment and matching named evidence", () => {
     const assessments = {
       self_review: {
@@ -336,6 +516,7 @@ describe("Construction event contracts", () => {
         { artifact_id: "80000000-0000-4000-8000-000000000008", content_version: "sha256:unit" },
         { artifact_id: "90000000-0000-4000-8000-000000000009", content_version: "sha256:design" },
       ],
+      artifact_paths: ["unit-of-work.md", "design.md"],
       assessments,
     };
     const data = {

@@ -7,7 +7,7 @@ import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { validateConstructionArtifact } from "./artifacts.js";
 import {
-  CONSTRUCTION_EVENT_VERSION,
+  CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
   validateConstructionEvent,
 } from "./events.js";
@@ -20,6 +20,8 @@ import {
 } from "./functional-design-completion.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
+import { captureStageCheckpoints } from "./stage-start.js";
+import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
 
 export interface FunctionalDesignStageCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
@@ -35,7 +37,7 @@ export type FunctionalDesignStageCompletionResult =
   | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
   | { readonly kind: "failed"; readonly data: Readonly<Record<string, unknown>> };
 
-interface FunctionalDesignMaterial {
+export interface FunctionalDesignMaterial {
   readonly artifactBindings: readonly { readonly artifact_id: string; readonly content_version: string }[];
   readonly artifactPaths: readonly string[];
   readonly unitDirectory: string;
@@ -83,7 +85,7 @@ const parseLinkPath = (url: string): string | undefined => {
   }
 };
 
-const readFunctionalDesignMaterial = async (
+export const readFunctionalDesignMaterial = async (
   repositoryRoot: string,
   missionId: string,
   unitId: string,
@@ -239,7 +241,6 @@ const validateFunctionalDesignCompletionFacts = (
     handoff: "functional-design-quality-handoff",
   } as const;
   const evidence: ConstructionHistoryFact[] = [];
-  let selectedCheckpointKey: string | undefined;
   let selectedCheckpoints: readonly unknown[] = [];
   for (const kind of ["self_review", "decision_resolution", "handoff"] as const) {
     const matches = unit.evidence
@@ -256,15 +257,10 @@ const validateFunctionalDesignCompletionFacts = (
       return { kind: "invalid", details: { evidence: kind, evidence_id: idsByKind[kind], reason: "missing, failed, stale-attempt, or stale-material evidence" } };
     }
     const observedCheckpointKey = checkpointKey(fact.event.data.checkpoints);
-    if (observedCheckpointKey === undefined || observedCheckpointKey === "[]" ||
-        (selectedCheckpointKey !== undefined && observedCheckpointKey !== selectedCheckpointKey)) {
-      return { kind: "invalid", details: { evidence: kind, evidence_id: idsByKind[kind], reason: "named evidence does not share one valid checkpoint set" } };
+    if (observedCheckpointKey === undefined || observedCheckpointKey === "[]" || !Array.isArray(fact.event.data.checkpoints)) {
+      return { kind: "invalid", details: { evidence: kind, evidence_id: idsByKind[kind], reason: "named evidence requires its own valid non-empty checkpoint set" } };
     }
-    if (!Array.isArray(fact.event.data.checkpoints)) {
-      return { kind: "invalid", details: { evidence: kind, evidence_id: idsByKind[kind], reason: "named evidence has no valid checkpoint set" } };
-    }
-    selectedCheckpointKey = observedCheckpointKey;
-    selectedCheckpoints = fact.event.data.checkpoints;
+    if (selectedCheckpoints.length === 0) selectedCheckpoints = fact.event.data.checkpoints;
     evidence.push(fact);
   }
   const approvalMatches = unit.approvals
@@ -275,8 +271,7 @@ const validateFunctionalDesignCompletionFacts = (
       approval.event.data.mission_id !== unit.missionId || approval.event.data.unit_id !== unit.unitId ||
       approval.event.data.stage !== "functional-design" || approval.event.data.stage_attempt_id !== stageAttemptId ||
       !sameArtifactBindings(approval.event.data.artifact_bindings, artifactBindings) ||
-      selectedCheckpointKey === undefined || selectedCheckpointKey === "[]" ||
-      checkpointKey(approval.event.data.checkpoints) !== selectedCheckpointKey ||
+      checkpointKey(approval.event.data.checkpoints) === undefined || checkpointKey(approval.event.data.checkpoints) === "[]" ||
       !approval.event.caused_by.includes(startEventId)) {
     return { kind: "invalid", details: { approval_event_id: approvalEventId, reason: "missing approval for the current attempt or current material" } };
   }
@@ -415,6 +410,34 @@ export class FunctionalDesignStageCompletion {
     if (materialFacts.kind === "invalid") {
       return failure("functional_design_evidence_invalid", "Every named Functional Design evidence result and requester approval must be bound to this attempt and current artifact material.", materialFacts.details);
     }
+    const commonDir = await commonDirectory(this.runtime, loaded.root);
+    if (!commonDir) return failure("stage_coordination_unavailable", "Git could not resolve the record home's common directory.", { repository_root: loaded.root });
+    const actualCheckpoints = await captureStageCheckpoints(this.runtime, loaded, commonDir);
+    if (actualCheckpoints.kind === "failed") return failure(actualCheckpoints.code, actualCheckpoints.message, actualCheckpoints.details);
+    const repositoryId = recordHomeRepositoryId(loaded.history.events);
+    const artifactPaths = material.artifactPaths.map((artifactPath) => Path.join(material.unitDirectory, artifactPath));
+    const recordHomeCheckpoint = repositoryId ? actualCheckpoints.checkpoints.find((checkpoint) => checkpoint.repository_id === repositoryId) : undefined;
+    if (!repositoryId || !recordHomeCheckpoint) return failure("functional_design_checkpoint_missing", "The record-home repository must have a current committed checkpoint.", { repository_id: repositoryId });
+    const currentMaterial = await verifyStageCheckpointMaterial(this.runtime.workspace, {
+      repositoryRoot: loaded.root, repositoryId, checkpoint: recordHomeCheckpoint, artifactPaths,
+    });
+    if (currentMaterial.kind === "invalid") return failure("functional_design_checkpoint_material_mismatch", "Every Functional Design artifact must match its content in the current record-home checkpoint.", { artifact_paths: currentMaterial.artifactPaths });
+    for (const fact of [...materialFacts.facts.evidence, materialFacts.facts.approval]) {
+      const verifiedSet = await verifyStageCheckpointSet(this.runtime.workspace, actualCheckpoints.repositoryRoots, fact.event.data.checkpoints);
+      if (verifiedSet.kind === "invalid") return failure("functional_design_evidence_checkpoint_invalid", "Every evidence and approval checkpoint must resolve in its selected repository workspace.", {
+        event_id: fact.event.id, repository_ids: verifiedSet.repositoryIds, invalid_commits: verifiedSet.invalidCommits,
+      });
+      const checkpoint = Array.isArray(fact.event.data.checkpoints)
+        ? fact.event.data.checkpoints.find((item) => isRecord(item) && item.repository_id === repositoryId)
+        : undefined;
+      if (!isRecord(checkpoint)) return failure("functional_design_evidence_checkpoint_missing", "Every evidence and approval checkpoint set must include the record-home repository.", { event_id: fact.event.id, repository_id: repositoryId });
+      const materialAtCheckpoint = await verifyStageCheckpointMaterial(this.runtime.workspace, {
+        repositoryRoot: loaded.root, repositoryId, checkpoint, artifactPaths,
+      });
+      if (materialAtCheckpoint.kind === "invalid") return failure("functional_design_evidence_material_checkpoint_mismatch", "Functional Design material must exist unchanged in each evidence and approval checkpoint.", {
+        event_id: fact.event.id, artifact_paths: materialAtCheckpoint.artifactPaths,
+      });
+    }
 
     const eventId = this.runtime.identities.next();
     const journalId = this.runtime.identities.next();
@@ -429,7 +452,7 @@ export class FunctionalDesignStageCompletion {
       phase: CONSTRUCTION_PHASE,
       type: "construction.stage-attempt-completed",
       envelope_version: 1,
-      event_version: CONSTRUCTION_EVENT_VERSION,
+      event_version: CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
       journal_id: journalId,
       recorded_at: this.runtime.now(),
       producer: this.runtime.producer,
@@ -440,10 +463,11 @@ export class FunctionalDesignStageCompletion {
         stage: "functional-design",
         stage_attempt_id: stageAttemptId,
         evidence_ids: evidenceIds,
-        checkpoints: materialFacts.facts.checkpoints,
+        checkpoints: actualCheckpoints.checkpoints,
         functional_design_assessment: {
           approval_event_id: materialFacts.facts.approval.event.id,
           artifact_bindings: material.artifactBindings,
+          artifact_paths: material.artifactPaths,
           assessments: request.assessments,
         },
       },

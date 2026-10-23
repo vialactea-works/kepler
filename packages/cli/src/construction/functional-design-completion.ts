@@ -33,6 +33,9 @@ const nonEmpty = (value: unknown): value is string =>
 
 const stringList = (value: unknown): value is readonly string[] =>
   Array.isArray(value) && value.every(nonEmpty) && new Set(value).size === value.length;
+const artifactPathList = (value: unknown): value is readonly string[] =>
+  stringList(value) && value.length > 0 && value.every((path) => !path.startsWith("/") && !path.includes("\\") &&
+    path.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== ".."));
 
 const uuidV4 = (value: unknown): value is string =>
   typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
@@ -162,17 +165,33 @@ export const sameArtifactBindings = (
   return JSON.stringify(actual) === JSON.stringify(expected);
 };
 
-export const isFunctionalDesignCompletionRecord = (
-  value: unknown,
-): value is FunctionalDesignCompletionRecord => {
-  if (!isRecord(value) || !onlyKeys(value, ["approval_event_id", "artifact_bindings", "assessments"]) ||
-      !uuidV4(value.approval_event_id) || !isFunctionalDesignCompletionAssessments(value.assessments) ||
-      !Array.isArray(value.artifact_bindings) || value.artifact_bindings.length < 2) return false;
+const validFunctionalDesignBindings = (value: unknown): boolean => {
+  if (!Array.isArray(value) || value.length < 2) return false;
   const artifactIds: string[] = [];
-  for (const binding of value.artifact_bindings) {
+  for (const binding of value) {
     if (!isRecord(binding) || !uuidV4(binding.artifact_id) || !nonEmpty(binding.content_version) ||
         binding.checkpoint !== undefined || !onlyKeys(binding, ["artifact_id", "content_version"])) return false;
     artifactIds.push(binding.artifact_id);
   }
   return new Set(artifactIds).size === artifactIds.length;
+};
+
+export type LegacyFunctionalDesignCompletionRecord = Omit<FunctionalDesignCompletionRecord, "artifact_paths">;
+
+export const isLegacyFunctionalDesignCompletionRecord = (value: unknown): value is LegacyFunctionalDesignCompletionRecord =>
+  isRecord(value) && onlyKeys(value, ["approval_event_id", "artifact_bindings", "assessments"]) &&
+  uuidV4(value.approval_event_id) && isFunctionalDesignCompletionAssessments(value.assessments) &&
+  validFunctionalDesignBindings(value.artifact_bindings);
+
+export const isFunctionalDesignCompletionRecord = (
+  value: unknown,
+): value is FunctionalDesignCompletionRecord =>
+  isRecord(value) && onlyKeys(value, ["approval_event_id", "artifact_bindings", "artifact_paths", "assessments"]) &&
+  uuidV4(value.approval_event_id) && isFunctionalDesignCompletionAssessments(value.assessments) &&
+  validFunctionalDesignBindings(value.artifact_bindings) && artifactPathList(value.artifact_paths);
+
+export const readFunctionalDesignCompletionRecord = (value: unknown): FunctionalDesignCompletionRecord | undefined => {
+  if (isFunctionalDesignCompletionRecord(value)) return value;
+  if (!isLegacyFunctionalDesignCompletionRecord(value)) return undefined;
+  return { ...value, artifact_paths: value.assessments.handoff.artifacts };
 };

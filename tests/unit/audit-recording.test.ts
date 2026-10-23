@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAuditRecord, type AuditRecordRuntime, type AuditRecordScope } from "../../packages/cli/src/audit/recording.js";
+import { hasRequesterParticipant } from "../../packages/cli/src/audit/participants.js";
 
 const ids = [
   "10000000-0000-4000-8000-000000000001",
@@ -50,6 +51,43 @@ describe("audit record creation", () => {
     });
     expect(result.event.data).not.toHaveProperty("material");
     expect(result.evidenceId).toBe(ids[1]);
+  });
+
+  it("records a selected requester interaction as direct evidence provenance", () => {
+    const relatedRequest = "70000000-0000-4000-8000-000000000007";
+    const result = createAuditRecord("evidence", {
+      inputs: [{ reference: "artifact:current", purpose: "Reviewed material" }],
+      artifact_bindings: [],
+      checkpoints: [],
+      check: "Requested independent review",
+      executor: "Independent reviewer",
+      result: { status: "passed", summary: "No blocking findings." },
+      related_request_event_id: relatedRequest,
+    }, { ...scope, causedBy: ["80000000-0000-4000-8000-000000000008"] }, journalId, runtime());
+
+    expect(result.kind).toBe("valid");
+    if (result.kind !== "valid") return;
+    expect(result.event.caused_by).toEqual([
+      "80000000-0000-4000-8000-000000000008",
+      relatedRequest,
+    ]);
+  });
+
+  it("records related same-attempt evidence event IDs as direct causal provenance", () => {
+    const relatedEvidence = ["80000000-0000-4000-8000-000000000008", "90000000-0000-4000-8000-000000000009"];
+    const result = createAuditRecord("evidence", {
+      inputs: [{ reference: "checkpoint:reviewed", purpose: "Reviewed source used by this verification" }],
+      artifact_bindings: [],
+      checkpoints: [],
+      check: "Outcome verification",
+      executor: "Verifier",
+      result: { status: "passed", summary: "The selected outcome is verified." },
+      related_event_ids: relatedEvidence,
+    }, scope, journalId, runtime());
+
+    expect(result.kind).toBe("valid");
+    if (result.kind !== "valid") return;
+    expect(result.event.caused_by).toEqual(relatedEvidence);
   });
 
   it("rejects invalid request keys, empty fields, and malformed inputs", () => {
@@ -155,6 +193,31 @@ describe("audit record creation", () => {
     if (result.kind === "valid") expect(result.event.data).toHaveProperty("effort_selection");
   });
 
+  it("records a typed Deliver outcome only in a requester-scoped Deliver interaction", () => {
+    const delivery_outcome = {
+      outcome: "deployment",
+      requested_outcome: "Deploy the reviewed output.",
+      destination: "environment:staging",
+      recipient: "Release operator",
+    };
+    const result = createAuditRecord("interaction", {
+      participants: ["Requester"],
+      content: "The requester selected deployment.",
+      delivery_outcome,
+    }, scope, journalId, runtime());
+
+    expect(result.kind).toBe("invalid");
+
+    const currentDeliver = createAuditRecord("interaction", {
+      participants: [" requester "],
+      content: "The requester selected deployment.",
+      delivery_outcome,
+    }, { ...scope, stage: "deliver", stageAttemptId: "70000000-0000-4000-8000-000000000007" }, journalId, runtime());
+
+    expect(currentDeliver.kind).toBe("valid");
+    if (currentDeliver.kind === "valid") expect(currentDeliver.event.data).toMatchObject({ delivery_outcome });
+  });
+
   it("rejects interactions without required participants and content", () => {
     const result = createAuditRecord("interaction", {
       participants: [],
@@ -205,5 +268,15 @@ describe("audit record creation", () => {
     }, scope, journalId, runtime([ids[0], ids[0]]));
 
     expect(result.kind).toBe("invalid");
+  });
+});
+
+describe("requester participant matching", () => {
+  it.each(["requester", "Requester", " requester "])("recognizes %s", (participant) => {
+    expect(hasRequesterParticipant([participant])).toBe(true);
+  });
+
+  it.each([undefined, null, "requester", ["orchestrator"], [42]])("rejects non-requester participant values", (participants) => {
+    expect(hasRequesterParticipant(participants)).toBe(false);
   });
 });
