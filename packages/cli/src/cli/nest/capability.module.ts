@@ -46,6 +46,7 @@ import {
 } from "../../construction/deliver-stage-completion.js";
 import { MissionHandoffPreflight } from "../../construction/mission-handoff-preflight.js";
 import { createNodeStageStartRuntime, StageStart } from "../../construction/stage-start.js";
+import { Revision } from "../../construction/revision.js";
 import { AuditContextResolver, createNodeAuditContextRuntime } from "../../audit/context.js";
 import { AuditRecording } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
@@ -92,6 +93,7 @@ import {
   ConstructionStageCompleteCommand,
   ConstructionStageStartCommand,
   ConstructionStageAssessRetainedScopesCommand,
+  ConstructionReviseCommand,
   GitAuthorCommand,
   GitCommand,
   MetadataLintCommand,
@@ -150,6 +152,7 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionStageCompleteCommand,
     ConstructionStageStartCommand,
     ConstructionStageAssessRetainedScopesCommand,
+    ConstructionReviseCommand,
     FunctionalDesignStageCompletion,
     QualityRequirementsStageCompletion,
     ImplementationPlanningStageCompletion,
@@ -231,6 +234,14 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     {
       provide: StageStart,
       useFactory: (contexts: AuditContextResolver) => new StageStart(
+        contexts,
+        createNodeStageStartRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver],
+    },
+    {
+      provide: Revision,
+      useFactory: (contexts: AuditContextResolver) => new Revision(
         contexts,
         createNodeStageStartRuntime({ name: "kepler", version: cliVersion }),
       ),

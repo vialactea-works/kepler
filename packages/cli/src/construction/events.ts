@@ -574,10 +574,22 @@ export interface IntegrationAcceptedData extends ActivityAttemptData {
   readonly authority_event_ids: readonly EventId[];
 }
 
+export type RevisionAffectedScope =
+  | { readonly kind: "stage"; readonly stage: ConstructionStage; readonly stage_attempt_id?: StageAttemptId }
+  | {
+      readonly kind: "activity";
+      readonly task_id: TaskId;
+      readonly stage_attempt_id: StageAttemptId;
+      readonly activity: ConstructionActivity;
+      readonly activity_attempt_id?: ActivityAttemptId;
+    };
+
 export interface RevisionAuthorizedData extends ConstructionBaseData {
   readonly revision_id: RevisionId;
   readonly orchestrator_decision: string;
   readonly reason: string;
+  readonly inputs: readonly MaterialInput[];
+  readonly affected_scopes?: readonly RevisionAffectedScope[];
   readonly stage: ConstructionStage;
   readonly stage_attempt_id?: StageAttemptId;
   readonly task_id?: TaskId;
@@ -721,6 +733,19 @@ const isInputs = (value: unknown): value is readonly MaterialInput[] =>
   Array.isArray(value) && value.every((input) =>
     isRecord(input) && isNonEmptyString(input.reference) && isNonEmptyString(input.purpose),
   );
+
+const isRevisionAffectedScope = (value: unknown): value is RevisionAffectedScope =>
+  isRecord(value) && (
+    value.kind === "stage" && isOneOf(value.stage, stageStates) &&
+      (value.stage_attempt_id === undefined || isUuidV4(value.stage_attempt_id)
+    ) || value.kind === "activity" && value.stage_attempt_id !== undefined && isUuidV4(value.stage_attempt_id) &&
+      isUuidV4(value.task_id) && isOneOf(value.activity, activityStates) &&
+      (value.activity_attempt_id === undefined || isUuidV4(value.activity_attempt_id))
+  );
+
+const isRevisionAffectedScopes = (value: unknown): value is readonly RevisionAffectedScope[] =>
+  Array.isArray(value) && value.length > 0 && value.every(isRevisionAffectedScope) &&
+  new Set(value.map((scope) => JSON.stringify(scope))).size === value.length;
 
 const isArtifactBindings = (value: unknown): value is readonly ArtifactBinding[] =>
   Array.isArray(value) && value.every((binding) =>
@@ -961,7 +986,7 @@ export const CONSTRUCTION_EVENT_REQUIRED_FIELDS: Readonly<Record<ConstructionEve
   "construction.interaction-recorded": ["participants", "content", "references"],
   "construction.integration-prepared": ["stage", "stage_attempt_id", "task_id", "activity", "activity_attempt_id", "captured_inputs", "candidate_checkpoints", "task_output_refs", "source_evidence_ids", "inputs"],
   "construction.integration-accepted": ["stage", "stage_attempt_id", "task_id", "activity", "activity_attempt_id", "prepared_event_id", "candidate_checkpoints", "repository_results", "authority_event_ids"],
-  "construction.revision-authorized": ["revision_id", "orchestrator_decision", "reason", "stage"],
+  "construction.revision-authorized": ["revision_id", "orchestrator_decision", "reason", "inputs", "stage"],
   "construction.retained-scope-assessed": ["stage", "stage_attempt_id", "assessments"],
   "construction.implementation-completion-assessed": ["stage", "stage_attempt_id", "final_checkpoints", "graph_ref", "task_ids", "reviewed_material_bindings", "self_review_evidence_id", "handoff_evidence_id", "unit_check_evidence_ids", "required_check_evidence_ids", "integration_event_ids", "retained_assessment_event_ids", "additional_review", "blocking_findings", "handoff_assessment"],
 };
@@ -1229,6 +1254,8 @@ const validatePayload = (
   }
   if (type === "construction.revision-authorized") {
     invalid("orchestrator_decision", isNonEmptyString(data.orchestrator_decision));
+    invalid("inputs", Array.isArray(data.inputs) && data.inputs.length > 0 && isInputs(data.inputs));
+    if (data.affected_scopes !== undefined) invalid("affected_scopes", isRevisionAffectedScopes(data.affected_scopes));
     if (data.activity !== undefined) invalid("activity", isOneOf(data.activity, activityStates));
     if (data.task_id !== undefined) invalid("task_id", isUuidV4(data.task_id));
     if (data.stage_attempt_id !== undefined) invalid("stage_attempt_id", isUuidV4(data.stage_attempt_id));

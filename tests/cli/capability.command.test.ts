@@ -388,6 +388,20 @@ describe("v3 root command tree", () => {
     expect(result.stderr).toBe("");
   });
 
+  it("exposes revision as a direct Construction command with exact boundary selectors", async () => {
+    const result = await runCli(["workflow", "construction", "revise", "--help"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("revise");
+    expect(result.stdout).toContain("--unit <unit-id>");
+    expect(result.stdout).toContain("--stage <stage>");
+    expect(result.stdout).toContain("--task <task-id>");
+    expect(result.stdout).toContain("--activity <activity>");
+    expect(result.stdout).toContain("--implementation-attempt <attempt-id>");
+    expect(result.stdout).toContain("--attempt <attempt-id>");
+    expect(result.stderr).toBe("");
+  });
+
   it("reports an empty capability group through the shared result reporter", async () => {
     const result = await runCli(["audit"]);
 

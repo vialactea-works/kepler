@@ -21,6 +21,7 @@ import { ImplementationRetainedScopeAssessment } from "../../construction/implem
 import { UnitOfWorkReviewStageCompletion } from "../../construction/unit-of-work-review-completion.js";
 import { DeliverStageCompletion } from "../../construction/deliver-stage-completion.js";
 import { StageStart } from "../../construction/stage-start.js";
+import { Revision } from "../../construction/revision.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
 import { AuditQueries } from "../../audit/queries.js";
@@ -656,6 +657,56 @@ export class ConstructionStageStartCommand extends CommandRunner {
   }
 }
 
+@SubCommand({ name: "revise", description: "Authorize a scoped Construction revision" })
+export class ConstructionReviseCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly revision: Revision,
+    private readonly input: AuditRequestInput,
+  ) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "attempt"] });
+    if (selectors.kind === "failed") {
+      reportSelectorFailure(this.reporter, selectors, "Provide one exact stage or Activity boundary and its attempt selectors.");
+      return;
+    }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    const body = await this.input.read();
+    if (body.kind === "failed") {
+      reportFailure(this.reporter, {
+        code: body.code.replace("audit_", "revision_"),
+        message: body.message.replace("Audit", "Revision"),
+        details: body.details,
+        recovery: body.recovery,
+      });
+      return;
+    }
+    const parsed = parseStrictJson(body.value);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_revision_request_json",
+        message: "The revision request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Provide one complete typed JSON object on stdin and retry.",
+      });
+      return;
+    }
+    const result = await this.revision.execute(selectors.selectors, parsed.value, selectedProject.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
 @SubCommand({ name: "show", description: "Show a Construction stage projection" })
 export class ConstructionStageShowCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
@@ -1098,7 +1149,7 @@ export class ConstructionUnitCommand extends CommandRunner {
 @SubCommand({
   name: "construction",
   description: "Run Construction workflow operations",
-  subCommands: [ConstructionUnitCommand, ConstructionStageCommand, ConstructionTaskCommand, ConstructionActivityCommand, ConstructionIntegrationCommand, ConstructionLintCommand],
+  subCommands: [ConstructionUnitCommand, ConstructionStageCommand, ConstructionTaskCommand, ConstructionActivityCommand, ConstructionIntegrationCommand, ConstructionReviseCommand, ConstructionLintCommand],
 })
 export class ConstructionCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) {

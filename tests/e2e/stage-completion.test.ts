@@ -1071,6 +1071,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     const returnAuthorization = await appendTypedConstructionEvent(harness, "construction.revision-authorized", {
       mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, revision_id: returnRevisionId,
       orchestrator_decision: "Return Implementation", reason: "Assess completed scopes before downstream work.",
+      inputs: [{ reference: "revision:implementation", purpose: "Feedback identifying the required return" }],
       stage: "implementation", stage_attempt_id: previousImplementationStart.attemptId,
     }, [returnInteraction.id]);
     const previousImplementationEnded = await appendTypedConstructionEvent(harness, "construction.stage-attempt-ended-by-revision", {

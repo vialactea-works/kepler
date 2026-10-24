@@ -120,7 +120,7 @@ const payload = (type: (typeof CONSTRUCTION_EVENT_TYPES)[number]): Record<string
   if (type === "construction.integration-accepted") {
     return { ...activity, activity: "code-integration", prepared_event_id: "prepared-event", candidate_checkpoints: [], repository_results: [], authority_event_ids: [] };
   }
-  if (type === "construction.revision-authorized") return { ...base, revision_id: identities.revision, orchestrator_decision: "Reopen implementation", reason: "Finding affects current work", stage: "implementation" };
+  if (type === "construction.revision-authorized") return { ...base, revision_id: identities.revision, orchestrator_decision: "Reopen implementation", reason: "Finding affects current work", inputs: [{ reference: "fixture:revision", purpose: "Supporting revision input" }], stage: "implementation" };
   if (type === "construction.retained-scope-assessed") return {
     ...stage,
     assessments: [{
