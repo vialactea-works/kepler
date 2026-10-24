@@ -16,6 +16,7 @@ import { readImplementationPlanningCompletionRecord } from "./implementation-pla
 import { validateStageStartAuthority } from "./stage-authority.js";
 import { readPlanningMaterial } from "./planning-stage-completion.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
+import { runWithConstructionRevisionFence } from "./unit-control.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 import type { ConstructionHistoryFact } from "./projection.js";
 
@@ -205,7 +206,7 @@ export class ImplementationStageCompletion {
       const loaded = await this.contexts.readUnit(selectors.unit, project);
       if (loaded.kind === "failed") result = propagateReadFailure(loaded);
       else if (loaded.root !== firstRead.root || loaded.missionId !== firstRead.missionId) result = failure("stage_scope_changed", "Unit membership changed while acquiring stage coordination.", { unit_id: selectors.unit });
-      else result = await this.completeLoaded(loaded, selectors.attempt, parsed.request);
+      else result = await this.completeLoaded(loaded, selectors.attempt, parsed.request, project);
     } catch (error) {
       result = failure("stage_completion_failed", "Kepler could not validate Implementation completion safely.", { message: error instanceof Error ? error.message : String(error) });
     }
@@ -218,6 +219,7 @@ export class ImplementationStageCompletion {
 
   private async completeLoaded(
     loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>, attemptId: string, request: ImplementationCompletionRequest,
+    project?: string,
   ): Promise<ImplementationStageCompletionResult> {
     if (loaded.unit.workflow !== "standard") return failure("unsupported_workflow", "Implementation completion requires the recorded Standard workflow binding.");
     if (loaded.unit.blocked) return failure("stage_history_blocked", "Construction history or projection issues prevent safe Implementation completion.", {
@@ -242,12 +244,12 @@ export class ImplementationStageCompletion {
     for (const fact of retainedAssessmentFacts) {
       if (fact.event.type !== "construction.retained-scope-assessed" || !isRetainedScopeAssessedData(fact.event.data) ||
           !hasDirectCause(fact, String(start.event.id)) ||
-          fact.event.data.assessments.some((assessment) => !isRetainedScopeAssessment(assessment) || !assessment.applicable)) {
-        return failure("implementation_retained_assessment_invalid", "Each retained-scope assessment must be typed, applicable, and caused by the current Implementation start.", { event_id: fact.event.id });
+          fact.event.data.assessments.some((assessment) => !isRetainedScopeAssessment(assessment))) {
+        return failure("implementation_retained_assessment_invalid", "Each retained-scope assessment must be typed and caused by the current Implementation start.", { event_id: fact.event.id });
       }
       retainedAssessmentEntries.push(...fact.event.data.assessments.map((assessment) => ({ assessment, fact })));
     }
-    const retainedAssessments = retainedAssessmentEntries.map((entry) => entry.assessment);
+    const retainedAssessments = retainedAssessmentEntries.filter((entry) => entry.assessment.applicable).map((entry) => entry.assessment);
     const upstreamCompletions = ["functional-design", "quality-requirements", "implementation-planning"] as const;
     const upstreamFacts = upstreamCompletions.map((name) => findCurrentCompletion(loaded, name));
     if (upstreamFacts.some((fact) => fact === undefined)) return failure("implementation_authority_missing", "Implementation requires current completed Functional Design, Quality Requirements, and Implementation Planning attempts.");
@@ -430,7 +432,7 @@ export class ImplementationStageCompletion {
     for (const task of taskFacts) {
       for (const activityName of expectedActivities) {
         const activity = task.activities.find((item) => item.activity === activityName);
-        if (!activity || activity.state !== "completed") return failure("implementation_activity_incomplete", "Every task requires completed Code Generation, Code Validation, and Code Integration Activities.", { task_id: task.taskId, activity: activityName, state: activity?.state });
+        if (!activity) return failure("implementation_activity_incomplete", "Every task requires completed Code Generation, Code Validation, and Code Integration Activities.", { task_id: task.taskId, activity: activityName });
         const currentAttempt = activity.currentAttemptId
           ? activity.attempts.find((item) => item.attemptId === activity.currentAttemptId && item.stageAttemptId === attemptId && item.state === "completed")
           : undefined;
@@ -439,6 +441,11 @@ export class ImplementationStageCompletion {
           ? activity.attempts.find((item) => item.attemptId === matching[0]?.original_activity_attempt_id &&
             item.stageAttemptId === matching[0]?.original_stage_attempt_id && item.state === "completed")
           : undefined;
+        if ((!currentAttempt && !retainedAttempt) || (currentAttempt && activity.state !== "completed")) {
+          return failure("implementation_activity_incomplete", "Every task requires completed Code Generation, Code Validation, and Code Integration Activities or one applicable retained scope.", {
+            task_id: task.taskId, activity: activityName, state: activity.state,
+          });
+        }
         const selectedAttempt = currentAttempt ?? retainedAttempt;
         const completions = selectedAttempt?.facts.filter((fact) => fact.event.type === "construction.activity-attempt-completed") ?? [];
         const completion = completions.length === 1 ? completions[0] : undefined;
@@ -595,13 +602,34 @@ export class ImplementationStageCompletion {
     const latestProjection = loaded.projection;
     const unitProjection = latestProjection.units.find((item) => item.unitId === loaded.unit.unitId);
     if (!unitProjection || unitProjection.blocked) return failure("implementation_projection_blocked", "The current Construction projection is blocked.");
-    for (const candidate of candidates) {
-      try { await this.runtime.journals.create(loaded.root, loaded.missionId, candidate.journal_id).append(candidate); }
-      catch (error) { return failure("stage_completion_append_failed", "Kepler could not durably append Implementation assessment history.", { journal_id: candidate.journal_id, message: error instanceof Error ? error.message : String(error) }, "Inspect the selected history journals for appended or uncertain records before retrying; preserve uncertain effects."); }
-    }
-    const completion = candidates.at(-1)!;
-    const assessment = candidates.find((candidate) => candidate.type === "construction.implementation-completion-assessed");
-    return { kind: "success", data: { id: completion.id, journal_id: completion.journal_id, unit_id: loaded.unit.unitId, stage: "implementation", attempt_id: attemptId, assessment_event_id: assessment?.id, evidence_ids: evidenceIds, integration_event_ids: integrationEventIds, checkpoints: finalCheckpoints } };
+    const guarded = await runWithConstructionRevisionFence({
+      workspace: this.runtime.workspace,
+      commonDirectory,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      expectedRoot: loaded.root,
+      project,
+      readUnit: (unitId, selectedProject) => this.contexts.readUnit(unitId, selectedProject),
+      target: { unitId: loaded.unit.unitId, stage: "implementation", stageAttemptId: attemptId },
+      failure,
+      operation: async (latest): Promise<ImplementationStageCompletionResult> => {
+        const currentStage = latest.unit.stages.find((candidate) => candidate.stage === "implementation");
+        if (latest.unit.blocked || currentStage?.state !== "running" || currentStage.currentAttemptId !== attemptId) {
+          return failure("stage_attempt_not_current", "The selected Implementation attempt changed before completion could be appended.", {
+            selected_attempt_id: attemptId, current_attempt_id: currentStage?.currentAttemptId, state: currentStage?.state,
+          });
+        }
+        for (const candidate of candidates) {
+          try { await this.runtime.journals.create(loaded.root, loaded.missionId, candidate.journal_id).append(candidate); }
+          catch (error) { return failure("stage_completion_append_failed", "Kepler could not durably append Implementation assessment history.", { journal_id: candidate.journal_id, message: error instanceof Error ? error.message : String(error) }, "Inspect the selected history journals for appended or uncertain records before retrying; preserve uncertain effects."); }
+        }
+        const completion = candidates.at(-1)!;
+        const assessment = candidates.find((candidate) => candidate.type === "construction.implementation-completion-assessed");
+        return { kind: "success", data: { id: completion.id, journal_id: completion.journal_id, unit_id: loaded.unit.unitId, stage: "implementation", attempt_id: attemptId, assessment_event_id: assessment?.id, evidence_ids: evidenceIds, integration_event_ids: integrationEventIds, checkpoints: finalCheckpoints } };
+      },
+    });
+    if (guarded.kind === "failed") return failure(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 

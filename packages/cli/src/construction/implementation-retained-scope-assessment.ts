@@ -16,6 +16,7 @@ import type { ImplementationStageCompletionRuntime } from "./implementation-stag
 import { captureStageCheckpoints } from "./stage-start.js";
 import { recordHomeRepositoryId, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
+import { runWithConstructionRevisionFence } from "./unit-control.js";
 import type { ConstructionHistoryFact } from "./projection.js";
 
 export interface ImplementationRetainedScopeAssessmentRequest {
@@ -49,7 +50,7 @@ const sameStringSet = (left: readonly string[], right: readonly string[]): boole
   new Set(left).size === left.length && new Set(right).size === right.length &&
   [...left].sort().join("\0") === [...right].sort().join("\0");
 const isAssessment = (value: unknown): value is RetainedScopeAssessment =>
-  isRetainedScopeAssessment(value) && value.applicable;
+  isRetainedScopeAssessment(value);
 const isRequest = (value: unknown): value is ImplementationRetainedScopeAssessmentRequest => {
   if (!isRecord(value) || !onlyKeys(value, ["assessments"]) || !Array.isArray(value.assessments) || value.assessments.length === 0 ||
       !value.assessments.every(isAssessment)) return false;
@@ -60,7 +61,7 @@ const isRequest = (value: unknown): value is ImplementationRetainedScopeAssessme
 export const validateImplementationRetainedScopeAssessmentRequest = (value: unknown):
   | { readonly kind: "valid"; readonly request: ImplementationRetainedScopeAssessmentRequest }
   | { readonly kind: "invalid"; readonly issues: readonly { readonly pointer: string; readonly message: string }[] } => {
-  if (!isRequest(value)) return { kind: "invalid", issues: [{ pointer: "", message: "Expected one or more distinct, applicable retained Activity assessments with original evidence and checkpoints." }] };
+  if (!isRequest(value)) return { kind: "invalid", issues: [{ pointer: "", message: "Expected one or more distinct retained Activity applicability assessments with original evidence and checkpoints." }] };
   return { kind: "valid", request: value };
 };
 
@@ -126,7 +127,7 @@ export class ImplementationRetainedScopeAssessment {
       const loaded = await this.contexts.readUnit(selectors.unit, project);
       if (loaded.kind === "failed") result = propagateReadFailure(loaded);
       else if (loaded.root !== firstRead.root || loaded.missionId !== firstRead.missionId) result = failure("stage_scope_changed", "Unit membership changed while acquiring stage coordination.", { unit_id: selectors.unit });
-      else result = await this.assessLoaded(loaded, selectors.attempt, parsed.request);
+      else result = await this.assessLoaded(loaded, selectors.attempt, parsed.request, commonDirectory, project);
     } catch (error) {
       result = failure("retained_scope_assessment_failed", "Kepler could not validate retained Activity scope safely.", { message: error instanceof Error ? error.message : String(error) });
     }
@@ -140,6 +141,8 @@ export class ImplementationRetainedScopeAssessment {
   private async assessLoaded(
     loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>, attemptId: string,
     request: ImplementationRetainedScopeAssessmentRequest,
+    commonDirectory: string,
+    project?: string,
   ): Promise<ImplementationRetainedScopeAssessmentResult> {
     if (loaded.unit.workflow !== "standard") return failure("unsupported_workflow", "Retained Activity assessment requires the recorded Standard workflow binding.");
     if (loaded.unit.blocked) return failure("stage_history_blocked", "Construction history or projection issues prevent safe retained-scope assessment.", {
@@ -205,8 +208,6 @@ export class ImplementationRetainedScopeAssessment {
         planningRecord.graph_ref.content_version !== planningMaterial.material.graphRef.content_version) {
       return failure("implementation_upstream_material_stale", "Current Design, Quality, Planning, or task graph material differs from its accepted completion bindings.");
     }
-    const commonDirectory = await recordHomeCommonDirectory(this.runtime, loaded.root);
-    if (!commonDirectory) return failure("stage_coordination_unavailable", "Git could not resolve the record home's common directory.", { repository_root: loaded.root });
     const captured = await captureStageCheckpoints(this.runtime, loaded, commonDirectory);
     if (captured.kind === "failed") return failure(captured.code, captured.message, captured.details);
     const repositoryId = recordHomeRepositoryId(loaded.history.events);
@@ -257,7 +258,7 @@ export class ImplementationRetainedScopeAssessment {
             evidence.event.data.stage_attempt_id !== assessment.original_stage_attempt_id || evidence.event.data.task_id !== assessment.task_id ||
             evidence.event.data.activity !== assessment.activity || evidence.event.data.activity_attempt_id !== assessment.original_activity_attempt_id ||
             !isRecord(evidence.event.data.result) || evidence.event.data.result.status !== "passed" ||
-            !sameArtifactBindings(evidence.event.data.artifact_bindings, expectedBindings) ||
+            (assessment.applicable && !sameArtifactBindings(evidence.event.data.artifact_bindings, expectedBindings)) ||
             checkpointKey(evidence.event.data.checkpoints) !== checkpointKey(assessment.checkpoints) ||
             !originalCompletion.event.caused_by.includes(evidence.event.id)) {
           return failure("retained_scope_evidence_invalid", "Original evidence must remain passed and bound to the exact Activity attempt, accepted material, and checkpoint set.", {
@@ -298,11 +299,32 @@ export class ImplementationRetainedScopeAssessment {
     if (validation.status !== "valid") return failure("retained_scope_event_invalid", "The retained-scope assessment event failed Construction validation.", {
       issues: validation.status === "invalid" ? validation.issues : [validation.reason],
     });
-    try { await this.runtime.journals.create(loaded.root, loaded.missionId, validation.event.journal_id).append(validation.event); }
-    catch (error) { return failure("retained_scope_append_failed", "Kepler could not durably append retained-scope assessment history.", {
-      journal_id: validation.event.journal_id, message: error instanceof Error ? error.message : String(error),
-    }, "Inspect the selected history journals for appended or uncertain records before retrying; preserve uncertain effects."); }
-    return { kind: "success", data: { id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId, stage: "implementation", attempt_id: attemptId, assessed_count: retainedAssessments.length } };
+    const guarded = await runWithConstructionRevisionFence({
+      workspace: this.runtime.workspace,
+      commonDirectory,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      expectedRoot: loaded.root,
+      project,
+      readUnit: (unitId, selectedProject) => this.contexts.readUnit(unitId, selectedProject),
+      target: { unitId: loaded.unit.unitId, stage: "implementation", stageAttemptId: attemptId },
+      failure,
+      operation: async (latest): Promise<ImplementationRetainedScopeAssessmentResult> => {
+        const currentStage = latest.unit.stages.find((candidate) => candidate.stage === "implementation");
+        if (latest.unit.blocked || currentStage?.state !== "running" || currentStage.currentAttemptId !== attemptId) {
+          return failure("stage_attempt_not_current", "The selected Implementation attempt changed before retained-scope assessment could be appended.", {
+            selected_attempt_id: attemptId, current_attempt_id: currentStage?.currentAttemptId, state: currentStage?.state,
+          });
+        }
+        try { await this.runtime.journals.create(loaded.root, loaded.missionId, validation.event.journal_id).append(validation.event); }
+        catch (error) { return failure("retained_scope_append_failed", "Kepler could not durably append retained-scope assessment history.", {
+          journal_id: validation.event.journal_id, message: error instanceof Error ? error.message : String(error),
+        }, "Inspect the selected history journals for appended or uncertain records before retrying; preserve uncertain effects."); }
+        return { kind: "success", data: { id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId, stage: "implementation", attempt_id: attemptId, assessed_count: retainedAssessments.length } };
+      },
+    });
+    if (guarded.kind === "failed") return failure(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 

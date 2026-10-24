@@ -141,6 +141,11 @@ const readConstructionSources = async (harness: E2EHarness): Promise<readonly Hi
 const parseHistorySource = (source: HistoryJournalSource): Record<string, unknown>[] =>
   new TextDecoder().decode(source.bytes).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
 
+const historyData = (record: Record<string, unknown>): Record<string, unknown> =>
+  typeof record.data === "object" && record.data !== null && !Array.isArray(record.data)
+    ? record.data as Record<string, unknown>
+    : {};
+
 const encodeHistorySource = (source: HistoryJournalSource, events: readonly unknown[]): HistoryJournalSource => ({
   ...source,
   bytes: new TextEncoder().encode(`${events.map((record) => JSON.stringify(record)).join("\n")}\n`),
@@ -597,6 +602,25 @@ const runCliWithExeca = (harness: E2EHarness, args: readonly string[]) => execa(
   },
 );
 
+const runCliThenInterruptCoordinator = (harness: E2EHarness, args: readonly string[], input?: string) => {
+  const cliInvocation = [Path.resolve(import.meta.dirname, "../../packages/cli/dist/cli/main.js"), ...args];
+  const inputLiteral = input === undefined ? "undefined" : JSON.stringify(input);
+  const script = [
+    'const { spawnSync } = require("node:child_process");',
+    `const childInput = ${inputLiteral};`,
+    `const child = spawnSync(process.execPath, ${JSON.stringify(cliInvocation)}, { cwd: process.cwd(), env: process.env, encoding: "utf8", maxBuffer: 16_000_000, ...(childInput === undefined ? {} : { input: childInput }) });`,
+    'if (child.error || child.status !== 0) { process.stderr.write(child.stderr ?? child.error?.message ?? ""); process.exit(child.status ?? 1); }',
+    'process.kill(process.pid, "SIGKILL");',
+  ].join("\n");
+  return execa(process.execPath, ["-e", script], {
+    cwd: harness.resources.repositoryDirectory,
+    env: harness.resources.environment(),
+    extendEnv: false,
+    reject: false,
+    timeout: 30_000,
+  });
+};
+
 const recordEvidence = (
   audit: AuditCliDriver,
   attempt: string,
@@ -823,7 +847,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(await audit.journalSnapshot()).toBe(before);
   }, 120_000);
 
-  it("completes Standard stages through Deliver via the stage CLI", async () => {
+  it("recovers interrupted Integration through the CLI and completes Standard stages through Deliver", async () => {
     const harness = await createE2EHarness({ application: "native" });
     harnesses.push(harness);
     await createAuditHistory(harness.resources.repositoryDirectory, undefined, { includeImplementationFacts: false });
@@ -1071,7 +1095,9 @@ describe("Functional Design stage completion CLI E2E", () => {
     const returnAuthorization = await appendTypedConstructionEvent(harness, "construction.revision-authorized", {
       mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, revision_id: returnRevisionId,
       orchestrator_decision: "Return Implementation", reason: "Assess completed scopes before downstream work.",
+      inputs: [{ reference: "revision:implementation", purpose: "Feedback identifying the required return" }],
       stage: "implementation", stage_attempt_id: previousImplementationStart.attemptId,
+      affected_scopes: [{ kind: "stage", stage: "implementation", prior_attempt: "present", stage_attempt_id: previousImplementationStart.attemptId }],
     }, [returnInteraction.id]);
     const previousImplementationEnded = await appendTypedConstructionEvent(harness, "construction.stage-attempt-ended-by-revision", {
       mission_id: auditFixture.missionId, unit_id: auditFixture.unitId, stage: "implementation",
@@ -1087,23 +1113,11 @@ describe("Functional Design stage completion CLI E2E", () => {
       [...implementationAuthority, implementationReopened.id, returnAuthorization.id], "implementation");
     const implementationAttempt = implementationStart.attemptId;
     const stageDriver = new StageCompletionCliDriver(harness.cli);
-    const retainedAssessmentRequest = { assessments: [
-      {
-        task_id: planningTaskId, activity: "code-generation", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeGeneration.activityAttemptId, original_evidence_ids: previousCodeGeneration.evidenceIds,
-        applicable: true, reason: "Generation output remains valid for the unchanged task graph.", checkpoints: planningMaterial.checkpoints,
-      },
-      {
-        task_id: planningTaskId, activity: "code-validation", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeValidation.activityAttemptId, original_evidence_ids: previousCodeValidation.evidenceIds,
-        applicable: true, reason: "Validation remains valid for the unchanged generated output.", checkpoints: planningMaterial.checkpoints,
-      },
-      {
-        task_id: planningTaskId, activity: "code-integration", original_stage_attempt_id: previousImplementationStart.attemptId,
-        original_activity_attempt_id: previousCodeIntegration.activityAttemptId, original_evidence_ids: previousCodeIntegration.evidenceIds,
-        applicable: true, reason: "The predecessor Integration was available before current work and remains in the assessed history.", checkpoints: planningMaterial.checkpoints,
-      },
-    ] };
+    const retainedAssessmentRequest = { assessments: [{
+      task_id: planningTaskId, activity: "code-generation", original_stage_attempt_id: previousImplementationStart.attemptId,
+      original_activity_attempt_id: previousCodeGeneration.activityAttemptId, original_evidence_ids: previousCodeGeneration.evidenceIds,
+      applicable: true, reason: "Generation output remains valid for the unchanged task graph.", checkpoints: planningMaterial.checkpoints,
+    }] };
     const beforeRetainedAssessmentDenials = await audit.journalSnapshot();
     const sameParentAssessment = stageDriver.assessRetainedScopes(auditFixture.unitId, implementationAttempt, {
       assessments: [{ ...retainedAssessmentRequest.assessments[0]!, original_stage_attempt_id: implementationAttempt }],
@@ -1137,7 +1151,11 @@ describe("Functional Design stage completion CLI E2E", () => {
     const firstAdmissionResult = JSON.parse(firstAdmissionProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
     const secondAdmissionResult = JSON.parse(secondAdmissionProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
     expect(firstAdmissionProcess.exitCode, JSON.stringify(firstAdmissionResult)).toBe(0);
-    expect(secondAdmissionProcess.exitCode, JSON.stringify(secondAdmissionResult)).toBe(0);
+    const stateBeforeSecondAdmission = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const stateBeforeSecondAdmissionData = stateBeforeSecondAdmission.exitCode === 0
+      ? JSON.parse(stateBeforeSecondAdmission.stdout).data.unit
+      : { exitCode: stateBeforeSecondAdmission.exitCode, stderr: stateBeforeSecondAdmission.stderr };
+    expect(secondAdmissionProcess.exitCode, JSON.stringify({ result: secondAdmissionResult, unit: stateBeforeSecondAdmissionData })).toBe(0);
     expect(firstAdmissionResult).toMatchObject({
       status: "success",
       data: { task_id: planningTaskId, implementation_attempt_id: implementationAttempt },
@@ -1169,24 +1187,17 @@ describe("Functional Design stage completion CLI E2E", () => {
       "workflow", "construction", "activity", "start", "--unit", auditFixture.unitId,
       "--task", taskId, "--activity", "code-generation", "--implementation-attempt", implementationAttempt,
     ]);
-    const firstGenerationStart = await startGeneration(planningTaskId);
     const secondGenerationStart = await startGeneration(planningSecondTaskId);
-    expect(firstGenerationStart.worker_dispatched).toBe(false);
     expect(secondGenerationStart.worker_dispatched).toBe(false);
-    const firstGenerationState = await runConstructionCli([
-      "workflow", "construction", "activity", "show", "--unit", auditFixture.unitId,
-      "--task", planningTaskId, "--activity", "code-generation", "--implementation-attempt", implementationAttempt,
-    ]);
     const secondGenerationState = await runConstructionCli([
       "workflow", "construction", "activity", "show", "--unit", auditFixture.unitId,
       "--task", planningSecondTaskId, "--activity", "code-generation", "--implementation-attempt", implementationAttempt,
     ]);
-    expect(firstGenerationState.state).toBe("running");
     expect(secondGenerationState.state).toBe("running");
     const runTaskRoute = async (
       taskId: string,
       taskContract: typeof planningMaterial.taskContract,
-      generationStart: Readonly<Record<string, unknown>>,
+      generationStart: Readonly<Record<string, unknown>> | undefined,
     ) => {
       const evidenceIds: string[] = [];
       const starts = new Map<string, string>();
@@ -1194,7 +1205,8 @@ describe("Functional Design stage completion CLI E2E", () => {
       const completions = new Map<string, string>();
       let integrationEventId = "";
       for (const activity of activityNames) {
-        const started = activity === "code-generation" ? generationStart : await runConstructionCli([
+        if (activity === "code-generation" && !generationStart) continue;
+        const started = activity === "code-generation" ? generationStart! : await runConstructionCli([
           "workflow", "construction", "activity", "start", "--unit", auditFixture.unitId,
           "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
         ]);
@@ -1202,8 +1214,37 @@ describe("Functional Design stage completion CLI E2E", () => {
         const startEventId = String(started.event_id);
         const inputs = started.inputs as readonly { readonly reference: string; readonly purpose: string }[];
         const checkpoints = started.checkpoints as readonly { readonly repository_id: string; readonly commit: string }[];
-        starts.set(activity, startEventId);
+        let lifecycleStartEventId = startEventId;
+        if (taskId === planningTaskId && activity === "code-validation") {
+          const activityScope = ["--unit", auditFixture.unitId, "--task", taskId, "--activity", activity,
+            "--implementation-attempt", implementationAttempt, "--attempt", activityAttemptId];
+          await runConstructionCli([
+            "workflow", "construction", "activity", "pause", ...activityScope,
+            "--request", JSON.stringify({ phase: "request", reason: "Pause Validation before recording its checks." }),
+          ]);
+          await runConstructionCli([
+            "workflow", "construction", "activity", "pause", ...activityScope,
+            "--request", JSON.stringify({
+              phase: "acknowledge",
+              reason: "Validation worker stopped and its effects were reconciled.",
+              orchestrator_attestation: {
+                exact_run_terminal: true,
+                effects_reconciled: true,
+                run_reference: `orchestrator-run:${activityAttemptId}`,
+                reconciliation_references: [`effects:${activityAttemptId}`, `workspace:${activityAttemptId}`],
+              },
+            }),
+          ]);
+          const resumed = await runConstructionCli([
+            "workflow", "construction", "activity", "resume", ...activityScope,
+            "--request", JSON.stringify({ inputs }),
+          ]);
+          expect(resumed.attempt_id).toBe(activityAttemptId);
+          lifecycleStartEventId = String(resumed.id);
+        }
+        starts.set(activity, lifecycleStartEventId);
         attempts.set(activity, activityAttemptId);
+        let interruptedRecovery = false;
         const currentEvidenceIds: string[] = [];
         const activityEvidence = activity === "code-integration"
           ? activityChecks[activity].map((check) => ({ check }))
@@ -1267,11 +1308,50 @@ describe("Functional Design stage completion CLI E2E", () => {
             currentEvidenceIds.push(String(recorded.evidence_id));
           }
           evidenceIds.push(currentEvidenceIds[0]!);
-          const accepted = await runConstructionCli([
+          const acceptArgs = [
             "workflow", "construction", "integration", "accept", ...integrationScope,
             "--lock-token", lockToken, "--prepared-event-id", preparedEventId,
-          ]);
-          integrationEventId = String(accepted.integration_event_id);
+          ];
+          if (taskId === planningTaskId) {
+            const interruptedCoordinator = await runCliThenInterruptCoordinator(harness, acceptArgs);
+            expect(interruptedCoordinator.signal).toBe("SIGKILL");
+            const interruptionHistory = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+            const acceptanceEvents = interruptionHistory.filter((record) => record.type === "construction.integration-accepted" &&
+              historyData(record).stage_attempt_id === implementationAttempt && historyData(record).task_id === taskId &&
+              historyData(record).activity_attempt_id === activityAttemptId);
+            const activityCompletions = interruptionHistory.filter((record) => record.type === "construction.activity-attempt-completed" &&
+              historyData(record).stage_attempt_id === implementationAttempt && historyData(record).task_id === taskId &&
+              historyData(record).activity_attempt_id === activityAttemptId);
+            const taskCompletions = interruptionHistory.filter((record) => record.type === "construction.task-completed" &&
+              historyData(record).stage_attempt_id === implementationAttempt && historyData(record).task_id === taskId);
+            expect(acceptanceEvents).toHaveLength(1);
+            expect(activityCompletions).toHaveLength(0);
+            expect(taskCompletions).toHaveLength(0);
+            const recoveredActivity = harness.cli.run([
+              "workflow", "construction", "activity", "show", "--unit", auditFixture.unitId,
+              "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
+            ]);
+            expect(recoveredActivity.exitCode, recoveredActivity.stdout).toBe(0);
+            expect(JSON.parse(recoveredActivity.stdout)).toMatchObject({
+              status: "success",
+              data: { state: "running", current_attempt_id: activityAttemptId },
+            });
+            const beforeDuplicateStart = await audit.journalSnapshot();
+            const duplicateStart = harness.cli.run([
+              "workflow", "construction", "activity", "start", "--unit", auditFixture.unitId,
+              "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
+            ]);
+            expect(duplicateStart.exitCode).toBe(1);
+            expect(JSON.parse(duplicateStart.stdout)).toMatchObject({
+              status: "failed", data: { code: "activity_attempt_already_active" },
+            });
+            expect(await audit.journalSnapshot()).toBe(beforeDuplicateStart);
+            integrationEventId = String(acceptanceEvents[0]!.id);
+            interruptedRecovery = true;
+          } else {
+            const accepted = await runConstructionCli(acceptArgs);
+            integrationEventId = String(accepted.integration_event_id);
+          }
         }
         const completionArgs = [
           "workflow", "construction", "activity", "complete", "--unit", auditFixture.unitId,
@@ -1316,7 +1396,8 @@ describe("Functional Design stage completion CLI E2E", () => {
             });
             await Fs.writeFile(reviewerJournalPath!, `${lines.join("\n")}\n`, "utf8");
           };
-          await mutateReviewerEvidence("agent:reviewer", `${String(generationStart.activity_attempt_id)}:worker`);
+          const generatorAttemptId = generationStart?.activity_attempt_id ?? previousCodeGeneration.activityAttemptId;
+          await mutateReviewerEvidence("agent:reviewer", `${String(generatorAttemptId)}:worker`);
           const beforeInvalidReviewerCompletion = await audit.journalSnapshot();
           const invalidReviewerProcess = await runCliWithExeca(harness, completionArgs);
           const invalidReviewerResponse = JSON.parse(invalidReviewerProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
@@ -1326,18 +1407,46 @@ describe("Functional Design stage completion CLI E2E", () => {
           await mutateReviewerEvidence(activityExecutors["code-generation"], `${activityAttemptId}:reviewer`);
         }
         const completed = await runConstructionCli(completionArgs);
+        if (interruptedRecovery) {
+          const recoveredHistory = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+          const matches = (type: string, predicate: (data: Record<string, unknown>) => boolean) =>
+            recoveredHistory.filter((record) => record.type === type && predicate(historyData(record)));
+          const currentStarts = matches("construction.activity-attempt-started", (data) =>
+            data.stage_attempt_id === implementationAttempt && data.task_id === taskId &&
+            data.activity === activity && data.activity_attempt_id === activityAttemptId);
+          const currentAcceptances = matches("construction.integration-accepted", (data) =>
+            data.stage_attempt_id === implementationAttempt && data.task_id === taskId &&
+            data.activity_attempt_id === activityAttemptId);
+          const currentActivityCompletions = matches("construction.activity-attempt-completed", (data) =>
+            data.stage_attempt_id === implementationAttempt && data.task_id === taskId &&
+            data.activity === activity && data.activity_attempt_id === activityAttemptId);
+          const currentTaskCompletions = matches("construction.task-completed", (data) =>
+            data.stage_attempt_id === implementationAttempt && data.task_id === taskId &&
+            data.integration_event_id === integrationEventId);
+          expect(currentStarts).toHaveLength(1);
+          expect(currentStarts[0]?.id).toBe(startEventId);
+          expect(currentAcceptances).toHaveLength(1);
+          expect(currentAcceptances[0]?.id).toBe(integrationEventId);
+          expect(currentActivityCompletions).toHaveLength(1);
+          expect(currentActivityCompletions[0]?.id).toBe(completed.event_id);
+          expect(currentTaskCompletions).toHaveLength(1);
+        }
+        if (lifecycleStartEventId !== startEventId) {
+          const completionRecord = (await readConstructionSources(harness)).flatMap(parseHistorySource)
+            .find((record) => record.id === String(completed.event_id));
+          expect(completionRecord?.caused_by).toContain(lifecycleStartEventId);
+        }
         completions.set(activity, String(completed.event_id));
       }
       return { evidenceIds, starts, attempts, completions, integrationEventId };
     };
-    const firstTaskRoute = await runTaskRoute(planningTaskId, planningMaterial.taskContracts[0]!, firstGenerationStart);
+    const firstTaskRoute = await runTaskRoute(planningTaskId, planningMaterial.taskContracts[0]!, undefined);
     const secondTaskRoute = await runTaskRoute(planningSecondTaskId, planningMaterial.taskContracts[1]!, secondGenerationStart);
     const activityEvidenceIds = [...firstTaskRoute.evidenceIds, ...secondTaskRoute.evidenceIds];
     const activityStarts = new Map([
       ...firstTaskRoute.starts,
       ...[...secondTaskRoute.starts].map(([activity, eventId]) => [`${planningSecondTaskId}:${activity}`, eventId] as const),
     ]);
-    const activityCompletionEventIds = firstTaskRoute.completions;
     const integrationEventId = firstTaskRoute.integrationEventId;
     const secondIntegrationEventId = secondTaskRoute.integrationEventId;
     const stageEvidence = async (check: string, executor: string): Promise<string> => {
@@ -1454,11 +1563,11 @@ describe("Functional Design stage completion CLI E2E", () => {
         data.stage_attempt_id === implementationAttempt;
     });
     if (!implementationCompletionRecord) throw new Error("The successful Implementation completion event is missing from history.");
-    const generationCompletionRecord = implementationEvents.find((record) => String(record.id) === String(activityCompletionEventIds.get("code-generation")));
+    const generationCompletionRecord = implementationEvents.find((record) => String(record.id) === String(secondTaskRoute.completions.get("code-generation")));
     if (!generationCompletionRecord) throw new Error("The successful Code Generation completion event is missing from history.");
     const generationCompletionData = generationCompletionRecord.data as Record<string, unknown>;
     const generationEvidenceIds = new Set(Array.isArray(generationCompletionData.evidence_ids) ? generationCompletionData.evidence_ids.map(String) : []);
-    const integrationCompletionRecord = implementationEvents.find((record) => String(record.id) === String(activityCompletionEventIds.get("code-integration")));
+    const integrationCompletionRecord = implementationEvents.find((record) => String(record.id) === String(firstTaskRoute.completions.get("code-integration")));
     if (!integrationCompletionRecord) throw new Error("The successful Code Integration completion event is missing from history.");
     const integrationCompletionData = integrationCompletionRecord.data as Record<string, unknown>;
     const integrationEvidenceIds = new Set(Array.isArray(integrationCompletionData.evidence_ids) ? integrationCompletionData.evidence_ids.map(String) : []);
@@ -1495,8 +1604,8 @@ describe("Functional Design stage completion CLI E2E", () => {
       auditFixture.missionId, materialMismatchSources, { completeness: "complete" },
     ));
     expect(materialMismatchProjection.units.find((unit) => unit.unitId === auditFixture.unitId)?.blocked).toBe(true);
-    expect(activityStarts.size).toBe(6);
-    expect(activityEvidenceIds).toHaveLength(6);
+    expect(activityStarts.size).toBe(5);
+    expect(activityEvidenceIds).toHaveLength(5);
     const afterImplementationHistory = collectHistoryFromSources(
       auditFixture.missionId, implementationHistorySources, { completeness: "complete" },
     );
@@ -1524,11 +1633,179 @@ describe("Functional Design stage completion CLI E2E", () => {
       stage: "implementation",
       state: "completed",
     }));
+    const postCompletionRevisionRequest = {
+      orchestrator_decision: "Reopen the completed Implementation for a new assessment",
+      reason: "A final cross-check requests a new parent before Review and Deliver proceed.",
+      inputs: [{ reference: "revision:post-completion", purpose: "The completed Implementation requires a new assessment" }],
+    };
+    const postCompletionRevisionArgs = ["workflow", "construction", "revise", "--unit", auditFixture.unitId,
+      "--stage", "implementation", "--attempt", implementationAttempt];
+    const postCompletionRevisionInput = JSON.stringify(postCompletionRevisionRequest);
+    const interruptedAuthorization = await runCliThenInterruptCoordinator(
+      harness, postCompletionRevisionArgs, postCompletionRevisionInput,
+    );
+    expect(interruptedAuthorization.signal).toBe("SIGKILL");
+    const authorizedHistory = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+    const matchingAuthorizations = authorizedHistory.filter((record) => record.type === "construction.revision-authorized" &&
+      historyData(record).unit_id === auditFixture.unitId && historyData(record).stage_attempt_id === implementationAttempt &&
+      historyData(record).reason === postCompletionRevisionRequest.reason &&
+      historyData(record).orchestrator_decision === postCompletionRevisionRequest.orchestrator_decision);
+    expect(matchingAuthorizations).toHaveLength(1);
+    const recoveryAuthorization = matchingAuthorizations[0]!;
+    const recoveryRevisionId = String(historyData(recoveryAuthorization).revision_id);
+    const revisionTransitions = (events: readonly Record<string, unknown>[]) => events.filter((record) =>
+      historyData(record).revision_id === recoveryRevisionId &&
+      ["construction.stage-attempt-ended-by-revision", "construction.stage-reopened"].includes(String(record.type)));
+    expect(revisionTransitions(authorizedHistory)).toHaveLength(0);
+    const interruptedCascade = await runCliThenInterruptCoordinator(
+      harness, postCompletionRevisionArgs, postCompletionRevisionInput,
+    );
+    expect(interruptedCascade.signal).toBe("SIGKILL");
+    const cascadedHistory = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+    const cascadedRevisionEvents = revisionTransitions(cascadedHistory);
+    expect(cascadedRevisionEvents.filter((record) => record.type === "construction.stage-attempt-ended-by-revision")).toHaveLength(1);
+    expect(cascadedRevisionEvents.filter((record) => record.type === "construction.stage-reopened")).toHaveLength(1);
+    const beforeCascadeReplay = await audit.journalSnapshot();
+    const postCompletionCascade = harness.cli.run(postCompletionRevisionArgs, { stdin: postCompletionRevisionInput });
+    expect(postCompletionCascade.exitCode, postCompletionCascade.stdout).toBe(0);
+    const postCompletionCascadeResult = JSON.parse(postCompletionCascade.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
+    expect(postCompletionCascadeResult).toMatchObject({ status: "success", data: { status: "barrier_complete", resumed_authorization: true } });
+    expect(postCompletionCascadeResult.data.affected_scopes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "stage", stage: "implementation" }),
+      expect.objectContaining({ kind: "stage", stage: "unit-of-work-review" }),
+      expect.objectContaining({ kind: "stage", stage: "deliver" }),
+    ]));
+    expect(postCompletionCascadeResult.data.transition_event_ids).toEqual([]);
+    expect(await audit.journalSnapshot()).toBe(beforeCascadeReplay);
+    const recoveredRevisionEvents = revisionTransitions((await readConstructionSources(harness)).flatMap(parseHistorySource));
+    expect(recoveredRevisionEvents).toHaveLength(2);
+    expect(recoveredRevisionEvents.filter((record) => record.type === "construction.stage-attempt-ended-by-revision")).toHaveLength(1);
+    expect(recoveredRevisionEvents.filter((record) => record.type === "construction.stage-reopened")).toHaveLength(1);
+    const postCompletionStageStart = harness.cli.run([
+      "workflow", "construction", "stage", "start", "--unit", auditFixture.unitId, "--stage", "implementation",
+      "--request", JSON.stringify({ inputs: implementationInputs }),
+    ]);
+    expect(postCompletionStageStart.exitCode, postCompletionStageStart.stdout).toBe(0);
+    const postCompletionStageStartResult = JSON.parse(postCompletionStageStart.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
+    expect(postCompletionStageStartResult.status).toBe("success");
+    const postCompletionAttempt = String(postCompletionStageStartResult.data.attempt_id);
+    const postCompletionStartEventId = String(postCompletionStageStartResult.data.id);
+    const priorImplementationEvents = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+    const postCompletionRetainedAssessments = [] as Array<Record<string, unknown>>;
+    for (const taskId of [planningTaskId, planningSecondTaskId]) {
+      for (const activity of activityNames) {
+        const currentCompletion = priorImplementationEvents.find((record) => {
+          const data = record.data && typeof record.data === "object" && !Array.isArray(record.data)
+            ? record.data as Record<string, unknown> : undefined;
+          return record.type === "construction.activity-attempt-completed" && data?.stage_attempt_id === implementationAttempt &&
+            data.task_id === taskId && data.activity === activity;
+        });
+        const completion = currentCompletion ?? (taskId === planningTaskId && activity === "code-generation"
+          ? priorImplementationEvents.find((record) => {
+            const data = record.data && typeof record.data === "object" && !Array.isArray(record.data)
+              ? record.data as Record<string, unknown> : undefined;
+            return record.type === "construction.activity-attempt-completed" &&
+              data?.stage_attempt_id === previousImplementationStart.attemptId && data.task_id === taskId && data.activity === activity;
+          })
+          : undefined);
+        if (!completion || !completion.data || typeof completion.data !== "object" || Array.isArray(completion.data)) {
+          throw new Error(`The completed ${activity} scope for task ${taskId} is missing.`);
+        }
+        const completionData = completion.data as Record<string, unknown>;
+        if (!Array.isArray(completionData.evidence_ids) || !Array.isArray(completionData.checkpoints)) {
+          throw new Error(`The completed ${activity} scope for task ${taskId} lacks evidence or checkpoints.`);
+        }
+        postCompletionRetainedAssessments.push({
+          task_id: taskId,
+          activity,
+          original_stage_attempt_id: completionData.stage_attempt_id,
+          original_activity_attempt_id: completionData.activity_attempt_id,
+          original_evidence_ids: completionData.evidence_ids,
+          applicable: true,
+          reason: `The completed ${activity} result remains applicable to the unchanged task graph.`,
+          checkpoints: completionData.checkpoints,
+        });
+      }
+    }
+    const postCompletionRetainedAssessment = stageDriver.assessRetainedScopes(auditFixture.unitId, postCompletionAttempt, {
+      assessments: postCompletionRetainedAssessments,
+    });
+    expect(postCompletionRetainedAssessment.exitCode, JSON.stringify(postCompletionRetainedAssessment.result)).toBe(0);
+    const postCompletionRetainedAssessmentId = String(postCompletionRetainedAssessment.result.data.id);
+    const postCompletionAdmissions = [] as Array<{ readonly taskId: string; readonly admissionId: string; readonly completionId: string; readonly integrationId: string }>;
+    for (const taskId of [planningTaskId, planningSecondTaskId]) {
+      const admission = harness.cli.run([
+        "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", taskId,
+        "--implementation-attempt", postCompletionAttempt, "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [] }),
+      ]);
+      expect(admission.exitCode, admission.stdout).toBe(0);
+      const admissionResult = JSON.parse(admission.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
+      expect(admissionResult.status).toBe("success");
+      expect(admissionResult.data.task_completion_event_id).toBeDefined();
+      postCompletionAdmissions.push({
+        taskId,
+        admissionId: String(admissionResult.data.admission_event_id),
+        completionId: String(admissionResult.data.task_completion_event_id),
+        integrationId: String(admissionResult.data.integration_event_id),
+      });
+    }
+    const postCompletionStageEvidence = async (check: string, executor: string): Promise<string> => {
+      const evidenceId = randomUUID();
+      const evidence = await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
+        mission_id: auditFixture.missionId,
+        unit_id: auditFixture.unitId,
+        stage: "implementation",
+        stage_attempt_id: postCompletionAttempt,
+        evidence_id: evidenceId,
+        artifact_bindings: planningMaterial.reviewedBindings,
+        checkpoints: planningMaterial.checkpoints,
+        inputs: planningMaterial.reviewedBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Current upstream material" })),
+        check,
+        executor,
+        result: { status: "passed", summary: `${check} passed for the post-completion return.` },
+        output_refs: [`assessment:${check}`],
+        conditions: [],
+      }, [postCompletionStartEventId]);
+      return String(evidence.data.evidence_id);
+    };
+    const postCompletionSelfReviewEvidenceId = await postCompletionStageEvidence("implementation-self-review", "Implementation owner");
+    const postCompletionHandoffEvidenceId = await postCompletionStageEvidence("implementation-review-handoff", "Implementation owner");
+    const postCompletionUnitCheckEvidenceId = await postCompletionStageEvidence("implementation-combined-result-check", "Independent verifier");
+    const postCompletionImplementationResult = new StageCompletionCliDriver(harness.cli).complete(
+      auditFixture.unitId,
+      postCompletionAttempt,
+      {
+        self_review_evidence_id: postCompletionSelfReviewEvidenceId,
+        handoff_evidence_id: postCompletionHandoffEvidenceId,
+        unit_check_evidence_ids: [postCompletionUnitCheckEvidenceId],
+        retained_scope_assessment_event_ids: [postCompletionRetainedAssessmentId],
+        additional_review: { requested: false },
+        blocking_findings: [],
+        handoff_assessment: {
+          status: "ready",
+          reason: "All retained task results remain applicable and the new unit assessment is complete.",
+          recipient: "unit-of-work-review",
+          artifacts: handoffArtifacts,
+        },
+      },
+      "implementation",
+    );
+    expect(postCompletionImplementationResult.exitCode, JSON.stringify(postCompletionImplementationResult.result)).toBe(0);
+    expect(postCompletionImplementationResult.result).toMatchObject({
+      status: "success",
+      data: { stage: "implementation", attempt_id: postCompletionAttempt },
+    });
+    const currentImplementationCompletionEventId = String(postCompletionImplementationResult.result.data.id);
+    expect(postCompletionAdmissions.map((item) => item.integrationId)).toEqual(expect.arrayContaining([
+      integrationEventId,
+      secondIntegrationEventId,
+    ]));
+    const downstreamImplementationCompletionEventId = currentImplementationCompletionEventId;
     const reviewStart = await appendStageStart(harness, [
       String(functionalCompletion.result.data.id),
       String(result.result.data.id),
       String(planningResult.result.data.id),
-      String(implementationResult.result.data.id),
+      downstreamImplementationCompletionEventId,
     ], "unit-of-work-review");
     const reviewEvidence = async (check: string): Promise<string> => {
       const evidenceId = randomUUID();
@@ -1553,7 +1830,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     const wholeUnitReviewEvidenceId = await reviewEvidence("unit-of-work-review");
     const reviewSelfEvidenceId = await reviewEvidence("unit-of-work-review-self-review");
     const reviewRequest = {
-      implementation_completion_event_id: String(implementationResult.result.data.id),
+      implementation_completion_event_id: downstreamImplementationCompletionEventId,
       reviewed_material_bindings: planningMaterial.reviewedBindings,
       final_checkpoints: planningMaterial.checkpoints,
       reviewer: "agent:reviewer",
@@ -1631,7 +1908,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       String(functionalCompletion.result.data.id),
       String(result.result.data.id),
       String(planningResult.result.data.id),
-      String(implementationResult.result.data.id),
+      downstreamImplementationCompletionEventId,
       String(reviewResult.result.data.id),
     ], "deliver");
     const deliveryOutcome = {
@@ -1736,7 +2013,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     const verificationBeforeOutcomeProjection = projectConstruction(collectHistoryFromSources(auditFixture.missionId, verificationBeforeOutcomeHistory, { completeness: "complete" }));
     expect(verificationBeforeOutcomeProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-completion-evidence");
     expect(verificationBeforeOutcomeProjection.units[0]?.blocked).toBe(true);
-  }, 240_000);
+  }, 600_000);
 
   it("rejects a Quality Requirements attempt without Functional Design authority in completion and replay", async () => {
     const harness = await createE2EHarness({ application: "native" });

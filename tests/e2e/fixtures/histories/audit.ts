@@ -112,8 +112,10 @@ export const createAuditHistory = async (
       revision_id: "a1000000-0000-4000-8000-00000000001a",
       orchestrator_decision: "Reopen Functional Design",
       reason: "The previous attempt needs correction.",
+      inputs: [{ reference: "review:design", purpose: "Feedback identifying the invalid result" }],
       stage: "functional-design",
       stage_attempt_id: auditFixture.priorStageAttemptId,
+      affected_scopes: [{ kind: "stage", stage: "functional-design", prior_attempt: "present", stage_attempt_id: auditFixture.priorStageAttemptId }],
     }, ["91000000-0000-4000-8000-000000000019"]),
     event("93000000-0000-4000-8000-000000000039", "construction.stage-attempt-ended-by-revision", {
       mission_id: auditFixture.missionId,

@@ -11,6 +11,8 @@ import {
   isDeliverCompletionRecord,
   isLegacyDeliverCompletionRecord,
   isDeliverOutcomeSelection,
+  isRevisionAffectedScopes,
+  type RevisionAffectedScope,
   type ActivityAttemptCompletedData,
   type ActivityAttemptId,
   type ConstructionActivity,
@@ -18,6 +20,7 @@ import {
   type ConstructionStage,
   type ConstructionStageActivityState,
   type ConstructionTaskState,
+  type RetainedScopeAssessment,
   type EffortLevel,
   type StageAttemptId,
   type TaskId,
@@ -1175,6 +1178,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           fact.event.data.stage_attempt_id !== attemptId || !hasDirectCause(assessmentFact, fact))) return false;
     const retainedFacts = retainedFactsById.filter((fact): fact is ConstructionHistoryFact => fact !== undefined);
     const retainedScopeKeys = new Set<string>();
+    const retainedScopeBindings = new Map<string, { readonly fact: ConstructionHistoryFact; readonly assessment: RetainedScopeAssessment }>();
     for (const fact of retainedFacts) {
       if (fact.event.type !== "construction.retained-scope-assessed" || !isRetainedScopeAssessedData(fact.event.data)) return false;
       for (const item of fact.event.data.assessments) {
@@ -1228,6 +1232,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           if (acceptances.length !== 1 || !hasDirectCause(fact, acceptances[0]!)) return false;
         }
         retainedScopeKeys.add(scopeKey);
+        retainedScopeBindings.set(scopeKey, { fact, assessment: item });
       }
     }
     const taskCompletions: ConstructionHistoryFact[] = [];
@@ -1248,12 +1253,20 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       const integrationId = String(taskCompletion.event.data.integration_event_id);
       const integration = factsById.get(integrationId);
       if (!integration || integration.event.type !== "construction.integration-accepted" ||
-          factUnitId(integration) !== unitId || integration.event.data.stage_attempt_id !== attemptId ||
-          integration.event.data.task_id !== taskId || integration.event.data.activity !== "code-integration" ||
-          !hasDirectCause(taskCompletion, integration) || !hasDirectCause(assessmentFact, integration)) return false;
+          factUnitId(integration) !== unitId || integration.event.data.task_id !== taskId ||
+          integration.event.data.activity !== "code-integration" || !hasDirectCause(taskCompletion, integration) ||
+          !hasDirectCause(assessmentFact, integration)) return false;
+      const retainedIntegration = retainedScopeBindings.get(JSON.stringify([taskId, "code-integration"]));
+      const integrationIsCurrent = integration.event.data.stage_attempt_id === attemptId;
+      const integrationIsRetained = retainedIntegration !== undefined &&
+        retainedIntegration.assessment.original_stage_attempt_id === integration.event.data.stage_attempt_id &&
+        retainedIntegration.assessment.original_activity_attempt_id === integration.event.data.activity_attempt_id &&
+        checkpointKey(retainedIntegration.assessment.checkpoints) === checkpointKey(integration.event.data.candidate_checkpoints) &&
+        hasDirectCause(taskCompletion, retainedIntegration.fact);
+      if (!integrationIsCurrent && !integrationIsRetained) return false;
       const prepared = factsById.get(String(integration.event.data.prepared_event_id));
       if (!prepared || prepared.event.type !== "construction.integration-prepared" ||
-          factUnitId(prepared) !== unitId || prepared.event.data.stage_attempt_id !== attemptId ||
+          factUnitId(prepared) !== unitId || prepared.event.data.stage_attempt_id !== integration.event.data.stage_attempt_id ||
           prepared.event.data.task_id !== taskId || !hasDirectCause(integration, prepared)) return false;
       const integrationCheckpointKey = checkpointKey(integration.event.data.candidate_checkpoints);
       if (integrationCheckpointKey === "[]") return false;
@@ -1755,11 +1768,34 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
             workerContexts.length !== validEvidence.length || (activity === "code-generation" && new Set(workerContexts).size !== 1))) evidenceValid = false;
       }
       if (activity === "code-validation") {
-        const generations = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+        const currentGenerations = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
           validCompletionEvents.has(candidate.event.id) && factUnitId(candidate) === factUnitId(fact) &&
           stringField(candidate.event.data, "task_id") === stringField(fact.event.data, "task_id") &&
           stringField(candidate.event.data, "stage_attempt_id") === stringField(fact.event.data, "stage_attempt_id") &&
           stringField(candidate.event.data, "activity") === "code-generation" && order.hasPath(candidate.event.id, fact.event.id));
+        const retainedGenerations = order.uniqueFacts.flatMap((retainedFact) => {
+          if (retainedFact.event.type !== "construction.retained-scope-assessed" ||
+              factUnitId(retainedFact) !== factUnitId(fact) ||
+              stringField(retainedFact.event.data, "stage_attempt_id") !== stringField(fact.event.data, "stage_attempt_id") ||
+              !isRetainedScopeAssessedData(retainedFact.event.data) || !order.hasPath(retainedFact.event.id, fact.event.id)) return [];
+          const assessments = retainedFact.event.data.assessments.filter((assessment) => assessment.applicable &&
+            assessment.task_id === stringField(fact.event.data, "task_id") && assessment.activity === "code-generation" &&
+            checkpointKey(assessment.checkpoints) === checkpointKey(fact.event.data.checkpoints));
+          return assessments.flatMap((assessment) => {
+            const completions = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+              validCompletionEvents.has(candidate.event.id) && factUnitId(candidate) === factUnitId(fact) &&
+              stringField(candidate.event.data, "task_id") === assessment.task_id &&
+              stringField(candidate.event.data, "stage_attempt_id") === assessment.original_stage_attempt_id &&
+              stringField(candidate.event.data, "activity") === "code-generation" &&
+              stringField(candidate.event.data, "activity_attempt_id") === assessment.original_activity_attempt_id &&
+              checkpointKey(candidate.event.data.checkpoints) === checkpointKey(assessment.checkpoints) &&
+              Array.isArray(candidate.event.data.evidence_ids) &&
+              sameStringSet(candidate.event.data.evidence_ids.map(String), assessment.original_evidence_ids.map(String)) &&
+              hasDirectCause(retainedFact, candidate));
+            return completions.length === 1 ? completions : [];
+          });
+        });
+        const generations = [...currentGenerations, ...retainedGenerations];
         const generationContexts = generations.flatMap((generation) =>
           (Array.isArray(generation.event.data.evidence_ids) ? generation.event.data.evidence_ids : []).flatMap((id) => {
             const matches = typeof id === "string" ? evidenceById.get(id) ?? [] : [];
@@ -1863,6 +1899,50 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     }
     validRevisionAuthorizations.add(revision.event.id);
   }
+  const revisionScopeMatches = (
+    authorization: ConstructionHistoryFact,
+    transition: ConstructionHistoryFact,
+  ): boolean => {
+    if (factUnitId(authorization) !== factUnitId(transition)) return false;
+    const rawScopes = authorization.event.data.affected_scopes;
+    if (rawScopes === undefined) {
+      if (authorization.event.event_version !== 1) return false;
+      return ["stage", "stage_attempt_id", "task_id", "activity", "activity_attempt_id"].every((field) =>
+        authorization.event.data[field] === transition.event.data[field],
+      );
+    }
+    if (!isRevisionAffectedScopes(rawScopes)) return false;
+    const scopes: readonly RevisionAffectedScope[] = rawScopes;
+    const data = transition.event.data;
+    if (transition.event.type === "construction.stage-attempt-ended-by-revision" ||
+        transition.event.type === "construction.stage-reopened") {
+      return scopes.some((scope) => scope.kind === "stage" && scope.prior_attempt === "present" &&
+        scope.stage === data.stage && scope.stage_attempt_id === data.stage_attempt_id);
+    }
+    if (transition.event.type === "construction.task-scope-ended-by-revision" ||
+        transition.event.type === "construction.task-scope-reopened") {
+      const expectedActivities = scopes.flatMap((scope) => scope.kind === "activity" && scope.task_id === data.task_id &&
+        scope.stage_attempt_id === data.stage_attempt_id ? [scope.activity] : []).sort();
+      const selectedActivities = Array.isArray(data.affected_activities)
+        ? data.affected_activities.filter((activity): activity is string => typeof activity === "string").sort()
+        : [];
+      return expectedActivities.length > 0 && JSON.stringify([...new Set(expectedActivities)]) === JSON.stringify([...new Set(selectedActivities)]) &&
+        selectedActivities.length === new Set(selectedActivities).size;
+    }
+    if (transition.event.type === "construction.activity-attempt-ended-by-revision") {
+      return scopes.some((scope) => scope.kind === "activity" && scope.prior_attempt === "present" &&
+        scope.task_id === data.task_id && scope.stage_attempt_id === data.stage_attempt_id &&
+        scope.activity === data.activity && scope.activity_attempt_id === data.activity_attempt_id);
+    }
+    if (transition.event.type === "construction.activity-reopened") {
+      return scopes.some((scope) => scope.kind === "activity" && scope.task_id === data.task_id &&
+        scope.stage_attempt_id === data.stage_attempt_id && scope.activity === data.activity &&
+        (scope.prior_attempt === "present"
+          ? scope.activity_attempt_id === data.activity_attempt_id
+          : data.activity_attempt_id === undefined));
+    }
+    return false;
+  };
   const revisionTransitionTypes = new Set([
     "construction.stage-attempt-ended-by-revision",
     "construction.stage-reopened",
@@ -1879,19 +1959,15 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const authorization = candidates.length === 1 ? candidates[0] : undefined;
     const matchingStageEndings = fact.event.type === "construction.stage-reopened" && authorization
       ? order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.stage-attempt-ended-by-revision" &&
-        factUnitId(candidate) === factUnitId(fact) && candidate.event.data.stage === fact.event.data.stage &&
-        candidate.event.data.revision_id === revisionId && candidate.event.data.stage_attempt_id === fact.event.data.stage_attempt_id &&
-        candidate.event.data.stage_attempt_id === authorization.event.data.stage_attempt_id &&
+        candidate.event.data.revision_id === revisionId && candidate.event.data.stage === fact.event.data.stage &&
+        candidate.event.data.stage_attempt_id === fact.event.data.stage_attempt_id && revisionScopeMatches(authorization, candidate) &&
         hasDirectCause(candidate, authorization) && hasDirectCause(fact, candidate))
       : [];
     const stageReopenBound = fact.event.type !== "construction.stage-reopened" ||
       (typeof fact.event.data.stage_attempt_id === "string" &&
         typeof authorization?.event.data.stage_attempt_id === "string" && matchingStageEndings.length === 1);
     const scopeMatches = authorization !== undefined && validRevisionAuthorizations.has(authorization.event.id) &&
-      factUnitId(authorization) === factUnitId(fact) && stageReopenBound &&
-      ["stage", "stage_attempt_id", "task_id", "activity", "activity_attempt_id"].every((field) =>
-        authorization.event.data[field] === fact.event.data[field],
-      ) && hasDirectCause(fact, authorization);
+      stageReopenBound && revisionScopeMatches(authorization, fact) && hasDirectCause(fact, authorization);
     if (scopeMatches) {
       validRevisionTransitions.add(fact.event.id);
       continue;
@@ -1935,9 +2011,8 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     const taskId = stringField(start.event.data, "task_id");
     const stageAttemptId = stringField(start.event.data, "stage_attempt_id");
     const unitId = factUnitId(start);
-    let previousActivity: string | undefined;
-    if (activity === "code-validation") previousActivity = "code-generation";
-    if (activity === "code-integration") previousActivity = "code-validation";
+    const previousActivity = activity === "code-validation" ? "code-generation" :
+      activity === "code-integration" ? "code-validation" : undefined;
     if (!activity || !taskId || !stageAttemptId || !unitId) return false;
     if (!previousActivity) return activity === "code-generation";
     const initialStart = start.event.type === "construction.activity-attempt-started"
@@ -1945,19 +2020,39 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       : order.uniqueFacts.find((candidate) => candidate.event.type === "construction.activity-attempt-started" &&
         sameActivityScope(candidate, start) && order.hasPath(candidate.event.id, start.event.id));
     if (!initialStart) return false;
-    const previous = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+    const currentRoutes = order.uniqueFacts.flatMap((candidate) =>
+      candidate.event.type === "construction.activity-attempt-completed" &&
       validCompletionEvents.has(candidate.event.id) && activityCompletionCurrentAt(candidate, boundary) &&
       factUnitId(candidate) === unitId && stringField(candidate.event.data, "task_id") === taskId &&
       stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
       stringField(candidate.event.data, "activity") === previousActivity && hasDirectCause(initialStart, candidate) &&
-      checkpointKey(candidate.event.data.checkpoints) === checkpointKey(start.event.data.checkpoints));
-    if (previous.length !== 1) return false;
-    if (activity !== "code-integration") return true;
-    return order.uniqueFacts.some((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
-      validCompletionEvents.has(candidate.event.id) && activityCompletionCurrentAt(candidate, boundary) &&
-      factUnitId(candidate) === unitId && stringField(candidate.event.data, "task_id") === taskId &&
-      stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
-      stringField(candidate.event.data, "activity") === "code-generation" && order.hasPath(candidate.event.id, previous[0]!.event.id));
+      checkpointKey(candidate.event.data.checkpoints) === checkpointKey(start.event.data.checkpoints)
+        ? [{ completion: candidate, routeFact: candidate }]
+        : [],
+    );
+    const retainedRoutes = order.uniqueFacts.flatMap((retainedFact) => {
+      if (retainedFact.event.type !== "construction.retained-scope-assessed" || factUnitId(retainedFact) !== unitId ||
+          stringField(retainedFact.event.data, "stage_attempt_id") !== stageAttemptId || !hasDirectCause(initialStart, retainedFact) ||
+          !isRetainedScopeAssessedData(retainedFact.event.data)) return [];
+      const assessments = retainedFact.event.data.assessments.filter((assessment) => assessment.applicable &&
+        assessment.task_id === taskId && assessment.activity === previousActivity &&
+        checkpointKey(assessment.checkpoints) === checkpointKey(start.event.data.checkpoints));
+      return assessments.flatMap((assessment) => {
+        const completions = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+          validCompletionEvents.has(candidate.event.id) && factUnitId(candidate) === unitId &&
+          stringField(candidate.event.data, "task_id") === taskId &&
+          stringField(candidate.event.data, "stage_attempt_id") === assessment.original_stage_attempt_id &&
+          stringField(candidate.event.data, "activity") === previousActivity &&
+          stringField(candidate.event.data, "activity_attempt_id") === assessment.original_activity_attempt_id &&
+          checkpointKey(candidate.event.data.checkpoints) === checkpointKey(assessment.checkpoints) &&
+          Array.isArray(candidate.event.data.evidence_ids) &&
+          sameStringSet(candidate.event.data.evidence_ids.map(String), assessment.original_evidence_ids.map(String)) &&
+          hasDirectCause(retainedFact, candidate));
+        return completions.length === 1 ? [{ completion: completions[0]!, routeFact: retainedFact }] : [];
+      });
+    });
+    const routes = [...currentRoutes, ...retainedRoutes].filter((route) => hasDirectCause(initialStart, route.routeFact));
+    return routes.length === 1;
   };
   for (const fact of order.uniqueFacts) {
     if (!validRevisionTransitions.has(fact.event.id) ||
@@ -2399,7 +2494,18 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       !priorIntegrations.some((other) => other.event.id !== candidate.event.id &&
         order.hasPath(candidate.event.id, other.event.id) && order.hasPath(other.event.id, fact.event.id)),
     );
-    const latestIntegration = latestPriorIntegrations.length === 1 ? latestPriorIntegrations[0] : undefined;
+    const latestCandidateKeys = latestPriorIntegrations.map((candidate) =>
+      candidate.event.type === "construction.integration-accepted"
+        ? checkpointKey(candidate.event.data.candidate_checkpoints)
+        : undefined,
+    );
+    const latestCandidateSetValid = latestPriorIntegrations.length > 0 &&
+      latestCandidateKeys.every((key) => key !== undefined && key === latestCandidateKeys[0]) &&
+      latestPriorIntegrations.every((candidate) => hasDirectCause(fact, candidate));
+    const latestIntegration = latestPriorIntegrations.length > 0 &&
+      (latestPriorIntegrations.length === 1 || latestCandidateSetValid)
+      ? latestPriorIntegrations[0]
+      : undefined;
     let expectedAdmissionBaseline: unknown;
     if (latestIntegration?.event.type === "construction.integration-accepted") {
       expectedAdmissionBaseline = latestIntegration.event.data.candidate_checkpoints;
@@ -2407,9 +2513,9 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
       expectedAdmissionBaseline = baseline.event.data.review_baseline;
     }
     const admissionBaselineValid = expectedAdmissionBaseline !== undefined &&
-      (priorIntegrations.length === 0 || latestPriorIntegrations.length === 1) &&
+      (priorIntegrations.length === 0 || latestCandidateSetValid) &&
       checkpointKey(data.admission_baseline) === checkpointKey(expectedAdmissionBaseline) &&
-      (latestIntegration === undefined || hasDirectCause(fact, latestIntegration));
+      (latestIntegration === undefined || latestPriorIntegrations.every((candidate) => hasDirectCause(fact, candidate)));
     if (!baseline) related.push(...baselines);
     if (!admissionBaselineValid) related.push(...latestPriorIntegrations);
     const predecessorProvenance = Array.isArray(data.predecessor_provenance) ? data.predecessor_provenance : [];
@@ -2633,14 +2739,17 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     );
     const admissionCauses = admissions.filter((candidate) => hasDirectCause(fact, candidate));
     const admitted = admissionCauses.some((candidate) => taskAdmissionDependenciesCurrentAt(candidate, fact));
-    const retainedAssessments = order.uniqueFacts.filter((candidate) => {
+    const retainedAssessments = order.uniqueFacts.flatMap((candidate) => {
       if (candidate.event.type !== "construction.retained-scope-assessed" || factUnitId(candidate) !== unitId ||
-          stringField(candidate.event.data, "stage_attempt_id") !== stageAttemptId) return false;
-      const assessments = Array.isArray(candidate.event.data.assessments) ? candidate.event.data.assessments : [];
-      return assessments.some((assessment) => isRecord(assessment) && assessment.applicable === true &&
-        assessment.task_id === taskId && (assessment.activity === undefined || assessment.activity === activity));
+          stringField(candidate.event.data, "stage_attempt_id") !== stageAttemptId || !isRetainedScopeAssessedData(candidate.event.data)) return [];
+      return candidate.event.data.assessments.some((assessment) => assessment.applicable && assessment.task_id === taskId)
+        ? [candidate]
+        : [];
     });
-    const retained = retainedAssessments.some((candidate) => hasDirectCause(fact, candidate));
+    const retained = retainedAssessments.some((candidate) => candidate.event.type === "construction.retained-scope-assessed" &&
+      isRetainedScopeAssessedData(candidate.event.data) &&
+      candidate.event.data.assessments.some((assessment) => assessment.applicable && assessment.task_id === taskId && assessment.activity === activity) &&
+      hasDirectCause(fact, candidate));
     if (admitted || (admissionCauses.length === 0 && retained)) {
       const requiredPreviousActivity = activity === "code-validation"
         ? "code-generation"
@@ -2656,14 +2765,10 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           hasDirectCause(fact, candidate))
         : [];
       const previousRetained = requiredPreviousActivity
-        ? retainedAssessments.filter((candidate) => {
-          const assessments = candidate.event.type === "construction.retained-scope-assessed" && Array.isArray(candidate.event.data.assessments)
-            ? candidate.event.data.assessments
-            : [];
-          return assessments.some((assessment) => isRecord(assessment) && assessment.applicable === true &&
-            assessment.task_id === taskId && assessment.activity === requiredPreviousActivity &&
-            checkpointKey(assessment.checkpoints) === checkpointKey(data.checkpoints));
-        })
+        ? retainedAssessments.filter((candidate) => candidate.event.type === "construction.retained-scope-assessed" &&
+          isRetainedScopeAssessedData(candidate.event.data) && candidate.event.data.assessments.some((assessment) =>
+            assessment.applicable && assessment.task_id === taskId && assessment.activity === requiredPreviousActivity &&
+            checkpointKey(assessment.checkpoints) === checkpointKey(data.checkpoints)))
         : [];
       const generationCurrent = activity !== "code-integration" || order.uniqueFacts.some((candidate) =>
         candidate.event.type === "construction.activity-attempt-completed" && validCompletionEvents.has(candidate.event.id) &&
@@ -2672,9 +2777,16 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
         stringField(candidate.event.data, "stage_attempt_id") === stageAttemptId &&
         stringField(candidate.event.data, "activity") === "code-generation" &&
         previousCompletions.some((previous) => order.hasPath(candidate.event.id, previous.event.id)));
+      const generationRetained = activity !== "code-integration" || retainedAssessments.some((candidate) =>
+        candidate.event.type === "construction.retained-scope-assessed" &&
+        isRetainedScopeAssessedData(candidate.event.data) &&
+        candidate.event.data.assessments.some((assessment) => assessment.applicable && assessment.task_id === taskId &&
+          assessment.activity === "code-generation" && checkpointKey(assessment.checkpoints) === checkpointKey(data.checkpoints)) &&
+        hasDirectCause(fact, candidate));
+      const generationAvailable = generationCurrent || generationRetained;
       const routeValid = requiredPreviousActivity === undefined ||
-        (previousCompletions.length === 1 && checkpointKey(previousCompletions[0]!.event.data.checkpoints) === checkpointKey(data.checkpoints) && generationCurrent) ||
-        (previousRetained.length === 1 && hasDirectCause(fact, previousRetained[0]!) && generationCurrent);
+        (previousCompletions.length === 1 && checkpointKey(previousCompletions[0]!.event.data.checkpoints) === checkpointKey(data.checkpoints) && generationAvailable) ||
+        (previousRetained.length === 1 && hasDirectCause(fact, previousRetained[0]!) && generationAvailable);
       if (routeValid) {
         validActivityStarts.add(fact.event.id);
         continue;
@@ -2807,29 +2919,63 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
           completions.push(fact);
           const integrationId = stringField(data, "integration_event_id");
           const accepted = integrationId ? factsById.get(integrationId) : undefined;
+          const currentStageAttemptId = stringField(data, "stage_attempt_id");
           const matchingAcceptance = accepted !== undefined && validIntegrationAcceptances.has(accepted.event.id) &&
             accepted.event.type === "construction.integration-accepted" &&
             stringField(accepted.event.data, "unit_id") === unitId &&
             stringField(accepted.event.data, "task_id") === taskId &&
-            stringField(accepted.event.data, "stage_attempt_id") === stringField(data, "stage_attempt_id") &&
+            stringField(accepted.event.data, "stage_attempt_id") === currentStageAttemptId &&
             fact.event.caused_by.includes(accepted.event.id) && order.hasPath(accepted.event.id, fact.event.id);
           const integrationCompletions = accepted && accepted.event.type === "construction.integration-accepted"
             ? order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
               validCompletionEvents.has(candidate.event.id) && sameActivityScope(candidate, accepted) &&
-              stringField(candidate.event.data, "activity") === "code-integration" && hasDirectCause(fact, candidate) &&
-              hasDirectCause(candidate, accepted) &&
+              stringField(candidate.event.data, "activity") === "code-integration" &&
+              hasDirectCause(fact, candidate) && hasDirectCause(candidate, accepted) &&
               checkpointKey(candidate.event.data.checkpoints) === checkpointKey(accepted.event.data.candidate_checkpoints))
             : [];
           const activityCompletion = integrationCompletions.length === 1 ? integrationCompletions[0] : undefined;
+          const retainedIntegrationMatches = accepted?.event.type === "construction.integration-accepted"
+            ? orderedUnitFacts.flatMap((candidate) => {
+              if (candidate.event.type !== "construction.retained-scope-assessed" ||
+                  stringField(candidate.event.data, "stage_attempt_id") !== currentStageAttemptId ||
+                  !isRetainedScopeAssessedData(candidate.event.data)) return [];
+              const assessments = candidate.event.data.assessments.filter((item) => item.applicable &&
+                item.task_id === taskId && item.activity === "code-integration" &&
+                item.original_stage_attempt_id === accepted.event.data.stage_attempt_id &&
+                item.original_activity_attempt_id === accepted.event.data.activity_attempt_id &&
+                checkpointKey(item.checkpoints) === checkpointKey(accepted.event.data.candidate_checkpoints));
+              return assessments.map((assessment) => ({ fact: candidate, assessment }));
+            }).filter(({ fact: retainedFact, assessment }) => {
+              const originalCompletions = order.uniqueFacts.filter((candidate) => candidate.event.type === "construction.activity-attempt-completed" &&
+                validCompletionEvents.has(candidate.event.id) && sameActivityScope(candidate, accepted) &&
+                stringField(candidate.event.data, "activity") === "code-integration" &&
+                Array.isArray(candidate.event.data.evidence_ids) &&
+                sameStringSet(candidate.event.data.evidence_ids.map(String), assessment.original_evidence_ids.map(String)) &&
+                checkpointKey(candidate.event.data.checkpoints) === checkpointKey(assessment.checkpoints) &&
+                hasDirectCause(candidate, accepted));
+              const parentStarts = orderedUnitFacts.filter((candidate) =>
+                ["construction.stage-attempt-started", "construction.stage-resumed"].includes(candidate.event.type) &&
+                candidate.event.data.stage === "implementation" && candidate.event.data.stage_attempt_id === currentStageAttemptId &&
+                hasDirectCause(retainedFact, candidate));
+              return originalCompletions.length === 1 && parentStarts.length === 1 &&
+                retainedFact.event.caused_by.includes(accepted.event.id) &&
+                fact.event.caused_by.includes(retainedFact.event.id) &&
+                fact.event.caused_by.includes(originalCompletions[0]!.event.id) &&
+                fact.event.caused_by.includes(parentStarts[0]!.event.id);
+            })
+            : [];
+          const retainedAcceptance = retainedIntegrationMatches.length === 1 ? retainedIntegrationMatches[0] : undefined;
           const admittedContract = admission?.event.type === "construction.task-admitted" && isRecord(admission.event.data.task_contract)
             ? admission.event.data.task_contract : undefined;
           const conditionsMatch = admittedContract && isStringArray(admittedContract.acceptance_criteria) &&
             isStringArray(data.conditions) && sameStringMultiset(data.conditions, admittedContract.acceptance_criteria);
           const admissionCaused = admission !== undefined && hasDirectCause(fact, admission);
-          const staleIntegration = matchingAcceptance && !currentIntegrationAcceptances.has(accepted.event.id);
-          if (staleIntegration) continue;
-          if (matchingAcceptance && currentIntegrationAcceptances.has(accepted.event.id) && activityCompletion && conditionsMatch && admissionCaused &&
-              taskStageAttemptId === stringField(data, "stage_attempt_id")) {
+          const staleIntegration = accepted !== undefined && accepted.event.type === "construction.integration-accepted" &&
+            validIntegrationAcceptances.has(accepted.event.id) && !currentIntegrationAcceptances.has(accepted.event.id);
+          if (staleIntegration && !retainedAcceptance) continue;
+          if ((matchingAcceptance && currentIntegrationAcceptances.has(accepted!.event.id) && activityCompletion ||
+              retainedAcceptance && activityCompletion) && conditionsMatch && admissionCaused &&
+              taskStageAttemptId === currentStageAttemptId) {
             taskState = "complete";
             completion = fact;
           } else if (taskStageAttemptId === stringField(data, "stage_attempt_id")) {
