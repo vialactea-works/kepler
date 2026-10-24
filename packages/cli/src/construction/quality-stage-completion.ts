@@ -7,6 +7,7 @@ import { validateStageStartAuthority } from "./stage-authority.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { readFunctionalDesignMaterial } from "./stage-completion.js";
+import { runWithConstructionRevisionFence } from "./unit-control.js";
 import { readStageArtifactMaterial, type StageArtifactMaterial } from "./stage-artifact-material.js";
 import {
   CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
@@ -243,7 +244,7 @@ export class QualityRequirementsStageCompletion {
       else if (loaded.root !== firstRead.root || loaded.missionId !== firstRead.missionId) {
         result = failure("stage_scope_changed", "Unit membership changed while acquiring stage coordination.", { unit_id: selectors.unit });
       } else {
-        result = await this.completeLoaded(loaded, selectors.attempt, validated.request);
+        result = await this.completeLoaded(loaded, selectors.attempt, validated.request, project);
       }
     } catch (error) {
       result = failure("stage_completion_failed", "Kepler could not validate Quality Requirements completion safely.", {
@@ -265,6 +266,7 @@ export class QualityRequirementsStageCompletion {
     loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
     stageAttemptId: string,
     request: QualityRequirementsCompletionRequest,
+    project?: string,
   ): Promise<QualityStageCompletionResult> {
     if (loaded.unit.workflow !== "standard") return failure("unsupported_workflow", "Quality Requirements completion requires the recorded Standard workflow binding.", { workflow: loaded.unit.workflow });
     if (loaded.unit.blocked) return failure("stage_history_blocked", "Construction history or projection issues prevent safe stage completion.", {
@@ -420,26 +422,40 @@ export class QualityRequirementsStageCompletion {
         issues: validation.status === "invalid" ? validation.issues : [validation.reason],
       });
     }
-    try {
-      await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
-    } catch (error) {
-      return failure("stage_completion_append_failed", "Kepler could not durably append the Quality Requirements completion event.", {
-        journal_id: journalId,
-        message: error instanceof Error ? error.message : String(error),
-      }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
-    }
-    return {
-      kind: "success",
-      data: {
-        id: validation.event.id,
-        journal_id: validation.event.journal_id,
-        unit_id: loaded.unit.unitId,
-        stage: "quality-requirements",
-        attempt_id: stageAttemptId,
-        evidence_ids: qualityRequirementsEvidenceIds(request.assessments),
-        approval_event_id: materialFacts.facts.approval.event.id,
+    const guarded = await runWithConstructionRevisionFence({
+      workspace: this.runtime.workspace,
+      commonDirectory: currentCommonDirectory,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      expectedRoot: loaded.root,
+      project,
+      readUnit: (unitId, selectedProject) => this.contexts.readUnit(unitId, selectedProject),
+      target: { unitId: loaded.unit.unitId, stage: "quality-requirements", stageAttemptId },
+      failure,
+      operation: async (latest): Promise<QualityStageCompletionResult> => {
+        const currentStage = latest.unit.stages.find((candidate) => candidate.stage === "quality-requirements");
+        if (latest.unit.blocked || currentStage?.state !== "running" || currentStage.currentAttemptId !== stageAttemptId) {
+          return failure("stage_attempt_not_current", "The selected Quality Requirements attempt changed before completion could be appended.", {
+            selected_attempt_id: stageAttemptId, current_attempt_id: currentStage?.currentAttemptId, state: currentStage?.state,
+          });
+        }
+        try {
+          await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
+        } catch (error) {
+          return failure("stage_completion_append_failed", "Kepler could not durably append the Quality Requirements completion event.", {
+            journal_id: journalId, message: error instanceof Error ? error.message : String(error),
+          }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
+        }
+        return { kind: "success", data: {
+          id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId,
+          stage: "quality-requirements", attempt_id: stageAttemptId,
+          evidence_ids: qualityRequirementsEvidenceIds(request.assessments),
+          approval_event_id: materialFacts.facts.approval.event.id,
+        } };
       },
-    };
+    });
+    if (guarded.kind === "failed") return failure(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 

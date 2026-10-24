@@ -3,6 +3,7 @@ import {
   CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION,
   CONSTRUCTION_EVENT_REQUIRED_FIELDS,
   CONSTRUCTION_EVENT_TYPES,
+  CONSTRUCTION_REVISION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
   CONSTRUCTION_STAGES,
   CONSTRUCTION_STAGE_ACTIVITY_STATES,
@@ -120,7 +121,7 @@ const payload = (type: (typeof CONSTRUCTION_EVENT_TYPES)[number]): Record<string
   if (type === "construction.integration-accepted") {
     return { ...activity, activity: "code-integration", prepared_event_id: "prepared-event", candidate_checkpoints: [], repository_results: [], authority_event_ids: [] };
   }
-  if (type === "construction.revision-authorized") return { ...base, revision_id: identities.revision, orchestrator_decision: "Reopen implementation", reason: "Finding affects current work", inputs: [{ reference: "fixture:revision", purpose: "Supporting revision input" }], stage: "implementation" };
+  if (type === "construction.revision-authorized") return { ...base, revision_id: identities.revision, orchestrator_decision: "Reopen implementation", reason: "Finding affects current work", inputs: [{ reference: "fixture:revision", purpose: "Supporting revision input" }], affected_scopes: [{ kind: "stage", stage: "implementation", prior_attempt: "none" }], stage: "implementation" };
   if (type === "construction.retained-scope-assessed") return {
     ...stage,
     assessments: [{
@@ -157,7 +158,9 @@ const payload = (type: (typeof CONSTRUCTION_EVENT_TYPES)[number]): Record<string
   throw new Error(`No payload fixture for ${type}`);
 };
 
-const envelope = (type: string, data: Record<string, unknown>, eventVersion = type === "construction.stage-attempt-completed" ? 2 : 1) => ({
+const envelope = (type: string, data: Record<string, unknown>, eventVersion = type === "construction.stage-attempt-completed"
+  ? 2
+  : type === "construction.revision-authorized" ? CONSTRUCTION_REVISION_EVENT_VERSION : 1) => ({
   id: `event-${type}`,
   phase: CONSTRUCTION_PHASE,
   type,
@@ -209,6 +212,35 @@ describe("Construction event contracts", () => {
       const result = validateConstructionEvent(envelope(type, payload(type)));
       expect(result.status, type).toBe("valid");
     }
+  });
+
+  it("keeps legacy revision events readable and requires derived scopes for new revisions", () => {
+    const legacy = payload("construction.revision-authorized");
+    delete legacy.affected_scopes;
+    expect(validateConstructionEvent(envelope("construction.revision-authorized", legacy, 1)).status).toBe("valid");
+    expect(validateConstructionEvent(envelope("construction.revision-authorized", legacy, CONSTRUCTION_REVISION_EVENT_VERSION)).status).toBe("invalid");
+  });
+
+  it("requires an explicit prior-attempt disposition for each revision scope", () => {
+    const authorization = payload("construction.revision-authorized");
+    const valid = validateConstructionEvent(envelope("construction.revision-authorized", {
+      ...authorization,
+      affected_scopes: [
+        { kind: "stage", stage: "implementation", prior_attempt: "present", stage_attempt_id: identities.stageAttempt },
+        { kind: "stage", stage: "unit-of-work-review", prior_attempt: "none" },
+        { kind: "activity", task_id: identities.task, stage_attempt_id: identities.stageAttempt,
+          activity: "code-validation", prior_attempt: "none" },
+      ],
+    }));
+    expect(valid.status).toBe("valid");
+    expect(validateConstructionEvent(envelope("construction.revision-authorized", {
+      ...authorization,
+      affected_scopes: [{ kind: "stage", stage: "unit-of-work-review" }],
+    })).status).toBe("invalid");
+    expect(validateConstructionEvent(envelope("construction.revision-authorized", {
+      ...authorization,
+      affected_scopes: [{ kind: "stage", stage: "unit-of-work-review", prior_attempt: "none", stage_attempt_id: identities.stageAttempt }],
+    })).status).toBe("invalid");
   });
 
   it("validates typed whole-unit Review and Deliver completion records", () => {
@@ -433,10 +465,12 @@ describe("Construction event contracts", () => {
     expect(result.event.data.inputs).toEqual([{ reference: "opaque: source material ", purpose: "Reviewed input" }]);
   });
 
-  it("requires retained-scope events to contain distinct, fully identified applicable scopes", () => {
+  it("requires retained-scope events to contain distinct, fully identified applicability outcomes", () => {
     const valid = payload("construction.retained-scope-assessed");
     const assessments = valid.assessments as Record<string, unknown>[];
     expect(validateConstructionEvent(envelope("construction.retained-scope-assessed", valid)).status).toBe("valid");
+    const notApplicable = { ...valid, assessments: [{ ...assessments[0], applicable: false, reason: "The necessary input changed." }] };
+    expect(validateConstructionEvent(envelope("construction.retained-scope-assessed", notApplicable)).status).toBe("valid");
 
     const empty = { ...valid, assessments: [] };
     expect(validateConstructionEvent(envelope("construction.retained-scope-assessed", empty)).status).toBe("invalid");

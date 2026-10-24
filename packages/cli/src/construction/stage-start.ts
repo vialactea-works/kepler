@@ -4,6 +4,8 @@ import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
+import { pendingRevisionBarrierFor } from "./revision-state.js";
+import { runWithConstructionUnitControl } from "./unit-control.js";
 import { parseAttachment, type LocalWorkspaceAttachment, type MissionWorkspaceRuntime } from "./mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
 import {
@@ -499,7 +501,7 @@ export class StageStart {
       } else if (loaded.root !== firstRead.root || loaded.missionId !== firstRead.missionId) {
         result = failure("stage_scope_changed", "Unit membership changed while acquiring stage coordination.", { unit_id: selectors.unit });
       } else {
-        result = await this.startLoaded(loaded, stage, parsed.request, commonDir);
+        result = await this.startLoaded(loaded, stage, parsed.request, commonDir, project);
       }
     } catch (error) {
       result = failure("stage_start_failed", "Kepler could not validate the selected Standard stage start safely.", {
@@ -522,6 +524,7 @@ export class StageStart {
     stage: ConstructionStage,
     request: StageStartRequest,
     commonDir: string,
+    project?: string,
   ): Promise<StageStartResult> {
     if (loaded.unit.workflow !== "standard") return failure("unsupported_workflow", "Stage start requires the recorded Standard workflow binding.", { workflow: loaded.unit.workflow });
     if (loaded.unit.blocked) return failure("stage_history_blocked", "Construction history or projection issues prevent a safe stage transition.", {
@@ -546,10 +549,6 @@ export class StageStart {
     }
     if (!validIdentities(eventId, journalId, stageAttemptId, existingIdentities(loaded))) {
       return failure("stage_start_identity_conflict", "The allocated stage-start identities are invalid, reused, or already present in history.");
-    }
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
-    if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") {
-      return failure("stage_start_journal_identity_conflict", "The allocated stage journal identity already has a filesystem entry.", { journal_id: journalId });
     }
     const candidate = {
       id: eventId,
@@ -577,28 +576,63 @@ export class StageStart {
         issues: validation.status === "invalid" ? validation.issues : [validation.reason],
       });
     }
-    try {
-      await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
-    } catch (error) {
-      return failure("stage_start_append_failed", "Kepler could not durably append the stage-start event.", {
-        journal_id: journalId,
-        message: error instanceof Error ? error.message : String(error),
-      }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
-    }
-    return {
-      kind: "success",
-      data: {
-        id: validation.event.id,
-        journal_id: validation.event.journal_id,
-        unit_id: loaded.unit.unitId,
-        stage,
-        attempt_id: stageAttemptId,
-        inputs: request.inputs,
-        checkpoints: captured.checkpoints,
-        authority_event_ids: authority.eventIds,
-        worker_dispatched: false,
+    const guarded = await runWithConstructionUnitControl(
+      this.runtime.workspace,
+      commonDir,
+      loaded.missionId,
+      loaded.unit.unitId,
+      async (): Promise<StageStartResult> => {
+        const latest = await this.contexts.readUnit(loaded.unit.unitId, project);
+        if (latest.kind === "failed") return propagateReadFailure(latest);
+        if (latest.root !== loaded.root || latest.missionId !== loaded.missionId || latest.unit.blocked) {
+          return failure("stage_scope_changed", "Unit history changed or became blocked before the stage-start event could be appended.", { unit_id: loaded.unit.unitId });
+        }
+        const barrier = pendingRevisionBarrierFor(latest, { unitId: loaded.unit.unitId, stage });
+        if (barrier) return failure("revision_barrier_pending", "The selected stage is behind an authorized revision barrier.", {
+          revision_id: barrier.revisionId,
+          authorization_event_id: barrier.authorizationEventId,
+          affected_scopes: barrier.affectedScopes,
+        }, "Stop and reconcile affected workers, apply the authorized cascade, then resume stage execution.");
+        const current = currentAuthority(latest, stage);
+        if (current.kind === "failed" || current.eventIds.join("\0") !== authority.eventIds.join("\0")) {
+          return failure("stage_authority_changed", "Stage authority changed before the stage-start event could be appended.", {
+            expected_authority_event_ids: authority.eventIds,
+            current_authority_event_ids: current.kind === "failed" ? current.details.event_ids : current.eventIds,
+          });
+        }
+        if (!validIdentities(eventId, journalId, stageAttemptId, existingIdentities(latest))) {
+          return failure("stage_start_identity_conflict", "The allocated stage-start identities are invalid, reused, or already present in current history.");
+        }
+        const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+        if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") {
+          return failure("stage_start_journal_identity_conflict", "The allocated stage journal identity already has a filesystem entry.", { journal_id: journalId });
+        }
+        try {
+          await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
+        } catch (error) {
+          return failure("stage_start_append_failed", "Kepler could not durably append the stage-start event.", {
+            journal_id: journalId,
+            message: error instanceof Error ? error.message : String(error),
+          }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
+        }
+        return {
+          kind: "success",
+          data: {
+            id: validation.event.id,
+            journal_id: validation.event.journal_id,
+            unit_id: loaded.unit.unitId,
+            stage,
+            attempt_id: stageAttemptId,
+            inputs: request.inputs,
+            checkpoints: captured.checkpoints,
+            authority_event_ids: authority.eventIds,
+            worker_dispatched: false,
+          },
+        };
       },
-    };
+    );
+    if (guarded.kind === "failed") return failure(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 

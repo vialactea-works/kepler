@@ -29,9 +29,16 @@ describe("Implementation retained-scope assessment request", () => {
     expect(result.kind).toBe("invalid");
   });
 
-  it("rejects unproven or non-applicable assessments", () => {
+  it("accepts a negative applicability finding so dependent work can be reopened", () => {
+    const result = validateImplementationRetainedScopeAssessmentRequest({
+      assessments: [{ ...assessment("code-generation"), applicable: false, reason: "The required input changed." }],
+    });
+
+    expect(result.kind).toBe("valid");
+  });
+
+  it("rejects unproven assessments", () => {
     const invalid = [
-      { ...assessment("code-generation"), applicable: false },
       { ...assessment("code-generation"), original_evidence_ids: [] },
       { ...assessment("code-generation"), checkpoints: [] },
       { ...assessment("not-an-activity") },

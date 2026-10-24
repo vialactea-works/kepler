@@ -16,6 +16,7 @@ import { captureStageCheckpoints } from "./stage-start.js";
 import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
 import { validateStageStartAuthority } from "./stage-authority.js";
 import type { ConstructionHistoryFact } from "./projection.js";
+import { runWithConstructionRevisionFence } from "./unit-control.js";
 
 export interface UnitOfWorkReviewCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
@@ -89,7 +90,7 @@ export class UnitOfWorkReviewStageCompletion {
       const loaded = await this.contexts.readUnit(selectors.unit, project);
       if (loaded.kind === "failed") result = propagateReadFailure(loaded);
       else if (loaded.root !== first.root || loaded.missionId !== first.missionId) result = fail("stage_scope_changed", "Unit membership changed while acquiring stage coordination.");
-      else result = await this.completeLoaded(loaded, selectors.attempt, rawRequest);
+      else result = await this.completeLoaded(loaded, selectors.attempt, rawRequest, project);
     } catch (error) {
       result = fail("stage_completion_failed", "Kepler could not validate Unit of Work Review completion safely.", { message: error instanceof Error ? error.message : String(error) });
     }
@@ -98,7 +99,7 @@ export class UnitOfWorkReviewStageCompletion {
     return result;
   }
 
-  private async completeLoaded(loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>, attemptId: string, request: UnitOfWorkReviewCompletionRecord): Promise<UnitOfWorkReviewCompletionResult> {
+  private async completeLoaded(loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>, attemptId: string, request: UnitOfWorkReviewCompletionRecord, project?: string): Promise<UnitOfWorkReviewCompletionResult> {
     if (loaded.unit.workflow !== "standard") return fail("unsupported_workflow", "Unit of Work Review completion requires the recorded Standard workflow binding.");
     if (loaded.unit.blocked) return fail("stage_history_blocked", "Construction history or projection issues prevent safe Review completion.", { history_issues: loaded.unit.historyIssues, projection_issues: loaded.unit.projectionIssues });
     const stages = loaded.unit.stages;
@@ -265,9 +266,30 @@ export class UnitOfWorkReviewStageCompletion {
     };
     const validation = validateConstructionEvent(candidate);
     if (validation.status !== "valid") return fail("stage_completion_event_invalid", "The typed Unit of Work Review completion event failed Construction validation.", { issues: validation.status === "invalid" ? validation.issues : [validation.reason] });
-    try { await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event); }
-    catch (error) { return fail("stage_completion_append_failed", "Kepler could not durably append Unit of Work Review completion.", { journal_id: journalId, message: error instanceof Error ? error.message : String(error) }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects."); }
-    return { kind: "success", data: { id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId, stage: "unit-of-work-review", attempt_id: attemptId, evidence_ids: evidenceIds, ...(approvalFact ? { approval_event_id: approvalFact.event.id } : {}) } };
+    const guarded = await runWithConstructionRevisionFence({
+      workspace: this.runtime.workspace,
+      commonDirectory: currentCommonDirectory,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      expectedRoot: loaded.root,
+      project,
+      readUnit: (unitId, selectedProject) => this.contexts.readUnit(unitId, selectedProject),
+      target: { unitId: loaded.unit.unitId, stage: "unit-of-work-review", stageAttemptId: attemptId },
+      failure: fail,
+      operation: async (latest): Promise<UnitOfWorkReviewCompletionResult> => {
+        const currentStage = latest.unit.stages.find((candidate) => candidate.stage === "unit-of-work-review");
+        if (latest.unit.blocked || currentStage?.state !== "running" || currentStage.currentAttemptId !== attemptId) {
+          return fail("stage_attempt_not_current", "The selected Unit of Work Review attempt changed before completion could be appended.", {
+            selected_attempt_id: attemptId, current_attempt_id: currentStage?.currentAttemptId, state: currentStage?.state,
+          });
+        }
+        try { await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event); }
+        catch (error) { return fail("stage_completion_append_failed", "Kepler could not durably append Unit of Work Review completion.", { journal_id: journalId, message: error instanceof Error ? error.message : String(error) }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects."); }
+        return { kind: "success", data: { id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId, stage: "unit-of-work-review", attempt_id: attemptId, evidence_ids: evidenceIds, ...(approvalFact ? { approval_event_id: approvalFact.event.id } : {}) } };
+      },
+    });
+    if (guarded.kind === "failed") return fail(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 

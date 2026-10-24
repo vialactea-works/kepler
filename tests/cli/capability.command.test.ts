@@ -294,6 +294,130 @@ describe("v3 root command tree", () => {
     });
   });
 
+  it("requests, acknowledges, and resumes the same stage attempt while unrelated scope progresses", async () => {
+    const fixture = await createProject("stage-pause-resume");
+    const missionRequest = JSON.stringify({
+      title: "Prepare the selected capability",
+      request: "Implement the requested change in the selected workspace.",
+      workflow: "standard",
+      recordHomeRepositoryId: "project",
+      contexts: [{ reference: "request:scope", purpose: "Accepted request" }],
+      repositories: [{
+        repositoryId: "application",
+        workspace: { kind: "existing", path: fixture.root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      }],
+    });
+    const mission = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["mission", "create", "--project", fixture.root, "--request", missionRequest]),
+    );
+    expect(mission.exitCode).toBe(0);
+    const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const createUnit = async (name: string, selectedMission = missionId): Promise<string> => {
+      const result = await withGitEnvironment(fixture.globalConfig, () =>
+        runCli(["workflow", "construction", "unit", "create", name, "--mission", selectedMission, "--project", fixture.root]),
+      );
+      expect(result.exitCode, result.stdout).toBe(0);
+      return JSON.parse(result.stdout).data.unit_id as string;
+    };
+    const unitId = await createUnit("paused-scope");
+    const inputs = [{ reference: "request:scope", purpose: "Requester scope for Functional Design" }];
+    const start = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design",
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+    ]));
+    expect(start.exitCode).toBe(0);
+    const attemptId = JSON.parse(start.stdout).data.attempt_id as string;
+    const pause = async (request: Readonly<Record<string, unknown>>) => withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "pause", "--unit", unitId, "--stage", "functional-design",
+      "--attempt", attemptId, "--request", JSON.stringify(request), "--project", fixture.root,
+    ]));
+    const requested = await pause({ phase: "request", reason: "Pause before review" });
+    expect(requested.exitCode).toBe(0);
+    expect(JSON.parse(requested.stdout)).toMatchObject({ status: "success", data: { attempt_id: attemptId, pause_state: "pausing" } });
+    const pausing = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "show", "--unit", unitId, "--stage", "functional-design", "--project", fixture.root,
+    ]));
+    expect(JSON.parse(pausing.stdout)).toMatchObject({ status: "success", data: { state: "pausing", current_attempt_id: attemptId } });
+    const blockedStart = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design",
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+    ]));
+    expect(JSON.parse(blockedStart.stdout)).toMatchObject({ status: "failed", data: { code: "stage_attempt_unavailable" } });
+
+    const unrelatedMission = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "mission", "create", "--project", fixture.root,
+      "--request", JSON.stringify({ ...JSON.parse(missionRequest), title: "Unrelated pause-scope progress" }),
+    ]));
+    expect(unrelatedMission.exitCode).toBe(0);
+    const unrelatedMissionId = JSON.parse(unrelatedMission.stdout).data.mission_id as string;
+    const unrelatedUnitId = await createUnit("unrelated-scope", unrelatedMissionId);
+    const unrelated = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "start", "--unit", unrelatedUnitId, "--stage", "functional-design",
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+    ]));
+    expect(unrelated.exitCode).toBe(0);
+    expect(JSON.parse(unrelated.stdout)).toMatchObject({ status: "success", data: { unit_id: unrelatedUnitId, worker_dispatched: false } });
+
+    const acknowledged = await pause({
+      phase: "acknowledge",
+      reason: "Worker stopped and effects reconciled",
+      orchestrator_attestation: {
+        exact_run_terminal: true,
+        effects_reconciled: true,
+        run_reference: "orchestrator-run:stage-1",
+        reconciliation_references: ["reconciliation:stage-1"],
+      },
+    });
+    expect(acknowledged.exitCode).toBe(0);
+    expect(JSON.parse(acknowledged.stdout)).toMatchObject({ status: "success", data: { attempt_id: attemptId, pause_state: "paused" } });
+    const paused = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "show", "--unit", unitId, "--stage", "functional-design", "--project", fixture.root,
+    ]));
+    expect(JSON.parse(paused.stdout)).toMatchObject({ status: "success", data: { state: "paused", current_attempt_id: attemptId } });
+
+    const resumed = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "resume", "--unit", unitId, "--stage", "functional-design",
+      "--attempt", attemptId, "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+    ]));
+    expect(resumed.exitCode).toBe(0);
+    expect(JSON.parse(resumed.stdout)).toMatchObject({
+      status: "success",
+      data: { attempt_id: attemptId, worker_dispatched: false },
+    });
+    const running = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "show", "--unit", unitId, "--stage", "functional-design", "--project", fixture.root,
+    ]));
+    expect(JSON.parse(running.stdout)).toMatchObject({ status: "success", data: { state: "running", current_attempt_id: attemptId } });
+    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", missionId, "history", "construction");
+    const events = (await Promise.all((await Fs.readdir(historyDirectory)).map((file) => Fs.readFile(Path.join(historyDirectory, file), "utf8"))))
+      .join("").trimEnd().split("\n").map((line) => JSON.parse(line) as { type: string; data: Record<string, unknown> });
+    const pauseEvents = events.filter((event) => event.type.includes("stage-pause") || event.type === "construction.stage-paused" || event.type === "construction.stage-resumed");
+    expect(pauseEvents.map((event) => event.type).sort()).toEqual([
+      "construction.stage-pause-requested",
+      "construction.stage-paused",
+      "construction.stage-resumed",
+    ].sort());
+    expect(pauseEvents.every((event) => event.data.stage_attempt_id === attemptId)).toBe(true);
+    expect(pauseEvents.find((event) => event.type === "construction.stage-paused")?.data.reason).toContain("orchestrator-run:stage-1");
+  });
+
+  it("exposes exact Activity pause and resume selectors in generated CLI help", async () => {
+    for (const operation of ["pause", "resume"] as const) {
+      const result = await runCli(["workflow", "construction", "activity", operation, "--help"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`activity ${operation}`);
+      expect(result.stdout).toContain("--unit <unit-id>");
+      expect(result.stdout).toContain("--task <task-id>");
+      expect(result.stdout).toContain("--activity <activity>");
+      expect(result.stdout).toContain("--implementation-attempt <attempt-id>");
+      expect(result.stdout).toContain("--attempt <attempt-id>");
+      expect(result.stdout).toContain("--request <json>");
+      expect(result.stderr).toBe("");
+    }
+  });
+
   it("routes Review and Deliver completion requests through their typed providers without appending on stale attempts", async () => {
     const fixture = await createProject("later-stage-completion");
     const missionRequest = JSON.stringify({

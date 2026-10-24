@@ -37,6 +37,7 @@ import { validateTaskGraphPathOperands } from "./task-graph-paths.js";
 import type { ConstructionHistoryFact } from "./projection.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
+import { runWithConstructionRevisionFence } from "./unit-control.js";
 import { captureStageCheckpoints } from "./stage-start.js";
 import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
 
@@ -387,7 +388,7 @@ export class ImplementationPlanningStageCompletion {
       else if (loaded.root !== firstRead.root || loaded.missionId !== firstRead.missionId) {
         result = failure("stage_scope_changed", "Unit membership changed while acquiring stage coordination.", { unit_id: selectors.unit });
       } else {
-        result = await this.completeLoaded(loaded, selectors.attempt, validated.request);
+        result = await this.completeLoaded(loaded, selectors.attempt, validated.request, project);
       }
     } catch (error) {
       result = failure("stage_completion_failed", "Kepler could not validate Implementation Planning completion safely.", {
@@ -409,6 +410,7 @@ export class ImplementationPlanningStageCompletion {
     loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
     attemptId: string,
     request: ImplementationPlanningCompletionRequest,
+    project?: string,
   ): Promise<PlanningStageCompletionResult> {
     if (loaded.unit.workflow !== "standard") return failure("unsupported_workflow", "Implementation Planning completion requires the recorded Standard workflow binding.", { workflow: loaded.unit.workflow });
     if (loaded.unit.blocked) return failure("stage_history_blocked", "Construction history or projection issues prevent safe stage completion.", {
@@ -589,21 +591,39 @@ export class ImplementationPlanningStageCompletion {
         issues: validation.status === "invalid" ? validation.issues : [validation.reason],
       });
     }
-    try {
-      await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
-    } catch (error) {
-      return failure("stage_completion_append_failed", "Kepler could not durably append Implementation Planning completion.", {
-        journal_id: journalId, message: error instanceof Error ? error.message : String(error),
-      }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
-    }
-    return {
-      kind: "success",
-      data: {
-        id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId,
-        stage: "implementation-planning", attempt_id: attemptId, evidence_ids: planningEvidenceIds(request.assessments),
-        graph_ref: material.graphRef, ...(facts.facts.approval ? { approval_event_id: facts.facts.approval.event.id } : {}),
+    const guarded = await runWithConstructionRevisionFence({
+      workspace: this.runtime.workspace,
+      commonDirectory: currentCommonDirectory,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      expectedRoot: loaded.root,
+      project,
+      readUnit: (unitId, selectedProject) => this.contexts.readUnit(unitId, selectedProject),
+      target: { unitId: loaded.unit.unitId, stage: "implementation-planning", stageAttemptId: attemptId },
+      failure,
+      operation: async (latest): Promise<PlanningStageCompletionResult> => {
+        const currentStage = latest.unit.stages.find((candidate) => candidate.stage === "implementation-planning");
+        if (latest.unit.blocked || currentStage?.state !== "running" || currentStage.currentAttemptId !== attemptId) {
+          return failure("stage_attempt_not_current", "The selected Implementation Planning attempt changed before completion could be appended.", {
+            selected_attempt_id: attemptId, current_attempt_id: currentStage?.currentAttemptId, state: currentStage?.state,
+          });
+        }
+        try {
+          await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
+        } catch (error) {
+          return failure("stage_completion_append_failed", "Kepler could not durably append Implementation Planning completion.", {
+            journal_id: journalId, message: error instanceof Error ? error.message : String(error),
+          }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
+        }
+        return { kind: "success", data: {
+          id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId,
+          stage: "implementation-planning", attempt_id: attemptId, evidence_ids: planningEvidenceIds(request.assessments),
+          graph_ref: material.graphRef, ...(facts.facts.approval ? { approval_event_id: facts.facts.approval.event.id } : {}),
+        } };
       },
-    };
+    });
+    if (guarded.kind === "failed") return failure(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 

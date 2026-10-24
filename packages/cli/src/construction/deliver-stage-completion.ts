@@ -8,12 +8,14 @@ import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION, CONSTRUCTION_PHASE, isDeliverCompletionRecord, isUnitOfWorkReviewCompletionRecord, validateConstructionEvent, type DeliverCompletionRecord, type MissionId, type StageAttemptId, type UnitId } from "./events.js";
 import { sameArtifactBindings } from "./functional-design-completion.js";
 import { readStageArtifactMaterial } from "./stage-artifact-material.js";
+import { MissionHandoffPreflight, type MissionHandoffObjectRequirement } from "./mission-handoff-preflight.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 import { captureStageCheckpoints } from "./stage-start.js";
 import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
 import { validateStageStartAuthority } from "./stage-authority.js";
 import type { ConstructionHistoryFact } from "./projection.js";
+import { runWithConstructionRevisionFence } from "./unit-control.js";
 
 export interface DeliverStageCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
@@ -51,7 +53,11 @@ const commonDirectory = async (runtime: DeliverStageCompletionRuntime, repositor
 };
 
 export class DeliverStageCompletion {
-  constructor(private readonly contexts: AuditContextResolver, private readonly runtime: DeliverStageCompletionRuntime) {}
+  constructor(
+    private readonly contexts: AuditContextResolver,
+    private readonly runtime: DeliverStageCompletionRuntime,
+    private readonly handoffPreflight: MissionHandoffPreflight,
+  ) {}
 
   async execute(selectors: ScopeSelectors, rawRequest: unknown, project?: string): Promise<DeliverStageCompletionResult> {
     if (!selectors.unit || selectors.stage !== "deliver" || !selectors.attempt || selectors.task !== undefined || selectors.activity !== undefined || selectors.implementationAttempt !== undefined || selectors.mission !== undefined) return fail("invalid_stage_completion_scope", "Deliver completion requires exactly --unit, --stage deliver, and --attempt.");
@@ -79,7 +85,7 @@ export class DeliverStageCompletion {
       const loaded = await this.contexts.readUnit(selectors.unit, project);
       if (loaded.kind === "failed") result = propagateReadFailure(loaded);
       else if (loaded.root !== first.root || loaded.missionId !== first.missionId) result = fail("stage_scope_changed", "Unit membership changed while acquiring stage coordination.");
-      else result = await this.completeLoaded(loaded, selectors.attempt, rawRequest);
+      else result = await this.completeLoaded(loaded, selectors.attempt, rawRequest, project);
     } catch (error) {
       result = fail("stage_completion_failed", "Kepler could not validate Deliver completion safely.", { message: error instanceof Error ? error.message : String(error) });
     }
@@ -88,7 +94,7 @@ export class DeliverStageCompletion {
     return result;
   }
 
-  private async completeLoaded(loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>, attemptId: string, request: DeliverCompletionRecord): Promise<DeliverStageCompletionResult> {
+  private async completeLoaded(loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>, attemptId: string, request: DeliverCompletionRecord, project?: string): Promise<DeliverStageCompletionResult> {
     if (loaded.unit.workflow !== "standard") return fail("unsupported_workflow", "Deliver completion requires the recorded Standard workflow binding.");
     if (loaded.unit.blocked) return fail("stage_history_blocked", "Construction history or projection issues prevent safe Deliver completion.", { history_issues: loaded.unit.historyIssues, projection_issues: loaded.unit.projectionIssues });
     const stages = loaded.unit.stages;
@@ -149,6 +155,25 @@ export class DeliverStageCompletion {
     if (reviewedCheckpointSet.kind === "invalid") return fail("deliver_review_checkpoint_invalid", "The reviewed source checkpoints must resolve in the selected repository workspaces.", {
       repository_ids: reviewedCheckpointSet.repositoryIds, invalid_commits: reviewedCheckpointSet.invalidCommits,
     });
+    const handoffRequirements = new Map<string, MissionHandoffObjectRequirement>();
+    for (const checkpoint of [...request.reviewed_checkpoints, ...actualCheckpoints.checkpoints]) {
+      const repository = actualCheckpoints.repositoryRoots.find((candidate) => candidate.repository_id === checkpoint.repository_id);
+      if (!repository) return fail("deliver_handoff_repository_missing", "A required handoff checkpoint has no selected repository binding.", {
+        repository_id: checkpoint.repository_id, commit: checkpoint.commit,
+      });
+      handoffRequirements.set(`${checkpoint.repository_id}\0${checkpoint.commit}`, {
+        repository_id: checkpoint.repository_id,
+        repository_path: repository.repositoryRoot,
+        object_id: checkpoint.commit,
+        object_kind: "commit",
+      });
+    }
+    const handoffPreflight = await this.handoffPreflight.execute({
+      mission_id: loaded.missionId,
+      handoff_id: `${loaded.unit.unitId}:${attemptId}`,
+      required_objects: [...handoffRequirements.values()],
+    });
+    if (handoffPreflight.kind === "failed") return fail(handoffPreflight.code, handoffPreflight.message, handoffPreflight.details, handoffPreflight.recovery);
     const recordHomeId = recordHomeRepositoryId(loaded.history.events);
     const recordHomeCheckpoint = recordHomeId ? actualCheckpoints.checkpoints.find((checkpoint) => checkpoint.repository_id === recordHomeId) : undefined;
     if (!recordHomeId || !recordHomeCheckpoint) return fail("deliver_record_home_checkpoint_missing", "The current delivery checkpoint set must include the record-home repository.");
@@ -272,9 +297,30 @@ export class DeliverStageCompletion {
     };
     const validation = validateConstructionEvent(candidate);
     if (validation.status !== "valid") return fail("stage_completion_event_invalid", "The typed Deliver completion event failed Construction validation.", { issues: validation.status === "invalid" ? validation.issues : [validation.reason] });
-    try { await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event); }
-    catch (error) { return fail("stage_completion_append_failed", "Kepler could not durably append Deliver completion.", { journal_id: journalId, message: error instanceof Error ? error.message : String(error) }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects."); }
-    return { kind: "success", data: { id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId, stage: "deliver", attempt_id: attemptId, outcome: request.outcome, evidence_ids: evidenceIds, ...(request.approval_event_id ? { approval_event_id: request.approval_event_id } : {}) } };
+    const guarded = await runWithConstructionRevisionFence({
+      workspace: this.runtime.workspace,
+      commonDirectory: currentCommonDir,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      expectedRoot: loaded.root,
+      project,
+      readUnit: (unitId, selectedProject) => this.contexts.readUnit(unitId, selectedProject),
+      target: { unitId: loaded.unit.unitId, stage: "deliver", stageAttemptId: attemptId },
+      failure: fail,
+      operation: async (latest): Promise<DeliverStageCompletionResult> => {
+        const currentStage = latest.unit.stages.find((candidate) => candidate.stage === "deliver");
+        if (latest.unit.blocked || currentStage?.state !== "running" || currentStage.currentAttemptId !== attemptId) {
+          return fail("stage_attempt_not_current", "The selected Deliver attempt changed before completion could be appended.", {
+            selected_attempt_id: attemptId, current_attempt_id: currentStage?.currentAttemptId, state: currentStage?.state,
+          });
+        }
+        try { await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event); }
+        catch (error) { return fail("stage_completion_append_failed", "Kepler could not durably append Deliver completion.", { journal_id: journalId, message: error instanceof Error ? error.message : String(error) }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects."); }
+        return { kind: "success", data: { id: validation.event.id, journal_id: validation.event.journal_id, unit_id: loaded.unit.unitId, stage: "deliver", attempt_id: attemptId, outcome: request.outcome, evidence_ids: evidenceIds, ...(request.approval_event_id ? { approval_event_id: request.approval_event_id } : {}) } };
+      },
+    });
+    if (guarded.kind === "failed") return fail(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 

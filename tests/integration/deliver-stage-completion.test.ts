@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../../packages/cli/src/audit/context.js";
 import { CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION, CONSTRUCTION_PHASE, CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, validateConstructionEvent, type ConstructionEventRecord, type DeliverOutcome, type StageAttemptId } from "../../packages/cli/src/construction/events.js";
 import { DeliverStageCompletion, createNodeDeliverStageCompletionRuntime } from "../../packages/cli/src/construction/deliver-stage-completion.js";
+import { MissionHandoffPreflight } from "../../packages/cli/src/construction/mission-handoff-preflight.js";
 import { missionWorkspaceKey } from "../../packages/cli/src/construction/mission-workspace.js";
 import type { ScopeSelectors } from "../../packages/cli/src/cli/scope-selectors.js";
 import type { ConstructionHistoryFact, ConstructionStageProjection } from "../../packages/cli/src/construction/projection.js";
@@ -120,7 +121,7 @@ interface DeliverFixture {
   readonly cleanup: () => Promise<void>;
 }
 
-const createDeliverFixture = async (options: { readonly handoffIncludesVerification?: boolean; readonly withApproval?: boolean; readonly verificationFollowsOperation?: boolean; readonly verificationFollowsOutcome?: boolean; readonly outcome?: DeliverOutcome } = {}): Promise<DeliverFixture> => {
+const createDeliverFixture = async (options: { readonly handoffIncludesVerification?: boolean; readonly withApproval?: boolean; readonly verificationFollowsOperation?: boolean; readonly verificationFollowsOutcome?: boolean; readonly withUnreachableReviewCheckpoint?: boolean; readonly outcome?: DeliverOutcome } = {}): Promise<DeliverFixture> => {
   const parent = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-deliver-completion-"));
   temporaryRoots.push(parent);
   const root = Path.join(parent, "project");
@@ -134,6 +135,16 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "Initialize Deliver fixture");
   const reviewCommit = git(root, "rev-parse", "HEAD");
+  let reviewedCommit = reviewCommit;
+  if (options.withUnreachableReviewCheckpoint) {
+    git(root, "switch", "-q", "-c", "unreachable-review");
+    await Fs.writeFile(Path.join(root, "unreachable-review.txt"), "Preserve this object without a ref.\n", "utf8");
+    git(root, "add", "unreachable-review.txt");
+    git(root, "commit", "-q", "-m", "Create unreachable review checkpoint");
+    reviewedCommit = git(root, "rev-parse", "HEAD");
+    git(root, "switch", "-q", "main");
+    git(root, "branch", "-D", "unreachable-review");
+  }
   const missionId = randomUUID();
   const unitId = "2026-10-22-deliver-fixture";
   const unitDirectory = `construction/units-of-work/${unitId}`;
@@ -152,7 +163,7 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
   git(root, "add", persistedDirectory);
   git(root, "commit", "-q", "-m", "Record delivery instructions");
   const deliveryCommit = git(root, "rev-parse", "HEAD");
-  const reviewCheckpoint = [{ repository_id: repositoryId, commit: reviewCommit }];
+  const reviewCheckpoint = [{ repository_id: repositoryId, commit: reviewedCommit }];
   const currentCheckpoint = [{ repository_id: repositoryId, commit: deliveryCommit }];
   const deliveryBinding = {
     artifact_id: deliveryArtifactId,
@@ -398,7 +409,9 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
     unit,
   } as unknown as Extract<AuditHistoryReadResult, { kind: "loaded" }>;
   const contexts = { readUnit: async () => loaded } as unknown as AuditContextResolver;
-  const service = new DeliverStageCompletion(contexts, createNodeDeliverStageCompletionRuntime({ name: "kepler-test", version: "0.10.3" }));
+  const runtime = createNodeDeliverStageCompletionRuntime({ name: "kepler-test", version: "0.10.3" });
+  const handoffPreflight = new MissionHandoffPreflight({ git: runtime.workspace.git, fileSystem: runtime.workspace.fileSystem });
+  const service = new DeliverStageCompletion(contexts, runtime, handoffPreflight);
   const selectors = { unit: unitId, stage: "deliver", attempt: attemptId } as ScopeSelectors;
   return {
     root,
@@ -604,6 +617,27 @@ describe("Deliver stage completion", () => {
     expect(result.kind, JSON.stringify(result)).toBe("success");
     if (result.kind !== "success") return;
     expect(result.data).toMatchObject({ stage: "deliver", outcome: "repository-handoff", approval_event_id: fixture.approvalEventId });
+  });
+
+  it("rejects a repository handoff when a required reviewed checkpoint is unreachable", async () => {
+    const fixture = await createDeliverFixture({ withUnreachableReviewCheckpoint: true, outcome: "repository-handoff" });
+    const request = deliveryRequest(fixture);
+    const checkpoint = fixture.reviewCheckpoint[0]!.commit;
+    const before = (await Fs.readdir(fixture.historyDirectory)).sort();
+    const refsBefore = git(fixture.root, "show-ref");
+
+    const result = await fixture.service.execute(fixture.selectors, request);
+
+    expect(result).toMatchObject({
+      kind: "failed",
+      data: {
+        code: "handoff_material_unavailable",
+        details: { failures: [{ object_id: checkpoint, reason: "object_unreachable" }] },
+      },
+    });
+    expect((await Fs.readdir(fixture.historyDirectory)).sort()).toEqual(before);
+    expect(git(fixture.root, "show-ref")).toBe(refsBefore);
+    expect(git(fixture.root, "cat-file", "-t", checkpoint)).toBe("commit");
   });
 
   it("rejects a recipient handoff that omits outcome-verification provenance", async () => {

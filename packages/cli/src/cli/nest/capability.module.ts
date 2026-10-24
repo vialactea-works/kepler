@@ -46,6 +46,7 @@ import {
 } from "../../construction/deliver-stage-completion.js";
 import { MissionHandoffPreflight } from "../../construction/mission-handoff-preflight.js";
 import { createNodeStageStartRuntime, StageStart } from "../../construction/stage-start.js";
+import { ConstructionPauseResume, createNodeConstructionPauseResumeRuntime } from "../../construction/pause-resume.js";
 import { Revision } from "../../construction/revision.js";
 import { AuditContextResolver, createNodeAuditContextRuntime } from "../../audit/context.js";
 import { AuditRecording } from "../../audit/recording.js";
@@ -79,6 +80,8 @@ import {
   ConstructionActivityStartCommand,
   ConstructionActivityCompleteCommand,
   ConstructionActivityShowCommand,
+  ConstructionActivityPauseCommand,
+  ConstructionActivityResumeCommand,
   ConstructionIntegrationCommand,
   ConstructionIntegrationLockCommand,
   ConstructionIntegrationPrepareCommand,
@@ -92,6 +95,8 @@ import {
   ConstructionUnitShowCommand,
   ConstructionStageCompleteCommand,
   ConstructionStageStartCommand,
+  ConstructionStagePauseCommand,
+  ConstructionStageResumeCommand,
   ConstructionStageAssessRetainedScopesCommand,
   ConstructionReviseCommand,
   GitAuthorCommand,
@@ -138,6 +143,8 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionActivityStartCommand,
     ConstructionActivityCompleteCommand,
     ConstructionActivityShowCommand,
+    ConstructionActivityPauseCommand,
+    ConstructionActivityResumeCommand,
     ConstructionIntegrationCommand,
     ConstructionIntegrationLockCommand,
     ConstructionIntegrationPrepareCommand,
@@ -151,6 +158,8 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     ConstructionUnitShowCommand,
     ConstructionStageCompleteCommand,
     ConstructionStageStartCommand,
+    ConstructionStagePauseCommand,
+    ConstructionStageResumeCommand,
     ConstructionStageAssessRetainedScopesCommand,
     ConstructionReviseCommand,
     FunctionalDesignStageCompletion,
@@ -217,11 +226,12 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
     },
     {
       provide: DeliverStageCompletion,
-      useFactory: (contexts: AuditContextResolver) => new DeliverStageCompletion(
+      useFactory: (contexts: AuditContextResolver, handoffPreflight: MissionHandoffPreflight) => new DeliverStageCompletion(
         contexts,
         createNodeDeliverStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+        handoffPreflight,
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, MissionHandoffPreflight],
     },
     {
       provide: QualityRequirementsStageCompletion,
@@ -238,6 +248,15 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
         createNodeStageStartRuntime({ name: "kepler", version: cliVersion }),
       ),
       inject: [AuditContextResolver],
+    },
+    {
+      provide: ConstructionPauseResume,
+      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries) => new ConstructionPauseResume(
+        contexts,
+        queries,
+        createNodeConstructionPauseResumeRuntime({ name: "kepler", version: cliVersion }),
+      ),
+      inject: [AuditContextResolver, ConstructionQueries],
     },
     {
       provide: Revision,

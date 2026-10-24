@@ -94,7 +94,7 @@ These are logical operations, not additional public commands. The [CLI reference
 | Task complete | Applicable Validation and Integration evidence show accepted material that passed the checks and all task conditions. | Record task completion without completing Implementation. |
 | Task or Activity return | The orchestrator authorizes correction under the accepted route. | Keep history. Reopened Activities start new attempts only when they execute. |
 
-A pause request and completed-pause acknowledgment are different facts. The request blocks new affected work. Acknowledge pause only after workers stop and locks reconcile. A timeout or absent session does not prove a stop. Unknown worker or lock effects prevent acknowledgment.
+A pause request and completed-pause acknowledgment are different facts. The request blocks new affected work. The orchestrator acknowledges only after it stops the exact affected workers through host controls and reconciles their effects and locks. The CLI does not control or inspect host workers; its acknowledgment is the orchestrator's report, not independent proof. A timeout, absent session, context identifier, or unknown effect does not establish a stop and must not be reported as reconciled. Unknown worker or lock effects prevent acknowledgment.
 
 Unrelated work continues. Keep attempt IDs and reservations. SH58 does not add public cancellation commands or a worker shutdown framework.
 
@@ -144,7 +144,7 @@ Stage facts bind their stage and attempt. Task facts bind their task and Impleme
 | `construction.evidence-recorded`, `construction.approval-recorded`, `construction.interaction-recorded` | Keep the existing public audit kinds. Apply shared evidence and approval requirements. Bind phase-specific records to their scope, material, inputs, result, and actor or requester. A structured effort selection stays in the same interaction record under SH63. A typed Deliver outcome selection also stays in its requester interaction and is referenced by Deliver completion. The owning phase validates scope, level, and requester attribution. Do not infer selections from text or add a separate effort event. |
 | `construction.integration-prepared` | Identify the Integration scope, lock-captured unit checkpoint set, validated task output, other actual inputs, immutable candidate set, and source evidence. Record the fixed admission baseline separately. |
 | `construction.integration-accepted` | Prepared candidate set, accepted repository results, actual inputs, successful check evidence, current Integration attempt, and applicable authority references. |
-| `construction.revision-authorized` | `revision_id`, orchestrator decision, reason, unit-stage or task-Activity boundary, and supporting findings. |
+| `construction.revision-authorized` | `revision_id`, orchestrator decision, reason, unit-stage or task-Activity boundary, supporting findings, and the derived affected scopes. Each scope records `prior_attempt: present` with its exact attempt ID, or `prior_attempt: none` without an attempt ID; an omitted disposition is invalid. |
 | `construction.retained-scope-assessed` | Current Implementation attempt and inputs, original scope and attempt references, applicability result, and reason. Keep the original parent and material. |
 | `construction.implementation-completion-assessed` | Current Implementation attempt, final repository-qualified checkpoint set, graph, required checks, Integration results, retained-scope assessments, and handoff assessment. |
 
@@ -272,7 +272,17 @@ Keep event-update coordination short and separate from the long unit Integration
 
 After interruption, review actual journals, Git refs, candidate material, check output, live ownership, and retained evidence. Reconcile effects before retry. Record recovered facts with their original scope. Ended attempts cannot grant current acceptance or completion. Unknown effects are still unknown. Do not delete material needed to resolve them.
 
-Under SH58, a pause request blocks new affected work before stopping completes. A completed-pause acknowledgment requires stopped workers and reconciled locks. A timeout, absent session, or unknown lock effect does not prove stopping. Resume verifies inputs and ownership while keeping the same attempt and reservations. Unrelated work continues.
+Under SH58, a pause request blocks new affected work before stopping completes. A completed-pause acknowledgment requires stopped workers and reconciled locks. A timeout, absent session, or unknown lock effect does not prove stopping. Resume verifies inputs and ownership while keeping the same attempt and reservations. Before dispatch, the external orchestrator must also recheck the exact run and worker assignment through its execution harness; the CLI does not observe that assignment. Unrelated work continues.
+
+### Manual recovery of a stale Integration lock
+
+Use this procedure only after the current owner cannot release its lock through the normal Integration operation. Stop the exact affected worker through the host's existing controls and confirm terminal status for that dispatched run. A worker context identifier, missing session, or timeout is not stop proof. Reconcile its journal writes, worktree changes, candidate checkpoints, check output, and ownership before removal. If any result or owner is unknown, preserve the lock and keep affected work blocked.
+
+Use the `lock_path` and `resource_key` reported by Kepler's lock inspection as the exact artifact identity. Confirm that the path is under the actual Git common directory's `kepler/missions/<mission-id>/coordination/` directory, is a real directory rather than a symlink, and contains complete `owner.json` and `integration.json` records that agree on the mission, unit, task, Implementation attempt, Activity attempt, and owner token. Confirm that no release marker, owner-moving artifact, or replacement holder exists. Missing, malformed, conflicting, or partial metadata is unknown ownership and blocks removal.
+
+With separate operator authority, remove only that complete identified lock directory as one artifact. Do not remove individual owner or snapshot files, sibling locks, coordination directories, release markers, journals, candidate work, or unrelated resources. This manual action does not stop a worker, release a replacement holder, undo Git or delivery effects, approve work, or prove that execution can resume. Re-run normal lock inspection and the relevant operation's input, attempt, ownership, and revision checks before resuming.
+
+For uncertain journal appends, retain the original bytes and retry only with the same event and domain identities after inspecting the exact journals. For partial workspace or delivery effects, preserve the resources and reported effect details; inspect the actual repository or recipient before retrying. Do not remove a directory or repeat an external operation while ownership or outcome remains uncertain. Before cross-checkout resume, verify every required object in its actual repository; a missing object blocks the affected handoff and does not authorize automatic fetch, publication, or repair.
 
 ## Contract boundaries
 

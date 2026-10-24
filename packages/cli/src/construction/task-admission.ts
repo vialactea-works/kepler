@@ -5,10 +5,13 @@ import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/cont
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import type { EventJournal } from "../history/journal.js";
 import { readImplementationPlanningCompletionRecord } from "./implementation-planning-completion.js";
-import { type ConstructionHistoryFact, type ConstructionUnitProjection } from "./projection.js";
+import { type ConstructionHistoryFact, type ConstructionTaskProjection, type ConstructionUnitProjection } from "./projection.js";
 import { ConstructionQueries, type TaskExecutionContext } from "./scoped-queries.js";
 import { captureStageCheckpoints, createNodeStageStartRuntime, type StageStartRuntime } from "./stage-start.js";
 import { plannedIntegrationCommands } from "./integration-command-contract.js";
+import { runWithConstructionRevisionFence } from "./unit-control.js";
+import { recordTaskCompletionUnderControl } from "./task-completion.js";
+import { retainedActivityFor } from "./retained-activity.js";
 import {
   CONSTRUCTION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
@@ -18,6 +21,7 @@ import {
   type EvidenceId,
   type GraphReference,
   type RepositoryCheckpoint,
+  type RetainedScopeAssessment,
   type TaskId,
 } from "./events.js";
 
@@ -53,8 +57,12 @@ const isRepositoryCheckpoints = (value: unknown): value is readonly RepositoryCh
   Array.isArray(value) && value.every((item) => isRecord(item) && typeof item.repository_id === "string" && commitId(item.commit)) &&
   new Set(value.map((item) => isRecord(item) ? item.repository_id : undefined)).size === value.length;
 const checkpointKey = (value: readonly RepositoryCheckpoint[]): string => JSON.stringify(
-  value.slice().sort((left, right) => left.repository_id.localeCompare(right.repository_id)),
+  value.slice().sort((left, right) => left.repository_id.localeCompare(right.repository_id))
+    .map((checkpoint) => [checkpoint.repository_id, checkpoint.commit]),
 );
+const sameStringSet = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && new Set(left).size === left.length && new Set(right).size === right.length &&
+  [...left].sort().join("\0") === [...right].sort().join("\0");
 const failure = (
   code: string,
   message: string,
@@ -169,6 +177,23 @@ const readTargetCheckpoints = async (
   return checkpoints.sort((left, right) => left.repository_id.localeCompare(right.repository_id));
 };
 
+const repositoryCheckpointSetIsAncestor = async (
+  runtime: TaskAdmissionRuntime,
+  candidate: readonly RepositoryCheckpoint[],
+  baseline: readonly RepositoryCheckpoint[],
+  roots: Extract<Awaited<ReturnType<typeof captureStageCheckpoints>>, { readonly kind: "valid" }> ["repositoryRoots"],
+): Promise<boolean> => {
+  const baselineByRepository = new Map(baseline.map((item) => [item.repository_id, item.commit]));
+  for (const checkpoint of candidate) {
+    const current = baselineByRepository.get(checkpoint.repository_id);
+    const repository = roots.find((item) => item.repository_id === checkpoint.repository_id);
+    if (!current || !repository) return false;
+    const ancestry = await runtime.workspace.git.run(repository.repositoryRoot, ["merge-base", "--is-ancestor", checkpoint.commit, current]);
+    if (ancestry.status !== 0) return false;
+  }
+  return candidate.length > 0;
+};
+
 const acceptedIntegrations = (
   projectionUnits: readonly ConstructionUnitProjection[],
   unitId: string,
@@ -196,8 +221,9 @@ const hasCausalPath = (events: ReadonlyMap<string, { readonly caused_by: readonl
 const currentIntegration = (
   loaded: Extract<AuditHistoryReadResult, { readonly kind: "loaded" }>,
   unitId: string,
-): ConstructionHistoryFact | undefined => {
+): readonly ConstructionHistoryFact[] | undefined => {
   const acceptances = acceptedIntegrations(loaded.projection.units, unitId);
+  if (acceptances.length === 0) return [];
   const events = new Map(loaded.history.events.flatMap((record) => record.event
     ? [[String(record.event.id), record.event] as const]
     : [],
@@ -205,7 +231,44 @@ const currentIntegration = (
   const leaves = acceptances.filter((candidate) => !acceptances.some((other) =>
     other.event.id !== candidate.event.id && hasCausalPath(events, String(candidate.event.id), String(other.event.id)),
   ));
-  return leaves.length === 1 ? leaves[0] : undefined;
+  if (leaves.length === 0) return undefined;
+  const candidateKeys = leaves.map((fact) => fact.event.type === "construction.integration-accepted" &&
+    isRepositoryCheckpoints(fact.event.data.candidate_checkpoints) ? checkpointKey(fact.event.data.candidate_checkpoints) : undefined);
+  if (candidateKeys.some((key) => key === undefined) || new Set(candidateKeys).size !== 1) return undefined;
+  return leaves.slice().sort((left, right) => String(left.event.id).localeCompare(String(right.event.id)));
+};
+
+interface RetainedIntegration {
+  readonly assessmentFact: ConstructionHistoryFact;
+  readonly assessment: RetainedScopeAssessment;
+  readonly completion: ConstructionHistoryFact;
+  readonly acceptance: ConstructionHistoryFact;
+}
+
+const retainedIntegrationFor = (
+  unit: ConstructionUnitProjection,
+  taskId: string,
+  implementationAttemptId: string,
+): RetainedIntegration | undefined => {
+  const retained = retainedActivityFor(unit, taskId, "code-integration", implementationAttemptId);
+  if (!retained) return undefined;
+  const { fact: assessmentFact, assessment, completion } = retained;
+  const task = unit.tasks.find((candidate) => candidate.taskId === taskId);
+  const activity = task?.activities.find((candidate) => candidate.activity === "code-integration");
+  const acceptances = activity?.accepted.filter((fact) => fact.event.type === "construction.integration-accepted" &&
+    fact.event.data.task_id === taskId && fact.event.data.stage_attempt_id === assessment.original_stage_attempt_id &&
+    fact.event.data.activity_attempt_id === assessment.original_activity_attempt_id) ?? [];
+  const acceptance = acceptances.length === 1 ? acceptances[0] : undefined;
+  return completion?.event.type === "construction.activity-attempt-completed" &&
+    acceptance?.event.type === "construction.integration-accepted" &&
+    Array.isArray(completion.event.data.evidence_ids) &&
+    sameStringSet(completion.event.data.evidence_ids.map(String), assessment.original_evidence_ids.map(String)) &&
+    isRepositoryCheckpoints(completion.event.data.checkpoints) && checkpointKey(completion.event.data.checkpoints) === checkpointKey(assessment.checkpoints) &&
+    isRepositoryCheckpoints(acceptance.event.data.candidate_checkpoints) && checkpointKey(acceptance.event.data.candidate_checkpoints) === checkpointKey(assessment.checkpoints) &&
+    completion.event.caused_by.includes(acceptance.event.id) &&
+    assessmentFact.event.caused_by.includes(completion.event.id) && assessmentFact.event.caused_by.includes(acceptance.event.id)
+    ? { assessmentFact, assessment, completion, acceptance }
+    : undefined;
 };
 
 const predecessorProvenance = async (
@@ -247,6 +310,34 @@ export class TaskAdmission {
     private readonly runtime: TaskAdmissionRuntime,
   ) {}
 
+  private async completeRetainedIntegration(
+    loaded: Extract<AuditHistoryReadResult, { readonly kind: "loaded" }>,
+    task: ConstructionTaskProjection,
+    parentStart: ConstructionHistoryFact,
+    admission: ConstructionHistoryFact,
+    acceptanceCriteria: readonly string[],
+  ): Promise<TaskAdmissionResult | undefined> {
+    const retained = retainedIntegrationFor(loaded.unit, task.taskId, String(parentStart.event.data.stage_attempt_id));
+    if (!retained) return undefined;
+    const completion = await recordTaskCompletionUnderControl(
+      this.runtime,
+      loaded,
+      task,
+      parentStart,
+      admission,
+      retained.acceptance,
+      retained.completion.event.id,
+      retained.completion.event.journal_id,
+      acceptanceCriteria,
+      [retained.assessmentFact.event.id],
+    );
+    if (completion.kind === "failed") return failure("retained_task_completion_failed", "Retained Code Integration could not be admitted as a current-parent task completion.", {
+      task_id: task.taskId, admission_event_id: admission.event.id, integration_event_id: retained.acceptance.event.id,
+      cause: completion.code, details: completion.details,
+    }, "Preserve the retained assessment and current admission; inspect uncertain task completion history, then retry task admission to reconcile it.");
+    return { kind: "success", data: completion.data };
+  }
+
   async execute(selectors: ScopeSelectors, rawRequest: unknown, project?: string): Promise<TaskAdmissionResult> {
     if (!selectors.unit || !selectors.task || !selectors.implementationAttempt || selectors.stage !== undefined ||
         selectors.activity !== undefined || selectors.attempt !== undefined || selectors.mission !== undefined) {
@@ -263,13 +354,13 @@ export class TaskAdmission {
     const acquired = await this.runtime.workspace.coordination.acquire({
       commonDirectory: commonDir,
       location: { kind: "mission", missionId: first.missionId },
-      resourceKey: createHash("sha256").update(JSON.stringify([first.missionId, selectors.unit, "task-admission"])).digest("hex"),
+      resourceKey: createHash("sha256").update(JSON.stringify([first.missionId, selectors.unit, selectors.task, "task-admission"])).digest("hex"),
       owner: {
         machine_id: this.runtime.workspace.identity.machine_id,
         process_id: this.runtime.workspace.identity.process_id,
         process_incarnation_id: this.runtime.workspace.identity.process_incarnation_id,
         mission_id: first.missionId,
-        resource_scope: `construction/task-admission/${selectors.unit}`,
+        resource_scope: `construction/task-admission/${selectors.unit}/${selectors.task}`,
         attempt_context: selectors.implementationAttempt,
       },
     });
@@ -315,7 +406,60 @@ export class TaskAdmission {
     }
     const currentTask = unit.tasks.find((item) => item.taskId === taskId);
     const currentTaskAdmissions = currentTask?.admissions.filter((fact) => fact.event.data.stage_attempt_id === implementationAttemptId) ?? [];
-    if (currentTaskAdmissions.length > 0) return failure("task_already_admitted", "The task is already admitted under the selected Implementation attempt.", { task_id: taskId });
+    if (currentTaskAdmissions.length > 0) {
+      if (currentTaskAdmissions.length !== 1 || !currentTask || currentTaskAdmissions[0]!.event.type !== "construction.task-admitted") {
+        return failure("task_admission_state_ambiguous", "The selected task has multiple or invalid admissions under this Implementation attempt.", {
+          task_id: taskId, admission_event_ids: currentTaskAdmissions.map((fact) => fact.event.id),
+        });
+      }
+      const existingAdmission = currentTaskAdmissions[0]!;
+      if (JSON.stringify(existingAdmission.event.data.task_definition_ref) !== JSON.stringify(execution.taskDefinitionRef) ||
+          JSON.stringify(existingAdmission.event.data.task_contract) !== JSON.stringify(admittedTaskContract(execution.task, execution.planSource))) {
+        return failure("task_admission_stale", "The existing task admission differs from the current task definition and contract.", {
+          task_id: taskId, admission_event_id: existingAdmission.event.id,
+        });
+      }
+      if (!retainedIntegrationFor(unit, taskId, implementationAttemptId)) {
+        return failure("task_already_admitted", "The task is already admitted under the selected Implementation attempt.", { task_id: taskId });
+      }
+      const currentCommonDir = await commonDirectory(this.runtime, loaded.root);
+      if (!currentCommonDir) return failure("task_admission_workspace_unavailable", "Git could not resolve the record home's common directory.");
+      const reconciled = await runWithConstructionRevisionFence({
+        workspace: this.runtime.workspace,
+        commonDirectory: currentCommonDir,
+        missionId: loaded.missionId,
+        unitId: unit.unitId,
+        expectedRoot: loaded.root,
+        project,
+        readUnit: (selectedUnit, selectedProject) => this.contexts.readUnit(selectedUnit, selectedProject),
+        target: { unitId: unit.unitId, stage: "implementation", stageAttemptId: implementationAttemptId, taskId },
+        failure,
+        operation: async (latest): Promise<TaskAdmissionResult> => {
+          const latestParent = currentParentStart(latest.unit, implementationAttemptId);
+          const latestTask = latest.unit.tasks.find((candidate) => candidate.taskId === taskId);
+          const latestAdmissions = latestTask?.admissions.filter((fact) => fact.event.data.stage_attempt_id === implementationAttemptId) ?? [];
+          if (latest.unit.blocked || !latestParent || !latestTask || latestAdmissions.length !== 1 ||
+              latestAdmissions[0]?.event.id !== existingAdmission.event.id ||
+              !retainedIntegrationFor(latest.unit, taskId, implementationAttemptId)) {
+            return failure("task_admission_state_changed", "The current parent, admission, or retained Integration binding changed before recovery.", {
+              task_id: taskId, implementation_attempt_id: implementationAttemptId,
+              admission_event_ids: latestAdmissions.map((fact) => fact.event.id),
+            });
+          }
+          const completion = await this.completeRetainedIntegration(latest, latestTask, latestParent, latestAdmissions[0]!, execution.task.acceptance_criteria);
+          if (!completion) return failure("task_already_admitted", "The existing task admission has no applicable retained Integration to reconcile.", { task_id: taskId });
+          if (completion.kind === "failed") return completion;
+          return { kind: "success", data: {
+            admission_event_id: existingAdmission.event.id,
+            implementation_attempt_id: implementationAttemptId,
+            task_id: taskId,
+            ...completion.data,
+          } };
+        },
+      });
+      if (reconciled.kind === "failed") return failure(reconciled.code, reconciled.message, reconciled.details, reconciled.recovery);
+      return reconciled.value;
+    }
     const selectedPrerequisites = selectedEvidence(unit, request.prerequisite_evidence_ids, implementationAttemptId, taskId, execution.task);
     if (selectedPrerequisites.kind === "invalid") return failure("task_prerequisite_unverified", "Blocking implementation prerequisites require passed, task-scoped evidence tied to the current Implementation attempt.", {
       missing_prerequisites: selectedPrerequisites.missing, invalid_evidence_ids: selectedPrerequisites.invalid,
@@ -347,18 +491,21 @@ export class TaskAdmission {
       return failure("unit_integration_targets_changed", "Prepared Integration targets differ from the fixed unit Review baseline.");
     }
     const acceptedHistory = acceptedIntegrations(loaded.projection.units, unit.unitId);
-    const latestIntegration = currentIntegration(loaded, unit.unitId);
-    if (acceptedHistory.length > 0 && !latestIntegration) return failure("task_admission_integration_history_ambiguous", "Mission Integration acceptances do not establish one causally latest candidate set.", {
+    const latestIntegrations = currentIntegration(loaded, unit.unitId);
+    if (acceptedHistory.length > 0 && !latestIntegrations) return failure("task_admission_integration_history_ambiguous", "Mission Integration acceptances do not establish one causally latest candidate set.", {
       accepted_event_ids: acceptedHistory.map((fact) => fact.event.id),
     });
+    const latestIntegration = latestIntegrations?.[0];
     const latestCandidateCheckpoints = latestIntegration?.event.type === "construction.integration-accepted" &&
       isRepositoryCheckpoints(latestIntegration.event.data.candidate_checkpoints)
       ? latestIntegration.event.data.candidate_checkpoints
       : undefined;
-    if (latestIntegration && (!latestCandidateCheckpoints ||
-        checkpointKey(latestCandidateCheckpoints) !== checkpointKey(admissionBaseline))) {
-      return failure("task_admission_integration_state_unreconciled", "The live Integration targets differ from the latest accepted repository-qualified set.", {
-        latest_integration_event_id: latestIntegration.event.id,
+    const latestCandidateIsCurrentAncestor = latestCandidateCheckpoints
+      ? await repositoryCheckpointSetIsAncestor(this.runtime, latestCandidateCheckpoints, admissionBaseline, captured.repositoryRoots)
+      : false;
+    if (latestIntegration && (!latestCandidateCheckpoints || !latestCandidateIsCurrentAncestor)) {
+      return failure("task_admission_integration_state_unreconciled", "The current Integration target set is not descended from the latest accepted repository-qualified set.", {
+        latest_integration_event_ids: latestIntegrations?.map((fact) => fact.event.id) ?? [],
         latest_candidate_checkpoints: latestCandidateCheckpoints,
         current_checkpoints: admissionBaseline,
       });
@@ -393,7 +540,7 @@ export class TaskAdmission {
         journal_id: baselineJournalId,
         recorded_at: this.runtime.now(),
         producer: this.runtime.producer,
-        caused_by: [start.event.id, ...(latestIntegration ? [latestIntegration.event.id] : [])],
+        caused_by: [start.event.id, ...(latestIntegrations ?? []).map((fact) => fact.event.id)],
         data: {
           mission_id: loaded.missionId,
           unit_id: unit.unitId,
@@ -420,7 +567,7 @@ export class TaskAdmission {
       caused_by: [...new Set([
         start.event.id,
         baselineEventId,
-        ...(latestIntegration ? [latestIntegration.event.id] : []),
+        ...(latestIntegrations ?? []).map((fact) => fact.event.id),
         ...provenance.values.map((item) => item.integration_event_id),
         ...selectedPrerequisites.facts.map((fact) => fact.event.id),
       ])],
@@ -448,39 +595,84 @@ export class TaskAdmission {
     }
     const admissionJournalPath = Path.join(journalRoot, `${admissionJournalId}.jsonl`);
     if (await this.runtime.workspace.fileSystem.pathKind(admissionJournalPath) !== "missing") return failure("task_admission_journal_identity_conflict", "The selected admission journal identity already has a filesystem entry.");
-    for (const event of appendEvents) {
-      try {
-        await this.runtime.journals.create(loaded.root, loaded.missionId, event.journal_id).append(event);
-      } catch (error) {
-        return failure("unit_baseline_append_failed", "Kepler could not durably append the unit Review baseline.", {
-          journal_id: event.journal_id, message: error instanceof Error ? error.message : String(error),
-        }, "Inspect history for an appended or uncertain baseline before retrying; preserve all records.");
-      }
-    }
-    try {
-      await this.runtime.journals.create(loaded.root, loaded.missionId, admissionJournalId).append(admissionValidation.event);
-    } catch (error) {
-      return failure("task_admission_append_failed", "Kepler could not durably append the task admission.", {
-        journal_id: admissionJournalId, message: error instanceof Error ? error.message : String(error),
-      }, "Inspect history for an appended or uncertain admission before retrying; preserve all records.");
-    }
-    return {
-      kind: "success",
-      data: {
-        admission_event_id: admissionValidation.event.id,
-        journal_id: admissionValidation.event.journal_id,
-        mission_id: loaded.missionId,
-        unit_id: unit.unitId,
-        task_id: taskId,
-        implementation_attempt_id: implementationAttemptId,
-        graph_ref: execution.graphRef,
-        task_definition_ref: execution.taskDefinitionRef,
-        admission_baseline: admissionBaseline,
-        review_baseline: priorBaseline ? reviewBaseline : admissionBaseline,
-        predecessor_provenance: provenance.values,
-        prerequisite_evidence_ids: request.prerequisite_evidence_ids,
+    const guarded = await runWithConstructionRevisionFence({
+      workspace: this.runtime.workspace,
+      commonDirectory: currentCommonDir,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      expectedRoot: loaded.root,
+      project,
+      readUnit: (selectedUnit, selectedProject) => this.contexts.readUnit(selectedUnit, selectedProject),
+      target: { unitId: loaded.unit.unitId, stage: "implementation", stageAttemptId: implementationAttemptId, taskId },
+      failure,
+      operation: async (latest): Promise<TaskAdmissionResult> => {
+        const currentStart = currentParentStart(latest.unit, implementationAttemptId);
+        const latestTask = latest.unit.tasks.find((candidate) => candidate.taskId === taskId);
+        const latestAdmissions = latestTask?.admissions.filter((fact) => fact.event.data.stage_attempt_id === implementationAttemptId) ?? [];
+        const latestBaselineId = latest.unit.baseline?.event.id;
+        if (latest.unit.blocked || !currentStart || latestAdmissions.length > 0 ||
+            (priorBaseline?.event.id ?? undefined) !== latestBaselineId ||
+            (planningGraphRef(latest.unit)?.content_version !== execution.graphRef.content_version ||
+              planningGraphRef(latest.unit)?.graph_id !== execution.graphRef.graph_id)) {
+          return failure("task_admission_state_changed", "The selected parent, task admission, unit baseline, or task graph changed before admission could be recorded.", {
+            task_id: taskId,
+            implementation_attempt_id: implementationAttemptId,
+            current_parent_start: currentStart?.event.id,
+            existing_admission_event_ids: latestAdmissions.map((fact) => fact.event.id),
+            expected_baseline_event_id: priorBaseline?.event.id,
+            current_baseline_event_id: latestBaselineId,
+            expected_graph_ref: execution.graphRef,
+            current_graph_ref: planningGraphRef(latest.unit),
+          }, "Re-read current graph, baseline, and dependencies, then retry task admission.");
+        }
+        for (const event of appendEvents) {
+          try {
+            await this.runtime.journals.create(loaded.root, loaded.missionId, event.journal_id).append(event);
+          } catch (error) {
+            return failure("unit_baseline_append_failed", "Kepler could not durably append the unit Review baseline.", {
+              journal_id: event.journal_id, message: error instanceof Error ? error.message : String(error),
+            }, "Inspect history for an appended or uncertain baseline before retrying; preserve all records.");
+          }
+        }
+        try {
+          await this.runtime.journals.create(loaded.root, loaded.missionId, admissionJournalId).append(admissionValidation.event);
+        } catch (error) {
+          return failure("task_admission_append_failed", "Kepler could not durably append the task admission.", {
+            journal_id: admissionJournalId, message: error instanceof Error ? error.message : String(error),
+          }, "Inspect history for an appended or uncertain admission before retrying; preserve all records.");
+        }
+        const admissionFact: ConstructionHistoryFact = {
+          sourceId: `construction/task-admission/${admissionValidation.event.journal_id}`,
+          journalId: String(admissionValidation.event.journal_id),
+          line: 1,
+          byteOffset: 0,
+          event: admissionValidation.event,
+        };
+        const retainedCompletion = latestTask
+          ? await this.completeRetainedIntegration(
+            latest, latestTask, currentStart, admissionFact, execution.task.acceptance_criteria,
+          )
+          : undefined;
+        if (retainedCompletion?.kind === "failed") return retainedCompletion;
+        return { kind: "success", data: {
+          admission_event_id: admissionValidation.event.id,
+          journal_id: admissionValidation.event.journal_id,
+          mission_id: loaded.missionId,
+          unit_id: unit.unitId,
+          task_id: taskId,
+          implementation_attempt_id: implementationAttemptId,
+          graph_ref: execution.graphRef,
+          task_definition_ref: execution.taskDefinitionRef,
+          admission_baseline: admissionBaseline,
+          review_baseline: priorBaseline ? reviewBaseline : admissionBaseline,
+          predecessor_provenance: provenance.values,
+          prerequisite_evidence_ids: request.prerequisite_evidence_ids,
+          ...(retainedCompletion?.kind === "success" ? retainedCompletion.data : {}),
+        } };
       },
-    };
+    });
+    if (guarded.kind === "failed") return failure(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 

@@ -6,6 +6,8 @@ import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/cont
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { validateConstructionArtifact } from "./artifacts.js";
+import { pendingRevisionBarrierFor } from "./revision-state.js";
+import { runWithConstructionUnitControl } from "./unit-control.js";
 import {
   CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
@@ -344,7 +346,7 @@ export class FunctionalDesignStageCompletion {
       else if (loaded.root !== firstRead.root || loaded.missionId !== firstRead.missionId) {
         result = failure("stage_scope_changed", "Unit membership changed while acquiring stage coordination.", { unit_id: selectors.unit });
       } else {
-        result = await this.completeLoaded(loaded, selectors.attempt, validated.request);
+        result = await this.completeLoaded(loaded, selectors.attempt, validated.request, project);
       }
     } catch (error) {
       result = failure("stage_completion_failed", "Kepler could not validate Functional Design completion safely.", {
@@ -366,6 +368,7 @@ export class FunctionalDesignStageCompletion {
     loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
     stageAttemptId: string,
     request: FunctionalDesignCompletionRequest,
+    project?: string,
   ): Promise<FunctionalDesignStageCompletionResult> {
     if (loaded.unit.workflow !== "standard") return failure("unsupported_workflow", "Functional Design completion requires the recorded Standard workflow binding.", { workflow: loaded.unit.workflow });
     const stage = loaded.unit.stages.find((candidate) => candidate.stage === "functional-design");
@@ -478,26 +481,53 @@ export class FunctionalDesignStageCompletion {
         issues: validation.status === "invalid" ? validation.issues : [validation.reason],
       });
     }
-    try {
-      await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
-    } catch (error) {
-      return failure("stage_completion_append_failed", "Kepler could not durably append the completion event.", {
-        journal_id: journalId,
-        message: error instanceof Error ? error.message : String(error),
-      }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
-    }
-    return {
-      kind: "success",
-      data: {
-        id: validation.event.id,
-        journal_id: validation.event.journal_id,
-        unit_id: loaded.unit.unitId,
-        stage: "functional-design",
-        attempt_id: stageAttemptId,
-        evidence_ids: evidenceIds,
-        approval_event_id: materialFacts.facts.approval.event.id,
+    const guarded = await runWithConstructionUnitControl(
+      this.runtime.workspace,
+      commonDir,
+      loaded.missionId,
+      loaded.unit.unitId,
+      async (): Promise<FunctionalDesignStageCompletionResult> => {
+        const latest = await this.contexts.readUnit(loaded.unit.unitId, project);
+        if (latest.kind === "failed") return propagateReadFailure(latest);
+        const latestStage = latest.unit.stages.find((candidate) => candidate.stage === "functional-design");
+        if (latest.root !== loaded.root || latest.missionId !== loaded.missionId || latest.unit.blocked ||
+            latestStage?.state !== "running" || latestStage.currentAttemptId !== stageAttemptId) {
+          return failure("stage_attempt_not_current", "The selected Functional Design attempt changed before completion could be appended.", {
+            selected_attempt_id: stageAttemptId,
+            current_attempt_id: latestStage?.currentAttemptId,
+            state: latestStage?.state,
+          });
+        }
+        const barrier = pendingRevisionBarrierFor(latest, { unitId: loaded.unit.unitId, stage: "functional-design", stageAttemptId });
+        if (barrier) return failure("revision_barrier_pending", "The selected stage attempt is behind an authorized revision barrier.", {
+          revision_id: barrier.revisionId,
+          authorization_event_id: barrier.authorizationEventId,
+          affected_scopes: barrier.affectedScopes,
+        }, "Stop and reconcile affected workers, apply the authorized cascade, then retry completion.");
+        try {
+          await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
+        } catch (error) {
+          return failure("stage_completion_append_failed", "Kepler could not durably append the completion event.", {
+            journal_id: journalId,
+            message: error instanceof Error ? error.message : String(error),
+          }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
+        }
+        return {
+          kind: "success",
+          data: {
+            id: validation.event.id,
+            journal_id: validation.event.journal_id,
+            unit_id: loaded.unit.unitId,
+            stage: "functional-design",
+            attempt_id: stageAttemptId,
+            evidence_ids: evidenceIds,
+            approval_event_id: materialFacts.facts.approval.event.id,
+          },
+        };
       },
-    };
+    );
+    if (guarded.kind === "failed") return failure(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 }
 
