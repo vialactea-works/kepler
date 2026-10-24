@@ -141,6 +141,11 @@ const readConstructionSources = async (harness: E2EHarness): Promise<readonly Hi
 const parseHistorySource = (source: HistoryJournalSource): Record<string, unknown>[] =>
   new TextDecoder().decode(source.bytes).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
 
+const historyData = (record: Record<string, unknown>): Record<string, unknown> =>
+  typeof record.data === "object" && record.data !== null && !Array.isArray(record.data)
+    ? record.data as Record<string, unknown>
+    : {};
+
 const encodeHistorySource = (source: HistoryJournalSource, events: readonly unknown[]): HistoryJournalSource => ({
   ...source,
   bytes: new TextEncoder().encode(`${events.map((record) => JSON.stringify(record)).join("\n")}\n`),
@@ -597,6 +602,23 @@ const runCliWithExeca = (harness: E2EHarness, args: readonly string[]) => execa(
   },
 );
 
+const runCliThenInterruptCoordinator = (harness: E2EHarness, args: readonly string[]) => {
+  const cliInvocation = [Path.resolve(import.meta.dirname, "../../packages/cli/dist/cli/main.js"), ...args];
+  const script = [
+    'const { spawnSync } = require("node:child_process");',
+    `const child = spawnSync(process.execPath, ${JSON.stringify(cliInvocation)}, { cwd: process.cwd(), env: process.env, encoding: "utf8", maxBuffer: 16_000_000 });`,
+    'if (child.error || child.status !== 0) { process.stderr.write(child.stderr ?? child.error?.message ?? ""); process.exit(child.status ?? 1); }',
+    'process.kill(process.pid, "SIGKILL");',
+  ].join("\n");
+  return execa(process.execPath, ["-e", script], {
+    cwd: harness.resources.repositoryDirectory,
+    env: harness.resources.environment(),
+    extendEnv: false,
+    reject: false,
+    timeout: 30_000,
+  });
+};
+
 const recordEvidence = (
   audit: AuditCliDriver,
   attempt: string,
@@ -823,7 +845,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(await audit.journalSnapshot()).toBe(before);
   }, 120_000);
 
-  it("completes Standard stages through Deliver via the stage CLI", async () => {
+  it("recovers interrupted Integration through the CLI and completes Standard stages through Deliver", async () => {
     const harness = await createE2EHarness({ application: "native" });
     harnesses.push(harness);
     await createAuditHistory(harness.resources.repositoryDirectory, undefined, { includeImplementationFacts: false });
@@ -1220,6 +1242,7 @@ describe("Functional Design stage completion CLI E2E", () => {
         }
         starts.set(activity, lifecycleStartEventId);
         attempts.set(activity, activityAttemptId);
+        let interruptedRecovery = false;
         const currentEvidenceIds: string[] = [];
         const activityEvidence = activity === "code-integration"
           ? activityChecks[activity].map((check) => ({ check }))
@@ -1283,11 +1306,50 @@ describe("Functional Design stage completion CLI E2E", () => {
             currentEvidenceIds.push(String(recorded.evidence_id));
           }
           evidenceIds.push(currentEvidenceIds[0]!);
-          const accepted = await runConstructionCli([
+          const acceptArgs = [
             "workflow", "construction", "integration", "accept", ...integrationScope,
             "--lock-token", lockToken, "--prepared-event-id", preparedEventId,
-          ]);
-          integrationEventId = String(accepted.integration_event_id);
+          ];
+          if (taskId === planningTaskId) {
+            const interruptedCoordinator = await runCliThenInterruptCoordinator(harness, acceptArgs);
+            expect(interruptedCoordinator.signal).toBe("SIGKILL");
+            const interruptionHistory = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+            const acceptanceEvents = interruptionHistory.filter((record) => record.type === "construction.integration-accepted" &&
+              historyData(record).stage_attempt_id === implementationAttempt && historyData(record).task_id === taskId &&
+              historyData(record).activity_attempt_id === activityAttemptId);
+            const activityCompletions = interruptionHistory.filter((record) => record.type === "construction.activity-attempt-completed" &&
+              historyData(record).stage_attempt_id === implementationAttempt && historyData(record).task_id === taskId &&
+              historyData(record).activity_attempt_id === activityAttemptId);
+            const taskCompletions = interruptionHistory.filter((record) => record.type === "construction.task-completed" &&
+              historyData(record).stage_attempt_id === implementationAttempt && historyData(record).task_id === taskId);
+            expect(acceptanceEvents).toHaveLength(1);
+            expect(activityCompletions).toHaveLength(0);
+            expect(taskCompletions).toHaveLength(0);
+            const recoveredActivity = harness.cli.run([
+              "workflow", "construction", "activity", "show", "--unit", auditFixture.unitId,
+              "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
+            ]);
+            expect(recoveredActivity.exitCode, recoveredActivity.stdout).toBe(0);
+            expect(JSON.parse(recoveredActivity.stdout)).toMatchObject({
+              status: "success",
+              data: { state: "running", current_attempt_id: activityAttemptId },
+            });
+            const beforeDuplicateStart = await audit.journalSnapshot();
+            const duplicateStart = harness.cli.run([
+              "workflow", "construction", "activity", "start", "--unit", auditFixture.unitId,
+              "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
+            ]);
+            expect(duplicateStart.exitCode).toBe(1);
+            expect(JSON.parse(duplicateStart.stdout)).toMatchObject({
+              status: "failed", data: { code: "activity_attempt_already_active" },
+            });
+            expect(await audit.journalSnapshot()).toBe(beforeDuplicateStart);
+            integrationEventId = String(acceptanceEvents[0]!.id);
+            interruptedRecovery = true;
+          } else {
+            const accepted = await runConstructionCli(acceptArgs);
+            integrationEventId = String(accepted.integration_event_id);
+          }
         }
         const completionArgs = [
           "workflow", "construction", "activity", "complete", "--unit", auditFixture.unitId,
@@ -1343,6 +1405,30 @@ describe("Functional Design stage completion CLI E2E", () => {
           await mutateReviewerEvidence(activityExecutors["code-generation"], `${activityAttemptId}:reviewer`);
         }
         const completed = await runConstructionCli(completionArgs);
+        if (interruptedRecovery) {
+          const recoveredHistory = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+          const matches = (type: string, predicate: (data: Record<string, unknown>) => boolean) =>
+            recoveredHistory.filter((record) => record.type === type && predicate(historyData(record)));
+          const currentStarts = matches("construction.activity-attempt-started", (data) =>
+            data.stage_attempt_id === implementationAttempt && data.task_id === taskId &&
+            data.activity === activity && data.activity_attempt_id === activityAttemptId);
+          const currentAcceptances = matches("construction.integration-accepted", (data) =>
+            data.stage_attempt_id === implementationAttempt && data.task_id === taskId &&
+            data.activity_attempt_id === activityAttemptId);
+          const currentActivityCompletions = matches("construction.activity-attempt-completed", (data) =>
+            data.stage_attempt_id === implementationAttempt && data.task_id === taskId &&
+            data.activity === activity && data.activity_attempt_id === activityAttemptId);
+          const currentTaskCompletions = matches("construction.task-completed", (data) =>
+            data.stage_attempt_id === implementationAttempt && data.task_id === taskId &&
+            data.integration_event_id === integrationEventId);
+          expect(currentStarts).toHaveLength(1);
+          expect(currentStarts[0]?.id).toBe(startEventId);
+          expect(currentAcceptances).toHaveLength(1);
+          expect(currentAcceptances[0]?.id).toBe(integrationEventId);
+          expect(currentActivityCompletions).toHaveLength(1);
+          expect(currentActivityCompletions[0]?.id).toBe(completed.event_id);
+          expect(currentTaskCompletions).toHaveLength(1);
+        }
         if (lifecycleStartEventId !== startEventId) {
           const completionRecord = (await readConstructionSources(harness)).flatMap(parseHistorySource)
             .find((record) => record.id === String(completed.event_id));
