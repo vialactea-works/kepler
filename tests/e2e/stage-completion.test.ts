@@ -602,11 +602,13 @@ const runCliWithExeca = (harness: E2EHarness, args: readonly string[]) => execa(
   },
 );
 
-const runCliThenInterruptCoordinator = (harness: E2EHarness, args: readonly string[]) => {
+const runCliThenInterruptCoordinator = (harness: E2EHarness, args: readonly string[], input?: string) => {
   const cliInvocation = [Path.resolve(import.meta.dirname, "../../packages/cli/dist/cli/main.js"), ...args];
+  const inputLiteral = input === undefined ? "undefined" : JSON.stringify(input);
   const script = [
     'const { spawnSync } = require("node:child_process");',
-    `const child = spawnSync(process.execPath, ${JSON.stringify(cliInvocation)}, { cwd: process.cwd(), env: process.env, encoding: "utf8", maxBuffer: 16_000_000 });`,
+    `const childInput = ${inputLiteral};`,
+    `const child = spawnSync(process.execPath, ${JSON.stringify(cliInvocation)}, { cwd: process.cwd(), env: process.env, encoding: "utf8", maxBuffer: 16_000_000, ...(childInput === undefined ? {} : { input: childInput }) });`,
     'if (child.error || child.status !== 0) { process.stderr.write(child.stderr ?? child.error?.message ?? ""); process.exit(child.status ?? 1); }',
     'process.kill(process.pid, "SIGKILL");',
   ].join("\n");
@@ -1638,48 +1640,45 @@ describe("Functional Design stage completion CLI E2E", () => {
     };
     const postCompletionRevisionArgs = ["workflow", "construction", "revise", "--unit", auditFixture.unitId,
       "--stage", "implementation", "--attempt", implementationAttempt];
-    const postCompletionAuthorization = harness.cli.run(postCompletionRevisionArgs, { stdin: JSON.stringify(postCompletionRevisionRequest) });
-    expect(postCompletionAuthorization.exitCode, postCompletionAuthorization.stdout).toBe(0);
-    const postCompletionAuthorizationResult = JSON.parse(postCompletionAuthorization.stdout) as {
-      readonly status: string;
-      readonly data: Readonly<Record<string, unknown>>;
-    };
-    expect(postCompletionAuthorizationResult).toMatchObject({ status: "success", data: { status: "barrier_pending" } });
-    const recoveryAuthorizationId = String(postCompletionAuthorizationResult.data.event_id);
-    const recoveryRevisionId = String(postCompletionAuthorizationResult.data.revision_id);
-    const recoveryEnd = await appendTypedConstructionEvent(harness, "construction.stage-attempt-ended-by-revision", {
-      mission_id: auditFixture.missionId,
-      unit_id: auditFixture.unitId,
-      stage: "implementation",
-      stage_attempt_id: implementationAttempt,
-      revision_id: recoveryRevisionId,
-      reason: "The prior process ended the Implementation attempt before interruption.",
-    }, [recoveryAuthorizationId]);
-    const recoveryReopen = await appendTypedConstructionEvent(harness, "construction.stage-reopened", {
-      mission_id: auditFixture.missionId,
-      unit_id: auditFixture.unitId,
-      stage: "implementation",
-      stage_attempt_id: implementationAttempt,
-      revision_id: recoveryRevisionId,
-      reason: "Resume the already-authorized Implementation cascade.",
-    }, [recoveryAuthorizationId, recoveryEnd.id]);
-    const postCompletionCascade = harness.cli.run(postCompletionRevisionArgs, { stdin: JSON.stringify(postCompletionRevisionRequest) });
+    const postCompletionRevisionInput = JSON.stringify(postCompletionRevisionRequest);
+    const interruptedAuthorization = await runCliThenInterruptCoordinator(
+      harness, postCompletionRevisionArgs, postCompletionRevisionInput,
+    );
+    expect(interruptedAuthorization.signal).toBe("SIGKILL");
+    const authorizedHistory = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+    const matchingAuthorizations = authorizedHistory.filter((record) => record.type === "construction.revision-authorized" &&
+      historyData(record).unit_id === auditFixture.unitId && historyData(record).stage_attempt_id === implementationAttempt &&
+      historyData(record).reason === postCompletionRevisionRequest.reason &&
+      historyData(record).orchestrator_decision === postCompletionRevisionRequest.orchestrator_decision);
+    expect(matchingAuthorizations).toHaveLength(1);
+    const recoveryAuthorization = matchingAuthorizations[0]!;
+    const recoveryRevisionId = String(historyData(recoveryAuthorization).revision_id);
+    const revisionTransitions = (events: readonly Record<string, unknown>[]) => events.filter((record) =>
+      historyData(record).revision_id === recoveryRevisionId &&
+      ["construction.stage-attempt-ended-by-revision", "construction.stage-reopened"].includes(String(record.type)));
+    expect(revisionTransitions(authorizedHistory)).toHaveLength(0);
+    const interruptedCascade = await runCliThenInterruptCoordinator(
+      harness, postCompletionRevisionArgs, postCompletionRevisionInput,
+    );
+    expect(interruptedCascade.signal).toBe("SIGKILL");
+    const cascadedHistory = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+    const cascadedRevisionEvents = revisionTransitions(cascadedHistory);
+    expect(cascadedRevisionEvents.filter((record) => record.type === "construction.stage-attempt-ended-by-revision")).toHaveLength(1);
+    expect(cascadedRevisionEvents.filter((record) => record.type === "construction.stage-reopened")).toHaveLength(1);
+    const beforeCascadeReplay = await audit.journalSnapshot();
+    const postCompletionCascade = harness.cli.run(postCompletionRevisionArgs, { stdin: postCompletionRevisionInput });
     expect(postCompletionCascade.exitCode, postCompletionCascade.stdout).toBe(0);
     const postCompletionCascadeResult = JSON.parse(postCompletionCascade.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
-    expect(postCompletionCascadeResult).toMatchObject({ status: "success", data: { status: "barrier_complete" } });
+    expect(postCompletionCascadeResult).toMatchObject({ status: "success", data: { status: "barrier_complete", resumed_authorization: true } });
     expect(postCompletionCascadeResult.data.affected_scopes).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "stage", stage: "implementation" }),
       expect.objectContaining({ kind: "stage", stage: "unit-of-work-review" }),
       expect.objectContaining({ kind: "stage", stage: "deliver" }),
     ]));
-    expect(postCompletionCascadeResult.data.transition_event_ids).not.toContain(recoveryEnd.id);
-    expect(postCompletionCascadeResult.data.transition_event_ids).not.toContain(recoveryReopen.id);
-    const recoveredRevisionEvents = (await readConstructionSources(harness)).flatMap(parseHistorySource).filter((record) => {
-      const data = record.data && typeof record.data === "object" && !Array.isArray(record.data)
-        ? record.data as Record<string, unknown> : undefined;
-      return data?.revision_id === recoveryRevisionId && data.stage === "implementation" &&
-        ["construction.stage-attempt-ended-by-revision", "construction.stage-reopened"].includes(String(record.type));
-    });
+    expect(postCompletionCascadeResult.data.transition_event_ids).toEqual([]);
+    expect(await audit.journalSnapshot()).toBe(beforeCascadeReplay);
+    const recoveredRevisionEvents = revisionTransitions((await readConstructionSources(harness)).flatMap(parseHistorySource));
+    expect(recoveredRevisionEvents).toHaveLength(2);
     expect(recoveredRevisionEvents.filter((record) => record.type === "construction.stage-attempt-ended-by-revision")).toHaveLength(1);
     expect(recoveredRevisionEvents.filter((record) => record.type === "construction.stage-reopened")).toHaveLength(1);
     const postCompletionStageStart = harness.cli.run([
