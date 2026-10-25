@@ -2,6 +2,7 @@ import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createE2EHarness, type E2EHarness } from "./harness.js";
+import { createDiffPackageHistory } from "./fixtures/histories/diff-package.js";
 
 const harnesses: E2EHarness[] = [];
 
@@ -496,6 +497,121 @@ describe("compiled CLI E2E", () => {
     });
     expect(await Fs.readFile(invalidPath, "utf8")).toBe(invalidSource);
     expect(await snapshot(repository)).toBe(before);
+  }, 120_000);
+
+  it("runs all source-bound diff-package signatures and preserves Construction and Git state", async () => {
+    const e2e = await createHarness("native");
+    const repository = e2e.resources.repositoryDirectory;
+    await addProjectMarker(repository);
+    await Fs.appendFile(Path.join(repository, ".git", "info", "exclude"), "\n/.kepler/\n/validation-package.md\n/integration-package.md\n/unit-review-package.md\n/overwrite-package.md\n/missing-object-package.md\n/environment-package.md\n");
+    const fixture = await createDiffPackageHistory(e2e.resources);
+    const statusBefore = e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all");
+    const gitBefore = await snapshot(Path.join(repository, ".git"));
+    const constructionBefore = await snapshot(Path.join(repository, ".kepler"));
+    const command = (kind: "validation" | "integration" | "unit-review", out: string) => [
+      "git", "diff-package", kind,
+      "--unit", fixture.unitId,
+      ...(kind === "unit-review" ? [] : ["--task", fixture.taskId]),
+      "--implementation-attempt", fixture.implementationAttemptId,
+      ...(kind === "validation" ? ["--generation-attempt", fixture.generationAttemptId] : []),
+      ...(kind === "integration" ? ["--integration-attempt", fixture.integrationAttemptId] : []),
+      "--project", repository,
+      "--out", out,
+    ];
+
+    for (const [kind, out] of [
+      ["validation", "validation-package.md"],
+      ["integration", "integration-package.md"],
+      ["unit-review", "unit-review-package.md"],
+    ] as const) {
+      const result = e2e.cli.run(command(kind, out));
+      expect(result, result.stdout).toMatchObject({ exitCode: 0, stderr: "" });
+      expect(envelope(result.stdout)).toMatchObject({
+        status: "success",
+        data: {
+          scope: kind,
+          unit_id: fixture.unitId,
+          implementation_attempt_id: fixture.implementationAttemptId,
+          output: Path.join(repository, out),
+          fingerprint: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+          empty: false,
+        },
+      });
+      const packageText = await Fs.readFile(Path.join(repository, out), "utf8");
+      expect(packageText).toContain("## Complete package-content fingerprint");
+      expect(packageText).toContain("## Authority and applicability");
+      expect(packageText).toContain("Package generation creates no attempt, rerun, check, approval, or lifecycle transition.");
+      expect(packageText).toContain("src/output.txt");
+      if (kind === "integration") {
+        expect(packageText).toContain(fixture.generationAttemptId);
+        expect(packageText).toContain(fixture.generationEvidenceId);
+      }
+      const gitAfter = await snapshot(Path.join(repository, ".git"));
+      expect(gitAfter).toBe(gitBefore);
+      expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
+      expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
+    }
+
+    const poisonedGitEnvironment = e2e.cli.run(command("validation", "environment-package.md"), {
+      env: {
+        GIT_DIR: Path.join(repository, ".git", "invalid-git-dir"),
+        GIT_WORK_TREE: Path.join(repository, "invalid-work-tree"),
+        GIT_COMMON_DIR: Path.join(repository, ".git", "invalid-common-dir"),
+        GIT_INDEX_FILE: Path.join(repository, ".git", "invalid-index"),
+      },
+    });
+    expect(poisonedGitEnvironment.exitCode, poisonedGitEnvironment.stdout).toBe(0);
+    expect(envelope(poisonedGitEnvironment.stdout)).toMatchObject({ status: "success", data: { scope: "validation" } });
+    expect(await snapshot(Path.join(repository, ".git"))).toBe(gitBefore);
+    expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
+    expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
+
+    const missingSelector = e2e.cli.run([
+      "git", "diff-package", "validation", "--unit", fixture.unitId, "--task", fixture.taskId,
+      "--implementation-attempt", fixture.implementationAttemptId, "--project", repository,
+    ]);
+    expect(missingSelector.exitCode).toBe(1);
+    expect(envelope(missingSelector.stdout)).toMatchObject({ status: "failed", data: { code: "required_selector_missing" } });
+
+    const mismatch = e2e.cli.run([
+      "git", "diff-package", "validation", "--unit", fixture.unitId, "--task", fixture.taskId,
+      "--implementation-attempt", fixture.implementationAttemptId,
+      "--generation-attempt", "70000000-0000-4000-8000-000000000007",
+      "--project", repository, "--out", "missing-object-package.md",
+    ]);
+    expect(mismatch.exitCode).toBe(1);
+    expect(envelope(mismatch.stdout)).toMatchObject({ status: "failed", data: { code: "diff_package_generation_attempt_mismatch" } });
+
+    const overwritePath = Path.join(repository, "overwrite-package.md");
+    await Fs.writeFile(overwritePath, "preserve this existing file\n", "utf8");
+    const overwrite = e2e.cli.run(command("validation", "overwrite-package.md"));
+    expect(overwrite.exitCode).toBe(1);
+    expect(envelope(overwrite.stdout)).toMatchObject({ status: "failed", data: { code: "diff_package_output_exists" } });
+    expect(await Fs.readFile(overwritePath, "utf8")).toBe("preserve this existing file\n");
+
+    const objectsDirectory = Path.join(repository, ".git", "objects");
+    const objectDirectory = Path.join(objectsDirectory, fixture.generation.slice(0, 2));
+    const objectPath = Path.join(objectDirectory, fixture.generation.slice(2));
+    const objectBytes = await Fs.readFile(objectPath);
+    const objectsStat = await Fs.stat(objectsDirectory);
+    const objectDirectoryStat = await Fs.stat(objectDirectory);
+    const objectStat = await Fs.stat(objectPath);
+    try {
+      await Fs.unlink(objectPath);
+      const missingObject = e2e.cli.run(command("validation", "missing-object-package.md"));
+      expect(missingObject.exitCode).toBe(1);
+      expect(envelope(missingObject.stdout)).toMatchObject({ status: "failed", data: { code: "diff_package_git_object_missing" } });
+      expect(await exists(Path.join(repository, "missing-object-package.md"))).toBe(false);
+    } finally {
+      await Fs.writeFile(objectPath, objectBytes);
+      await Fs.utimes(objectPath, objectStat.atimeMs / 1_000, objectStat.mtimeMs / 1_000);
+      await Fs.utimes(objectDirectory, objectDirectoryStat.atimeMs / 1_000, objectDirectoryStat.mtimeMs / 1_000);
+      await Fs.utimes(objectsDirectory, objectsStat.atimeMs / 1_000, objectsStat.mtimeMs / 1_000);
+    }
+
+    expect(await snapshot(Path.join(repository, ".git"))).toBe(gitBefore);
+    expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
+    expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
   }, 120_000);
 
   it("reports blank or missing Git identity without writes", async () => {

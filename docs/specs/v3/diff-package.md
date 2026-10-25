@@ -6,7 +6,7 @@
 
 A diff package is generated inspection material for an existing Construction scope. It binds a readable manifest, changed paths, statistics, and patches to phase-owned records and repository-qualified checkpoint sets. It is not a stage, Activity, lifecycle milestone, authored artifact type, workflow authority, or general packaging framework.
 
-These contracts set version 3 behavior. The current CLI does not have these commands.
+These contracts set version 3 behavior. M12 implements the three source-bound diff-package commands in the current CLI; this does not imply that the rest of the v3 command tree is implemented or released.
 
 The `kepler git diff-package` command family has three fixed inspection scopes: Code Validation, Code Integration, and Unit of Work Review. It selects existing material-producer context and repository bindings from recorded facts. It does not start the consuming Validation or Review attempt. See the [CLI contract](cli.md#kepler-git-diff-package) for unchanged signatures.
 
@@ -36,7 +36,7 @@ Keep the validated task output and its original Generation and Validation eviden
 
 The Review package starts at the original unit Review baseline set captured before the first task admission. It ends at the final checkpoint set that the selected Implementation attempt's completion assessment identifies. Keep the original baseline across later attempts and reviews. Keep it distinct from mission startup. Do not substitute a remote target merge base or current `HEAD`.
 
-Include cumulative unit changes and relevant task contributions kept from earlier attempts and Integration history. Do not hide earlier unit work after a return or narrow whole-unit review to changed lines. The package is an aid for review of the complete outcome, including relevant unchanged behavior, current contracts, and applicable evidence.
+Include cumulative unit changes and relevant task contributions kept from earlier attempts and Integration history. Bound this history to the selected Implementation attempt: include predecessor attempts, but exclude later attempts. Do not hide earlier unit work after a return or narrow whole-unit review to changed lines. The package is an aid for review of the complete outcome, including relevant unchanged behavior, current contracts, and applicable evidence.
 
 ## Selectors and resolution
 
