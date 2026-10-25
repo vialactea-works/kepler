@@ -1,5 +1,6 @@
 import { Command, CommandRunner, Option, SubCommand } from "nest-commander";
 import { GitAuthorLookup } from "../git-author.js";
+import { GitDiffPackageCommand } from "./diff-package.commands.js";
 import { MetadataLinter } from "../metadata-lint.js";
 import { parseProjectSelector, ProjectResolver } from "../project-selection.js";
 import { appendSelectorValue, parseScopeSelectors, type ScopeSelectorFailure } from "../scope-selectors.js";
@@ -114,7 +115,7 @@ export class GitAuthorCommand extends CommandRunner {
 @Command({
   name: "git",
   description: "Inspect and work with repository material",
-  subCommands: [GitAuthorCommand],
+  subCommands: [GitAuthorCommand, GitDiffPackageCommand],
 })
 export class GitCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) {

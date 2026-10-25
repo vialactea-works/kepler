@@ -53,6 +53,9 @@ import { AuditRecording } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
 import { AuditQueries } from "../../audit/queries.js";
 import { createMissionWorkspacePreparation } from "../../construction/mission-workspace.js";
+import { ConstructionDiffPackageSources } from "../../construction/diff-package-source.js";
+import { GitDiffPackageAdapter } from "../../workbench/git-diff-package.js";
+import { GitDiffPackageService } from "../../workbench/diff-package.js";
 import { createNodeMissionWorkspaceRuntime } from "../../construction/mission-workspace-runtime.js";
 import { MetadataLinter } from "../metadata-lint.js";
 import { PROJECT_SELECTION_RUNTIME, ProjectSelectionModule } from "../project-selection.module.js";
@@ -107,6 +110,13 @@ import {
   UuidCommand,
   WorkflowCommand,
 } from "./capability.commands.js";
+import {
+  GIT_DIFF_PACKAGE_OPERATION,
+  GitDiffPackageCommand,
+  GitDiffPackageIntegrationCommand,
+  GitDiffPackageUnitReviewCommand,
+  GitDiffPackageValidationCommand,
+} from "./diff-package.commands.js";
 import { ResultModule } from "./result.module.js";
 
 const packageMetadata: unknown = createRequire(import.meta.url)("../../../package.json");
@@ -120,6 +130,10 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
   providers: [
     GitCommand,
     GitAuthorCommand,
+    GitDiffPackageCommand,
+    GitDiffPackageValidationCommand,
+    GitDiffPackageIntegrationCommand,
+    GitDiffPackageUnitReviewCommand,
     UuidCommand,
     MetadataLintCommand,
     AuditCommand,
@@ -178,6 +192,14 @@ const cliVersion = typeof packageMetadata === "object" && packageMetadata !== nu
           (await queries.taskExecutionContext(unitId, taskId, project)).kind === "execution-context"),
       ),
       inject: [ProjectResolver, ConstructionQueries],
+    },
+    {
+      provide: GIT_DIFF_PACKAGE_OPERATION,
+      useFactory: (contexts: AuditContextResolver) => new GitDiffPackageService(
+        new ConstructionDiffPackageSources(contexts),
+        new GitDiffPackageAdapter(),
+      ),
+      inject: [AuditContextResolver],
     },
     {
       provide: AuditQueries,
