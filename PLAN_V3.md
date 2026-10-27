@@ -441,6 +441,8 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 ## M13: Write all Construction skills
 
+**Status:** Complete on the integration branch.
+
 **Sources:** [skills](docs/specs/v3/skills.md), all stage/Activity contracts, and available M04-M12 command interfaces.
 
 - [x] M13.1 Write `skills/kepler-design/SKILL.md` for investigation, requester discussion, unit/design authorship, self-review, explicit approval, reopening questions, and Quality handoff. Keep technical solution selection outside Functional Design.
