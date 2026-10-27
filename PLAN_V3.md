@@ -423,6 +423,8 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 ## M12: Add all three Git diff-package interfaces
 
+**Status:** Complete on the integration branch.
+
 **Sources:** [diff packages](docs/specs/v3/diff-package.md), [fixed signatures](docs/specs/v3/cli.md#kepler-git-diff-package), SH100-SH101, IE32-IE33, UR17.
 
 - [x] M12.1 Add exactly `git diff-package validation`, `integration`, and `unit-review` with their accepted source-attempt selectors. Do not add a mission/repository/batch/format selector, an arbitrary range override, or an implicit latest source.
