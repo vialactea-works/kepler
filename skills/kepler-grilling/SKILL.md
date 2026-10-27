@@ -1,54 +1,27 @@
 ---
 name: kepler-grilling
-description: "Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases."
+description: Run a focused, requester-owned discussion while preserving the calling skill's context, decision authority, and exit condition.
 ---
 
-Interview me relentlessly about every aspect of this until we reach a shared understanding. Work through each branch of the decision tree, resolving dependencies between decisions one at a time. For each question, provide your recommended answer.
+# Focused Requester Discussion
 
-Ask one question at a time and wait for feedback before continuing. Asking multiple questions at once is bewildering.
+## When to Use
 
-Look up *facts* available in the environment (filesystem, tools, etc.) rather than asking me. The *decisions* are mine — put each one to me and wait for my answer.
+Use when a caller asks you to stress-test a plan, decision, finding, trade-off, or open question, or when the caller explicitly invokes this supporting skill. The calling stage or Activity owns its artifacts, decisions, completion rules, and handoff.
 
-Do not act on it until I confirm we have reached a shared understanding.
+## Inputs
 
-If the user reverses a recorded decision, update its artifact to state the current truth — never leave the stale version standing.
+Require the caller's subject/context and a concrete exit condition (for example, clarify functional intent, resolve a material target choice, or validate a proposed finding). If either is missing, ask what to examine and what outcome ends the discussion. Accept caller-supplied artifact paths and scope. Do not infer the stage, reopen an artifact, or replace the caller's exit condition with your own process.
 
-Immediately after writing an answer to a recognized ticket, map, or route, run the narrowest file-scoped command: `kepler workbench lint --file <ticket-path>`, `kepler workbench lint --file <map-path>`, or `kepler workbench lint --file <route-path>`. A nonzero lint result is a failed gate: resolve the finding and rerun lint, or report the exact blocker. The latest successful lint is required before handoff or commit. Do not lint conversation text or unrelated notes.
+## Procedure
 
-## Challenge posture
+1. Separate facts that can be looked up from choices that belong to the requester. Inspect source documents, code, tests, project standards, or provided research for discoverable facts. Do not ask the requester to repeat information available in the repository or references.
+2. Identify each unresolved decision that could affect the caller's exit condition. Ask one focused question at a time. Offer a recommendation and concise reason where a recommendation helps; distinguish it from the requester's authority.
+3. Evaluate each answer. If it creates a concrete contradiction, failure case, material cost, or conflict with a recorded decision, raise one specific objection. If the requester reaffirms or marks a choice final, accept it, record any remaining reservation briefly, and do not reopen the same point without new evidence.
+4. Keep facts, assumptions, recommendation, requester decision, and unresolved issue distinct. Do not present a proposal as an existing fact. Do not decide product behavior, quality targets, approval, permission, revision scope, or completion on the requester's behalf.
+5. Record each answer only where the caller's contract requires it and at the path the caller supplied. If a stage requires CLI-owned recording, use its typed interaction operation, for example `kepler audit record interaction --unit <unit-id> --stage <stage> --attempt <attempt-id> [--project <path>]` with the accepted JSON request on stdin. Faithfully record actual requester statements; an interaction record does not itself grant approval or change authority. Do not create tickets, maps, routes, a transcript, or a separate decision artifact for convenience.
+6. Stop as soon as the caller's exit condition holds. If it cannot hold without an unresolved requester choice or unavailable fact, identify that exact item and return control rather than continuing an unrelated interrogation.
 
-Evaluate every answer the user gives before moving on. If it has a concrete weakness — a failure scenario, a cost, a contradiction with a prior decision or the glossary — push back **once** with a specific objection. If the user reaffirms or marks the decision final, accept it: record the decision as the authoritative answer, note any reservation in one line, and drop the point for the rest of the session. The user owns decisions; you own making sure they were made with eyes open.
+## Handoff
 
-## Invocation contract
-
-Other skills invoke grilling with two inputs: the **content** to grill (a plan, findings, approaches, open questions) and an **exit condition** (e.g. "intent is clear", "an approach is chosen", "every finding is validated"). Grill until the exit condition holds, record the answers where the caller directs (a ticket's `## Answer`, the artifact under revision), and return control. When invoked bare — with no content or exit condition — ask what to stress-test and grill until shared understanding.
-
-## Process flow
-
-```dot
-digraph kepler_grilling {
-    "Identify content + exit condition" [shape=box];
-    "Pick next question\n(one at a time)" [shape=box];
-    "Fact or decision?" [shape=diamond];
-    "Look it up in the environment" [shape=box];
-    "Put to user with recommendation\n(wait for answer)" [shape=box];
-    "Concrete weakness?" [shape=diamond];
-    "Push back once\n(specific objection)" [shape=box];
-    "Accept + record answer\n(note reservation in one line)" [shape=box];
-    "Exit condition met?" [shape=diamond];
-    "Stop — await confirmation\n(do not act yet)" [shape=doublecircle];
-
-    "Identify content + exit condition" -> "Pick next question\n(one at a time)";
-    "Pick next question\n(one at a time)" -> "Fact or decision?";
-    "Fact or decision?" -> "Look it up in the environment" [label="fact"];
-    "Fact or decision?" -> "Put to user with recommendation\n(wait for answer)" [label="decision"];
-    "Look it up in the environment" -> "Exit condition met?";
-    "Put to user with recommendation\n(wait for answer)" -> "Concrete weakness?";
-    "Concrete weakness?" -> "Push back once\n(specific objection)" [label="yes"];
-    "Concrete weakness?" -> "Accept + record answer\n(note reservation in one line)" [label="no"];
-    "Push back once\n(specific objection)" -> "Accept + record answer\n(note reservation in one line)" [label="user reaffirms or revises"];
-    "Accept + record answer\n(note reservation in one line)" -> "Exit condition met?";
-    "Exit condition met?" -> "Pick next question\n(one at a time)" [label="no"];
-    "Exit condition met?" -> "Stop — await confirmation\n(do not act yet)" [label="yes"];
-}
-```
+Return the caller's subject and scope, facts checked with sources, questions and answers, any recommendation or reservation, unresolved choices, and whether the caller's exit condition is met. Name the supplied destination or report that no path was supplied. The caller decides whether to update an artifact, record evidence, request approval, or propose a revision.
