@@ -13,6 +13,7 @@ import {
   type KeplerServiceOptions,
   type KeplerSettings,
 } from "../../../packages/core/src/index.js";
+import { createSetupBundleFixture } from "../../helpers/setup-bundle-fixture.js";
 import type {
   ActivityAttemptId,
   ArtifactId,
@@ -78,13 +79,25 @@ const settings: KeplerSettings = parseKeplerSettings("enabled: true");
 const artifactReader: ArtifactReader = markdownArtifactReader;
 const artifactWriter: ArtifactWriter = markdownArtifactWriter;
 const setupFiles: SetupFiles = {
+  readBundle: () => createSetupBundleFixture(),
+  globalPaths: () => globalPathsWithInstallationRecord,
   ensureHome: () => {},
-  copyTemplates: () => ["plan.md"],
-  copyGuidelineManifests: () => {},
-  writeDefaultSettings: () => {},
+  inspectPath: () => ({ kind: "missing" }),
+  pendingRecoveryPaths: () => [],
+  applyPlan: () => ({ createdFiles: [], updatedFiles: [], settingsCreated: true }),
+};
+const globalPathsWithInstallationRecord = {
+  ...globalPaths,
+  installationRecord: "/temporary/home/.config/vialactea-works/kepler/installation.json",
 };
 const bundleLocator: SetupBundleLocator = () => "/bundle";
-const setup: Setup = new SetupService(setupFiles, bundleLocator);
+const setup: Setup = new SetupService(
+  setupFiles,
+  bundleLocator,
+  "0.10.3",
+  { os: "linux", arch: "x64" },
+  () => "550e8400-e29b-41d4-a716-446655440000",
+);
 const setupResult: SetupResult = setup.setup();
 
 describe("public Core and setup contracts", () => {
@@ -102,6 +115,8 @@ describe("public Core and setup contracts", () => {
   });
 
   it("runs a use case through its narrow in-memory adapter contract", () => {
-    expect(setupResult).toEqual({ templates: ["plan.md"] });
+    expect(setupResult.generation_id).toBe("550e8400-e29b-41d4-a716-446655440000");
+    expect(setupResult.compatibility.check).toBe("compatible");
+    expect(setupResult.host_binding.host.check).toBe("not_checked");
   });
 });

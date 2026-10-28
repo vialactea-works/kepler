@@ -61,6 +61,15 @@ const bundleManifestBase: BundleManifest = {
   files: {
     "guidelines/general/01-code-style.md": digest,
     "templates/v3/construction/design.md": digest,
+    ...Object.fromEntries(
+      skillIds.map((id) => [`skills/${id}/SKILL.md`, digest] as const),
+    ),
+    ...Object.fromEntries(
+      roles.map(([, agent_id]) => [
+        `agents/claude-code/v1/${agent_id}.md`,
+        digest,
+      ] as const),
+    ),
   },
   content_digest: digest,
   compatibility: bundleCompatibility,
@@ -79,6 +88,7 @@ function installationRecord(): InstallationRecord {
     bundle_release: {
       release: bundleRelease,
       content_digest: bundleManifest.content_digest,
+      manifest: bundleManifest,
       installed_files: {
         "templates/v3/construction/design.md": digest,
       },
@@ -90,7 +100,7 @@ function installationRecord(): InstallationRecord {
     host_binding: {
       host: {
         id: "claude-code",
-        release: hostBindingRelease,
+        release: null,
         check: "not_checked",
       },
       platform: { os: "linux", arch: "x64" },
@@ -130,13 +140,53 @@ describe("installation generation metadata", () => {
     ).toThrow("must match pattern");
   });
 
+  it("canonicalizes nested resource members, array order, and Unicode file paths", () => {
+    const reordered: BundleManifest = {
+      ...bundleManifest,
+      compatibility: {
+        cli_releases: [...bundleCompatibility.cli_releases].reverse(),
+        skills: bundleCompatibility.skills
+          .map((skill) => ({
+            required: skill.required,
+            digest: skill.digest,
+            release: skill.release,
+            id: skill.id,
+          }))
+          .reverse(),
+        host_bindings: bundleCompatibility.host_bindings
+          .map((binding) => ({
+            digest: binding.digest,
+            release: binding.release,
+            agent_id: binding.agent_id,
+            role: binding.role,
+          }))
+          .reverse(),
+      },
+    };
+    const unicodeFiles = {
+      ...bundleManifest,
+      files: { "templates/Ω.md": digest, "templates/é.md": digest },
+    };
+    const reorderedUnicodeFiles = {
+      ...unicodeFiles,
+      files: { "templates/é.md": digest, "templates/Ω.md": digest },
+    };
+
+    expect(bundleManifestContentDigest(reordered)).toBe(
+      bundleManifest.content_digest,
+    );
+    expect(bundleManifestContentDigest(unicodeFiles)).toBe(
+      bundleManifestContentDigest(reorderedUnicodeFiles),
+    );
+    expect(() => parseBundleManifest(JSON.stringify(reordered))).not.toThrow();
+  });
+
   it("computes a deterministic digest over the manifest generation and declared files", () => {
     const reordered: BundleManifest = {
       ...bundleManifest,
-      files: {
-        "templates/v3/construction/design.md": digest,
-        "guidelines/general/01-code-style.md": digest,
-      },
+      files: Object.fromEntries(
+        Object.entries(bundleManifest.files).reverse(),
+      ),
     };
 
     expect(bundleManifestContentDigest(reordered)).toBe(
@@ -154,6 +204,46 @@ describe("installation generation metadata", () => {
         JSON.stringify({ ...bundleManifest, files: changedFiles }),
       ),
     ).toThrow("content_digest does not match bundle manifest metadata");
+  });
+
+  it("binds skill and host-role digests to their declared bundle files", () => {
+    const wrongDigest = `sha256:${"b".repeat(64)}` as ContentDigest;
+    const changedSkillManifest: BundleManifest = {
+      ...bundleManifest,
+      compatibility: {
+        ...bundleManifest.compatibility,
+        skills: bundleManifest.compatibility.skills.map((skill, index) =>
+          index === 0 ? { ...skill, digest: wrongDigest } : skill,
+        ),
+      },
+    };
+    const changedBindingManifest: BundleManifest = {
+      ...bundleManifest,
+      compatibility: {
+        ...bundleManifest.compatibility,
+        host_bindings: bundleManifest.compatibility.host_bindings.map(
+          (binding, index) =>
+            index === 0 ? { ...binding, digest: wrongDigest } : binding,
+        ),
+      },
+    };
+
+    expect(() =>
+      parseBundleManifest(
+        JSON.stringify({
+          ...changedSkillManifest,
+          content_digest: bundleManifestContentDigest(changedSkillManifest),
+        }),
+      ),
+    ).toThrow("bundle skill digest does not match");
+    expect(() =>
+      parseBundleManifest(
+        JSON.stringify({
+          ...changedBindingManifest,
+          content_digest: bundleManifestContentDigest(changedBindingManifest),
+        }),
+      ),
+    ).toThrow("bundle host-binding digest does not match");
   });
 
   it("rejects incomplete declared skill or host-binding sets", () => {
@@ -203,16 +293,16 @@ describe("installation generation metadata", () => {
     const parsed = parseInstallationRecord(encoded);
 
     expect(encoded.endsWith("\n")).toBe(true);
-    expect(parsed).toEqual(record);
+    expect(serializeInstallationRecord(parsed)).toBe(encoded);
     expect(parsed.format_version).toBe(1);
     expect(parsed.bundle_release.release).toBe(bundleRelease);
     expect(parsed.bundle_release.content_digest).toBe(
       bundleManifest.content_digest,
     );
-    expect(parsed.skills.map((skill) => skill.id)).toEqual(skillIds);
+    expect(parsed.skills.map((skill) => skill.id)).toEqual([...skillIds].sort());
     expect(parsed.skills.filter((skill) => skill.required)).toHaveLength(8);
     expect(parsed.host_binding.roles.map((role) => role.agent_id)).toEqual(
-      roles.map(([, agent_id]) => agent_id),
+      roles.map(([, agent_id]) => agent_id).sort(),
     );
     expect(parsed.skills.every((skill) => skill.check === "not_checked")).toBe(
       true,
@@ -220,6 +310,128 @@ describe("installation generation metadata", () => {
     expect(
       parsed.host_binding.roles.every((role) => role.check === "not_checked"),
     ).toBe(true);
+  });
+
+  it("binds ownership receipts and installed resource facts to the embedded manifest", () => {
+    const record = installationRecord();
+    const wrongDigest = `sha256:${"b".repeat(64)}` as ContentDigest;
+
+    expect(() =>
+      parseInstallationRecord(
+        JSON.stringify({
+          ...record,
+          bundle_release: {
+            ...record.bundle_release,
+            installed_files: {
+              "templates/v3/construction/design.md": wrongDigest,
+            },
+          },
+        }),
+      ),
+    ).toThrow("installation receipt is not declared by its bundle manifest");
+    expect(() =>
+      parseInstallationRecord(
+        JSON.stringify({
+          ...record,
+          bundle_release: {
+            ...record.bundle_release,
+            installed_files: { "templates/unlisted.md": digest },
+          },
+        }),
+      ),
+    ).toThrow("installation receipt is not declared by its bundle manifest");
+    expect(() =>
+      parseInstallationRecord(
+        JSON.stringify({
+          ...record,
+          bundle_release: {
+            ...record.bundle_release,
+            content_digest: wrongDigest,
+          },
+        }),
+      ),
+    ).toThrow("bundle identity does not match its manifest");
+  });
+
+  it("rejects compatibility claims that contradict known resource checks", () => {
+    const record = installationRecord();
+    const missingRequiredSkill: InstallationRecord = {
+      ...record,
+      skills: record.skills.map((skill, index) =>
+        index === 0 ? { ...skill, check: "missing" } : skill,
+      ),
+    };
+    const mismatchedRole: InstallationRecord = {
+      ...record,
+      host_binding: {
+        ...record.host_binding,
+        roles: record.host_binding.roles.map((role, index) =>
+          index === 0 ? { ...role, check: "mismatch" } : role,
+        ),
+      },
+    };
+    const missingHostIdentity: InstallationRecord = {
+      ...record,
+      host_binding: {
+        ...record.host_binding,
+        host: { id: null, release: null, check: "matches" },
+      },
+    };
+
+    expect(() =>
+      parseInstallationRecord(JSON.stringify(missingRequiredSkill)),
+    ).toThrow("expected unknown");
+    expect(() => parseInstallationRecord(JSON.stringify(mismatchedRole))).toThrow(
+      "expected unsupported",
+    );
+    expect(() =>
+      parseInstallationRecord(JSON.stringify(missingHostIdentity)),
+    ).toThrow("requires a host identity");
+    expect(
+      parseInstallationRecord(
+        JSON.stringify({
+          ...missingRequiredSkill,
+          compatibility: { check: "unknown" },
+        }),
+      ).compatibility.check,
+    ).toBe("unknown");
+  });
+
+  it("rejects duplicate JSON object members before parsing manifests or records", () => {
+    const record = installationRecord();
+    const encoded = JSON.stringify(record);
+    const duplicateCompatibility = encoded.replace(
+      '"compatibility":{"check":"compatible"}',
+      '"compatibility":{"check":"compatible"},"compatibility":{"check":"compatible"}',
+    );
+    const bundleRelease = JSON.stringify(record.bundle_release);
+    const duplicateBundleRelease = encoded.replace(
+      `"bundle_release":${bundleRelease}`,
+      `"bundle_release":${bundleRelease},"bundle_release":${bundleRelease}`,
+    );
+    const receiptPath = "templates/v3/construction/design.md";
+    const receipt = `"installed_files":{"${receiptPath}":"${digest}"}`;
+    const duplicateReceiptPath = encoded.replace(
+      receipt,
+      `"installed_files":{"${receiptPath}":"${digest}","${receiptPath}":"${digest}"}`,
+    );
+    const duplicateManifestMember = JSON.stringify(bundleManifest).replace(
+      '"bundle_release":"kepler-bundle-3.0.0"',
+      '"bundle_release":"kepler-bundle-3.0.0","bundle_release":"kepler-bundle-3.0.0"',
+    );
+
+    expect(() => parseInstallationRecord(duplicateCompatibility)).toThrow(
+      "Duplicate JSON object member",
+    );
+    expect(() => parseInstallationRecord(duplicateBundleRelease)).toThrow(
+      "Duplicate JSON object member",
+    );
+    expect(() => parseInstallationRecord(duplicateReceiptPath)).toThrow(
+      "Duplicate JSON object member",
+    );
+    expect(() => parseBundleManifest(duplicateManifestMember)).toThrow(
+      "Duplicate JSON object member",
+    );
   });
 
   it("rejects unsupported record versions and unsafe ownership receipts", () => {

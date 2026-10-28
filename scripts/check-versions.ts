@@ -48,12 +48,31 @@ if (!sourceVersion) {
   throw new Error("Could not read canonical VERSION from src/index.ts");
 }
 
-const versions = [...packageVersions.map(({ version }) => version), sourceVersion];
+let cliSourceVersion: string | undefined;
+try {
+  const source = readFileSync(resolve("packages/cli/src/cli/version.ts"), "utf8");
+  cliSourceVersion = source.match(/^export const CLI_RELEASE = "([^"]+)";$/m)?.[1];
+} catch (error) {
+  throw new Error(
+    `Could not read CLI_RELEASE from packages/cli/src/cli/version.ts: ${String(error)}`,
+  );
+}
+
+if (!cliSourceVersion) {
+  throw new Error("Could not read CLI_RELEASE from packages/cli/src/cli/version.ts");
+}
+
+const versions = [
+  ...packageVersions.map(({ version }) => version),
+  sourceVersion,
+  cliSourceVersion,
+];
 if (new Set(versions).size !== 1) {
   throw new Error(
     [
       ...packageVersions.map(({ file, version }) => `${file}: ${version}`),
       `src/index.ts: ${sourceVersion}`,
+      `packages/cli/src/cli/version.ts: ${cliSourceVersion}`,
     ].join("\n"),
   );
 }

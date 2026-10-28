@@ -91,7 +91,18 @@ describe("compiled CLI E2E", () => {
       expect(result).toMatchObject({ exitCode: 0, stderr: "" });
       expect(envelope(result.stdout)).toMatchObject({
         status: "success",
-        data: { output: expect.stringContaining("Kepler set up successfully.") },
+        data: {
+          generation_id: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+          ),
+          compatibility: { check: "compatible" },
+          skills: expect.arrayContaining([
+            expect.objectContaining({ id: "kepler-design", check: "not_checked" }),
+          ]),
+          host_binding: {
+            host: { id: "claude-code", check: "not_checked" },
+          },
+        },
       });
       expect(
         await exists(
@@ -127,12 +138,12 @@ describe("compiled CLI E2E", () => {
     expect(result.exitCode).toBe(1);
     expect(parsed.status).toBe("failed");
     expect(parsed.data).toMatchObject({
-      code: "operation_failed",
-      message: expect.stringContaining("Setup failed:"),
+      code: "setup_write_failed",
+      message: expect.stringContaining("Failed to create Kepler home directories:"),
       details: {},
       recovery: expect.any(String),
     });
-    expect(result.stderr).toContain("Setup failed:");
+    expect(result.stderr).toBe("");
   }, 120_000);
 
   it("keeps legacy workbench operation output inside the JSON result envelope", async () => {

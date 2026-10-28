@@ -66,6 +66,7 @@ export interface InstallationRecord {
   readonly bundle_release: {
     readonly release: string;
     readonly content_digest: ContentDigest;
+    readonly manifest: BundleManifest;
     readonly installed_files: Readonly<Record<string, ContentDigest>>;
   };
   readonly skills: readonly InstallationResourceCheck[];
@@ -84,6 +85,10 @@ export interface InstallationRecord {
   readonly compatibility: {
     readonly check: CompatibilityCheck;
   };
+}
+
+export function sha256Digest(content: string | Uint8Array): ContentDigest {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
 
 export class InstallationMetadataError extends Error {
@@ -166,6 +171,7 @@ const installationRecordSchema = closedObject({
   bundle_release: closedObject({
     release: text,
     content_digest: digest,
+    manifest: bundleManifestSchema,
     installed_files: digestMap,
   }),
   skills: {
@@ -254,6 +260,7 @@ export function parseBundleManifest(content: string): BundleManifest {
       "bundle manifest files must not include the self-referential manifest file",
     );
   }
+  validateBundleResourceEntries(manifest);
   if (bundleManifestContentDigest(manifest) !== manifest.content_digest) {
     throw new InstallationMetadataError(
       "content_digest does not match bundle manifest metadata",
@@ -270,18 +277,26 @@ export function bundleManifestContentDigest(
     bundle_release: manifest.bundle_release,
     files: sortedRecord(manifest.files),
     compatibility: {
-      cli_releases: [...manifest.compatibility.cli_releases].sort((left, right) =>
-        left.localeCompare(right),
-      ),
-      skills: [...manifest.compatibility.skills].sort((left, right) =>
-        left.id.localeCompare(right.id),
-      ),
-      host_bindings: [...manifest.compatibility.host_bindings].sort((left, right) =>
-        left.role.localeCompare(right.role),
-      ),
+      cli_releases: [...manifest.compatibility.cli_releases].sort(compareStrings),
+      skills: manifest.compatibility.skills
+        .map((skill) => ({
+          id: skill.id,
+          release: skill.release,
+          digest: skill.digest,
+          required: skill.required,
+        }))
+        .sort((left, right) => compareStrings(left.id, right.id)),
+      host_bindings: manifest.compatibility.host_bindings
+        .map((binding) => ({
+          role: binding.role,
+          agent_id: binding.agent_id,
+          release: binding.release,
+          digest: binding.digest,
+        }))
+        .sort((left, right) => compareStrings(left.role, right.role)),
     },
   };
-  return `sha256:${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}`;
+  return sha256Digest(JSON.stringify(payload));
 }
 
 export function evaluateBundleCompatibility(
@@ -319,6 +334,17 @@ export function parseInstallationRecord(content: string): InstallationRecord {
   const record = parsed;
   validateSkillSet(record.skills);
   validateHostBindingSet(record.host_binding.roles);
+  const manifest = parseBundleManifest(
+    JSON.stringify(record.bundle_release.manifest),
+  );
+  if (
+    record.bundle_release.release !== manifest.bundle_release ||
+    record.bundle_release.content_digest !== manifest.content_digest
+  ) {
+    throw new InstallationMetadataError(
+      "installation record bundle identity does not match its manifest",
+    );
+  }
   validateRelativeDigestMap(
     record.bundle_release.installed_files,
     "bundle_release.installed_files",
@@ -331,6 +357,8 @@ export function parseInstallationRecord(content: string): InstallationRecord {
       "bundle_release.installed_files may include only template and guideline targets",
     );
   }
+  validateRecordResourcesMatchManifest(record, manifest);
+  validateRecordCompatibility(record, manifest);
   return record;
 }
 
@@ -338,7 +366,8 @@ export function serializeInstallationRecord(
   record: InstallationRecord,
 ): string {
   const validated = parseInstallationRecord(JSON.stringify(record));
-  return `${JSON.stringify(validated, null, 2)}\n`;
+  const normalized = normalizeInstallationRecord(validated);
+  return `${JSON.stringify(normalized, null, 2)}\n`;
 }
 
 function isBundleManifest(value: unknown): value is BundleManifest {
@@ -367,6 +396,25 @@ function validateSkillSet(
   }
 }
 
+function validateBundleResourceEntries(manifest: BundleManifest): void {
+  for (const skill of manifest.compatibility.skills) {
+    const path = `skills/${skill.id}/SKILL.md`;
+    if (manifest.files[path] !== skill.digest) {
+      throw new InstallationMetadataError(
+        `bundle skill digest does not match its declared resource: ${skill.id}`,
+      );
+    }
+  }
+  for (const binding of manifest.compatibility.host_bindings) {
+    const path = `agents/claude-code/v1/${binding.agent_id}.md`;
+    if (manifest.files[path] !== binding.digest) {
+      throw new InstallationMetadataError(
+        `bundle host-binding digest does not match its declared resource: ${binding.role}`,
+      );
+    }
+  }
+}
+
 function validateHostBindingSet(
   bindings: readonly { readonly role: string; readonly agent_id: string }[],
 ): void {
@@ -381,6 +429,161 @@ function validateHostBindingSet(
       "all four accepted host role bindings must be declared",
     );
   }
+}
+
+function validateRecordResourcesMatchManifest(
+  record: InstallationRecord,
+  manifest: BundleManifest,
+): void {
+  const manifestSkills = new Map(
+    manifest.compatibility.skills.map((skill) => [skill.id, skill]),
+  );
+  const mismatchedSkill = record.skills.find((skill) => {
+    const expected = manifestSkills.get(skill.id);
+    return (
+      expected === undefined ||
+      expected.release !== skill.release ||
+      expected.digest !== skill.digest ||
+      expected.required !== skill.required
+    );
+  });
+  const manifestBindings = new Map(
+    manifest.compatibility.host_bindings.map((binding) => [binding.role, binding]),
+  );
+  const mismatchedBinding = record.host_binding.roles.find((binding) => {
+    const expected = manifestBindings.get(binding.role);
+    return (
+      expected === undefined ||
+      expected.agent_id !== binding.agent_id ||
+      expected.release !== binding.release ||
+      expected.digest !== binding.digest
+    );
+  });
+  if (mismatchedSkill || mismatchedBinding) {
+    throw new InstallationMetadataError(
+      "installation record resource facts do not match its bundle manifest",
+    );
+  }
+  if (
+    (record.host_binding.host.check === "matches" &&
+      (record.host_binding.host.id === null ||
+        record.host_binding.host.release === null))
+  ) {
+    throw new InstallationMetadataError(
+      "a matching host check requires a host identity and release",
+    );
+  }
+  for (const [path, digestValue] of Object.entries(
+    record.bundle_release.installed_files,
+  )) {
+    if (manifest.files[path] !== digestValue) {
+      throw new InstallationMetadataError(
+        `installation receipt is not declared by its bundle manifest: ${path}`,
+      );
+    }
+  }
+}
+
+function validateRecordCompatibility(
+  record: InstallationRecord,
+  manifest: BundleManifest,
+): void {
+  const declared = evaluateBundleCompatibility(manifest, record.cli_release);
+  const resourceMismatch =
+    record.skills.some((skill) => skill.check === "mismatch") ||
+    record.host_binding.roles.some((role) => role.check === "mismatch") ||
+    record.host_binding.host.check === "mismatch";
+  const requiredResourceMissing =
+    record.skills.some((skill) => skill.required && skill.check === "missing") ||
+    record.host_binding.roles.some((role) => role.check === "missing") ||
+    record.host_binding.host.check === "missing";
+  let expected: "compatible" | "unknown" | "unsupported";
+  if (resourceMismatch || declared.check === "unsupported") {
+    expected = "unsupported";
+  } else if (
+    requiredResourceMissing || declared.check === "unknown"
+  ) {
+    expected = "unknown";
+  } else {
+    expected = "compatible";
+  }
+  if (record.compatibility.check !== expected) {
+    throw new InstallationMetadataError(
+      `compatibility check contradicts its declared versions or resource checks; expected ${expected}`,
+    );
+  }
+}
+
+function normalizeInstallationRecord(
+  record: InstallationRecord,
+): InstallationRecord {
+  const manifest = record.bundle_release.manifest;
+  const normalizedManifest: BundleManifest = {
+    manifest_format_version: manifest.manifest_format_version,
+    bundle_release: manifest.bundle_release,
+    files: sortedRecord(manifest.files),
+    content_digest: manifest.content_digest,
+    compatibility: {
+      cli_releases: [...manifest.compatibility.cli_releases].sort(compareStrings),
+      skills: manifest.compatibility.skills
+        .map((skill) => ({
+          id: skill.id,
+          release: skill.release,
+          digest: skill.digest,
+          required: skill.required,
+        }))
+        .sort((left, right) => compareStrings(left.id, right.id)),
+      host_bindings: manifest.compatibility.host_bindings
+        .map((binding) => ({
+          role: binding.role,
+          agent_id: binding.agent_id,
+          release: binding.release,
+          digest: binding.digest,
+        }))
+        .sort((left, right) => compareStrings(left.role, right.role)),
+    },
+  };
+  return {
+    format_version: record.format_version,
+    generation_id: record.generation_id,
+    cli_release: record.cli_release,
+    bundle_release: {
+      release: record.bundle_release.release,
+      content_digest: record.bundle_release.content_digest,
+      manifest: normalizedManifest,
+      installed_files: sortedRecord(record.bundle_release.installed_files),
+    },
+    skills: record.skills
+      .map((skill) => ({
+        id: skill.id,
+        release: skill.release,
+        digest: skill.digest,
+        required: skill.required,
+        check: skill.check,
+      }))
+      .sort((left, right) => compareStrings(left.id, right.id)),
+    host_binding: {
+      host: {
+        id: record.host_binding.host.id,
+        release: record.host_binding.host.release,
+        check: record.host_binding.host.check,
+      },
+      platform: {
+        os: record.host_binding.platform.os,
+        arch: record.host_binding.platform.arch,
+      },
+      roles: record.host_binding.roles
+        .map((role) => ({
+          role: role.role,
+          agent_id: role.agent_id,
+          release: role.release,
+          digest: role.digest,
+          check: role.check,
+        }))
+        .sort((left, right) => compareStrings(left.role, right.role)),
+    },
+    compatibility: { check: record.compatibility.check },
+  };
 }
 
 function validateRelativeDigestMap(
@@ -407,14 +610,135 @@ function sortedRecord(
   value: Readonly<Record<string, ContentDigest>>,
 ): Record<string, ContentDigest> {
   return Object.fromEntries(
-    Object.entries(value).sort(([left], [right]) => left.localeCompare(right)),
+    Object.entries(value).sort(([left], [right]) => compareStrings(left, right)),
   );
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function rejectDuplicateJsonMembers(content: string, label: string): void {
+  let cursor = 0;
+  const skipWhitespace = (): void => {
+    while (/\s/.test(content[cursor] ?? "")) cursor += 1;
+  };
+  const readString = (): string => {
+    const start = cursor;
+    if (content[cursor] !== '"') throw new Error("Expected a JSON string");
+    cursor += 1;
+    while (cursor < content.length) {
+      const character = content[cursor];
+      if (character === "\\") {
+        cursor += 2;
+      } else if (character === '"') {
+        cursor += 1;
+        try {
+          return JSON.parse(content.slice(start, cursor)) as string;
+        } catch (error) {
+          throw new Error(`Invalid JSON string: ${String(error)}`);
+        }
+      } else {
+        if ((character?.charCodeAt(0) ?? 0) < 0x20) {
+          throw new Error("Invalid control character in JSON string");
+        }
+        cursor += 1;
+      }
+    }
+    throw new Error("Unterminated JSON string");
+  };
+  const readValue = (): void => {
+    skipWhitespace();
+    const character = content[cursor];
+    if (character === "{") {
+      readObject();
+      return;
+    }
+    if (character === "[") {
+      readArray();
+      return;
+    }
+    if (character === '"') {
+      readString();
+      return;
+    }
+    const start = cursor;
+    while (
+      cursor < content.length &&
+      !/[\s,\]}]/.test(content[cursor] ?? "")
+    ) {
+      cursor += 1;
+    }
+    if (cursor === start) throw new Error("Invalid JSON value");
+  };
+  const readObject = (): void => {
+    cursor += 1;
+    skipWhitespace();
+    if (content[cursor] === "}") {
+      cursor += 1;
+      return;
+    }
+    const keys = new Set<string>();
+    while (cursor < content.length) {
+      skipWhitespace();
+      const key = readString();
+      if (keys.has(key)) {
+        throw new InstallationMetadataError(
+          `Duplicate JSON object member in ${label}: ${key}`,
+        );
+      }
+      keys.add(key);
+      skipWhitespace();
+      if (content[cursor] !== ":") throw new Error("Expected a JSON colon");
+      cursor += 1;
+      readValue();
+      skipWhitespace();
+      if (content[cursor] === "}") {
+        cursor += 1;
+        return;
+      }
+      if (content[cursor] !== ",") throw new Error("Expected a JSON comma");
+      cursor += 1;
+    }
+    throw new Error("Unterminated JSON object");
+  };
+  const readArray = (): void => {
+    cursor += 1;
+    skipWhitespace();
+    if (content[cursor] === "]") {
+      cursor += 1;
+      return;
+    }
+    while (cursor < content.length) {
+      readValue();
+      skipWhitespace();
+      if (content[cursor] === "]") {
+        cursor += 1;
+        return;
+      }
+      if (content[cursor] !== ",") throw new Error("Expected a JSON comma");
+      cursor += 1;
+    }
+    throw new Error("Unterminated JSON array");
+  };
+
+  try {
+    readValue();
+    skipWhitespace();
+    if (cursor !== content.length) throw new Error("Trailing JSON content");
+  } catch (error) {
+    if (error instanceof InstallationMetadataError) throw error;
+    throw new InstallationMetadataError(`Invalid ${label} JSON`);
+  }
 }
 
 function parseJsonObject(
   content: string,
   label: string,
 ): Record<string, unknown> {
+  rejectDuplicateJsonMembers(content, label);
   let value: unknown;
   try {
     value = JSON.parse(content) as unknown;

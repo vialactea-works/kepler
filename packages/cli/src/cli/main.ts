@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 import "reflect-metadata";
-import cliPackage from "../../package.json" with { type: "json" };
+import { CLI_RELEASE } from "./version.js";
 import { reportCliResult } from "./nest/result-reporter.js";
 
-const VERSION = cliPackage.version;
+process.env.KEPLER_CLI_RELEASE = CLI_RELEASE;
 
 await import("@nestjs/common");
 const { CommandFactory } = await import("nest-commander");
@@ -53,7 +53,7 @@ const reportFailure = (error: unknown): void => {
 try {
   await CommandFactory.run(AppModule, {
     cliName: "kepler",
-    version: VERSION,
+    version: CLI_RELEASE,
     errorHandler: (error) => {
       throw error;
     },
