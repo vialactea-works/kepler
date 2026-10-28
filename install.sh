@@ -63,6 +63,14 @@ resolve_version() {
   fi
 }
 
+INSTALL_WORK_DIR=""
+
+cleanup_install_work_dir() {
+  if [ -n "$INSTALL_WORK_DIR" ]; then
+    rm -rf -- "$INSTALL_WORK_DIR"
+  fi
+}
+
 verify_checksums() {
   local work_dir="$1"
   local checksums_file="SHA256SUMS"
@@ -95,7 +103,8 @@ install_kepler() {
   mkdir -p "$work_dir"
   cd "$work_dir"
 
-  trap 'rm -rf "$work_dir"' EXIT
+  INSTALL_WORK_DIR="$work_dir"
+  trap cleanup_install_work_dir EXIT
 
   echo "==> Downloading release assets"
   curl -fsSL -o "$binary_name" "$download_url_base/$binary_name"
@@ -118,13 +127,11 @@ install_kepler() {
   mkdir -p ~/.kepler-dist
   tar xzf "$bundle_name" -C ~/.kepler-dist
 
-  # Leave the work dir before deleting it, otherwise the shell (and any
-  # command run afterwards, like `kepler setup`) is left with a deleted
-  # working directory.
   cd "$HOME"
 
-  trap - EXIT
   rm -rf "$work_dir"
+  INSTALL_WORK_DIR=""
+  trap - EXIT
 }
 
 main() {
