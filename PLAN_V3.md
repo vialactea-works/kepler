@@ -475,6 +475,8 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 ## M15: Add compatible setup and installation resources
 
+**Status:** Complete on the integration branch.
+
 **Sources:** [installation](docs/specs/v3/installation.md), [setup](docs/specs/v3/cli.md#kepler-setup), SH114, SH116-SH117, SH124.
 
 - [x] M15.1 Implement the installation-generation record with its specified field names and meanings at `<Kepler global home>/installation.json`. Select minimal encodings for generation, compatibility, digest, and managed-resource receipt data not specified by the contract. Keep CLI release, bundle generation, artifact/event formats, and native resource facts distinct. Do not add a host-certification framework.
