@@ -42,6 +42,8 @@ A usable installation must include a compatible CLI, bundle, skills, and host bi
 
 **Accepted under [SH117](authoring_progress.md#completed-shared-decisions).** Kepler supplies versioned skills and native agent definitions. The coding-agent host or its skill manager owns their installation and upgrades in its native locations.
 
+The initial v3 bundle stores the eleven portable skill trees under `skills/<skill-id>/` and four Claude Code subagent definitions under `agents/claude-code/v1/<agent-id>.md`. The bundle manifest binds each skill record to its `SKILL.md` digest, each role binding to its definition digest, and every payload file to the complete bundle digest. `bun run prepare:bundle` synchronizes the skill trees from `skills/` and refreshes the manifest. Set `KEPLER_BUNDLE_RELEASE`, `KEPLER_SKILLS_RELEASE`, and `KEPLER_CLAUDE_CODE_BINDINGS_RELEASE` when changing their corresponding version domains. This layout supplies versioned files; it does not show that Claude Code or a skill manager installed or loaded them. The [Claude Code subagent format](https://code.claude.com/docs/en/sub-agents) describes the native Markdown/YAML definition layout.
+
 Here, the host is the coding-agent application. Native configuration assigns the four roles, entry skills, tool permissions, and existing subagent dispatch. Setup owns Kepler's bundle resources and default settings, not native agent or skill installation.
 
 Each installer reports its own writes and failures. Keep installation results within that installer's scope. A failed or incomplete native installation cannot establish readiness through a successful setup result. Keep existing host configuration and apply its owner's permission rules before replacement.
@@ -82,7 +84,7 @@ Project Git author identity is not necessary for software installation. Before y
 
 ## Setup contract
 
-The accepted [setup interface](cli.md#kepler-setup) under SH114 keeps its installation-bootstrap role. Copy compatible bundle templates and guideline manifests. Create default settings only when settings do not exist.
+The accepted [setup interface](cli.md#kepler-setup) under SH114 keeps its installation-bootstrap role. Validate the complete selected bundle inventory and every payload digest, including skill and native definition files, before changing the global home. Copy compatible bundle templates and guideline manifests. Create default settings only when settings do not exist.
 
 Apply the accepted [agent resource ownership](#agent-resource-ownership). Setup does not install native agent definitions or skills. It does not create units, prepare project markers, edit project files, dispatch workers, or apply workflow transitions.
 
@@ -155,6 +157,8 @@ Resume from the explicit project, unit, current history, material, and safe work
 An installation upgrade does not convert v2 artifacts, translate old status, or adopt old history as v3 authority. Keep unsupported history and unfinished work. Missing compatibility prevents affected v3 operations without changing their data.
 
 Existing Core path resolution and legacy copying stay separate from artifact conversion. This contract changes neither those shared rules nor the deferred migration policy. It grants no deletion, external rollback, or distributed synchronization authority.
+
+For a generation rollout, select a CLI and its compatible sidecar bundle, then run `kepler setup`. Keep active project artifacts, unsupported history, and local runtime data unchanged. Setup can update only installer-owned files whose recorded digests still match. An incompatible bundle or necessary-path conflict leaves the current record in place and returns a failure; an interrupted update retains its recovery files and requires manual recovery. Do not convert v2 artifacts, adopt old history, or move active work into v3 as part of installation. Install native skills and definitions through the host or skill manager, which reports its own result. Begin affected v3 execution only after the required components and host capabilities are available.
 
 The operator selects rollout timing under applicable authority. SH116 selects intended targets without agent certification. It does not authorize installation or deployment. SH117 assigns native-resource writes to the host or skill manager.
 

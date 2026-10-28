@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { createRequire } from "node:module";
+import { CLI_RELEASE } from "../version.js";
 import {
   GitAuthorLookup,
 } from "../git-author.js";
@@ -119,11 +119,7 @@ import {
 } from "./diff-package.commands.js";
 import { ResultModule } from "./result.module.js";
 
-const packageMetadata: unknown = createRequire(import.meta.url)("../../../package.json");
-const cliVersion = typeof packageMetadata === "object" && packageMetadata !== null &&
-  "version" in packageMetadata && typeof packageMetadata.version === "string"
-  ? packageMetadata.version
-  : "unavailable";
+const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
 
 @Module({
   imports: [ResultModule, ProjectSelectionModule],

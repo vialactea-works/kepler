@@ -148,12 +148,12 @@ describe("main CLI", () => {
     expect(parseCliEnvelope(result.stdout)).toMatchObject({
       status: "failed",
       data: {
-        code: "operation_failed",
-        message: expect.stringContaining("Setup failed:"),
+        code: "setup_write_failed",
+        message: expect.stringContaining("Failed to create Kepler home directories:"),
         details: {},
-        recovery: expect.any(String),
+        recovery: expect.stringContaining("Resolve the filesystem failure"),
       },
     });
-    expect(result.stderr.match(/Setup failed:/g) ?? []).toHaveLength(1);
+    expect(result.stderr).toBe("");
   });
 });

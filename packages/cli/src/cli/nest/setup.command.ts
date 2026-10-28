@@ -1,12 +1,13 @@
 import { Inject } from "@nestjs/common";
 import { Command, CommandRunner } from "nest-commander";
 import { SETUP_OPERATION } from "../setup-runtime.js";
-import type { Setup, SetupResult } from "../setup.service.js";
+import { SetupFailure } from "../setup.service.js";
+import type { Setup } from "../setup.service.js";
 import { ResultReporter } from "./result-reporter.js";
 
 @Command({
   name: "setup",
-  description: "Bootstrap Kepler directories and install templates",
+  description: "Install a compatible Kepler generation without changing user resources",
 })
 export class SetupCommand extends CommandRunner {
   constructor(
@@ -22,29 +23,23 @@ export class SetupCommand extends CommandRunner {
   ): Promise<void> {
     try {
       const result = this.setup.setup();
-      this.reporter.report({
-        stdout: this.formatSuccess(result),
-        stderr: "",
-        exitCode: 0,
-      });
+      this.reporter.report({ status: "success", data: { ...result } });
     } catch (error) {
       this.reporter.report({
-        stdout: "",
-        stderr: `Setup failed: ${this.errorMessage(error)}\n`,
-        exitCode: 2,
+        status: "failed",
+        data: {
+          code: error instanceof SetupFailure ? error.code : "setup_failed",
+          message: this.errorMessage(error),
+          details: error instanceof SetupFailure ? error.details : {},
+          recovery:
+            error instanceof SetupFailure
+              ? error.recovery
+              : "Review the failure and resolve it before retrying setup.",
+        },
       });
     }
   }
 
-  private formatSuccess(result: SetupResult): string {
-    const lines = [
-      "Kepler set up successfully.",
-      `Installed ${result.templates.length} templates.`,
-      ...result.templates.map((name) => `  ${name}`),
-      "Installed guidelines.",
-    ];
-    return `${lines.join("\n")}\n`;
-  }
 
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
