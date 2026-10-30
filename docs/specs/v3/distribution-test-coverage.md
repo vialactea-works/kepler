@@ -14,4 +14,4 @@ The same test runs the installed executable from a temporary directory outside t
 
 ## CI
 
-The pull-request and release verification jobs run the named unit, integration, and E2E projects, including the installer/standalone and packed-Core behavior gates. The release workflow no longer calls shell smoke scripts. Native distribution execution for the supported Linux/macOS architectures is tracked separately from cross-compilation in the release matrix work.
+Pull-request and release verification run explicit TypeScript-source, typecheck, build, unit, integration, Docker E2E, and packed-Core gates. Both workflows run the standalone E2E on native `linux-x64`, `linux-arm64`, `darwin-x64`, and `darwin-arm64` runners; the test checks that the detected native target matches the matrix label. The release workflow's separate cross-compilation job builds release artifacts on Linux x64 and does not claim to execute them on other targets.

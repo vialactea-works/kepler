@@ -118,8 +118,20 @@ jobs:
         run: |
           "$RUNNER_TEMP/check-versions"
 
+      - name: Check TypeScript source policy
+        run: bun run check:typescript-sources
+
+      - name: Typecheck
+        run: bun run typecheck
+
       - name: Build packages
         run: bun run build
+
+      - name: Run unit tests
+        run: bun run test:unit
+
+      - name: Run integration tests
+        run: bun run test:integration
 
       - name: Pull Docker E2E image
         run: |
@@ -127,8 +139,8 @@ jobs:
           image="${image}5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6"
           docker pull "$image"
 
-      - name: Run test suite
-        run: bun run test
+      - name: Run Docker E2E tests
+        run: bun run test:e2e
 
       - name: Test packed core package
         run: bun run test:package
@@ -136,11 +148,53 @@ jobs:
       - name: Run ShellCheck
         run: shellcheck install.sh
 
+  native-distribution:
+    name: Native standalone distribution E2E (${{ matrix.target }})
+    needs:
+      - check-version
+      - verify
+    if: needs.check-version.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      KEPLER_EXPECTED_TARGET: ${{ matrix.target }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build packages
+        run: bun run build
+
+      - name: Run native standalone distribution E2E
+        run: bun --bun vitest run --project e2e tests/e2e/installation.test.ts
+
   tag:
     name: Create version tag
     needs:
       - check-version
       - verify
+      - native-distribution
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -168,7 +222,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.check-version.outputs.version }}
 
   build:
-    name: Build CLI binaries
+    name: Cross-compile CLI binaries (no execution)
     needs: tag
     runs-on: ubuntu-latest
     permissions:
@@ -199,7 +253,7 @@ jobs:
       - name: Build packages
         run: bun run build
 
-      - name: Build binary
+      - name: Cross-compile binary artifact
         run: |
           bun build --compile \
             --target=bun-${{ matrix.os }}-${{ matrix.arch }} \

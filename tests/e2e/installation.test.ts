@@ -26,6 +26,10 @@ const hostArch =
     : undefined;
 const platformTarget =
   hostPlatform && hostArch ? `${hostPlatform}-${hostArch}` : undefined;
+const expectedPlatformTarget = process.env.KEPLER_EXPECTED_TARGET;
+if (expectedPlatformTarget && platformTarget !== expectedPlatformTarget) {
+  throw new Error(`Expected native target ${expectedPlatformTarget}; detected ${platformTarget ?? "unsupported"}.`);
+}
 let resourceRoot = "";
 let assetsDirectory = "";
 let fakeBinDirectory = "";
