@@ -6,13 +6,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AuditCliDriver } from "./driver/audit-cli.js";
 import { StageCompletionCliDriver } from "./driver/stage-completion-cli.js";
 import { createE2EHarness, type E2EHarness } from "./harness.js";
-import { auditFixture, createAuditHistory } from "./fixtures/histories/audit.js";
+import { auditFixture, configureAuditFixture, createAuditHistory, resetAuditFixture, type AuditFixture } from "./fixtures/histories/audit.js";
 import { collectHistory as collectHistoryFromSources, type HistoryJournalSource } from "../../packages/cli/src/history/collection.js";
 import { projectConstruction } from "../../packages/cli/src/construction/projection.js";
 import { validateConstructionEvent } from "../../packages/cli/src/construction/events.js";
 
 const harnesses: E2EHarness[] = [];
-const unitDirectory = `.kepler/missions/${auditFixture.missionId}/construction/units-of-work/${auditFixture.unitId}`;
+let unitDirectory = `.kepler/missions/${auditFixture.missionId}/construction/units-of-work/${auditFixture.unitId}`;
 const repositoryId = "repo-main";
 const artifactIds = {
   "unit-of-work.md": "a1000000-0000-4000-8000-000000000001",
@@ -31,18 +31,18 @@ const planningGraphId = "c2000000-0000-4000-8000-000000000002";
 const planningTaskId = "c3000000-0000-4000-8000-000000000003";
 const planningSecondTaskId = "c4000000-0000-4000-8000-000000000004";
 
-const sources = {
-  "unit-of-work.md": `---\nid: ${artifactIds["unit-of-work.md"]}\ntype: unit-of-work\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Unit of Work\n\n## Purpose\n\nMake the selected workflow behavior explicit.\n\n## Scope\n\nInclude the Functional Design contract.\n\n## Context\n\nKeep the current public behavior and constraints.\n`,
-  "design.md": `---\nid: ${artifactIds["design.md"]}\ntype: functional-design\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Design\n\n## Domain behavior\n\nThe result preserves the current contract and provides observable behavior.\n\n## Domain model\n\nThe model is described in [supporting detail](details/functional-design/domain-model.md).\n\n## Boundaries and interactions\n\nThe selected unit owns its functional behavior.\n\n## Design decisions and open questions\n\nNo unresolved material questions remain.\n`,
-  "details/functional-design/domain-model.md": `---\nid: ${artifactIds["details/functional-design/domain-model.md"]}\ntype: supporting-document\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Domain model detail\n\nThe model preserves the current contract.\n`,
-} as const;
+const projectArtifactSources = (unitId: string) => ({
+  "unit-of-work.md": `---\nid: ${artifactIds["unit-of-work.md"]}\ntype: unit-of-work\nschema_version: 3\nunit_id: ${unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Unit of Work\n\n## Purpose\n\nMake the selected workflow behavior explicit.\n\n## Scope\n\nInclude the Functional Design contract.\n\n## Context\n\nKeep the current public behavior and constraints.\n`,
+  "design.md": `---\nid: ${artifactIds["design.md"]}\ntype: functional-design\nschema_version: 3\nunit_id: ${unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Design\n\n## Domain behavior\n\nThe result preserves the current contract and provides observable behavior.\n\n## Domain model\n\nThe model is described in [supporting detail](details/functional-design/domain-model.md).\n\n## Boundaries and interactions\n\nThe selected unit owns its functional behavior.\n\n## Design decisions and open questions\n\nNo unresolved material questions remain.\n`,
+  "details/functional-design/domain-model.md": `---\nid: ${artifactIds["details/functional-design/domain-model.md"]}\ntype: supporting-document\nschema_version: 3\nunit_id: ${unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Domain model detail\n\nThe model preserves the current contract.\n`,
+} as const);
 
 const createProjectArtifacts = async (harness: E2EHarness) => {
   const root = harness.resources.repositoryDirectory;
   const unitRoot = Path.join(root, unitDirectory);
   await Fs.mkdir(Path.join(unitRoot, "details", "functional-design"), { recursive: true });
   const artifactBindings = [] as Array<{ artifact_id: string; content_version: string }>;
-  for (const [relativePath, source] of Object.entries(sources)) {
+  for (const [relativePath, source] of Object.entries(projectArtifactSources(auditFixture.unitId))) {
     await Fs.writeFile(Path.join(unitRoot, relativePath), source, "utf8");
     artifactBindings.push({
       artifact_id: artifactIds[relativePath as keyof typeof artifactIds],
@@ -398,10 +398,19 @@ const createPlanningArtifacts = async (
   harness: E2EHarness,
   functionalMaterial: Awaited<ReturnType<typeof createProjectArtifacts>>,
   qualityMaterial: Awaited<ReturnType<typeof createQualityArtifacts>>,
+  options: { readonly executableIntegrationCommands?: boolean } = {},
 ) => {
   const root = harness.resources.repositoryDirectory;
   const unitRoot = Path.join(root, unitDirectory);
-  const planSource = `---\nid: ${planningArtifactId}\ntype: implementation-plan\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Implementation plan\n\n## Technical solution\n\nEnforce owning-user access at the data boundary because this keeps the security rule testable.\n\n## Task graph context\n\nThe task decomposition is recorded in [tasks-dag.json](tasks-dag.json).\n\n## Verification strategy\n\nTypecheck by running the project build, which includes TypeScript compilation: \`repo-main: bun run build\`. Run the project build with \`repo-main: bun run build\`. Run the full application test suite with \`repo-main: bun run test\`.\n\nRun the focused unit test for the access policy and verify that another user is denied.\n\n## Decisions and open questions\n\nThe task owns the access-policy implementation; no consequential decisions remain open.\n`;
+  const useExecutableCommands = options.executableIntegrationCommands ?? false;
+  const typecheckCommand = (file: string) => useExecutableCommands
+    ? `repo-main: bun run ./node_modules/typescript/bin/tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --strict --typeRoots ./node_modules/@types --types node src/access.ts ${file}`
+    : "repo-main: bun run build";
+  const buildCommand = useExecutableCommands ? "repo-main: bun build src/access.ts --outdir .kepler-e2e-build" : "repo-main: bun run build";
+  const buildMethod = useExecutableCommands ? "Build the access policy with" : "Build with";
+  const buildExpected = useExecutableCommands ? "The access policy builds successfully." : "The project build passes.";
+  const testCommand = (file: string) => useExecutableCommands ? `repo-main: bun run ${file}` : "repo-main: bun run test";
+  const planSource = `---\nid: ${planningArtifactId}\ntype: implementation-plan\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Implementation plan\n\n## Technical solution\n\nEnforce owning-user access at the data boundary because this keeps the security rule testable.\n\n## Task graph context\n\nThe task decomposition is recorded in [tasks-dag.json](tasks-dag.json).\n\n## Verification strategy\n\nTypecheck the owner policy and baseline test with \`${typecheckCommand("tests/access-check.ts")}\`. Typecheck regression coverage with \`${typecheckCommand("tests/access-regression.ts")}\`.\n\n${buildMethod} \`${buildCommand}\`. Run the full test suite for the owner policy with \`${testCommand("tests/access-check.ts")}\`. Run the full test suite for regression coverage with \`${testCommand("tests/access-regression.ts")}\`.\n\n## Decisions and open questions\n\nThe task owns the access-policy implementation; no consequential decisions remain open.\n`;
   const graph = {
     format: "kepler-task-dag",
     version: 1,
@@ -412,13 +421,13 @@ const createPlanningArtifacts = async (
       title: "Enforce owner-scoped reads",
       goal: "Prevent users from reading another user's stored data.",
       inputs: [{ reference: `artifact:${qualityArtifactIds["details/quality-requirements/security.md"]}`, purpose: "Accepted security requirement" }],
-      outputs: ["Owner-scoped data access policy"],
+      outputs: ["src/access.ts"],
       acceptance_criteria: ["A non-owner receives an access-denied result."],
       guidance: ["Keep the policy at the data boundary."],
       verification: [
-        { scope: "typecheck", method: "Typecheck by running the project build, which includes TypeScript compilation: `repo-main: bun run build`.", expected_result: "Typechecking passes." },
-        { scope: "build", method: "Build with `repo-main: bun run build`.", expected_result: "The project build passes." },
-        { scope: "full-test-suite", method: "Run the full application test suite with `repo-main: bun run test`.", expected_result: "All application tests pass." },
+        { scope: "typecheck", method: `Typecheck owner policy with \`${typecheckCommand("tests/access-check.ts")}\`.`, expected_result: "Typechecking passes." },
+        { scope: "build", method: `${buildMethod} \`${buildCommand}\`.`, expected_result: buildExpected },
+        { scope: "full-test-suite", method: `Run the full test suite with \`${testCommand("tests/access-check.ts")}\`.`, expected_result: "The owner policy tests pass." },
         { scope: "unit", method: "Run the access-policy unit test", expected_result: "A non-owner is denied." },
       ],
       depends_on: [],
@@ -428,13 +437,13 @@ const createPlanningArtifacts = async (
       title: "Record access-policy regression coverage",
       goal: "Keep evidence that owner-scoped reads deny another user's access.",
       inputs: [{ reference: `artifact:${qualityArtifactIds["details/quality-requirements/security.md"]}`, purpose: "Accepted security requirement" }],
-      outputs: ["Owner-access regression evidence"],
+      outputs: ["tests/access-regression.ts"],
       acceptance_criteria: ["A non-owner receives an access-denied result."],
       guidance: ["Keep the regression check tied to the access policy."],
       verification: [
-        { scope: "typecheck", method: "Typecheck by running the project build, which includes TypeScript compilation: `repo-main: bun run build`.", expected_result: "Typechecking passes." },
-        { scope: "build", method: "Build with `repo-main: bun run build`.", expected_result: "The project build passes." },
-        { scope: "full-test-suite", method: "Run the full application test suite with `repo-main: bun run test`.", expected_result: "All application tests pass." },
+        { scope: "typecheck", method: `Typecheck regression coverage with \`${typecheckCommand("tests/access-regression.ts")}\`.`, expected_result: "Typechecking passes." },
+        { scope: "build", method: `${buildMethod} \`${buildCommand}\`.`, expected_result: buildExpected },
+        { scope: "full-test-suite", method: `Run the full test suite with \`${testCommand("tests/access-regression.ts")}\`.`, expected_result: "The regression tests pass." },
         { scope: "unit", method: "Run the access-policy unit test", expected_result: "A non-owner is denied." },
       ],
       depends_on: [],
@@ -470,7 +479,10 @@ const createPlanningArtifacts = async (
     planSource,
     taskIds: [planningTaskId, planningSecondTaskId],
     taskContracts,
-    taskContract: taskContracts[0]!,
+    verificationObligations: graph.tasks.flatMap((task) => task.verification.map((verification) =>
+      `task:${task.id} ${verification.scope}: ${verification.method}; expected: ${verification.expected_result}`,
+    )),
+    taskContract: taskContracts[0]!
   };
 };
 
@@ -559,12 +571,7 @@ const planningCompletionRequest = (
       input_bindings: material.inputBindings,
       graph_ref: material.graphRef,
       task_ids: material.taskIds,
-      verification_obligations: material.taskIds.flatMap((taskId) => [
-        `task:${taskId} typecheck: Typecheck by running the project build, which includes TypeScript compilation: \`repo-main: bun run build\`.; expected: Typechecking passes.`,
-        `task:${taskId} build: Build with \`repo-main: bun run build\`.; expected: The project build passes.`,
-        `task:${taskId} full-test-suite: Run the full application test suite with \`repo-main: bun run test\`.; expected: All application tests pass.`,
-        `task:${taskId} unit: Run the access-policy unit test; expected: A non-owner is denied.`,
-      ]),
+      verification_obligations: material.verificationObligations,
       prerequisite_conditions: [],
       coordination_constraints: ["Serialize repository integration per unit."],
       approval_required: false,
@@ -721,6 +728,8 @@ const completionRequest = (
 
 afterEach(async () => {
   for (const harness of harnesses.splice(0)) await harness.cleanup();
+  resetAuditFixture();
+  unitDirectory = `.kepler/missions/${auditFixture.missionId}/construction/units-of-work/${auditFixture.unitId}`;
 });
 
 describe("Functional Design stage completion CLI E2E", () => {
@@ -2124,4 +2133,462 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(projection.blocked).toBe(true);
     expect(projection.stages).toContainEqual(expect.objectContaining({ stage: "quality-requirements", state: "unknown" }));
   }, 120_000);
+});
+
+describe("Standard workflow CLI E2E", () => {
+  it.each([
+    { name: "greenfield repository", noCommit: true },
+    { name: "existing application", noCommit: false },
+  ])("prepares, implements, reviews, and delivers a $name", async ({ noCommit }) => {
+    const harness = await createE2EHarness({ application: "native" });
+    harnesses.push(harness);
+    const root = harness.resources.repositoryDirectory;
+    if (noCommit) {
+      await Fs.rm(root, { recursive: true, force: true });
+      await Fs.mkdir(root, { recursive: true });
+      harness.resources.runGit(root, "init", "-q", "-b", "main");
+      harness.resources.runGit(root, "config", "user.name", "Kepler E2E Fixture");
+      harness.resources.runGit(root, "config", "user.email", "e2e@example.invalid");
+      await Fs.mkdir(Path.join(root, ".kepler"), { recursive: true });
+      await Fs.writeFile(Path.join(root, ".kepler", "marker"), "v3\n", "utf8");
+      await Fs.writeFile(Path.join(root, ".gitignore"), "node_modules/\n", "utf8");
+    } else {
+      await Fs.mkdir(Path.join(root, ".kepler"), { recursive: true });
+      await Fs.writeFile(Path.join(root, ".kepler", "marker"), "v3\n", "utf8");
+      await Fs.writeFile(Path.join(root, ".gitignore"), "node_modules/\n", "utf8");
+      await Fs.mkdir(Path.join(root, "src"), { recursive: true });
+      await Fs.writeFile(Path.join(root, "src", "access.ts"), "export const canReadStoredData = (_ownerId: string, _requesterId: string): boolean => true;\n", "utf8");
+      harness.resources.runGit(root, "add", ".kepler/marker", ".gitignore", "src/access.ts");
+      harness.resources.runGit(root, "commit", "-q", "-m", "Prepare the existing application");
+    }
+    await Fs.symlink(Path.resolve(import.meta.dirname, "../..", "node_modules"), Path.join(root, "node_modules"), "dir");
+
+    const missionRequest = {
+      title: noCommit ? "Create an owner-scoped access policy" : "Secure the existing application access policy",
+      request: "Only the owner of stored requester data can read it, and the repository handoff must include checked implementation evidence.",
+      workflow: "standard",
+      recordHomeRepositoryId: repositoryId,
+      contexts: [{ reference: "request:access-policy", purpose: "Requester scope for this implementation" }],
+      repositories: [{
+        repositoryId,
+        workspace: { kind: "existing", path: root },
+        branch: { kind: "current" },
+        integrationTarget: "refs/heads/main",
+      }],
+    };
+    const missionResult = harness.cli.run([
+      "mission", "create", "--project", root, "--request", JSON.stringify(missionRequest),
+    ]);
+    expect(missionResult.exitCode, missionResult.stdout).toBe(0);
+    const missionEnvelope = JSON.parse(missionResult.stdout) as { status: string; data: Record<string, unknown> };
+    expect(missionEnvelope).toMatchObject({ status: "success", data: { workflow: "standard", execution_started: false } });
+    const missionId = String(missionEnvelope.data.mission_id);
+    expect(missionEnvelope.data.workspaces).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        repository_id: repositoryId,
+        branch: "main",
+        starting_checkpoint: noCommit ? { kind: "no-commit" } : expect.objectContaining({ kind: "commit" }),
+      }),
+    ]));
+
+    const unitResult = harness.cli.run([
+      "workflow", "construction", "unit", "create", "access-policy",
+      "--mission", missionId, "--effort", "comprehensive", "--project", root,
+    ]);
+    expect(unitResult.exitCode, unitResult.stdout).toBe(0);
+    const unitEnvelope = JSON.parse(unitResult.stdout) as { status: string; data: Record<string, unknown> };
+    expect(unitEnvelope).toMatchObject({ status: "success", data: { mission_id: missionId, workflow: "standard", execution_started: false } });
+    const unitId = String(unitEnvelope.data.unit_id);
+    unitDirectory = `.kepler/missions/${missionId}/${String(unitEnvelope.data.directory)}`;
+    const fixture: AuditFixture = {
+      missionId,
+      unitId,
+      journalId: String(unitEnvelope.data.journal_id),
+      stageAttemptId: randomUUID(),
+      priorStageAttemptId: randomUUID(),
+      implementationAttemptId: randomUUID(),
+      baselineEventId: randomUUID(),
+      taskId: planningTaskId,
+      activityAttemptId: randomUUID(),
+      eventIds: [randomUUID(), randomUUID()],
+    };
+    configureAuditFixture(fixture);
+    const audit = createAuditDriver(harness);
+    const startStage = (stage: string, inputs: readonly { readonly reference: string; readonly purpose: string }[]) => {
+      const result = harness.cli.run([
+        "workflow", "construction", "stage", "start", "--unit", unitId, "--stage", stage,
+        "--request", JSON.stringify({ inputs }), "--project", root,
+      ]);
+      expect(result.exitCode, result.stdout).toBe(0);
+      const envelope = JSON.parse(result.stdout) as { status: string; data: Record<string, unknown> };
+      expect(envelope.status, JSON.stringify(envelope)).toBe("success");
+      return envelope.data;
+    };
+    const startInputs = (bindings: readonly { readonly artifact_id: string }[], purpose: string) =>
+      bindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose }));
+
+    const functionalStart = startStage("functional-design", [{ reference: "request:access-policy", purpose: "Requested owner-scoped access behavior" }]);
+    const functionalAttempt = String(functionalStart.attempt_id);
+    configureAuditFixture({ ...auditFixture, stageAttemptId: functionalAttempt });
+    const functionalMaterial = await createProjectArtifacts(harness);
+    const functionalEvidence = recordEvidence(audit, functionalAttempt, functionalMaterial);
+    const functionalApproval = recordApproval(audit, functionalMaterial);
+    const functionalCompletion = new StageCompletionCliDriver(harness.cli).complete(
+      unitId, functionalAttempt, completionRequest(functionalEvidence, functionalApproval),
+    );
+    expect(functionalCompletion.exitCode, JSON.stringify(functionalCompletion.result)).toBe(0);
+
+    const qualityStart = startStage("quality-requirements", startInputs(functionalMaterial.artifactBindings, "Accepted Functional Design material"));
+    const qualityAttempt = String(qualityStart.attempt_id);
+    const qualityMaterial = await createQualityArtifacts(harness);
+    const qualityEvidence = recordQualityEvidence(audit, qualityAttempt, qualityMaterial);
+    const qualityApproval = recordQualityApproval(audit, qualityAttempt, qualityMaterial);
+    const qualityCompletion = new StageCompletionCliDriver(harness.cli).complete(
+      unitId, qualityAttempt, qualityCompletionRequest(qualityEvidence, qualityApproval), "quality-requirements",
+    );
+    expect(qualityCompletion.exitCode, JSON.stringify(qualityCompletion.result)).toBe(0);
+
+    const planningStart = startStage("implementation-planning", [
+      ...startInputs(functionalMaterial.artifactBindings, "Accepted Functional Design material"),
+      ...startInputs(qualityMaterial.artifactBindings, "Accepted Quality Requirements material"),
+    ]);
+    const planningAttempt = String(planningStart.attempt_id);
+    const planningMaterial = await createPlanningArtifacts(harness, functionalMaterial, qualityMaterial, { executableIntegrationCommands: true });
+    const planningEvidence = recordPlanningEvidence(audit, planningAttempt, planningMaterial);
+    const planningCompletion = new StageCompletionCliDriver(harness.cli).complete(
+      unitId, planningAttempt, planningCompletionRequest(planningMaterial, planningEvidence), "implementation-planning",
+    );
+    expect(planningCompletion.exitCode, JSON.stringify(planningCompletion.result)).toBe(0);
+
+    await Fs.mkdir(Path.join(root, "src"), { recursive: true });
+    await Fs.mkdir(Path.join(root, "tests"), { recursive: true });
+    await Fs.writeFile(
+      Path.join(root, "src", "access.ts"),
+      "export const canReadStoredData = (ownerId: string, requesterId: string): boolean => ownerId === requesterId;\n",
+      "utf8",
+    );
+    await Fs.writeFile(
+      Path.join(root, "tests", "access-check.ts"),
+      'import * as assert from "node:assert/strict";\nimport { canReadStoredData } from "../src/access.js";\nassert.equal(canReadStoredData("owner", "owner"), true);\nassert.equal(canReadStoredData("owner", "other"), false);\n',
+      "utf8",
+    );
+    await Fs.writeFile(
+      Path.join(root, "tests", "access-regression.ts"),
+      'import * as assert from "node:assert/strict";\nimport { canReadStoredData } from "../src/access.js";\nassert.equal(canReadStoredData("owner", "other"), false);\nassert.equal(canReadStoredData("other", "owner"), false);\n',
+      "utf8",
+    );
+    harness.resources.runGit(root, "add", ".gitignore", "src/access.ts", "tests/access-check.ts", "tests/access-regression.ts");
+    harness.resources.runGit(root, "commit", "-q", "-m", "Implement owner-scoped reads and regression checks");
+
+    const implementationInputs = [
+      { reference: `task-graph:${planningMaterial.graphRef.graph_id}@${planningMaterial.graphRef.content_version}`, purpose: "Accepted task graph" },
+      ...startInputs(planningMaterial.reviewedBindings, "Accepted Functional Design, Quality Requirements, and Planning material"),
+    ];
+    const implementationStart = startStage("implementation", implementationInputs);
+    const implementationAttempt = String(implementationStart.attempt_id);
+    configureAuditFixture({ ...auditFixture, implementationAttemptId: implementationAttempt });
+    const taskIds = planningMaterial.taskIds;
+    const taskChecks = {
+      "code-generation": ["code-generation-typecheck", "code-generation-related-tests", "code-generation-self-review"],
+      "code-validation": ["code-validation-typecheck", "code-validation-build", "code-validation-full-test-suite", "code-validation-independent-review", "code-validation-self-review"],
+    } as const;
+    const integrationCommands = (testFile: string) => ({
+      "code-integration-typecheck": {
+        repository_id: repositoryId,
+        executable: "bun",
+        argv: ["run", "./node_modules/typescript/bin/tsc", "--noEmit", "--target", "ES2022", "--module", "ESNext", "--moduleResolution", "Bundler", "--strict", "--typeRoots", "./node_modules/@types", "--types", "node", "src/access.ts", testFile],
+      },
+      "code-integration-build": { repository_id: repositoryId, executable: "bun", argv: ["build", "src/access.ts", "--outdir", ".kepler-e2e-build"] },
+      "code-integration-full-test-suite": { repository_id: repositoryId, executable: "bun", argv: ["run", testFile] },
+    } as const);
+    const runTask = async (taskId: string, testFile: string) => {
+      const taskIntegrationCommands = integrationCommands(testFile);
+      const admission = harness.cli.run([
+        "workflow", "construction", "task", "admit", "--unit", unitId, "--task", taskId,
+        "--implementation-attempt", implementationAttempt, "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [] }), "--project", root,
+      ]);
+      expect(admission.exitCode, admission.stdout).toBe(0);
+      const taskIndex = planningMaterial.taskIds.indexOf(taskId);
+      const taskContract = planningMaterial.taskContracts[taskIndex];
+      if (!taskContract) throw new Error(`Missing plan contract for ${taskId}`);
+      const activityEvidenceIds: string[] = [];
+      let integrationEventId = "";
+      for (const activity of ["code-generation", "code-validation", "code-integration"] as const) {
+        const start = harness.cli.run([
+          "workflow", "construction", "activity", "start", "--unit", unitId, "--task", taskId,
+          "--activity", activity, "--implementation-attempt", implementationAttempt, "--project", root,
+        ]);
+        expect(start.exitCode, start.stdout).toBe(0);
+        const startData = (JSON.parse(start.stdout) as { data: Record<string, unknown> }).data;
+        const activityAttempt = String(startData.activity_attempt_id);
+        const inputs = startData.inputs as readonly { readonly reference: string; readonly purpose: string }[];
+        const checkpoints = startData.checkpoints as readonly { readonly repository_id: string; readonly commit: string }[];
+        const evidenceIds: string[] = [];
+        if (activity !== "code-integration") {
+          const checks = activity === "code-generation"
+            ? taskChecks[activity]
+            : ["code-validation-typecheck", "code-validation-build", "code-validation-full-test-suite", "code-validation-independent-review", "code-validation-self-review"] as const;
+          for (const check of checks) {
+            const independent = check === "code-validation-independent-review";
+            const recorded = audit.record("evidence", {
+              unit: unitId,
+              stage: "implementation",
+              task: taskId,
+              activity,
+              implementationAttempt,
+              attempt: activityAttempt,
+            }, {
+              artifact_bindings: planningMaterial.reviewedBindings,
+              checkpoints,
+              inputs,
+              check,
+              executor: independent ? "agent:reviewer" : activity === "code-generation" ? "agent:builder" : "agent:verifier",
+              worker_context_id: independent ? `${activityAttempt}:reviewer` : `${activityAttempt}:worker`,
+              result: { status: "passed", summary: `${check} passed for ${taskId}.` },
+              output_refs: taskContract.outputs,
+              conditions: [],
+            });
+            expect(recorded.exitCode, recorded.stdout).toBe(0);
+            evidenceIds.push(String(recorded.result.data.evidence_id));
+          }
+        } else {
+          const scope = [
+            "--unit", unitId, "--task", taskId, "--activity", activity,
+            "--implementation-attempt", implementationAttempt, "--attempt", activityAttempt,
+          ];
+          const lock = harness.cli.run(["workflow", "construction", "integration", "lock", ...scope, "--project", root]);
+          expect(lock.exitCode, lock.stdout).toBe(0);
+          const lockData = (JSON.parse(lock.stdout) as { data: Record<string, unknown> }).data;
+          const lockToken = String(lockData.lock_token);
+          const prepare = harness.cli.run([
+            "workflow", "construction", "integration", "prepare", ...scope, "--lock-token", lockToken,
+            "--request", JSON.stringify({ captured_inputs: lockData.captured_inputs, candidate_checkpoints: checkpoints }), "--project", root,
+          ]);
+          expect(prepare.exitCode, prepare.stdout).toBe(0);
+          const preparedEventId = String((JSON.parse(prepare.stdout) as { data: Record<string, unknown> }).data.prepared_event_id);
+          for (const check of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] as const) {
+            const selfReview = check === "code-integration-self-review";
+            const checkCommand = selfReview ? undefined : taskIntegrationCommands[check];
+            if (checkCommand) {
+              const execution = await execa(checkCommand.executable, [...checkCommand.argv], {
+                cwd: root,
+                env: harness.resources.environment(),
+                extendEnv: false,
+                reject: false,
+                timeout: 30_000,
+              });
+              expect(execution.exitCode, `${check}: ${execution.stderr}`).toBe(0);
+              if (check === "code-integration-build") {
+                const outputDirectory = Path.join(root, ".kepler-e2e-build");
+                await Fs.access(Path.join(outputDirectory, "access.js"));
+                await Fs.rm(outputDirectory, { recursive: true, force: true });
+              }
+            }
+            const request = {
+              prepared_event_id: preparedEventId,
+              check,
+              executor: "agent:integrator",
+              result: { status: "passed", summary: `${check} passed for the immutable ${taskId} candidate.` },
+              ...(selfReview ? {} : { check_command: checkCommand }),
+              output_refs: taskContract.outputs,
+              conditions: selfReview ? ["Integration bindings match the accepted candidate and actual inputs.", ...taskContract.acceptance_criteria] : [],
+            };
+            const recorded = harness.cli.run([
+              "workflow", "construction", "integration", "evidence", ...scope, "--lock-token", lockToken,
+              "--request", JSON.stringify(request), "--project", root,
+            ]);
+            expect(recorded.exitCode, recorded.stdout).toBe(0);
+            evidenceIds.push(String((JSON.parse(recorded.stdout) as { data: Record<string, unknown> }).data.evidence_id));
+          }
+          const accepted = harness.cli.run([
+            "workflow", "construction", "integration", "accept", ...scope,
+            "--lock-token", lockToken, "--prepared-event-id", preparedEventId, "--project", root,
+          ]);
+          expect(accepted.exitCode, accepted.stdout).toBe(0);
+          integrationEventId = String((JSON.parse(accepted.stdout) as { data: Record<string, unknown> }).data.integration_event_id);
+        }
+        const complete = harness.cli.run([
+          "workflow", "construction", "activity", "complete", "--unit", unitId, "--task", taskId,
+          "--activity", activity, "--implementation-attempt", implementationAttempt, "--attempt", activityAttempt,
+          "--evidence", JSON.stringify({ evidence_ids: evidenceIds }), "--project", root,
+        ]);
+        expect(complete.exitCode, complete.stdout).toBe(0);
+        activityEvidenceIds.push(...evidenceIds);
+      }
+      return { integrationEventId, activityEvidenceIds };
+    };
+
+    const firstTask = await runTask(taskIds[0]!, "tests/access-check.ts");
+    const secondTask = await runTask(taskIds[1]!, "tests/access-regression.ts");
+    expect(firstTask.integrationEventId).not.toBe(secondTask.integrationEventId);
+    const finalCheckpoint = harness.resources.runGit(root, "rev-parse", "HEAD");
+    const taskEvidence = async (check: string, executor: string) => {
+      const recorded = audit.record("evidence", { unit: unitId, stage: "implementation", attempt: implementationAttempt }, {
+        artifact_bindings: planningMaterial.reviewedBindings,
+        checkpoints: [{ repository_id: repositoryId, commit: finalCheckpoint }],
+        inputs: planningMaterial.reviewedBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Current accepted upstream material" })),
+        check,
+        executor,
+        result: { status: "passed", summary: `${check} passed for the combined implementation.` },
+        output_refs: [`assessment:${check}`],
+        conditions: [],
+      });
+      expect(recorded.exitCode, recorded.stdout).toBe(0);
+      return String(recorded.result.data.evidence_id);
+    };
+    const implementationSelfReview = await taskEvidence("implementation-self-review", "agent:builder");
+    const implementationHandoff = await taskEvidence("implementation-review-handoff", "agent:builder");
+    const combinedCheck = await taskEvidence("implementation-combined-result-check", "agent:verifier");
+    const handoffArtifacts = [
+      ...functionalMaterial.artifactPaths,
+      ...qualityMaterial.artifactPaths,
+      "plan.md",
+      "tasks-dag.json",
+    ].sort();
+    const implementationCompletion = new StageCompletionCliDriver(harness.cli).complete(unitId, implementationAttempt, {
+      self_review_evidence_id: implementationSelfReview,
+      handoff_evidence_id: implementationHandoff,
+      unit_check_evidence_ids: [combinedCheck],
+      retained_scope_assessment_event_ids: [],
+      additional_review: { requested: false },
+      blocking_findings: [],
+      handoff_assessment: {
+        status: "ready",
+        reason: "Both planned tasks completed and the combined access-policy checks passed.",
+        recipient: "unit-of-work-review",
+        artifacts: handoffArtifacts,
+      },
+    }, "implementation");
+    expect(implementationCompletion.exitCode, JSON.stringify(implementationCompletion.result)).toBe(0);
+    const implementationCompletionId = String(implementationCompletion.result.data.id);
+
+    const reviewStart = startStage("unit-of-work-review", startInputs(planningMaterial.reviewedBindings, "Whole-unit review material"));
+    const reviewAttempt = String(reviewStart.attempt_id);
+    const reviewCheck = async (check: string) => {
+      const recorded = audit.record("evidence", { unit: unitId, stage: "unit-of-work-review", attempt: reviewAttempt }, {
+        artifact_bindings: planningMaterial.reviewedBindings,
+        checkpoints: [{ repository_id: repositoryId, commit: finalCheckpoint }],
+        inputs: planningMaterial.reviewedBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Current material reviewed for the complete unit" })),
+        check,
+        executor: "agent:reviewer",
+        result: { status: "passed", summary: `${check} passed for the integrated unit.` },
+        output_refs: [`review-report:${check}`],
+        conditions: [],
+      });
+      expect(recorded.exitCode, recorded.stdout).toBe(0);
+      return String(recorded.result.data.evidence_id);
+    };
+    const reviewAssessment = await reviewCheck("implementation-evidence-assessment");
+    const reviewEvidence = await reviewCheck("unit-of-work-review");
+    const reviewSelfReview = await reviewCheck("unit-of-work-review-self-review");
+    const reviewCompletion = new StageCompletionCliDriver(harness.cli).complete(unitId, reviewAttempt, {
+      implementation_completion_event_id: implementationCompletionId,
+      reviewed_material_bindings: planningMaterial.reviewedBindings,
+      final_checkpoints: [{ repository_id: repositoryId, commit: finalCheckpoint }],
+      reviewer: "agent:reviewer",
+      implementation_authors: ["agent:builder"],
+      implementation_evidence_assessment_id: reviewAssessment,
+      review_evidence_id: reviewEvidence,
+      self_review_evidence_id: reviewSelfReview,
+      findings: { blocking: [], limitations: [] },
+      additional_review: { requested: false },
+      acceptance_required: false,
+      handoff: { status: "ready", recipient: "deliver", summary: "The whole-unit review is ready for repository handoff." },
+    }, "unit-of-work-review");
+    expect(reviewCompletion.exitCode, JSON.stringify(reviewCompletion.result)).toBe(0);
+    const reviewCompletionId = String(reviewCompletion.result.data.id);
+
+    const deliveryArtifactId = randomUUID();
+    const deliveryInstructions = `---\nid: ${deliveryArtifactId}\ntype: delivery-plan\nschema_version: 3\nunit_id: ${unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Delivery plan\n\n## Outcome and destination\n\nHand the reviewed repository and its checks to the requester.\n\n## Operations and prerequisites\n\nPrepare a handoff package from the reviewed repository checkpoint and retained evidence.\n\n## Verification and recovery\n\nVerify that the requester can identify the checked checkpoint and both task results.\n\n## Decisions and open questions\n\nRepository handoff is the agreed outcome.\n`;
+    await Fs.writeFile(Path.join(root, unitDirectory, "delivery.md"), deliveryInstructions, "utf8");
+    harness.resources.runGit(root, "add", unitDirectory);
+    harness.resources.runGit(root, "commit", "-q", "-m", "Record authorized repository delivery plan");
+    const deliveryCheckpoint = harness.resources.runGit(root, "rev-parse", "HEAD");
+    const deliveryBindings = [
+      ...planningMaterial.reviewedBindings,
+      { artifact_id: deliveryArtifactId, content_version: `sha256:${createHash("sha256").update(deliveryInstructions, "utf8").digest("hex")}` },
+    ];
+    const deliveryStart = startStage("deliver", startInputs(deliveryBindings, "Reviewed repository handoff material"));
+    const deliveryAttempt = String(deliveryStart.attempt_id);
+    const deliveryOutcome = {
+      outcome: "repository-handoff",
+      requested_outcome: "Hand the reviewed repository and checked task evidence to the requester. I authorize preparation of the handoff package.",
+      destination: "repository:main",
+      recipient: "Requester",
+    };
+    const outcomeRequest = audit.record("interaction", { unit: unitId, stage: "deliver", attempt: deliveryAttempt }, {
+      participants: ["Requester"],
+      content: deliveryOutcome.requested_outcome,
+      references: ["request:delivery-outcome", "request:prepare-handoff-package"],
+      delivery_outcome: deliveryOutcome,
+    });
+    expect(outcomeRequest.exitCode, outcomeRequest.stdout).toBe(0);
+    const outcomeEventId = String(outcomeRequest.result.data.id);
+    const deliveryEvidence = (check: string, relatedEventIds: readonly string[] = []) => {
+      const recorded = audit.record("evidence", { unit: unitId, stage: "deliver", attempt: deliveryAttempt }, {
+        inputs: deliveryBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Reviewed repository delivery material" })),
+        artifact_bindings: deliveryBindings,
+        checkpoints: [{ repository_id: repositoryId, commit: deliveryCheckpoint }],
+        check,
+        executor: "agent:delivery-owner",
+        result: { status: "passed", summary: `${check} passed for the authorized repository handoff.` },
+        output_refs: [`delivery-output:${check}`],
+        ...(check === "deliver-operation-result" || check === "deliver-outcome-verification" ? { related_request_event_id: outcomeEventId } : {}),
+        ...(relatedEventIds.length > 0 ? { related_event_ids: relatedEventIds } : {}),
+      });
+      expect(recorded.exitCode, recorded.stdout).toBe(0);
+      return { evidenceId: String(recorded.result.data.evidence_id), eventId: String(recorded.result.data.id) };
+    };
+    const deliveryPreparation = deliveryEvidence("deliver-preparation");
+    const deliverySelfReview = deliveryEvidence("deliver-self-review");
+    const deliveryOperation = deliveryEvidence("deliver-operation-result");
+    const deliveryVerification = deliveryEvidence("deliver-outcome-verification", [deliveryOperation.eventId]);
+    const deliveryHandoff = deliveryEvidence("deliver-recipient-handoff", [deliveryPreparation.eventId, deliverySelfReview.eventId, deliveryOperation.eventId, deliveryVerification.eventId]);
+    const deliveryCompletion = new StageCompletionCliDriver(harness.cli).complete(unitId, deliveryAttempt, {
+      review_completion_event_id: reviewCompletionId,
+      outcome_request_event_id: outcomeEventId,
+      ...deliveryOutcome,
+      artifact_bindings: deliveryBindings,
+      reviewed_checkpoints: [{ repository_id: repositoryId, commit: finalCheckpoint }],
+      preparation_evidence_id: deliveryPreparation.evidenceId,
+      self_review_evidence_id: deliverySelfReview.evidenceId,
+      operation_results: [{
+        operation: "Prepare the reviewed repository handoff package",
+        status: "succeeded",
+        evidence_id: deliveryOperation.evidenceId,
+        source_checkpoints: [{ repository_id: repositoryId, commit: finalCheckpoint }],
+        authority: { kind: "requester-instruction", event_id: outcomeEventId },
+      }],
+      verification_evidence_ids: [deliveryVerification.evidenceId],
+      handoff_evidence_id: deliveryHandoff.evidenceId,
+      additional_review: { requested: false },
+      approval_required: false,
+      handoff: { status: "ready", summary: "The requester received the reviewed repository checkpoint and retained evidence." },
+    }, "deliver");
+    expect(deliveryCompletion.exitCode, JSON.stringify(deliveryCompletion.result)).toBe(0);
+
+    const shown = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", unitId, "--project", root]);
+    expect(shown.exitCode, shown.stdout).toBe(0);
+    const unit = (JSON.parse(shown.stdout) as { data: { unit: Record<string, unknown> } }).data.unit;
+    expect(unit.blocked).toBe(false);
+    expect(unit.stages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "functional-design", state: "completed" }),
+      expect.objectContaining({ stage: "quality-requirements", state: "completed" }),
+      expect.objectContaining({ stage: "implementation-planning", state: "completed" }),
+      expect.objectContaining({ stage: "implementation", state: "completed" }),
+      expect.objectContaining({ stage: "unit-of-work-review", state: "completed" }),
+      expect.objectContaining({ stage: "deliver", state: "completed" }),
+    ]));
+    expect(await Fs.readFile(Path.join(root, "src", "access.ts"), "utf8")).toContain("ownerId === requesterId");
+    expect(await Fs.stat(Path.join(root, unitDirectory, "delivery.md"))).toBeDefined();
+    expect(harness.resources.runGit(root, "branch", "--show-current")).toBe("main");
+    expect(harness.resources.runGit(root, "status", "--porcelain", "--untracked-files=all")).toContain(".kepler/missions/");
+    const history = (await readConstructionSources(harness)).flatMap(parseHistorySource);
+    expect(history.filter((record) => record.type === "construction.task-completed")).toHaveLength(2);
+    expect(history.filter((record) => record.type === "construction.integration-accepted")).toHaveLength(2);
+    expect(history.some((record) => record.type === "construction.mission-created")).toBe(true);
+    expect(history.some((record) => record.type === "construction.unit-created" && historyData(record).unit_id === unitId)).toBe(true);
+    expect(harness.resources.runGit(root, "log", "-1", "--format=%s")).toBe("Record authorized repository delivery plan");
+    await audit.journalSnapshot();
+  }, 600_000);
 });
