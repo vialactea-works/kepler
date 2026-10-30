@@ -1995,6 +1995,13 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(mismatchedOutcome.exitCode).toBe(1);
     expect(mismatchedOutcome.result).toMatchObject({ status: "failed", data: { code: "deliver_outcome_request_invalid" } });
     expect(await audit.journalSnapshot()).toBe(beforeOutcomeMismatch);
+    const missingHandoff = deliverDriver.complete(auditFixture.unitId, deliveryStart.attemptId, {
+      ...deliverRequest,
+      handoff_evidence_id: randomUUID(),
+    }, "deliver");
+    expect(missingHandoff.exitCode).toBe(1);
+    expect(missingHandoff.result).toMatchObject({ status: "failed", data: { code: "deliver_preparation_evidence_invalid" } });
+    expect(await audit.journalSnapshot()).toBe(beforeOutcomeMismatch);
     const deliveryResult = deliverDriver.complete(auditFixture.unitId, deliveryStart.attemptId, deliverRequest, "deliver");
     expect(deliveryResult.exitCode, JSON.stringify(deliveryResult.result)).toBe(0);
     expect(deliveryResult.result).toMatchObject({
@@ -2360,6 +2367,23 @@ describe("Standard workflow CLI E2E", () => {
           expect(lock.exitCode, lock.stdout).toBe(0);
           const lockData = (JSON.parse(lock.stdout) as { data: Record<string, unknown> }).data;
           const lockToken = String(lockData.lock_token);
+          if (noCommit && taskId === taskIds[0]) {
+            const beforeInvalidRevision = await audit.journalSnapshot();
+            const invalidRevision = harness.cli.run([
+              "workflow", "construction", "revise", "--unit", unitId, "--task", taskId,
+              "--activity", "code-integration", "--implementation-attempt", implementationAttempt,
+              "--attempt", activityAttempt, "--request", JSON.stringify({
+                orchestrator_decision: "Retry the active Integration attempt",
+                reason: "The active Integration needs another check run.",
+                inputs: [{ reference: "request:integration-retry", purpose: "Retry the current Integration attempt" }],
+              }), "--project", root,
+            ]);
+            expect(invalidRevision.exitCode).toBe(1);
+            expect(JSON.parse(invalidRevision.stdout)).toMatchObject({
+              status: "failed", data: { code: "integration_retry_uses_current_attempt" },
+            });
+            expect(await audit.journalSnapshot()).toBe(beforeInvalidRevision);
+          }
           const prepare = harness.cli.run([
             "workflow", "construction", "integration", "prepare", ...scope, "--lock-token", lockToken,
             "--request", JSON.stringify({ captured_inputs: lockData.captured_inputs, candidate_checkpoints: checkpoints }), "--project", root,
