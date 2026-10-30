@@ -351,7 +351,7 @@ jobs:
             --run-attempt "$GITHUB_RUN_ATTEMPT"
 
       - name: Attest release assets
-        uses: actions/attest@4d101475d8b20a2381f78447822ac1eab6504dd8
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: release-assets/*
 
