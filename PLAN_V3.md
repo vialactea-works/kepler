@@ -207,7 +207,7 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 - [x] M01.5 Use one Vitest project/configuration for unit tests, one for integration tests, and one for E2E tests. Keep valid existing tests. Put each test in a project for its actual boundary, not its current folder name. Use explicit API imports and TypeScript type checks for tests.
 - [x] M01.6 Add the E2E layers above. Include connector interfaces, an `execa` CLI driver, Docker/native application resources, and temporary homes/Git repositories. Add deterministic fixtures, diagnostics, and cleanup.
 - [x] M01.7 Add `typecheck`, `test:unit`, `test:integration`, and `test:e2e` scripts. Make `bun run test` do the full behavior suite without smoke checks. Keep `bun run build` as the package compilation gate. Keep the packed-Core integration gate separate from the package build command.
-- [x] M01.8 Record all smoke invocations, including `scripts/smoke-installer.sh`, `scripts/smoke-standalone.sh`, `packages/core/scripts/pack-smoke.sh`, package scripts, and release jobs. Put their useful behavior in M15/M16 replacements. Do not start these scripts for v3 validation.
+- [x] M01.8 Record the original shallow distribution checks in [distribution test coverage](docs/specs/v3/distribution-test-coverage.md). Replace their useful behavior with substantive installer, standalone, and packed-Core tests. Do not use smoke tests for v3 validation.
 
 **Complete when:** Unit tests can use typed collaborators without external effects. Test discovery does not find suites twice. The E2E harness uses CLI behavior with isolated resources and cleanup of test-owned resources.
 
@@ -495,10 +495,10 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 **Sources:** all [v3 specifications](docs/specs/v3/README.md), [Standard](docs/specs/v3/workflows/standard/README.md), SH116, and the E2E playbook above.
 
-- [ ] M16.1 Use `execa` for a small E2E suite of necessary workflows. Do a workflow test with mission preparation, unit creation, Design, Quality, Planning, and multi-task Implementation. Include independent Validation records. Do checked Integration. Complete whole-unit Review. Then do authorized repository delivery.
+- [x] M16.1 Use `execa` for a small E2E suite of necessary workflows. Do a workflow test with mission preparation, unit creation, Design, Quality, Planning, and multi-task Implementation. Include independent Validation records. Do checked Integration. Complete whole-unit Review. Then do authorized repository delivery.
 
   Include greenfield and existing-application paths with actual artifact, Git, and history effects.
-- [ ] M16.2 Add all failure/recovery cases for:
+- [x] M16.2 Add all failure/recovery cases for:
   - Necessary approval/evidence is absent.
   - An application check has a failure.
   - A non-author separation rule is violated.
@@ -510,9 +510,11 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
   - A retained-scope return occurs after completion.
   - Handoff material is missing.
   Keep exhaustive input combinations in unit tests.
-- [ ] M16.3 Show all checkpoint roles, per-repository check results, and partial-effect reporting in a bounded multi-repository workflow. Include source-bound diff packages and unaffected-unit progress. Do not use mocks instead of Git/locking/application checks under test.
-- [ ] M16.4 Add packed-Core integration tests with a disposable consumer. The consumer imports public exports and typechecks `.ts` source against tarball declarations. Include behavior and failure tests, not import-only startup.
-- [ ] M16.5 Use the staged standalone binary and sidecar outside the checkout. Make Bun/Node unavailable to the CLI. Replace old smoke scripts and CI calls after substantive coverage exists. Remove obsolete references and fake-success installer fixtures. Do not keep a smoke suite.
+- [x] M16.3 Show all checkpoint roles, per-repository check results, and partial-effect reporting in a bounded multi-repository workflow. Include source-bound diff packages and unaffected-unit progress. Do not use mocks instead of Git/locking/application checks under test.
+- [x] M16.4 Add packed-Core integration tests with a disposable consumer. The consumer imports public exports and typechecks `.ts` source against tarball declarations. Include behavior and failure tests, not import-only startup.
+- [x] M16.5 Use the staged standalone binary and sidecar outside the checkout. Make Bun/Node unavailable to the CLI. Replace old smoke scripts and CI calls after substantive coverage exists. Remove obsolete references and fake-success installer fixtures. Do not keep a smoke suite.
+
+  **M16.5 verification:** `bun --bun vitest run --project e2e tests/e2e/installation.test.ts` passed 2 tests on Linux x86_64. The installed standalone executable returned its version and completed setup from outside the checkout with an empty `PATH`; it used the staged sidecar. `bun run check:typescript-sources`, `bun run typecheck`, and `git diff --check` passed. This is native Linux x86_64 execution evidence only.
 - [ ] M16.6 Make CI use unit, integration, Docker E2E, compilation/typecheck, packed-package, and distribution gates explicitly. Use native runners for target-specific checks on Linux/macOS and `x86_64`/`arm64`. Keep cross-compilation and native execution evidence in different categories. Do not claim untested target coverage.
 - [ ] M16.7 Change root README, contributor/agent guidance, and user CLI/skill documentation. Change supported workflows, native-resource installation instructions, recovery guidance, and release notes. Describe v3 behavior available at release and its limits. Do not promote deferred features, compatibility conversions, or agent certification.
 - [ ] M16.8 Set root/package versions and `src/index.ts` `VERSION` to the same release version. Do checks for manifests, package exports/types, standalone compilation, sidecar compatibility/digests, checksums, and immutable release-asset provenance. Do not publish as an automatic test effect.

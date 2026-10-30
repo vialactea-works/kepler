@@ -37,4 +37,4 @@ Kepler supplies versioned bundle resources, skills, and native agent definitions
 
 See [Installation: agent resource ownership](installation.md#agent-resource-ownership), [setup contract](installation.md#setup-contract), and [upgrade and legacy behavior](installation.md#upgrade-and-legacy-behavior).
 
-The [M01.8 smoke-invocation inventory](smoke-invocation-inventory.md) records current release callers and their M15/M16 replacements.
+The [M01.8 distribution test coverage](distribution-test-coverage.md) records the substantive replacements for the original distribution checks.

@@ -133,13 +133,8 @@ jobs:
       - name: Test packed core package
         run: bun run test:package
 
-      - name: Test local installer
-        run: bash scripts/smoke-installer.sh
-
       - name: Run ShellCheck
-        run: |
-          shellcheck install.sh scripts/smoke-standalone.sh \
-            scripts/smoke-installer.sh
+        run: shellcheck install.sh
 
   tag:
     name: Create version tag
@@ -216,12 +211,6 @@ jobs:
             packages/cli/src/cli/main.ts \
             --outfile kepler-${{ matrix.os }}-${{ matrix.arch }}
 
-      - name: Test binary (linux-x64 only)
-        if: matrix.os == 'linux' && matrix.arch == 'x64'
-        run: |
-          chmod +x ./kepler-linux-x64
-          bash scripts/smoke-standalone.sh ./kepler-linux-x64
-
       - name: Upload binary artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -276,15 +265,6 @@ jobs:
             bun pm pack --filename "$GITHUB_WORKSPACE/$PACKAGE_ARCHIVE" --quiet
           )
           printf 'Created %s\n' "$PACKAGE_ARCHIVE"
-
-      - name: Smoke test binary with packaged bundle
-        run: |
-          BUNDLE_STAGE="$(mktemp -d)"
-          trap 'rm -rf "$BUNDLE_STAGE"' EXIT
-          tar xzf kepler-bundle.tar.gz -C "$BUNDLE_STAGE"
-          chmod +x ./kepler-linux-x64
-          bash scripts/smoke-standalone.sh \
-            ./kepler-linux-x64 "$BUNDLE_STAGE/bundle"
 
       - name: Generate checksums
         run: |

@@ -137,9 +137,10 @@ async function runInstalledSetup(
   executablePath: string,
   home: string,
   bundleOverride?: string,
+  options: { readonly path?: string; readonly cwd?: string } = {},
 ) {
   return execa(executablePath, ["setup"], {
-    cwd: projectRoot,
+    cwd: options.cwd ?? projectRoot,
     env: {
       HOME: home,
       ...(bundleOverride === undefined
@@ -147,7 +148,7 @@ async function runInstalledSetup(
         : { KEPLER_BUNDLE_DIR: bundleOverride }),
       LC_ALL: "C.UTF-8",
       NO_COLOR: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: options.path ?? process.env.PATH ?? "",
       TMPDIR: Path.join(home, "tmp"),
       TZ: "UTC",
       XDG_CONFIG_HOME: Path.join(home, ".config"),
@@ -270,6 +271,36 @@ if (platformTarget) {
       expect(await Fs.readFile(templatePath, "utf8")).toContain(
         "# Functional design",
       );
+      const runtimeFreePath = Path.join(resourceRoot, "no-runtime-path");
+      const outsideCheckout = Path.join(resourceRoot, "outside-checkout");
+      await Promise.all([
+        Fs.mkdir(runtimeFreePath, { recursive: true }),
+        Fs.mkdir(outsideCheckout, { recursive: true }),
+      ]);
+      const standaloneEnvironment: NodeJS.ProcessEnv = {
+        HOME: home,
+        LC_ALL: "C.UTF-8",
+        NO_COLOR: "1",
+        PATH: runtimeFreePath,
+        TMPDIR: Path.join(home, "tmp"),
+        TZ: "UTC",
+        XDG_CONFIG_HOME: Path.join(home, ".config"),
+      };
+      const standaloneVersion = await execa(executablePath, ["--version"], {
+        cwd: outsideCheckout,
+        env: standaloneEnvironment,
+        extendEnv: false,
+        reject: false,
+        timeout: 30_000,
+      });
+      expect(standaloneVersion.exitCode, standaloneVersion.stderr).toBe(0);
+      expect(standaloneVersion.stdout).toContain("0.10.3");
+      const standaloneSetup = await runInstalledSetup(executablePath, home, undefined, {
+        path: runtimeFreePath,
+        cwd: outsideCheckout,
+      });
+      expect(standaloneSetup.exitCode, standaloneSetup.stderr).toBe(0);
+      expect(parseCliResult(standaloneSetup.stdout)).toMatchObject({ status: "success" });
       expect(
         parseInstallationRecord(await Fs.readFile(recordPath, "utf8")).bundle_release.release,
       ).toBe("kepler-bundle-3.0.0");
