@@ -6,11 +6,11 @@
 
 ## Purpose and status
 
-This document defines the Kepler v3 command line interface. The requester approved the complete contract, including its command names, arguments, output fields, and operation rules. This approval does not approve an executing Unit of Work or show implementation or release.
+This document defines the Kepler v3 command line contract. The requester approved its command names, arguments, output fields, and operation rules. Approval alone does not approve an executing Unit of Work or prove that a release contains the behavior.
 
-The [runtime contract](runtime.md) sets shared event and execution rules. The accepted [Mission contract](mission.md) sets mission policy, not command syntax. This document does not replace those rules. Details left unspecified remain implementation choices.
+The current source implements the v3 root capabilities alongside the earlier `workbench` surface. The [CLI guide](../../cli.md) describes user-facing behavior; this document retains the detailed command contract. The [runtime contract](runtime.md) sets shared event and execution rules. The [Mission contract](mission.md) sets mission policy. Details left unspecified remain implementation choices.
 
-The current CLI does not have this v3 command tree. Its root has `setup` and `workbench` commands. The v3 `setup` contract keeps the installation role. It is not the Initialization phase. This reference does not remove or migrate existing commands.
+The `setup` command installs Kepler resources. It is not the Initialization phase. The earlier `workbench` commands remain separate and do not convert or adopt v2 records.
 
 ## Accepted policy
 

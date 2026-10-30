@@ -4,7 +4,9 @@
 
 ## Purpose
 
-List accepted decisions, remaining questions, and release implementation work for the Construction MVP. The complete version 3 framework is not necessary before implementation can start.
+List accepted decisions, remaining questions, and the original release implementation work for the Construction MVP. The complete version 3 framework was not necessary before implementation could start.
+
+This register records requester decisions, not current release availability. Current implementation and verification evidence lives in `PLAN_V3.md` and `distribution-test-coverage.md`; consult `docs/releases/` and published release assets for release availability. The register does not certify host or agent behavior.
 
 List specification decisions, not Unit of Work execution state. Each row records one decision with one unique ID. Implementation work necessary for these decisions does not add a separate requester approval gate.
 
@@ -240,7 +242,7 @@ Every decision in this section is complete. The linked specification contains it
 
 ## MVP implementation choices
 
-No registered MVP implementation choices remain open. This closes specification decisions only. It does not show that Kepler v3 is implemented, tested, or released.
+No registered MVP implementation choices remain open. This closes specification decisions only. Implementation, test, and release evidence remain separate and must be checked against the current source or published assets.
 
 Release implementation must still:
 

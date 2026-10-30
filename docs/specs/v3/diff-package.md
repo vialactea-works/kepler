@@ -6,7 +6,7 @@
 
 A diff package is generated inspection material for an existing Construction scope. It binds a readable manifest, changed paths, statistics, and patches to phase-owned records and repository-qualified checkpoint sets. It is not a stage, Activity, lifecycle milestone, authored artifact type, workflow authority, or general packaging framework.
 
-These contracts set version 3 behavior. M12 implements the three source-bound diff-package commands in the current CLI; this does not imply that the rest of the v3 command tree is implemented or released.
+These contracts set version 3 behavior. M12 implements the three source-bound diff-package commands in the current CLI, and M04-M16 implement the broader Construction command tree and distribution checks. The [CLI guide](../../cli.md) and release notes describe user-facing behavior; consult completed CI runs for target-specific evidence.
 
 The `kepler git diff-package` command family has three fixed inspection scopes: Code Validation, Code Integration, and Unit of Work Review. It selects existing material-producer context and repository bindings from recorded facts. It does not start the consuming Validation or Review attempt. See the [CLI contract](cli.md#kepler-git-diff-package) for unchanged signatures.
 

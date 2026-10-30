@@ -2,7 +2,7 @@
 
 [Version 3 reference](README.md) | [CLI contract](cli.md) | [Skills](skills.md) | [Construction runtime contract](phases/construction/runtime.md) | [Authoring progress](authoring_progress.md)
 
-**Status:** Approved by the requester under [SH124](authoring_progress.md#completed-shared-decisions). Earlier decisions SH114, SH116, and SH117 keep their scope. Kepler v3 is not implemented or released. This approval does not claim current support or authorize installation.
+**Status:** Approved by the requester under [SH124](authoring_progress.md#completed-shared-decisions). M15 implements the versioned installation resources and compatible setup behavior. Release availability must be checked separately; approval does not authorize installation.
 
 ## Purpose and boundary
 
@@ -12,17 +12,11 @@ Installation and setup do not run Initialization, create units, dispatch workers
 
 ## Current repository behavior
 
-The current root exposes `setup` and `workbench`, not the v3 tree. See [CLI status](cli.md#purpose-and-status). Source: `packages/cli/src/cli/nest/root.command.ts:3-9`.
+The current root exposes `setup`, `workbench`, `git`, `uuid`, `lint`, `audit`, `workflow`, and `mission`. The v3 commands coexist with the earlier change-based `workbench`; they do not convert its artifacts. See the [CLI guide](../../cli.md) for command usage and the [CLI contract](cli.md) for detailed interfaces.
 
-Current setup copies bundle templates and guideline manifests. It writes default settings only when settings are absent. Source: `packages/cli/src/cli/setup.service.ts:24-88`.
+The current `kepler setup` validates the selected bundle's compatibility and content digests before writes, records an installation generation, preserves settings and user-modified resources, and creates default settings only when absent. It does not install host-native skills or agent definitions. The release installer verifies downloaded assets against `SHA256SUMS`, places the standalone binary and sidecar bundle, then runs setup. Sources: `packages/cli/src/cli/setup.service.ts`, `packages/cli/src/cli/setup-runtime.ts`, `install.sh`, and `.github/workflows/release.yml`.
 
-The current directory-copy adapter uses recursive `force: true`. Source: `packages/cli/src/cli/setup-runtime.ts:34-35`. The accepted v3 behavior keeps user-modified resources. The current software does not keep user-modified resources.
-
-The current command parses `--force` but does not use that option. Source: `packages/cli/src/cli/nest/setup.command.ts:17-27`. The accepted v3 interface removes the flag.
-
-Current global paths use absolute `XDG_CONFIG_HOME`, otherwise `$HOME/.config`, followed by `vialactea-works/kepler`. Project data uses `.kepler`, with existing legacy-path handling. Source: `packages/core/src/service.ts:46-99`.
-
-The release workflow packages the sidecar bundle and checks a standalone binary with it. Source: `.github/workflows/release.yml:248-270`. These existing delivery mechanisms do not show that v3 resources have been released.
+The existing global path remains `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler`; project records use `.kepler`. The Core path-copy behavior for legacy locations remains separate from v2 artifact or history conversion. Source: `packages/core/src/service.ts`.
 
 ## Installed components
 

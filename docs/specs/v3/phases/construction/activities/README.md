@@ -30,7 +30,7 @@ Each Activity owns its named [evidence](../../../runtime.md#stage-and-activity-e
 
 No Activity Markdown document is required. Optional detail uses `details/code-generation/`, `details/code-validation/`, or `details/code-integration/` within the unit.
 
-Optional supporting Markdown uses the [metadata contract](../../../metadata.md) and `supporting-document` type. Assigned entry skills do self-review. They do not write journals or projections directly. These contracts do not put current skill implementations into effect or adopt them.
+Optional supporting Markdown uses the [metadata contract](../../../metadata.md) and `supporting-document` type. Assigned entry skills do self-review. They do not write journals or projections directly. M13 implements the assigned skill procedures; use the [user skill reference](../../../../../skills.md) and verify host installation separately.
 
 Use the [Git diff-package reference](../../../diff-package.md) for optional, scope-bound inspection handoffs. Generation supplies its original attempt and output context. Validation can examine that package without treating it as a check result. Integration uses its already-recorded preparation context. Packages add no Activity, named evidence, completion gate, or independent review step.
 
