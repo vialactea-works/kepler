@@ -2269,7 +2269,7 @@ describe("Standard workflow CLI E2E", () => {
     );
     await Fs.writeFile(
       Path.join(root, "tests", "access-check.ts"),
-      'import * as assert from "node:assert/strict";\nimport { canReadStoredData } from "../src/access.js";\nassert.equal(canReadStoredData("owner", "owner"), true);\nassert.equal(canReadStoredData("owner", "other"), false);\n',
+      'import * as assert from "node:assert/strict";\nimport { canReadStoredData } from "../src/access.js";\nif (process.env.KEPLER_E2E_FAIL_CHECK === "1") throw new Error("Injected Integration check failure.");\nassert.equal(canReadStoredData("owner", "owner"), true);\nassert.equal(canReadStoredData("owner", "other"), false);\n',
       "utf8",
     );
     await Fs.writeFile(
@@ -2368,16 +2368,20 @@ describe("Standard workflow CLI E2E", () => {
           const preparedEventId = String((JSON.parse(prepare.stdout) as { data: Record<string, unknown> }).data.prepared_event_id);
           for (const check of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] as const) {
             const selfReview = check === "code-integration-self-review";
+            const injectFailure = noCommit && taskId === taskIds[0] && check === "code-integration-full-test-suite";
             const checkCommand = selfReview ? undefined : taskIntegrationCommands[check];
             if (checkCommand) {
               const execution = await execa(checkCommand.executable, [...checkCommand.argv], {
                 cwd: root,
-                env: harness.resources.environment(),
+                env: injectFailure
+                  ? { ...harness.resources.environment(), KEPLER_E2E_FAIL_CHECK: "1" }
+                  : harness.resources.environment(),
                 extendEnv: false,
                 reject: false,
                 timeout: 30_000,
               });
-              expect(execution.exitCode, `${check}: ${execution.stderr}`).toBe(0);
+              if (injectFailure) expect(execution.exitCode, `${check}: ${execution.stderr}`).not.toBe(0);
+              else expect(execution.exitCode, `${check}: ${execution.stderr}`).toBe(0);
               if (check === "code-integration-build") {
                 const outputDirectory = Path.join(root, ".kepler-e2e-build");
                 await Fs.access(Path.join(outputDirectory, "access.js"));
@@ -2388,7 +2392,9 @@ describe("Standard workflow CLI E2E", () => {
               prepared_event_id: preparedEventId,
               check,
               executor: "agent:integrator",
-              result: { status: "passed", summary: `${check} passed for the immutable ${taskId} candidate.` },
+              result: { status: injectFailure ? "failed" : "passed", summary: injectFailure
+                ? `${check} failed under the E2E fault injection for ${taskId}.`
+                : `${check} passed for the immutable ${taskId} candidate.` },
               ...(selfReview ? {} : { check_command: checkCommand }),
               output_refs: taskContract.outputs,
               conditions: selfReview ? ["Integration bindings match the accepted candidate and actual inputs.", ...taskContract.acceptance_criteria] : [],
@@ -2398,7 +2404,40 @@ describe("Standard workflow CLI E2E", () => {
               "--request", JSON.stringify(request), "--project", root,
             ]);
             expect(recorded.exitCode, recorded.stdout).toBe(0);
-            evidenceIds.push(String((JSON.parse(recorded.stdout) as { data: Record<string, unknown> }).data.evidence_id));
+            if (request.result.status === "passed") evidenceIds.push(String((JSON.parse(recorded.stdout) as { data: Record<string, unknown> }).data.evidence_id));
+          }
+          if (noCommit && taskId === taskIds[0]) {
+            const rejected = harness.cli.run([
+              "workflow", "construction", "integration", "accept", ...scope,
+              "--lock-token", lockToken, "--prepared-event-id", preparedEventId, "--project", root,
+            ]);
+            expect(rejected.exitCode).toBe(1);
+            expect(JSON.parse(rejected.stdout)).toMatchObject({ status: "failed", data: { code: "integration_check_failed" } });
+            const check = "code-integration-full-test-suite" as const;
+            const checkCommand = taskIntegrationCommands[check];
+            const execution = await execa(checkCommand.executable, [...checkCommand.argv], {
+              cwd: root,
+              env: harness.resources.environment(),
+              extendEnv: false,
+              reject: false,
+              timeout: 30_000,
+            });
+            expect(execution.exitCode, `${check}: ${execution.stderr}`).toBe(0);
+            const retry = harness.cli.run([
+              "workflow", "construction", "integration", "evidence", ...scope, "--lock-token", lockToken,
+              "--request", JSON.stringify({
+                prepared_event_id: preparedEventId,
+                check,
+                executor: "agent:integrator",
+                result: { status: "passed", summary: `${check} passed after the injected failure was removed.` },
+                check_command: checkCommand,
+                output_refs: taskContract.outputs,
+                conditions: [],
+              }),
+              "--project", root,
+            ]);
+            expect(retry.exitCode, retry.stdout).toBe(0);
+            evidenceIds.push(String((JSON.parse(retry.stdout) as { data: Record<string, unknown> }).data.evidence_id));
           }
           const accepted = harness.cli.run([
             "workflow", "construction", "integration", "accept", ...scope,
@@ -2586,6 +2625,9 @@ describe("Standard workflow CLI E2E", () => {
     const history = (await readConstructionSources(harness)).flatMap(parseHistorySource);
     expect(history.filter((record) => record.type === "construction.task-completed")).toHaveLength(2);
     expect(history.filter((record) => record.type === "construction.integration-accepted")).toHaveLength(2);
+    if (noCommit) expect(history.some((record) => record.type === "construction.evidence-recorded" &&
+      historyData(record).check === "code-integration-full-test-suite" &&
+      (historyData(record).result as Record<string, unknown> | undefined)?.status === "failed")).toBe(true);
     expect(history.some((record) => record.type === "construction.mission-created")).toBe(true);
     expect(history.some((record) => record.type === "construction.unit-created" && historyData(record).unit_id === unitId)).toBe(true);
     expect(harness.resources.runGit(root, "log", "-1", "--format=%s")).toBe("Record authorized repository delivery plan");
