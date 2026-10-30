@@ -116,7 +116,7 @@ const compatibility: BundleCompatibility = {
 };
 const base: BundleManifest = {
   manifest_format_version: 1,
-  bundle_release: process.env.KEPLER_BUNDLE_RELEASE ?? "kepler-bundle-3.0.0",
+  bundle_release: process.env.KEPLER_BUNDLE_RELEASE ?? "kepler-bundle-3.0.1",
   files,
   content_digest: sha256Digest(new Uint8Array()),
   compatibility,

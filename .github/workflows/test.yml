@@ -40,14 +40,13 @@ jobs:
       - name: Run integration tests
         run: bun run test:integration
 
-      - name: Pull Docker E2E image
-        run: |
-          image='oven/bun:1.4.0@sha256:'
-          image="${image}5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6"
-          docker pull "$image"
+      - name: Build Docker E2E image
+        run: docker build --file tests/e2e/Dockerfile --tag kepler-e2e:1.4.0 .
 
       - name: Run Docker E2E tests
         run: bun run test:e2e
+        env:
+          KEPLER_E2E_DOCKER_IMAGE: kepler-e2e:1.4.0
 
       - name: Test packed core package
         run: bun run test:package

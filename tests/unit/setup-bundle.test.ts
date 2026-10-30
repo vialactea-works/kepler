@@ -13,7 +13,7 @@ import {
 } from "../../packages/cli/src/cli/setup-bundle.js";
 import { createSetupRuntime } from "../../packages/cli/src/cli/setup-runtime.js";
 
-const cliRelease = "0.10.3";
+const cliRelease = "0.11.0";
 const encoder = new TextEncoder();
 const skills = [
   "kepler-design",

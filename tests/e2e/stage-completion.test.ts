@@ -2372,12 +2372,12 @@ describe("Standard workflow CLI E2E", () => {
             const invalidRevision = harness.cli.run([
               "workflow", "construction", "revise", "--unit", unitId, "--task", taskId,
               "--activity", "code-integration", "--implementation-attempt", implementationAttempt,
-              "--attempt", activityAttempt, "--request", JSON.stringify({
-                orchestrator_decision: "Retry the active Integration attempt",
-                reason: "The active Integration needs another check run.",
-                inputs: [{ reference: "request:integration-retry", purpose: "Retry the current Integration attempt" }],
-              }), "--project", root,
-            ]);
+              "--attempt", activityAttempt, "--project", root,
+            ], { stdin: JSON.stringify({
+              orchestrator_decision: "Retry the active Integration attempt",
+              reason: "The active Integration needs another check run.",
+              inputs: [{ reference: "request:integration-retry", purpose: "Retry the current Integration attempt" }],
+            }) });
             expect(invalidRevision.exitCode).toBe(1);
             expect(JSON.parse(invalidRevision.stdout)).toMatchObject({
               status: "failed", data: { code: "integration_retry_uses_current_attempt" },
