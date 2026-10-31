@@ -493,6 +493,8 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 ## M16: Complete E2E workflows, packaging, and release gates
 
+**Status:** Complete on the integration branch.
+
 **Sources:** all [v3 specifications](docs/specs/v3/README.md), [Standard](docs/specs/v3/workflows/standard/README.md), SH116, and the E2E playbook above.
 
 - [x] M16.1 Use `execa` for a small E2E suite of necessary workflows. Do a workflow test with mission preparation, unit creation, Design, Quality, Planning, and multi-task Implementation. Include independent Validation records. Do checked Integration. Complete whole-unit Review. Then do authorized repository delivery.
