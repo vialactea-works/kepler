@@ -669,6 +669,31 @@ describe("Construction Integration execution", () => {
       .rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("keeps an unrelated Unit progressing while another Unit holds Integration", async () => {
+    const active = await setup();
+    const unaffected = await setup();
+    const activeExecution = active.execution(41017);
+    const unaffectedExecution = unaffected.execution(41018);
+    const activeLock = await activeExecution.lock(active.selectors);
+    expect(activeLock.kind).toBe("success");
+    if (activeLock.kind !== "success") return;
+
+    const unaffectedLock = await unaffectedExecution.lock(unaffected.selectors);
+    expect(unaffectedLock.kind).toBe("success");
+    if (unaffectedLock.kind !== "success") return;
+    const prepared = await unaffectedExecution.prepare(unaffected.selectors, unaffectedLock.data.lock_token as string, {
+      captured_inputs: unaffectedLock.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: unaffected.generated } satisfies RepositoryCheckpoint],
+    });
+    expect(prepared.kind).toBe("success");
+    expect(await unaffectedExecution.release(unaffected.selectors, unaffectedLock.data.lock_token as string)).toMatchObject({
+      kind: "success", data: { aborted: true, lock_released: true },
+    });
+    expect(await activeExecution.release(active.selectors, activeLock.data.lock_token as string)).toMatchObject({
+      kind: "success", data: { aborted: true, lock_released: true },
+    });
+  });
+
   it("rejects verification-plan changes after admission before acquiring the Integration lock", async () => {
     const fixture = await setup();
     fixture.setPlanSource(planSource.replace("bun run typecheck", "bun run changed-typecheck"));

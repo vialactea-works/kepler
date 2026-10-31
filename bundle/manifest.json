@@ -1,6 +1,6 @@
 {
   "manifest_format_version": 1,
-  "bundle_release": "kepler-bundle-3.0.0",
+  "bundle_release": "kepler-bundle-3.0.1",
   "files": {
     "agents/claude-code/v1/kepler-architect.md": "sha256:f85d179aabbf0f1ce042a27b038d1d2bcad1df96705002f71f082c0cf63cf034",
     "agents/claude-code/v1/kepler-coder.md": "sha256:515506090d041ef09c792114ffeac8fb39563da4b23ab27ebc0fd0f126c1478b",
@@ -59,10 +59,10 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "content_digest": "sha256:2726a99f7a20ad85decaa997dba86d61282271a6ae20e7d8237d7d5cdd2fea58",
+  "content_digest": "sha256:398abd4a1740cdfdff7940a39e87a2b11fea48f091210a75bd110b8cad2efda1",
   "compatibility": {
     "cli_releases": [
-      "0.10.3"
+      "0.11.0"
     ],
     "skills": [
       {

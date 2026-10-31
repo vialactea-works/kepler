@@ -646,4 +646,38 @@ describe("compiled CLI E2E", () => {
     });
     expect(await snapshot(repository)).toBe(before);
   }, 120_000);
+
+  it("reads Git identity through the Docker-backed CLI from the real repository", async () => {
+    const e2e = await createHarness();
+    const repository = e2e.resources.repositoryDirectory;
+    await addProjectMarker(repository);
+    e2e.resources.runGit(repository, "config", "user.name", "Docker E2E Author");
+    e2e.resources.runGit(repository, "config", "user.email", "docker-e2e@example.invalid");
+    const beforeResolved = await snapshot(repository);
+
+    const resolved = e2e.cli.run(["git", "author"]);
+
+    expect(resolved.exitCode).toBe(0);
+    expect(resolved.stderr).toBe("");
+    expect(envelope(resolved.stdout)).toMatchObject({
+      status: "success",
+      data: { name: "Docker E2E Author", email: "docker-e2e@example.invalid" },
+    });
+    expect(await snapshot(repository)).toBe(beforeResolved);
+
+    e2e.resources.runGit(repository, "config", "--unset", "user.name");
+    const beforeMissing = await snapshot(repository);
+    const missing = e2e.cli.run(["git", "author"]);
+
+    expect(missing.exitCode).toBe(1);
+    expect(missing.stderr).toBe("");
+    expect(envelope(missing.stdout)).toMatchObject({
+      status: "failed",
+      data: {
+        code: "git_identity_missing",
+        details: { missing: ["user.name"] },
+      },
+    });
+    expect(await snapshot(repository)).toBe(beforeMissing);
+  }, 120_000);
 });

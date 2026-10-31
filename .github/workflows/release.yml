@@ -118,34 +118,83 @@ jobs:
         run: |
           "$RUNNER_TEMP/check-versions"
 
+      - name: Check TypeScript source policy
+        run: bun run check:typescript-sources
+
+      - name: Typecheck
+        run: bun run typecheck
+
       - name: Build packages
         run: bun run build
 
-      - name: Pull Docker E2E image
-        run: |
-          image='oven/bun:1.4.0@sha256:'
-          image="${image}5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6"
-          docker pull "$image"
+      - name: Run unit tests
+        run: bun run test:unit
 
-      - name: Run test suite
-        run: bun run test
+      - name: Run integration tests
+        run: bun run test:integration
+
+      - name: Build Docker E2E image
+        run: docker build --file tests/e2e/Dockerfile --tag kepler-e2e:1.4.0 .
+
+      - name: Run Docker E2E tests
+        run: bun run test:e2e
+        env:
+          KEPLER_E2E_DOCKER_IMAGE: kepler-e2e:1.4.0
 
       - name: Test packed core package
         run: bun run test:package
 
-      - name: Test local installer
-        run: bash scripts/smoke-installer.sh
-
       - name: Run ShellCheck
-        run: |
-          shellcheck install.sh scripts/smoke-standalone.sh \
-            scripts/smoke-installer.sh
+        run: shellcheck install.sh
+
+  native-distribution:
+    name: Native standalone distribution E2E (${{ matrix.target }})
+    needs:
+      - check-version
+      - verify
+    if: needs.check-version.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      KEPLER_EXPECTED_TARGET: ${{ matrix.target }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build packages
+        run: bun run build
+
+      - name: Run native standalone distribution E2E
+        run: bun --bun vitest run --project e2e tests/e2e/installation.test.ts
 
   tag:
     name: Create version tag
     needs:
       - check-version
       - verify
+      - native-distribution
+      - verify-release-assets
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -161,7 +210,13 @@ jobs:
           TAG="v$RELEASE_VERSION"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "$TAG"
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          if [ "$CHECKED_OUT_SHA" != "$GITHUB_SHA" ]; then
+            printf 'Checked out %s but workflow event identifies %s.\n' \
+              "$CHECKED_OUT_SHA" "$GITHUB_SHA" >&2
+            exit 1
+          fi
+          git tag "$TAG" "$GITHUB_SHA"
           COMMIT_SHA="$(git rev-parse "$TAG")"
           gh api "repos/$GH_REPO/git/refs" \
             --method POST \
@@ -173,8 +228,12 @@ jobs:
           RELEASE_VERSION: ${{ needs.check-version.outputs.version }}
 
   build:
-    name: Build CLI binaries
-    needs: tag
+    name: Cross-compile CLI binaries (no execution)
+    needs:
+      - check-version
+      - verify
+      - native-distribution
+    if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -204,7 +263,7 @@ jobs:
       - name: Build packages
         run: bun run build
 
-      - name: Build binary
+      - name: Cross-compile binary artifact
         run: |
           bun build --compile \
             --target=bun-${{ matrix.os }}-${{ matrix.arch }} \
@@ -215,12 +274,6 @@ jobs:
             --external @nestjs/websockets \
             packages/cli/src/cli/main.ts \
             --outfile kepler-${{ matrix.os }}-${{ matrix.arch }}
-
-      - name: Test binary (linux-x64 only)
-        if: matrix.os == 'linux' && matrix.arch == 'x64'
-        run: |
-          chmod +x ./kepler-linux-x64
-          bash scripts/smoke-standalone.sh ./kepler-linux-x64
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -236,6 +289,8 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -259,6 +314,7 @@ jobs:
             mv "$dir"/* .
             rmdir "$dir"
           done
+          rmdir artifacts
           ls -la
 
       - name: Create bundle archive
@@ -277,40 +333,97 @@ jobs:
           )
           printf 'Created %s\n' "$PACKAGE_ARCHIVE"
 
-      - name: Smoke test binary with packaged bundle
+      - name: Stage release assets
         run: |
-          BUNDLE_STAGE="$(mktemp -d)"
-          trap 'rm -rf "$BUNDLE_STAGE"' EXIT
-          tar xzf kepler-bundle.tar.gz -C "$BUNDLE_STAGE"
-          chmod +x ./kepler-linux-x64
-          bash scripts/smoke-standalone.sh \
-            ./kepler-linux-x64 "$BUNDLE_STAGE/bundle"
+          mkdir release-assets
+          mv kepler-* release-assets/
 
-      - name: Generate checksums
+      - name: Create release provenance and checksums
         run: |
-          sha256sum kepler-* > SHA256SUMS
-          cat SHA256SUMS
+          VERSION="$(bun scripts/package-version.ts package.json)"
+          bun scripts/release-assets.ts \
+            --mode create \
+            --assets release-assets \
+            --version "$VERSION" \
+            --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
 
-      - name: Upload checksums
+      - name: Attest release assets
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: release-assets/*
+
+      - name: Upload release metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: checksums
-          path: SHA256SUMS
+          name: release-metadata
+          path: |
+            release-assets/RELEASE-MANIFEST.json
+            release-assets/SHA256SUMS
           retention-days: 1
 
       - name: Upload bundle archive
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: bundle
-          path: kepler-bundle.tar.gz
+          path: release-assets/kepler-bundle.tar.gz
           retention-days: 1
 
       - name: Upload core package tarball
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: core-package
-          path: kepler-core-*.tgz
+          path: release-assets/kepler-core-*.tgz
           retention-days: 1
+
+  verify-release-assets:
+    name: Verify immutable release assets
+    needs:
+      - check-version
+      - package
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+
+      - name: Download release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release provenance and checksums
+        run: |
+          bun scripts/release-assets.ts \
+            --mode verify \
+            --assets release-assets \
+            --version "$RELEASE_VERSION" \
+            --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+        env:
+          RELEASE_VERSION: ${{ needs.check-version.outputs.version }}
+
+      - name: Verify GitHub artifact attestations
+        run: |
+          for asset in release-assets/*; do
+            gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   publish-core:
     name: Publish core package to GitHub Packages
@@ -318,14 +431,20 @@ jobs:
       - check-version
       - verify
       - package
+      - verify-release-assets
+      - tag
     if: >-
       ${{
         always() &&
         needs.check-version.outputs.should_publish_core == 'true' &&
         needs.verify.result == 'success' &&
         (
-          needs.package.result == 'success' ||
-          (github.event_name == 'workflow_dispatch' && inputs.publish_core)
+          (github.event_name == 'workflow_dispatch' && inputs.publish_core) ||
+          (
+            needs.package.result == 'success' &&
+            needs.verify-release-assets.result == 'success' &&
+            needs.tag.result == 'success'
+          )
         )
       }}
     runs-on: ubuntu-latest
@@ -373,10 +492,13 @@ jobs:
     needs:
       - check-version
       - package
+      - verify-release-assets
+      - tag
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      attestations: read
       contents: write
     steps:
       - name: Checkout release notes
@@ -393,6 +515,30 @@ jobs:
           # directory sharing its own name, which broke the old manual
           # flatten.
           merge-multiple: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+
+      - name: Verify release provenance and checksums
+        run: |
+          bun scripts/release-assets.ts \
+            --mode verify \
+            --assets release-assets \
+            --version "$RELEASE_VERSION" \
+            --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+        env:
+          RELEASE_VERSION: ${{ needs.check-version.outputs.version }}
+
+      - name: Verify GitHub artifact attestations
+        run: |
+          for asset in release-assets/*; do
+            gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: List release assets
         run: ls -la release-assets

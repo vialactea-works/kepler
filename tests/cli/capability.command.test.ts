@@ -244,8 +244,8 @@ describe("v3 root command tree", () => {
       "construction.mission-workspaces-prepared",
     ]);
     expect(events.map((event) => event.producer)).toEqual([
-      { name: "kepler", version: "0.10.3" },
-      { name: "kepler", version: "0.10.3" },
+      { name: "kepler", version: "0.11.0" },
+      { name: "kepler", version: "0.11.0" },
     ]);
   });
 

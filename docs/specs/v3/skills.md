@@ -4,11 +4,9 @@
 
 ## Purpose
 
-This document gives version 3 skill names and responsibilities. The requester accepted the Functional Design and Quality Requirements responsibilities under FD13 and NF12. The requester accepted Planning, Implementation, Review, and Deliver responsibilities under IP12, IE07, UR08, and DL09. The requester accepted Code Generation, Code Validation, and Code Integration responsibilities under IE08, IE09, and IE28. These decisions approve responsibility contracts, not agent profiles or current skill implementations.
+This document gives version 3 skill names and responsibilities. The requester accepted the Functional Design and Quality Requirements responsibilities under FD13 and NF12. The requester accepted Planning, Implementation, Review, and Deliver responsibilities under IP12, IE07, UR08, and DL09. The requester accepted Code Generation, Code Validation, and Code Integration responsibilities under IE08, IE09, and IE28. M13-M15 implement eleven versioned skill trees and four Claude Code role definitions; those resources do not certify host loading or agent behavior.
 
-Stage and Activity contracts set their own scopes, completion conditions, and authority. Skills give procedures under those contracts. Skill names and packaging do not set stage or Activity boundaries.
-
-These specifications do not rename skill files or change current implementations.
+Stage and Activity contracts set their own scopes, completion conditions, and authority. Skills give procedures under those contracts. Skill names and packaging do not set stage or Activity boundaries. See the [user skill reference](../../skills.md) for the shipped skill list and the [installation guide](../../installation.md) for host ownership.
 
 ## Skill names
 

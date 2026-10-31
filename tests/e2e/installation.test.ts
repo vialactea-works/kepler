@@ -26,6 +26,10 @@ const hostArch =
     : undefined;
 const platformTarget =
   hostPlatform && hostArch ? `${hostPlatform}-${hostArch}` : undefined;
+const expectedPlatformTarget = process.env.KEPLER_EXPECTED_TARGET;
+if (expectedPlatformTarget && platformTarget !== expectedPlatformTarget) {
+  throw new Error(`Expected native target ${expectedPlatformTarget}; detected ${platformTarget ?? "unsupported"}.`);
+}
 let resourceRoot = "";
 let assetsDirectory = "";
 let fakeBinDirectory = "";
@@ -137,9 +141,10 @@ async function runInstalledSetup(
   executablePath: string,
   home: string,
   bundleOverride?: string,
+  options: { readonly path?: string; readonly cwd?: string } = {},
 ) {
   return execa(executablePath, ["setup"], {
-    cwd: projectRoot,
+    cwd: options.cwd ?? projectRoot,
     env: {
       HOME: home,
       ...(bundleOverride === undefined
@@ -147,7 +152,7 @@ async function runInstalledSetup(
         : { KEPLER_BUNDLE_DIR: bundleOverride }),
       LC_ALL: "C.UTF-8",
       NO_COLOR: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: options.path ?? process.env.PATH ?? "",
       TMPDIR: Path.join(home, "tmp"),
       TZ: "UTC",
       XDG_CONFIG_HOME: Path.join(home, ".config"),
@@ -209,7 +214,24 @@ beforeAll(async () => {
     ["-czf", Path.join(assetsDirectory, "kepler-bundle.tar.gz"), "bundle/"],
     { cwd: projectRoot, timeout: 30_000 },
   );
-  const checksummedAssets = [executableName, "kepler-bundle.tar.gz"];
+  const checksummedAssets = [
+    "kepler-darwin-x64",
+    "kepler-darwin-arm64",
+    "kepler-linux-x64",
+    "kepler-linux-arm64",
+    "kepler-bundle.tar.gz",
+    "kepler-core-0.11.0.tgz",
+    "RELEASE-MANIFEST.json",
+  ];
+  for (const name of checksummedAssets) {
+    if (name === executableName || name === "kepler-bundle.tar.gz") continue;
+    await Fs.writeFile(
+      Path.join(assetsDirectory, name),
+      name === "RELEASE-MANIFEST.json"
+        ? JSON.stringify({ format_version: 1, source: { commit: "fixture" } })
+        : `Unrequested release asset: ${name}\n`,
+    );
+  }
   const checksumLines = await Promise.all(
     checksummedAssets.map(async (name) => {
       const contents = await Fs.readFile(Path.join(assetsDirectory, name));
@@ -270,9 +292,39 @@ if (platformTarget) {
       expect(await Fs.readFile(templatePath, "utf8")).toContain(
         "# Functional design",
       );
+      const runtimeFreePath = Path.join(resourceRoot, "no-runtime-path");
+      const outsideCheckout = Path.join(resourceRoot, "outside-checkout");
+      await Promise.all([
+        Fs.mkdir(runtimeFreePath, { recursive: true }),
+        Fs.mkdir(outsideCheckout, { recursive: true }),
+      ]);
+      const standaloneEnvironment: NodeJS.ProcessEnv = {
+        HOME: home,
+        LC_ALL: "C.UTF-8",
+        NO_COLOR: "1",
+        PATH: runtimeFreePath,
+        TMPDIR: Path.join(home, "tmp"),
+        TZ: "UTC",
+        XDG_CONFIG_HOME: Path.join(home, ".config"),
+      };
+      const standaloneVersion = await execa(executablePath, ["--version"], {
+        cwd: outsideCheckout,
+        env: standaloneEnvironment,
+        extendEnv: false,
+        reject: false,
+        timeout: 30_000,
+      });
+      expect(standaloneVersion.exitCode, standaloneVersion.stderr).toBe(0);
+      expect(standaloneVersion.stdout).toContain("0.11.0");
+      const standaloneSetup = await runInstalledSetup(executablePath, home, undefined, {
+        path: runtimeFreePath,
+        cwd: outsideCheckout,
+      });
+      expect(standaloneSetup.exitCode, standaloneSetup.stderr).toBe(0);
+      expect(parseCliResult(standaloneSetup.stdout)).toMatchObject({ status: "success" });
       expect(
         parseInstallationRecord(await Fs.readFile(recordPath, "utf8")).bundle_release.release,
-      ).toBe("kepler-bundle-3.0.0");
+      ).toBe("kepler-bundle-3.0.1");
 
       const settings = "extensions:\n  - name: rtk\n    enabled: false\n";
       await Fs.writeFile(settingsPath, settings);
@@ -362,10 +414,15 @@ if (platformTarget) {
       await Fs.cp(assetsDirectory, tamperedAssets, { recursive: true });
       const sumsPath = Path.join(tamperedAssets, "SHA256SUMS");
       const sums = await Fs.readFile(sumsPath, "utf8");
-      await Fs.writeFile(
-        sumsPath,
-        sums.replace(/^[a-f0-9]{64}/, "0".repeat(64)),
-      );
+      const tamperedSums = sums
+        .split("\n")
+        .map((line) =>
+          line.endsWith(`  ${executableName}`)
+            ? `${"0".repeat(64)}  ${executableName}`
+            : line,
+        )
+        .join("\n");
+      await Fs.writeFile(sumsPath, tamperedSums);
       const home = Path.join(resourceRoot, "bad-checksum-home");
       const installation = await runInstaller(home, tamperedAssets);
 

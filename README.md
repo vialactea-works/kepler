@@ -1,189 +1,81 @@
 # Kepler
 
-Kepler is a coding toolbox focused on producing high-quality code and architecture. It brings
-structure to AI-assisted coding — carrying a change from idea to merge through disciplined,
-spec-driven steps that any coding agent can follow.
+Kepler combines a standalone workflow CLI, versioned templates and guidelines, portable skills, and optional Claude Code role definitions. Its Standard Construction workflow carries a Unit of Work from Functional Design through Quality Requirements, Implementation Planning, Implementation, Unit of Work Review, and Deliver.
 
-Kepler is now a **simple CLI that sets up the Assisted workflow**: `kepler setup` installs the
-spec-driven-development artifact templates and coding guidelines into `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/`, while
-`kepler workbench` provides the supported workflow-mechanics surface used by the skills. The
-Autonomous workflow engine and Ambient memory layer were removed in 0.3.0; the last full-feature
-state is preserved on the `archive/full-feature-pre-cleanup` branch and the `pre-cleanup-0.2.1` tag.
+The CLI records scoped workflow state and evidence. Skills guide the work. The host or skill manager installs and loads skills and agent definitions; Kepler does not certify agent behavior.
 
 ## Install
 
+Install the CLI and its compatible sidecar bundle:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vialactea-works/kepler/main/install.sh | bash
-
-npx skills add https://github.com/vialactea-works/kepler
 ```
 
-The first command installs the platform-specific standalone Bun executable and its sidecar bundle,
-then sets up artifacts in `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler`. The second installs the skills in your preferred coding agent.
-
-Kepler stores global files under `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/` and project artifacts under `.kepler/`. If the previous hidden global directory `${XDG_CONFIG_HOME:-$HOME/.config}/.vialactea-works/kepler/`, legacy `~/.hamilton/`, or project `.hamilton/` contains data and the corresponding canonical path does not exist, Kepler copies the data and leaves the source unchanged. Existing canonical data takes precedence without merging or deleting legacy data; when both legacy global directories exist, Kepler uses the previous hidden directory.
-
-**Environment variables** (optional):
-- `KEPLER_VERSION` — install a specific release version (default: latest)
-- `KEPLER_REPO_SLUG` — GitHub repo slug to download from (default: `vialactea-works/kepler`)
-- `KEPLER_BUNDLE_DIR` — override where `kepler setup` reads `bundle/` from (for development)
-
-See the **[Skills reference](docs/skills.md)** for what each skill does, its inputs, and its outputs,
-and the **[SDD framework](docs/sdd-framework.md)** for the design rationale.
-The **[Change state machine](docs/change-state-machine.md)** documents lifecycle states,
-skill ownership, and transition guards with their artifact-field inputs.
-
-## Nest CLI migration
-
-The CLI now uses NestJS with `nest-commander`; releases provide a standalone Bun executable with its
-sidecar `bundle/`. The former Effect-generated global options `--completions`, `--log-level`, and
-`--wizard` are removed, absent from help, and rejected as usage errors with exit code `2`.
-A setup failure exits with status `2` instead of `0`.
-
-## What the CLI does
-
-`kepler setup` bootstraps `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/`:
-
-```
-${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/
-  templates/     # SDD artifact templates (plan.md, design.md, proposal.md, ...)
-  guidelines/    # coding guidelines (general, golang, typescript)
-  settings.yaml  # default settings
-```
-
-The distributed `kepler workbench` command is the supported surface for workflow mechanics. Its
-operations are `kepler workbench isolate`, `kepler workbench diff`,
-`kepler workbench precondition`, `kepler workbench context`, and
-`kepler workbench prototype`. `kepler workbench task-state` guards task admission (`--admit`),
-before-edit prerequisite reservations (`--reserve`), and integrated publication (`--publish`).
-Artifact validation uses `kepler workbench lint`. See the [task-state command reference](docs/skills.md#task-state) for required arguments.
+Install the eight Standard entry skills and three supporting skills into your coding-agent host with the [Skills CLI](https://github.com/vercel-labs/skills):
 
 ```bash
-kepler setup          # bootstrap ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/ (preserves existing settings)
-kepler setup --force  # rerun setup; preserves existing settings
-kepler workbench --help
+npx skills add ~/.kepler-dist/bundle/skills \
+  --skill kepler-design \
+  --skill kepler-quality \
+  --skill kepler-plan \
+  --skill kepler-orchestrate \
+  --skill kepler-code \
+  --skill kepler-code-feedback \
+  --skill kepler-review \
+  --skill kepler-finish-work \
+  --skill kepler-grilling \
+  --skill kepler-domain-modelling \
+  --skill kepler-research
+```
+
+Run `kepler setup` to install compatible templates and guidelines and create missing default settings. Setup preserves settings and user-modified resources. It does not install skills or host-native agent definitions. See [installation](docs/installation.md) for Claude Code role definitions, upgrades, and target limits.
+
+## Start a workflow
+
+Use a coding-agent host that can load `SKILL.md` files. For help with the installed command tree and the typed mission request, see the [CLI guide](docs/cli.md).
+
+```bash
 kepler --help
+kepler mission create --help
+kepler workflow construction unit create --help
 ```
 
-## Assisted skills — start here
+Create a mission with `kepler mission create`, prepare the selected workspaces, then create a Unit of Work bound to the `standard` workflow. Existing application code and tests are not prerequisites. The record-home still must meet the CLI's Git and `.kepler/` project-selection requirements. Mission creation does not start a stage.
 
-The **[spec-driven development skills](docs/sdd-framework.md)** carry a change through a fixed
-seven-step sequence, one disciplined stage at a time:
+Follow the Standard skills in order. For each task in Implementation, Kepler keeps Code Generation, independent non-author Code Validation, and checked Code Integration as separate Activities. The CLI records state and evidence; the orchestrating host dispatches agents. Kepler does not make delivery permission automatic. Review [the workflow guide](docs/sdd-framework.md), [the skill reference](docs/skills.md), and [recovery guidance](docs/recovery.md).
 
-```
-init ──▶ [ propose ] ──▶ plan ──▶ ( code ◀──▶ code-feedback ) ──▶ review ──▶ finish-work
-  0        1 optional      2          3             4                5            6
-                                     repeat per task              once per change
-```
+## CLI and documentation
 
-Each step is a self-contained `SKILL.md` that names no engine internals. It depends on the project's
-standards (`AGENTS.md`), the artifact templates and coding guidelines Kepler installs under
-`${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/` with `kepler setup`, the distributed `kepler workbench` command, and the
-per-change artifacts under the project's own `.kepler/` directory. The same skill guides a person
-in an editor or an agent like Claude Code. The heavyweight front door (`propose`) is optional; a
-tactical change starts at `plan`.
+- [CLI guide](docs/cli.md): installed commands, scope, output, and legacy workbench boundary.
+- [Installation](docs/installation.md): bundle setup, host-managed resources, upgrades, and release targets.
+- [Recovery](docs/recovery.md): inspect and resume interrupted work without guessing or discarding effects.
+- [Skills](docs/skills.md): shipped skill roles and handoffs.
+- [Workflow](docs/sdd-framework.md): Standard stage order and authority boundaries.
+- [Release notes](docs/releases/): shipped changes by release.
+- [Version 3 contracts](docs/specs/v3/README.md): detailed behavior and implementation status.
 
-The workbench provides the supported mechanics for stable checkpoints, diff packaging, change
-context, precondition gates, isolation, and prototype branches. Skills retain judgment and sequencing
-around those operations.
+## Limits
 
-### Artifacts
+The current workflow CLI implements Construction. It does not implement the future Initialization or Inception phases. It does not convert version 2 artifacts or history into version 3. Existing `workbench` commands serve the earlier change-based workflow and are not a v3 migration path. Setup does not certify host readiness, skill loading, or agent behavior. Kepler does not publish, deploy, roll back, or delete data unless you separately authorize the operation.
 
-The skills produce durable, per-project artifacts under `.kepler/`:
+The release artifacts target Linux and macOS on x86_64 and arm64. CI configures native standalone checks for all four targets; a green run is evidence for that run only. Cross-compilation does not establish native execution.
 
-```text
-.kepler/
-  specs/                              # canonical capability truth and project language
-    glossary.md                       # context-scoped ubiquitous language
-    <capability>.md
-  changes/
-    <YYYY-MM-DD-title>/
-      proposal.md                     # optional — why
-      design.md                       # optional — domain model and architecture
-      requirements/<capability>.md    # optional — what (delta form)
-      plan.md                         # required — the handoff contract
-      progress.md                     # required — current task ledger
-      tasks/
-        task-N/
-          progress.md                 # implementation attempt history
-          feedback.md                 # task-feedback verdict history
-      review.md                       # whole-branch review history
-      finish.md                       # finish attempt and outcome history
-```
-
-Changes are ephemeral; specs are durable. When a change finishes, its requirement deltas fold into
-`specs/`, the project's always-current requirements truth. Init establishes the canonical glossary;
-new proposals use its scoped language and describe involved contexts and boundary impact. A capability
-may represent a domain, subdomain or bounded context, including infrastructure responsibilities.
-A design explains the relevant model, package responsibilities, ports and adapters, and code attribution
-before its supporting decisions. Coverage scales to the change; unresolved language is surfaced, not invented.
-See [domain language and capability scope](docs/skills.md#domain-language-and-capability-scope).
-
-When upgrading this workflow, first finish any active change with the Kepler generation that
-created it. Between changes, update the CLI and the agent-loaded skills together from one Kepler
-generation, run `kepler setup`, verify `kepler workbench --help`, and then start the next change.
-Setup does not delete stale helper files from an older generation. `bun run purge` removes the local
-CLI symlink and `~/.kepler-dist/`, but preserves Kepler's global data. See the **[between-changes migration guidance](docs/sdd-framework.md#upgrading-to-the-split-workflow)**
-for the exact procedure. Never replace one part of the installed generation while a change is active.
-
-## Dependency-aware task execution
-
-New plans can opt into dependency mode with `execution: {version: 2, mode: dependencies}`. Each task has a coherent Goal, testable Acceptance, explicit `Depends on`, Steps, Verify, and Commit; Files is optional guidance, not an allowlist. A goal-serving unlisted edit stays within the task when it respects approved intent, design, and project standards. A new prerequisite instead needs a committed before-edit reservation: at most two over a task's lifetime and at most four concrete paths in each reservation. Removing, rewriting, reverting, retrying, or correcting work never resets or refunds that budget. A third reservation, a larger scope, a new public contract or dependency, or a public-security authority change requires owner-approved re-planning.
-
-Dependency readiness is a derived projection, not permission to edit. A guarded admission binds the original Base, plan revision, task definition, isolated worker/worktree, and prerequisite approvals; retries, rebinds, and a missing cache recover that original Base from admission history rather than guessing a newer checkpoint. A task's root `done` means its implementation was published, while fully gated also requires fresh independent approved feedback. When a prerequisite is blocked or uncleared, its descendants stay held; independent ready tasks may use compatible isolated lanes. The coordinator serializes original-commit integration, executes each task's exact Verify field after integration, and publishes the shared root result. This is not a distributed scheduler or a promise of concurrent execution.
-
-Version 1 and unversioned plans keep their historical numeric serial behavior. Unsupported execution versions or modes fail closed rather than falling back to serial behavior. `done` and `blocked` are completed actor outcomes; `interrupted` and `unavailable` are neutral observations that require artifact-based recovery, not invented terminal records. Whole-branch review begins only after every active task is fully gated, and finish remains closed until that review clears.
-
-## Requirements
-
-- **A coding agent that loads `SKILL.md` files** (e.g. Claude Code).
-- **An existing git repo** — Kepler operates on an existing repository (no greenfield support yet).
-
-## Development
-
-### Quick start
+## Develop Kepler
 
 ```bash
-# 1. Install the CLI
-
-# For end users, use the install.sh script:
-curl -fsSL https://raw.githubusercontent.com/vialactea-works/kepler/main/install.sh | bash
-
-# For contributors building from source:
-bun install
-bun run build                  # compile TypeScript
-bun run install-local          # symlink to ~/.local/bin/
-kepler setup                 # install bundle/{templates,guidelines}/ → ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/
-
-# 2. Make the pipeline skills available to your coding agent.
-#    The skills live in skills/kepler-*/ — copy or symlink them into a
-#    skills directory your agent loads (e.g. ~/.claude/skills/), or point
-#    the agent at the SKILL.md paths.
-
-# 3. In your project, run the skills through your agent, in order:
-#    kepler-init         → standards + canonical glossary + .kepler/ workspace (once)
-#    kepler-propose      → proposal + requirements + design (optional)
-#    kepler-plan         → plan.md + root task ledger + task progress files
-#    kepler-code         → implement one task and record its attempt
-#    kepler-code-feedback → review that task; loop with code until approved
-#    kepler-review       → inspect the whole branch once after all tasks
-#    kepler-finish-work  → gate, sync specs, record intent, merge / PR / no-op, verify, record outcome
+bun install --frozen-lockfile
+bun run check:typescript-sources
+bun run typecheck
+bun run build
+bun run test:unit
+bun run test:integration
+bun run test:e2e
+bun run test:package
 ```
 
-**Build and test commands** (for contributors):
-
-```bash
-bun install                    # install dependencies
-bun run build                  # compile TypeScript (tsc -p tsconfig.json)
-bun run test                   # run Vitest on Bun
-bun run install-local          # build + symlink the CLI locally
-bun run purge                  # remove the CLI symlink and ~/.kepler-dist/; preserves Kepler data
-```
-
-**Do not use `bun test`** — it selects Bun's native test runner. Use `bun --bun vitest run` or
-`bun run test` instead. See [AGENTS.md](AGENTS.md) for conventions and
-[CONTRIBUTING.md](CONTRIBUTING.md) for the docs-sync rules.
+Run tests with Vitest on Bun; do not use `bun test`. See [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for repository rules and verification details.
 
 ## License
 
-Kepler is licensed under the [Apache License 2.0](LICENSE). Some skills in this repository are adapted from other projects; their original licences are reproduced in [NOTICE](NOTICE) and in a `NOTICE` file beside each forked skill directory.
+Kepler is licensed under the [Apache License 2.0](LICENSE). Forked skills retain their notices in the corresponding skill directories and release bundle.

@@ -4,7 +4,20 @@ import { execaSync } from "execa";
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../../../packages/cli/src/construction/events.js";
 import { missionWorkspaceKey } from "../../../../packages/cli/src/construction/mission-workspace.js";
 
-export const auditFixture = {
+export interface AuditFixture {
+  readonly missionId: string;
+  readonly unitId: string;
+  readonly journalId: string;
+  readonly stageAttemptId: string;
+  readonly priorStageAttemptId: string;
+  readonly implementationAttemptId: string;
+  readonly baselineEventId: string;
+  readonly taskId: string;
+  readonly activityAttemptId: string;
+  readonly eventIds: readonly [string, string];
+}
+
+const initialAuditFixture: AuditFixture = {
   missionId: "10000000-0000-4000-8000-000000000001",
   unitId: "2026-10-21-audit-e2e",
   journalId: "20000000-0000-4000-8000-000000000002",
@@ -18,7 +31,17 @@ export const auditFixture = {
     "40000000-0000-4000-8000-000000000004",
     "50000000-0000-4000-8000-000000000005",
   ],
-} as const;
+};
+
+export let auditFixture = initialAuditFixture;
+
+export const configureAuditFixture = (fixture: AuditFixture): void => {
+  auditFixture = fixture;
+};
+
+export const resetAuditFixture = (): void => {
+  auditFixture = initialAuditFixture;
+};
 
 const event = (id: string, type: string, data: Record<string, unknown>, causedBy: readonly string[] = []) => ({
   id,

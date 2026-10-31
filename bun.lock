@@ -24,7 +24,7 @@
     },
     "packages/cli": {
       "name": "@vialactea-works/kepler-cli",
-      "version": "0.10.3",
+      "version": "0.11.0",
       "bin": {
         "kepler": "./dist/cli/main.js",
       },
@@ -46,7 +46,7 @@
     },
     "packages/core": {
       "name": "@vialactea-works/kepler-core",
-      "version": "0.10.3",
+      "version": "0.11.0",
       "dependencies": {
         "remark": "15.0.1",
         "remark-frontmatter": "5.0.0",

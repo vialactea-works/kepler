@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
 import * as Path from "node:path";
+import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ConstructionEventRecord } from "../../packages/cli/src/construction/events.js";
 import type { DiffPackageComparisonBinding, DiffPackageResolvedSource } from "../../packages/cli/src/construction/diff-package-source.js";
@@ -118,6 +119,9 @@ describe("GitDiffPackageAdapter", () => {
     repositories.push(primary, secondary);
 
     const history = Array.from({ length: 40 }, (_, index) => `line-${index + 1}`).join("\n") + "\n";
+    await Fs.mkdir(Path.join(primary.path, "src"), { recursive: true });
+    await Fs.writeFile(Path.join(primary.path, "src", "result.txt"), "primary result\n", "utf8");
+    await Fs.writeFile(Path.join(primary.path, "verify.ts"), 'import * as assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nassert.equal(readFileSync("src/result.txt", "utf8"), "primary result\\n");\n', "utf8");
     await Fs.writeFile(Path.join(primary.path, "history.txt"), history, "utf8");
     await Fs.writeFile(Path.join(primary.path, "shared.txt"), "base version\n", "utf8");
     await Fs.mkdir(Path.join(primary.path, "assets"), { recursive: true });
@@ -146,6 +150,9 @@ describe("GitDiffPackageAdapter", () => {
     await Fs.writeFile(Path.join(primary.path, "unrecorded.txt"), "Later work is outside the selected source checkpoint\n", "utf8");
     const currentHead = commit(primary.path, "Advance HEAD after source checkpoint");
 
+    await Fs.mkdir(Path.join(secondary.path, "src"), { recursive: true });
+    await Fs.writeFile(Path.join(secondary.path, "src", "result.txt"), "secondary result\n", "utf8");
+    await Fs.writeFile(Path.join(secondary.path, "verify.ts"), 'import * as assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nassert.equal(readFileSync("src/result.txt", "utf8"), "secondary result\\n");\n', "utf8");
     await Fs.writeFile(Path.join(secondary.path, "lib.txt"), "Secondary repository source output\n", "utf8");
     const secondaryOutput = commit(secondary.path, "Record secondary output");
     await Fs.writeFile(Path.join(secondary.path, "later.txt"), "Unrecorded secondary work\n", "utf8");
@@ -193,17 +200,52 @@ describe("GitDiffPackageAdapter", () => {
       candidate_checkpoints: [{ repository_id: primary.id, commit: integrationCandidate }, { repository_id: secondary.id, commit: secondaryOutput }],
       source_evidence_ids: [randomUUID()],
     });
-    const integrationAccepted = record("construction.integration-accepted", {
-      mission_id: missionId,
-      unit_id: unitId,
-      stage: "implementation",
-      stage_attempt_id: implementationAttemptId,
-      task_id: taskId,
-      activity: "code-integration",
-      activity_attempt_id: integrationAttemptId,
-      candidate_checkpoints: [{ repository_id: primary.id, commit: integrationCandidate }, { repository_id: secondary.id, commit: secondaryOutput }],
-      prepared_event_id: integrationPrepared.id,
-    });
+    const integrationEvidence = async (repository: typeof primary, checkpoint: string, expected: string) => {
+      const check = await execa("bun", ["run", "verify.ts"], { cwd: repository.path, env: environment, extendEnv: false });
+      expect(check.exitCode, `${repository.id}: ${check.stderr}`).toBe(0);
+      return {
+        ...record("construction.evidence-recorded", {
+          mission_id: missionId,
+          unit_id: unitId,
+          stage: "implementation",
+          stage_attempt_id: implementationAttemptId,
+          task_id: taskId,
+          activity: "code-integration",
+          activity_attempt_id: integrationAttemptId,
+          evidence_id: randomUUID(),
+          artifact_bindings: [],
+          checkpoints: [{ repository_id: repository.id, commit: checkpoint }],
+          inputs: [{ reference: `repo:${repository.id}`, purpose: `Verify the ${repository.id} candidate` }],
+          check: "code-integration-full-test-suite",
+          check_command: { repository_id: repository.id, executable: "bun", argv: ["run", "verify.ts"] },
+          executor: "agent:integrator",
+          result: { status: "passed", summary: `${expected} checks out in its own repository.` },
+          output_refs: [`${repository.id}:src/result.txt`],
+          conditions: [],
+        }),
+        caused_by: [integrationPrepared.id],
+      } as ConstructionEventRecord;
+    };
+    const primaryIntegrationEvidence = await integrationEvidence(primary, integrationCandidate, "Primary result");
+    const secondaryIntegrationEvidence = await integrationEvidence(secondary, secondaryOutput, "Secondary result");
+    const integrationAccepted = {
+      ...record("construction.integration-accepted", {
+        mission_id: missionId,
+        unit_id: unitId,
+        stage: "implementation",
+        stage_attempt_id: implementationAttemptId,
+        task_id: taskId,
+        activity: "code-integration",
+        activity_attempt_id: integrationAttemptId,
+        candidate_checkpoints: [{ repository_id: primary.id, commit: integrationCandidate }, { repository_id: secondary.id, commit: secondaryOutput }],
+        repository_results: [
+          { repository_id: primary.id, evidence_ids: [primaryIntegrationEvidence.data.evidence_id] },
+          { repository_id: secondary.id, evidence_ids: [secondaryIntegrationEvidence.data.evidence_id] },
+        ],
+        prepared_event_id: integrationPrepared.id,
+      }),
+      caused_by: [integrationPrepared.id, primaryIntegrationEvidence.id, secondaryIntegrationEvidence.id],
+    } as ConstructionEventRecord;
     const taskDefinition = record("construction.task-admitted", {
       mission_id: missionId,
       unit_id: unitId,
@@ -213,6 +255,7 @@ describe("GitDiffPackageAdapter", () => {
       graph_ref: { graph_id: "graph-1", content_version: "graph-v1" },
       task_definition_ref: { graph_id: "graph-1", task_id: taskId, content_version: "task-v1" },
       task_contract: { outputs: ["history.txt", "shared.txt", "task.txt", "assets/payload.bin"], acceptance_criteria: ["Source output is recorded"], dependency_task_ids: [], implementation_prerequisites: [] },
+      admission_baseline: [{ repository_id: primary.id, commit: primaryBase }, { repository_id: secondary.id, commit: secondary.base }],
     });
     const source: DiffPackageResolvedSource = {
       scope: { kind: "unit-review", unitId, implementationAttemptId },
@@ -238,10 +281,10 @@ describe("GitDiffPackageAdapter", () => {
       taskDefinitions: [taskDefinition],
       upstreamVersions: [taskDefinition],
       sourceAttempts: [{ taskId, activity: "code-generation", attemptId: taskOutputAttemptId, implementationAttemptId, eventIds: [String(taskDefinition.id)] }],
-      activityEvidence: [],
+      activityEvidence: [primaryIntegrationEvidence, secondaryIntegrationEvidence],
       retainedScopes: [retained],
       integrationHistory: [integrationPrepared, integrationAccepted],
-      sourceRecords: [taskDefinition, retained, integrationPrepared, integrationAccepted],
+      sourceRecords: [taskDefinition, retained, integrationPrepared, primaryIntegrationEvidence, secondaryIntegrationEvidence, integrationAccepted],
     };
     git(primary.path, "replace", taskOutput, primaryBase);
     const gitDirectorySnapshots = await Promise.all([primary.path, secondary.path].map((path) => snapshot(Path.join(path, ".git"))));
@@ -281,6 +324,13 @@ describe("GitDiffPackageAdapter", () => {
     expect(emptyIntegration.patch).toBe("");
     expect(rendered.empty).toBe(false);
     expect(packageText).toContain("retained-scope-original-admission-to-output");
+    expect(packageText).toContain(primaryIntegrationEvidence.id);
+    expect(packageText).toContain(secondaryIntegrationEvidence.id);
+    expect(packageText).toContain('"repository_id": "repo-primary"');
+    expect(packageText).toContain('"repository_id": "repo-secondary"');
+    expect(packageText).toContain('"admission_baseline"');
+    expect(packageText).toContain('"captured_inputs"');
+    expect(packageText).toContain('"candidate_checkpoints"');
     expect(packageText).toContain("conflict_effect_attribution");
     expect(packageText).toContain("uncertain");
     expect(packageText).toContain("shared.txt");

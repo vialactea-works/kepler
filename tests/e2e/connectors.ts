@@ -122,7 +122,9 @@ export class DockerApplicationConnector implements ApplicationConnector {
   readonly kind = "docker" as const;
 
   constructor(
-    readonly image = "oven/bun:1.4.0@sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6",
+    readonly image =
+      process.env.KEPLER_E2E_DOCKER_IMAGE ??
+      "oven/bun:1.4.0@sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6",
   ) {}
 
   assertAvailable(resources: E2EResources, cliPath: string): void {
