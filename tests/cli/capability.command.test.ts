@@ -7,6 +7,7 @@ import type { INestApplicationContext } from "@nestjs/common";
 import { CommandFactory } from "nest-commander";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppModule } from "../../packages/cli/src/cli/app.module.js";
+import { taskGraphExample } from "../fixtures/task-graph.js";
 
 interface CapturedCli {
   readonly stdout: string;
@@ -652,5 +653,224 @@ describe("v3 root command tree", () => {
       status: "failed",
       data: { code: "duplicate_selector", details: { selector: "project" } },
     });
+  });
+});
+
+describe("Construction query CLI", () => {
+  const createQueryFixture = async () => {
+    const fixture = await createProject("construction-queries");
+    const mission = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "mission", "create", "--project", fixture.root,
+      "--request", JSON.stringify({
+        title: "Read the planned Construction tasks",
+        request: "Inspect task definitions and dependencies without changing execution state.",
+        workflow: "standard",
+        recordHomeRepositoryId: "project",
+        contexts: [],
+        repositories: [{
+          repositoryId: "project",
+          workspace: { kind: "existing", path: fixture.root },
+          branch: { kind: "current" },
+          integrationTarget: "refs/heads/main",
+        }],
+      }),
+    ]));
+    expect(mission.exitCode, mission.stdout).toBe(0);
+    const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const created = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "unit", "create", "query-unit",
+      "--mission", missionId, "--project", fixture.root,
+    ]));
+    expect(created.exitCode, created.stdout).toBe(0);
+    const unitId = JSON.parse(created.stdout).data.unit_id as string;
+    const unitRoot = Path.join(fixture.root, ".kepler", "missions", missionId, "construction", "units-of-work", unitId);
+    const graph = { ...taskGraphExample(), unit_id: unitId };
+    const graphPath = Path.join(unitRoot, "tasks-dag.json");
+    await Fs.writeFile(graphPath, `${JSON.stringify(graph, null, 2)}\n`);
+    await Fs.writeFile(Path.join(unitRoot, "plan.md"), [
+      "---",
+      "id: 11111111-1111-4111-8111-111111111111",
+      "type: implementation-plan",
+      "schema_version: 3",
+      `unit_id: ${unitId}`,
+      "author: Ada Lovelace <ada@example.com>",
+      "---",
+      "# Implementation plan",
+      "",
+      "## Technical solution",
+      "",
+      "Implement the publishing boundary and its adapter.",
+      "",
+      "## Task graph context",
+      "",
+      "The task graph is [tasks-dag.json](tasks-dag.json).",
+      "",
+      "## Verification strategy",
+      "",
+      "Use the checks declared in the task graph.",
+      "",
+      "## Decisions and open questions",
+      "",
+      "No open decisions.",
+      "",
+    ].join("\n"));
+    return { ...fixture, missionId, unitId, graph, graphPath };
+  };
+
+  const query = async (
+    fixture: Awaited<ReturnType<typeof createQueryFixture>>,
+    arguments_: readonly string[],
+    exitCode: 0 | 1 = 0,
+  ): Promise<Record<string, unknown>> => {
+    const before = await snapshot(fixture.root);
+    const result = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", ...arguments_, "--unit", fixture.unitId, "--project", fixture.root,
+    ]));
+    expect(result.exitCode, result.stdout).toBe(exitCode);
+    expect(result.stderr).toBe("");
+    expect(result.stdout.endsWith("\n")).toBe(true);
+    const response = JSON.parse(result.stdout) as { status: string; data: Record<string, unknown> };
+    expect(Object.keys(response).sort()).toEqual(["data", "status"]);
+    expect(response.status).toBe(exitCode === 0 ? "success" : "failed");
+    if (exitCode === 1) {
+      expect(Object.keys(response.data).sort()).toEqual(["code", "details", "message", "recovery"]);
+      expect(response.data.message).toEqual(expect.any(String));
+      expect(response.data.recovery).toEqual(expect.any(String));
+    }
+    expect(await snapshot(fixture.root)).toBe(before);
+    return response.data;
+  };
+
+  it("lists authored tasks and dependencies without admitting work or changing files", async () => {
+    const fixture = await createQueryFixture();
+    const [first, second] = fixture.graph.tasks;
+
+    const data = await query(fixture, ["task", "list"]);
+
+    expect(data).toMatchObject({
+      record_home: fixture.root,
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      tasks: [
+        { task_id: first!.id, title: first!.title, state: "ready", dependencies: [], blockers: [], unknowns: [] },
+        {
+          task_id: second!.id,
+          title: second!.title,
+          state: "blocked",
+          dependencies: [first!.id],
+          blockers: [`predecessor-not-integrated:${first!.id}`],
+          unknowns: [],
+        },
+      ],
+    });
+  });
+
+  it("shows the selected task definition and empty execution records without changing files", async () => {
+    const fixture = await createQueryFixture();
+    const task = fixture.graph.tasks[0]!;
+
+    const data = await query(fixture, ["task", "show", "--task", task.id]);
+
+    expect(data).toMatchObject({
+      record_home: fixture.root,
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      definition: task,
+      state: "ready",
+      current_scope: { implementation_attempt_id: null },
+      admissions: [],
+      activities: [],
+      evidence: [],
+      approvals: [],
+      progress: { completed_activities: 0, total_activities: 3, complete: false },
+      blockers: [],
+      unknowns: [],
+    });
+  });
+
+  it("reports a ready task without recording admission or changing files", async () => {
+    const fixture = await createQueryFixture();
+    const task = fixture.graph.tasks[0]!;
+
+    const data = await query(fixture, ["task", "ready", "--task", task.id]);
+
+    expect(data).toEqual({
+      record_home: fixture.root,
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      task_id: task.id,
+      task_state: "ready",
+      readiness: "ready",
+      dependencies: [],
+      known_prerequisite_facts: [],
+      unknown_prerequisites: [],
+      blockers: [],
+      unknowns: [],
+    });
+  });
+
+  it("returns a successful readiness query with an unintegrated predecessor and unknown prerequisite", async () => {
+    const fixture = await createQueryFixture();
+    const [first, second] = fixture.graph.tasks;
+
+    const data = await query(fixture, ["task", "ready", "--task", second!.id]);
+
+    expect(data).toMatchObject({
+      record_home: fixture.root,
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      task_id: second!.id,
+      task_state: "blocked",
+      readiness: "blocked",
+      dependencies: [{
+        task_id: first!.id,
+        status: "not_integrated",
+        declared_outputs: first!.outputs,
+        integration_events: [],
+        integrated_output_refs: [],
+      }],
+      known_prerequisite_facts: [],
+      unknown_prerequisites: [{ description: second!.prerequisites[0]!.description, blocking: true, status: "unknown" }],
+      blockers: [`predecessor-not-integrated:${first!.id}`],
+      unknowns: [],
+    });
+  });
+
+  it("lints the canonical graph successfully without changing files or history", async () => {
+    const fixture = await createQueryFixture();
+
+    expect(await query(fixture, ["lint"])).toEqual({ findings: [] });
+  });
+
+  it.each(["show", "ready"])("rejects task %s for an unknown task without changing files or history", async (operation) => {
+    const fixture = await createQueryFixture();
+
+    const data = await query(fixture, ["task", operation, "--task", "90000000-0000-4000-8000-000000000099"], 1);
+
+    expect(data).toMatchObject({
+      code: "task_not_found",
+      details: { unit_id: fixture.unitId, task_id: "90000000-0000-4000-8000-000000000099" },
+    });
+  });
+
+  it("returns Construction lint findings in the failure envelope without repairing the graph", async () => {
+    const fixture = await createQueryFixture();
+    const source = `${JSON.stringify({ ...fixture.graph, unsupported: true }, null, 2)}\n`;
+    await Fs.writeFile(fixture.graphPath, source);
+
+    const data = await query(fixture, ["lint"], 1);
+
+    expect(data).toMatchObject({
+      code: "construction_lint_failed",
+      details: {
+        findings: [{
+          path: `.kepler/missions/${fixture.missionId}/construction/units-of-work/${fixture.unitId}/tasks-dag.json`,
+          field: "/unsupported",
+          code: "invalid-schema",
+          message: expect.any(String),
+        }],
+      },
+    });
+    expect(await Fs.readFile(fixture.graphPath, "utf8")).toBe(source);
   });
 });

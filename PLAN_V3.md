@@ -553,11 +553,94 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 ## Final acceptance checklist
 
+Checked items passed the 2026-10-31 audit or the later CLI test update below. Unchecked items have acceptance gaps or incomplete verification; milestone checkboxes do not override these conclusions.
+
 - [ ] Use the accepted authority, attempt, evidence, approval, and completion contracts for all six Standard stages and all three task Activities.
-- [ ] Add behavior tests for all accepted CLI operations, including all five audit surfaces and all three diff-package scopes. Use the shared JSON/exit/stream contracts.
+- [x] Add behavior tests for all accepted CLI operations, including all five audit surfaces and all three diff-package scopes. Use the shared JSON/exit/stream contracts.
 - [ ] Make mission startup callable and document it. Show workspace preparation, one-unit membership, fixed baselines, scoped concurrency, recovery, and unbound-data preservation.
-- [ ] Use `remark` plus `remark-frontmatter` for Markdown. Keep task graphs in their accepted closed schema. Keep authored artifacts out of execution-state storage.
+- [x] Use `remark` plus `remark-frontmatter` for Markdown. Keep task graphs in their accepted closed schema. Keep authored artifacts out of execution-state storage.
 - [ ] Keep authored code TypeScript-only. Use interfaces extensively and keep them replaceable. Include exported runtime and type contracts in tests.
-- [ ] Use Vitest unit tests as the broad base. Use real integration tests to show collaborations. Use `execa` E2E tests with the playbook-inspired layers. Keep smoke tests out of v3 validation.
+- [x] Use Vitest unit tests as the broad base. Use real integration tests to show collaborations. Use `execa` E2E tests with the playbook-inspired layers. Keep smoke tests out of v3 validation.
 - [ ] Keep all eleven skills, four native definitions, v3 templates, compatible installation resources, and user documentation complete and consistent. Do not add live-agent/skill-text tests or certification claims.
 - [ ] Complete verification only when necessary checks pass on identified material. Record actual commands and results. Keep evidence content available. State native-target gaps. Do not invent results. This plan does not give authority for release, deployment, migration, rollback, or destructive cleanup.
+
+### Final acceptance audit: 2026-10-31
+
+**Conclusion: not fully accepted.** Three checklist items passed, four have acceptance gaps, and the final verification item remains partial. The requester resolved the Integration command-interface finding through the decision below. The later CLI test update closed the successful command-coverage gap. Other findings remain open.
+
+**Original audit material:** `8861ded2b8de9772a94b4b1d151a381b0a407ddf` on `wt/feat-kepler-v3-worktree-20261020`, initially clean. The audit combined three independent read-only reviews, parent source inspection, existing verification gates, and in-memory diagnostics. During that audit, only this plan was edited; code, specifications, tests, bundle resources, and milestone history were not changed. The later working-tree test changes and their verification are recorded separately below. The audit conclusions do not grant requester approval or release authority. The following decision has its own explicit scope.
+
+#### Requester decision: Integration command interface
+
+On 2026-10-31, the requester selected the existing `kepler workflow construction integration` command group with `lock`, `prepare`, `evidence`, `accept`, and `release`. Retain these separate operations. Do not add `task integrate` to resolve the audit finding.
+
+**Command-interface finding: resolved by requester decision.** The failed `task integrate` diagnostic records the interface difference that existed at the original audit. It is no longer a missing implementation requirement under this decision.
+
+**Specification update required:** update `docs/specs/v3/cli.md` and the affected records in `docs/specs/v3/authoring_progress.md` to describe the separate Integration operations. Update command inventories, Task and Activity descriptions, `task integrate` references, and the applicable public-lock restrictions. Keep the existing authority, attempt, evidence, check, and lock-safety requirements. The earlier M10 wording must also be aligned when this documentation work is done. No code or specification was changed for this decision.
+
+This decision alone did not resolve the possible stale-evidence race or the missing successful CLI behavior tests. Item 1 remains unchecked. The test update below resolves the command-coverage gap in item 2.
+
+#### CLI behavior-test update: 2026-11-05
+
+Eight new integration tests in `tests/cli/capability.command.test.ts` cover the real Nest command parser and providers. Each fixture uses public mission and unit creation commands in a temporary Git repository. Successful cases cover `task list`, `task show`, ready and blocked `task ready` results, and Construction lint. Failure cases cover unknown tasks for `show` and `ready`, plus an invalid task graph for lint. All cases check the JSON response, final newline, stderr, and exit code. Repository snapshots verify unchanged files, history, and Git metadata after each query.
+
+**Verification:** `bun run check:typescript-sources`, `bun run typecheck`, `bun run build`, and `bun run test:unit` passed. Unit tests passed 62 files and 827 tests. The following related integration run passed three files and 27 tests, including all eight new tests:
+
+```text
+bun --bun vitest run --project integration --no-file-parallelism tests/cli/capability.command.test.ts tests/cli/scope-selectors.command.test.ts tests/integration/scoped-construction-queries.test.ts
+```
+
+Active LSP checks found no errors or warnings in the changed test file. `git diff --check` passed. Full integration, E2E, packed-package, and native-target suites were not rerun for this test-only change. No production code or specification changed. The specification update and all other acceptance gaps remain open.
+
+| Item | Verdict | Conclusion and evidence |
+| --- | --- | --- |
+| 1. Stage and Activity contracts | Not accepted | Standard ordering, current attempts, approvals, evidence bindings, and the fixed Activity route are present. The requester resolved the command-interface finding by retaining the separate Integration operations. The possible stale-evidence acceptance race remains open. See `packages/cli/src/construction/integration-execution.ts:813-970`. |
+| 2. Accepted CLI behavior coverage | Accepted | All five audit surfaces, all three diff-package scopes, and shared JSON/exit/stream behavior have passing coverage. The new tests cover successful `task list`, `task show`, `task ready`, and Construction lint through the real parser and providers. They also verify failure responses and read-only effects. The requester resolved the command-interface finding; its specification update remains pending. See `tests/cli/capability.command.test.ts`, `tests/e2e/specifications/audit.ts`, and `tests/e2e/compiled-cli.test.ts`. |
+| 3. Startup and runtime recovery | Not accepted | Startup is callable and documented; workspace preparation, membership, baselines, scoped coordination, and unbound-data preservation have coverage. A preparation failure leaves a created but unprepared mission, and the public startup API has no continuation selecting that mission. An in-memory public-API diagnostic confirmed that retrying the same request creates a different mission and leaves the original with only its creation event. See `packages/cli/src/construction/mission-startup.ts:456-649`, `packages/cli/src/cli/nest/capability.commands.ts:408-482`, and `packages/cli/src/construction/unit-create.ts:501-505`. |
+| 4. Markdown, graph, and state boundaries | Accepted | `remark`/`remark-frontmatter`, duplicate-key rejection, metadata rules, meaningful round trips, the closed task-DAG schema, opaque references, and containment have passing unit/integration coverage. Authored artifacts remain separate from journal-derived execution state. See `packages/core/src/artifact-markdown.ts`, `packages/cli/src/construction/task-graph.ts`, `packages/core/tests/unit/artifact.test.ts`, and `tests/integration/construction-task-graph.test.ts`. |
+| 5. TypeScript, replaceable interfaces, and public contracts | Not accepted | Source policy, typechecking, representative public type/runtime contracts, and the packed-Core consumer passed. Application isolation is incomplete: `FunctionalDesignStageCompletion` directly calls a concrete material reader, which uses `Fs.realpath` and the default native artifact filesystem rather than an injected collaborator. Quality, Planning, and Deliver share this pattern. See `packages/cli/src/construction/stage-completion.ts:126,159,390`, `packages/cli/src/construction/stage-artifact-material.ts`, and `packages/cli/src/construction/planning-stage-completion.ts:226`. |
+| 6. Test pyramid and executable gates | Accepted | Vitest unit tests form the broad base; real Git/filesystem/journal/framework integrations and execa CLI E2E are present. All 114 tracked test files were discovered exactly once across the three projects. All gates passed and no active smoke suite/script was found. This accepts the requested pyramid and gate structure, not exhaustive coverage or agent behavior. The test-residue cleanup caveat below remains. |
+| 7. Shipped resources and documentation | Not accepted | The current bundle contains all 11 skills, four native definitions, and six v3 templates; its 56 payload digests, content digest, and source-skill bytes match. Portable procedures nevertheless reference unshipped contract files, setup does not enforce the required template inventory, and the unit gate still asserts skill text. See the resource findings below. CLI/skill documentation follows the separate Integration interface now selected by the requester; the specification update is pending. |
+| 8. Complete verification and retained evidence | Partial | All existing local gates were rerun on the identified source, and complete output is retained. Native Linux x86_64 installer/standalone execution passed. Linux arm64 and both macOS targets were not executed or independently verified in this audit, so full target verification remains open. No cross-compilation or configured CI job is counted as native execution. |
+
+#### Remaining contract and resource gaps
+
+- **Startup continuation:** the diagnostic injected one preparation failure through in-memory ports, then retried `MissionStartup.execute` with the same request. The retry succeeded under a new mission ID; the original had no prepared event. The public `mission` group offers only `create`, and unit creation rejects the unprepared original. Existing failure-reporting tests do not establish same-mission recovery.
+- **Portable reference closure:** `bundle/skills/kepler-design/SKILL.md:30` and `bundle/skills/kepler-quality/SKILL.md:30` delegate required reopening questions to `../../docs/specs/v3/...`, which resolves to absent `bundle/docs/`. Other stage skills have the same dependency. Planning requires the accepted task-graph format, but its schema and complete field contract are not shipped in the sidecar. Repository-relative source links do not establish usable installed procedures.
+- **Incomplete template inventory accepted:** a read-only, in-memory diagnostic removed every template except `templates/v3/construction/design.md`, recalculated the manifest digest, and called `validateSetupBundle`. It still returned `compatible` for `0.11.0`. The committed bundle itself is complete; the completeness guard is not. See `packages/cli/src/cli/setup-bundle.ts:136-147` and `tests/unit/setup-bundle.test.ts:82-93,164-173`.
+- **Excluded skill-text assertions remain:** `tests/skills/kepler-brand.test.ts:5-20` reads all source `SKILL.md` files and asserts frontmatter names and wording. `vitest.config.ts:8` includes it in the unit gate, contrary to this checklist and SH116. Its passing result is not evidence of agent behavior.
+
+#### Additional static findings and scope limits
+
+These findings were checked against source but were **not dynamically reproduced** during this audit:
+
+- `IntegrationExecution.accept` selects passed evidence before entering the final unit-control fence. The guarded operation rechecks the attempt and target but does not reselect the latest check evidence. A newer failed/inconclusive record could therefore race with acceptance (`packages/cli/src/construction/integration-execution.ts:835,903-970`). A focused interleaving test is still needed.
+- `ConstructionQueries.readiness` initially marks every prerequisite unknown, while its known-fact lookup only follows an existing admission. It does not report otherwise valid pre-admission prerequisite evidence that admission can consume (`packages/cli/src/construction/scoped-queries.ts:496-572`; `packages/cli/src/construction/task-admission.ts:121-148`).
+
+M10 explicitly records single-repository Integration and externally executed worker checks. This audit retains those documented implementation limits rather than treating them as newly discovered policy decisions. M16.3 is not proof that multi-repository Integration acceptance works: the current implementation rejects it before acquisition. No exhaustive API-coverage or live-agent certification claim follows from this audit.
+
+#### Verification performed
+
+All commands below completed with exit `0` on native Linux x86_64 with Bun `1.4.0`.
+
+| Command/check | Observed result |
+| --- | --- |
+| `bun run check:typescript-sources` | Passed. |
+| `bun run typecheck` | Passed. |
+| `bun run check:version` | Passed; workspace release `0.11.0`. |
+| `bun run build` | Passed. |
+| `bun run test:unit` | 62 files, 827 tests passed; 11.55 seconds. |
+| `bun run test:integration` | 45 files, 654 tests passed; 418.48 seconds. |
+| `bun run test:package` | Packed-Core consumer passed, 1 test; 29.45 seconds. This test also belongs to the integration project. |
+| `docker build --file tests/e2e/Dockerfile --tag kepler-acceptance-8861ded:1.4.0 .` | Built the isolated Git-enabled test image. |
+| `KEPLER_E2E_DOCKER_IMAGE=kepler-acceptance-8861ded:1.4.0 bun run test:e2e` | 7 files, 75 tests passed; 825.28 seconds, including Docker CLI behavior and native Linux x86_64 installer/standalone behavior. |
+| `CI=1 bun --bun vitest list --filesOnly` plus tracked-file comparison | 114 files: 62 unit, 45 integration, 7 E2E; no duplicate or omitted tracked test file. |
+| Read-only manifest, payload, and source-skill comparison | 11 skills, four bindings, 56 payload files; all inventory/digests/bytes matched. Bundle content digest: `sha256:398abd4a1740cdfdff7940a39e87a2b11fea48f091210a75bd110b8cad2efda1`. |
+
+`prepare:bundle` was not run because it rewrites resource files; the read-only checks established current consistency without regeneration. Long-running gates ran detached, with their actual exit statuses and complete output retained.
+
+**Cleanup caveat:** passing tests left six identified temporary directories (five legacy diff-output roots and one handoff fixture root). The audit removed those test-created residues and its Docker image, and preserved pre-existing temporary directories and Docker containers/images. No new E2E container or E2E resource root remained. Automatic fixture cleanup therefore still has a defect despite the passing gates.
+
+**Retained evidence:** `/home/caio/.local/state/kepler/acceptance/2026-10-31-8861ded-0rFihf/` contains command output, exit statuses, discovery/inventory results, diagnostics, resource snapshots, and the three review reports. `SHA256SUMS` identifies the retained files. Static report statements about gates pending at handoff are superseded by the completed parent-run results above. The retained reports and diagnostic output describe the original audit; the requester decision above resolves their Integration command-interface finding without changing those historical files. The later CLI test update resolves their successful-query coverage finding.
+
+No release, deployment, migration, real user-home installation, native skill-manager installation, or live-agent evaluation was performed. GitHub-hosted native jobs and artifact attestations were not verified here. This audit records the remaining gaps; it does not change their contracts or authorize those external effects.
