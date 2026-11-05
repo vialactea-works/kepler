@@ -173,6 +173,8 @@ Attempt binding and [evidence applicability](#evidence-applicability) are separa
 
 Resume from CLI-recorded progress after making sure that the actual work and evidence match the recorded progress. Keep unfinished work and continue the same attempt if it has not ended. Make sure that no previous worker changes the same work. Repeat work only where results are missing or no longer valid. Resolve conflicting records before resuming the affected work.
 
+For interrupted mission startup, use the [Mission preparation recovery contract](mission.md#continue-mission-preparation) and its exact-ID CLI operation. Local pending instructions do not establish workflow state. A recorded preparation result describes past preparation, not current execution readiness.
+
 Use the existing [revision procedure](revision.md#revision-procedure) when upstream contracts are invalid. Independent work can continue while its inputs and contracts stay valid.
 
 SH67 supports manual removal of the complete identified Kepler lock artifact as a deadlock escape hatch. This manual recovery does not require a working CLI or owner handshake. Use the lock and ownership rules under SH64-SH66. Missing or partial owner metadata does not make a lock available. This is not automatic age-based takeover.

@@ -9,6 +9,7 @@ import type {
   MissionWorkspacePreparationContext,
   MissionWorkspacePreparationResult,
   MissionWorkspaceRequest,
+  MissionRecordHomeIdentity,
   PreparedMissionRepository,
 } from "./mission-startup.js";
 import type { MissionCoordination, MissionCoordinationOwner } from "./mission-coordination.js";
@@ -477,6 +478,7 @@ const sourceFor = async (
 
 const inspectOne = async (
   runtime: MissionWorkspaceRuntime,
+  recordHomePath: string,
   recordHomeCommonDirectory: string,
   recordHomeRepositoryId: string,
   request: MissionRepositoryRequest,
@@ -516,16 +518,19 @@ const inspectOne = async (
     integrationTargetKey,
     startingCheckpoint: branch.startingCheckpoint,
     repositoryPath: source.repository.root,
+    recordHomePath,
     gitDirectory: source.repository.gitDirectory,
     commonDirectory: source.repository.commonDirectory,
     localWorkspaceKey,
     workspacePath: source.workspacePath,
     workspaceKind: source.workspaceKind,
     sourcePath: source.repository.root,
-    baseCommit: branch.baseCommit,
+    ...(branch.baseCommit ? { baseCommit: branch.baseCommit } : {}),
     recordHomeRepositoryId,
     recordHomeCommonDirectory,
     initialDirtyPaths: source.repository.statusPaths,
+    initialBranch: source.repository.currentBranch ?? null,
+    initialCheckpoint: checkpointFromRepository(source.repository),
   };
 };
 
@@ -566,13 +571,25 @@ const runBranchPreparation = async (
     }
     const current = await inspectGitRepository(runtime, preflightPath, allowedUntrackedPaths);
     if ("kind" in current) return withEffects(current);
-    if (current.commonDirectory !== inspected.commonDirectory) {
-      return withEffects(failure("workspace_repository_changed", "The selected Git common directory changed after mission inspection.", {
+    if (current.root !== preflightPath || current.gitDirectory !== inspected.gitDirectory ||
+        current.commonDirectory !== inspected.commonDirectory) {
+      return withEffects(failure("workspace_repository_changed", "The selected canonical Git workspace identity changed after mission inspection.", {
         repository_id: inspected.repositoryId,
+        expected_path: preflightPath,
+        actual_path: current.root,
+        expected_git_directory: inspected.gitDirectory,
+        actual_git_directory: current.gitDirectory,
         expected_common_directory: inspected.commonDirectory,
         actual_common_directory: current.commonDirectory,
       }));
     }
+    if (inspected.workspaceKind === "new" && await runtime.fileSystem.pathKind(inspected.workspacePath) !== "missing") {
+      return withEffects(failure("workspace_destination_raced", "The selected workspace destination appeared after inspection; Kepler left it untouched.", {
+        path: inspected.workspacePath,
+      }));
+    }
+    const workspaceCoordinates = await verifyCanonicalWorkspaceCoordinates(runtime, inspected);
+    if ("kind" in workspaceCoordinates) return withEffects(workspaceCoordinates);
 
     if (inspected.workspaceKind === "new") {
       if (await runtime.fileSystem.pathKind(inspected.workspacePath) !== "missing") {
@@ -659,8 +676,8 @@ const runBranchPreparation = async (
     if ("kind" in selectedPath) return withEffects(selectedPath);
     const finalBranch = await currentBranch(runtime, selectedPath);
     const startingCheckpoint = checkpointFromRepository(selectedPath);
-    if (selectedPath.commonDirectory !== inspected.commonDirectory || finalBranch !== inspected.resolvedBranch ||
-      !sameCheckpoint(startingCheckpoint, inspected.startingCheckpoint)) {
+    if (selectedPath.root !== inspected.workspacePath || selectedPath.commonDirectory !== inspected.commonDirectory ||
+      finalBranch !== inspected.resolvedBranch || !sameCheckpoint(startingCheckpoint, inspected.startingCheckpoint)) {
       return withEffects(failure("workspace_preparation_verification_failed", "The prepared worktree does not match its inspected repository, branch, or starting checkpoint.", {
         repository_id: inspected.repositoryId,
         expected_branch: inspected.resolvedBranch,
@@ -746,6 +763,38 @@ const writeAttachment = async (
   ]);
   if (typeof directory !== "string") return directory;
   const attachmentPath = Path.join(directory, `${inspected.localWorkspaceKey}.json`);
+  const kind = await runtime.fileSystem.pathKind(attachmentPath);
+  if (kind === "file") {
+    try {
+      const actual = parseAttachment(JSON.parse(await runtime.fileSystem.readFile(attachmentPath)));
+      if (actual && actual.format === attachment.format && actual.mission_id === attachment.mission_id &&
+          actual.record_home_repository_id === attachment.record_home_repository_id &&
+          actual.repository_id === attachment.repository_id && actual.workspace_id === attachment.workspace_id &&
+          actual.workspace_path === attachment.workspace_path && actual.repository_path === attachment.repository_path &&
+          actual.git_directory === attachment.git_directory && actual.common_directory === attachment.common_directory &&
+          actual.branch === attachment.branch && actual.integration_target === attachment.integration_target &&
+          sameCheckpoint(actual.starting_checkpoint, attachment.starting_checkpoint)) return undefined;
+    } catch {
+      return failure("workspace_attachment_conflict", "An existing workspace attachment is malformed or cannot be read; Kepler left it untouched.", {
+        repository_id: inspected.repositoryId,
+        workspace_id: inspected.localWorkspaceKey,
+        attachment_path: attachmentPath,
+      }, "Preserve the attachment and compare it with the saved mission binding before retrying.");
+    }
+    return failure("workspace_attachment_conflict", "An existing workspace attachment does not match the saved mission binding; Kepler left it untouched.", {
+      repository_id: inspected.repositoryId,
+      workspace_id: inspected.localWorkspaceKey,
+      attachment_path: attachmentPath,
+    }, "Preserve the attachment and resolve the identity conflict explicitly before retrying.");
+  }
+  if (kind !== "missing") {
+    return failure("workspace_attachment_conflict", "The workspace attachment path is not a missing path or a regular file; Kepler left it untouched.", {
+      repository_id: inspected.repositoryId,
+      workspace_id: inspected.localWorkspaceKey,
+      attachment_path: attachmentPath,
+      path_kind: kind,
+    }, "Preserve the attachment path and resolve its type explicitly before retrying.");
+  }
   try {
     await runtime.fileSystem.writeFileExclusive(attachmentPath, `${JSON.stringify(attachment, null, 2)}\n`);
   } catch (error) {
@@ -759,9 +808,456 @@ const writeAttachment = async (
   return undefined;
 };
 
+const expectedCheckpoint = (repository: InspectedMissionRepository): MissionStartingCheckpoint => repository.startingCheckpoint;
+
+const repositoryCheckpointFailure = (
+  inspected: InspectedMissionRepository,
+  actualBranch: string | undefined,
+  actualCheckpoint: MissionStartingCheckpoint,
+  message: string,
+): MissionStartupFailure => failure("workspace_recovery_conflict", message, {
+  repository_id: inspected.repositoryId,
+  workspace_path: inspected.workspacePath,
+  expected_branch: inspected.resolvedBranch,
+  actual_branch: actualBranch ?? null,
+  expected_checkpoint: expectedCheckpoint(inspected),
+  actual_checkpoint: actualCheckpoint,
+  initial_branch: inspected.initialBranch,
+  initial_checkpoint: inspected.initialCheckpoint,
+}, "Preserve the current Git state and attachment. Restore no baseline automatically; resolve the reported mismatch explicitly before retrying.");
+
+const worktreeRegistration = async (
+  runtime: MissionWorkspaceRuntime,
+  repository: GitRepository,
+  workspacePath: string,
+  branch: string,
+): Promise<boolean | MissionStartupFailure> => {
+  const listed = await runtime.git.run(repository.root, ["worktree", "list", "--porcelain"]);
+  if (listed.status !== 0) return failure("worktree_list_failed", "Git could not verify the selected worktree registration.", {
+    repository_id: "unknown",
+    workspace_path: workspacePath,
+    stderr: listed.stderr.trim(),
+  });
+  let currentPath: string | undefined;
+  for (const line of listed.stdout.split(/\r?\n/)) {
+    if (line.startsWith("worktree ")) currentPath = line.slice("worktree ".length);
+    if (line === `branch refs/heads/${branch}` && currentPath === workspacePath) return true;
+  }
+  return false;
+};
+
+const reconcileSavedRepository = async (
+  runtime: MissionWorkspaceRuntime,
+  inspected: InspectedMissionRepository,
+  recordHome: string,
+  context: MissionWorkspacePreparationContext,
+): Promise<GitRepository | MissionStartupFailure> => {
+  const savedCoordinates = await verifyCanonicalWorkspaceCoordinates(runtime, inspected);
+  if ("kind" in savedCoordinates) return savedCoordinates;
+  const recordHomeRepository = await inspectGitRepository(runtime, recordHome);
+  if ("kind" in recordHomeRepository) return recordHomeRepository;
+  if (recordHomeRepository.root !== inspected.recordHomePath ||
+      recordHomeRepository.commonDirectory !== inspected.recordHomeCommonDirectory) {
+    return failure("record_home_changed", "The selected record-home Git worktree no longer matches the saved mission identity.", {
+      expected_record_home: inspected.recordHomePath,
+      actual_record_home: recordHomeRepository.root,
+      expected_common_directory: inspected.recordHomeCommonDirectory,
+      actual_common_directory: recordHomeRepository.commonDirectory,
+    }, "Select the original record home and preserve all mission history before retrying.");
+  }
+
+  const source = await inspectGitRepository(runtime, inspected.sourcePath);
+  if ("kind" in source) return source;
+  if (source.root !== inspected.sourcePath || source.root !== inspected.repositoryPath ||
+      source.gitDirectory !== inspected.gitDirectory || source.commonDirectory !== inspected.commonDirectory) {
+    return failure("workspace_repository_changed", "The saved source path no longer identifies the original canonical Git repository.", {
+      repository_id: inspected.repositoryId,
+      expected_source_path: inspected.sourcePath,
+      actual_source_path: source.root,
+      expected_git_directory: inspected.gitDirectory,
+      actual_git_directory: source.gitDirectory,
+      expected_common_directory: inspected.commonDirectory,
+      actual_common_directory: source.commonDirectory,
+    }, "Preserve all resources and select no replacement repository; resolve the Git identity mismatch before retrying.");
+  }
+
+  let selectedPath: GitRepository | MissionStartupFailure;
+  if (inspected.workspaceKind === "new") {
+    const destinationKind = await runtime.fileSystem.pathKind(inspected.workspacePath);
+    if (destinationKind === "missing") {
+      const expected = inspected.startingCheckpoint;
+      if (expected.kind !== "commit") {
+        return failure("workspace_recovery_unsupported", "A missing worktree cannot be recovered from an unborn starting checkpoint.", {
+          repository_id: inspected.repositoryId,
+          workspace_path: inspected.workspacePath,
+          starting_checkpoint: expected,
+        }, "Preserve the saved mission facts. Choose an explicit supported recovery path; Kepler will not invent a commit.");
+      }
+      const branchRef = `refs/heads/${inspected.resolvedBranch}`;
+      const branchCommit = await resolveCommit(runtime, source.root, branchRef);
+      if (branchCommit && branchCommit !== expected.commit) {
+        return repositoryCheckpointFailure(inspected, inspected.initialBranch ?? undefined, checkpointFromRepository(source), "The selected branch moved away from the fixed starting checkpoint.");
+      }
+      if (inspected.branchSelection.kind !== "new" && branchCommit !== expected.commit) {
+        return failure("workspace_recovery_conflict", "The selected existing branch no longer points to its fixed starting checkpoint.", {
+          repository_id: inspected.repositoryId,
+          branch: inspected.resolvedBranch,
+          expected_checkpoint: expected,
+          actual_branch_checkpoint: branchCommit ?? null,
+        }, "Preserve the branch and workspace paths; restore or select history explicitly before retrying.");
+      }
+      const destinationCoordinates = await verifyCanonicalWorkspaceCoordinates(runtime, inspected);
+      if ("kind" in destinationCoordinates) return destinationCoordinates;
+      if (await runtime.fileSystem.pathKind(inspected.workspacePath) !== "missing") {
+        return failure("workspace_destination_conflict", "The saved worktree destination appeared before guarded recovery could create it; Kepler left it untouched.", {
+          repository_id: inspected.repositoryId,
+          workspace_path: inspected.workspacePath,
+        }, "Preserve the path and Git metadata, then reconcile the original mission identity explicitly.");
+      }
+      if (inspected.branchSelection.kind === "new" && !branchCommit) {
+        const added = await runtime.git.run(source.root, [
+          "worktree", "add", "--quiet", "-b", inspected.resolvedBranch, inspected.workspacePath, expected.commit,
+        ]);
+        if (added.status !== 0) return failure("workspace_creation_failed", "Git could not create the saved worktree from its fixed commit; no cleanup was attempted.", {
+          repository_id: inspected.repositoryId,
+          workspace_path: inspected.workspacePath,
+          stderr: added.stderr.trim(),
+          partial_effects: [{ repository_id: inspected.repositoryId, workspace_path: inspected.workspacePath, effect: "worktree-created", state: "uncertain" }],
+        }, "Preserve the selected path and Git metadata. Retry the same mission only after reconciling any worktree Git may have created.");
+      } else {
+        const added = await runtime.git.run(source.root, ["worktree", "add", "--quiet", inspected.workspacePath, inspected.resolvedBranch]);
+        if (added.status !== 0) return failure("workspace_creation_failed", "Git could not create the saved worktree from its fixed branch; no cleanup was attempted.", {
+          repository_id: inspected.repositoryId,
+          workspace_path: inspected.workspacePath,
+          stderr: added.stderr.trim(),
+          partial_effects: [{ repository_id: inspected.repositoryId, workspace_path: inspected.workspacePath, effect: "worktree-created", state: "uncertain" }],
+        }, "Preserve the selected path and Git metadata. Retry the same mission only after reconciling any worktree Git may have created.");
+      }
+    } else if (destinationKind !== "directory") {
+      return failure("workspace_destination_conflict", "The saved worktree destination is not a directory; Kepler left it untouched.", {
+        repository_id: inspected.repositoryId,
+        workspace_path: inspected.workspacePath,
+        path_kind: destinationKind,
+      }, "Preserve the path and resolve its conflict explicitly before retrying.");
+    }
+    selectedPath = await inspectGitRepository(runtime, inspected.workspacePath);
+    if ("kind" in selectedPath) return selectedPath;
+    if (selectedPath.root !== inspected.workspacePath || selectedPath.commonDirectory !== inspected.commonDirectory) {
+      return failure("workspace_destination_conflict", "The saved destination is not the intended worktree of the original Git repository.", {
+        repository_id: inspected.repositoryId,
+        workspace_path: inspected.workspacePath,
+        expected_common_directory: inspected.commonDirectory,
+        actual_common_directory: selectedPath.commonDirectory,
+      }, "Preserve the destination and repository metadata; resolve the identity mismatch without deleting or adopting the path.");
+    }
+    const registered = await worktreeRegistration(runtime, source, inspected.workspacePath, inspected.resolvedBranch);
+    if (typeof registered !== "boolean") return registered;
+    if (!registered) return failure("workspace_registration_conflict", "The destination is not registered as the selected branch's worktree; Kepler left it untouched.", {
+      repository_id: inspected.repositoryId,
+      workspace_path: inspected.workspacePath,
+      branch: inspected.resolvedBranch,
+    }, "Preserve all Git metadata and resolve the worktree registration explicitly before retrying.");
+  } else {
+    const allowedUntrackedPaths = new Set<string>();
+    if (inspected.workspacePath === recordHome) {
+      const journalRelativePath = Path.relative(recordHome, context.missionJournalPath);
+      const journalStatusPath = journalRelativePath.split(Path.sep).join("/");
+      if (journalRelativePath !== "" && journalRelativePath !== ".." &&
+          !journalRelativePath.startsWith(`..${Path.sep}`) && !Path.isAbsolute(journalRelativePath) &&
+          !inspected.initialDirtyPaths.includes(journalStatusPath)) allowedUntrackedPaths.add(journalStatusPath);
+    }
+    selectedPath = await inspectGitRepository(runtime, inspected.workspacePath, allowedUntrackedPaths);
+    if ("kind" in selectedPath) return selectedPath;
+    if (selectedPath.root !== inspected.workspacePath || selectedPath.root !== inspected.repositoryPath ||
+        selectedPath.commonDirectory !== inspected.commonDirectory || selectedPath.gitDirectory !== inspected.gitDirectory) {
+      return failure("workspace_repository_changed", "The selected workspace path no longer identifies the original Git worktree.", {
+        repository_id: inspected.repositoryId,
+        workspace_path: inspected.workspacePath,
+        expected_git_directory: inspected.gitDirectory,
+        actual_git_directory: selectedPath.gitDirectory,
+        expected_common_directory: inspected.commonDirectory,
+        actual_common_directory: selectedPath.commonDirectory,
+      }, "Preserve the selected path and resolve the worktree identity mismatch before retrying.");
+    }
+    const selectedBranch = await currentBranch(runtime, selectedPath);
+    const selectedCheckpoint = checkpointFromRepository(selectedPath);
+    const alreadyPrepared = selectedBranch === inspected.resolvedBranch && sameCheckpoint(selectedCheckpoint, inspected.startingCheckpoint);
+    if (!alreadyPrepared) {
+      const initialState = selectedBranch === inspected.initialBranch && sameCheckpoint(selectedCheckpoint, inspected.initialCheckpoint);
+      if (!initialState || selectedPath.dirty) {
+        return repositoryCheckpointFailure(inspected, selectedBranch, selectedCheckpoint, "The selected workspace differs from both its saved starting checkpoint and original pre-preparation state.");
+      }
+      const branchCommit = await resolveCommit(runtime, selectedPath.root, `refs/heads/${inspected.resolvedBranch}`);
+      if (inspected.startingCheckpoint.kind === "commit" && branchCommit !== inspected.startingCheckpoint.commit) {
+        if (inspected.branchSelection.kind !== "new" || branchCommit !== undefined) {
+          return failure("workspace_recovery_conflict", "The selected branch no longer matches its saved starting commit.", {
+            repository_id: inspected.repositoryId,
+            branch: inspected.resolvedBranch,
+            expected_checkpoint: inspected.startingCheckpoint,
+            actual_branch_checkpoint: branchCommit ?? null,
+          }, "Preserve the current branch and resolve the fixed checkpoint mismatch explicitly before retrying.");
+        }
+      } else if (inspected.startingCheckpoint.kind === "no-commit" && branchCommit !== undefined) {
+        return failure("workspace_recovery_conflict", "The selected branch now has a commit but its saved checkpoint is unborn.", {
+          repository_id: inspected.repositoryId,
+          branch: inspected.resolvedBranch,
+          expected_checkpoint: inspected.startingCheckpoint,
+          actual_branch_checkpoint: branchCommit,
+        }, "Preserve the current branch and resolve the fixed checkpoint mismatch explicitly before retrying.");
+      }
+      const branchCoordinates = await verifyCanonicalWorkspaceCoordinates(runtime, inspected);
+      if ("kind" in branchCoordinates) return branchCoordinates;
+      const changed = inspected.branchSelection.kind === "new" && branchCommit === undefined
+        ? await runtime.git.run(selectedPath.root, ["switch", "--quiet", "--no-overwrite-ignore", "--no-track", "--create", inspected.resolvedBranch, inspected.baseCommit ?? ""])
+        : await runtime.git.run(selectedPath.root, ["switch", "--quiet", "--no-overwrite-ignore", "--", inspected.resolvedBranch]);
+      if (changed.status !== 0) return failure("workspace_branch_recovery_failed", "Git could not apply the saved branch selection; no rollback was attempted.", {
+        repository_id: inspected.repositoryId,
+        workspace_path: inspected.workspacePath,
+        branch: inspected.resolvedBranch,
+        stderr: changed.stderr.trim(),
+        partial_effects: [{ repository_id: inspected.repositoryId, workspace_path: inspected.workspacePath, effect: "branch-selection", state: "uncertain" }],
+      }, "Preserve all branch, working-tree, and journal state. Retry the same mission only after confirming the actual branch and checkpoint.");
+    }
+  }
+
+  const finalBranch = await currentBranch(runtime, selectedPath);
+  const finalCheckpoint = checkpointFromRepository(selectedPath);
+  if (selectedPath.commonDirectory !== inspected.commonDirectory || finalBranch !== inspected.resolvedBranch ||
+      !sameCheckpoint(finalCheckpoint, inspected.startingCheckpoint)) {
+    return repositoryCheckpointFailure(inspected, finalBranch, finalCheckpoint, "The reconciled workspace does not match the saved branch and starting checkpoint.");
+  }
+  return selectedPath;
+};
+
+interface CanonicalWorkspaceCoordinates {
+  readonly commonDirectory: string;
+  readonly workspacePath: string;
+  readonly workspaceKey: string;
+}
+
+const verifyCanonicalWorkspaceCoordinates = async (
+  runtime: MissionWorkspaceRuntime,
+  inspected: InspectedMissionRepository,
+): Promise<CanonicalWorkspaceCoordinates | MissionStartupFailure> => {
+  const rejected = (reason: string, details: Readonly<Record<string, unknown>> = {}): MissionStartupFailure => failure(
+    "workspace_recovery_identity_changed",
+    "The saved workspace or Git common-directory coordinate is not canonical or no longer matches its resource identity.",
+    { repository_id: inspected.repositoryId, reason, ...details },
+    "Preserve the saved workspace and retry the same mission only after resolving the canonical path identity; Kepler will not adopt or rebind an alias.",
+  );
+  const commonDirectory = inspected.commonDirectory;
+  const workspacePath = inspected.workspacePath;
+  if (!Path.isAbsolute(commonDirectory) || Path.resolve(commonDirectory) !== commonDirectory ||
+      !Path.isAbsolute(workspacePath) || Path.resolve(workspacePath) !== workspacePath) {
+    return rejected("saved-path-not-normalized", { common_directory: commonDirectory, workspace_path: workspacePath });
+  }
+  try {
+    if (await runtime.fileSystem.pathKind(commonDirectory) !== "directory" ||
+        await runtime.fileSystem.realpath(commonDirectory) !== commonDirectory) {
+      return rejected("common-directory-alias", { common_directory: commonDirectory });
+    }
+    const workspaceKind = await runtime.fileSystem.pathKind(workspacePath);
+    let canonicalWorkspacePath: string;
+    if (inspected.workspaceKind === "new" && workspaceKind === "missing") {
+      const parent = Path.dirname(workspacePath);
+      const name = Path.basename(workspacePath);
+      if (!name || name === "." || name === ".." || Path.join(parent, name) !== workspacePath ||
+          await runtime.fileSystem.pathKind(parent) !== "directory" || await runtime.fileSystem.realpath(parent) !== parent) {
+        return rejected("workspace-parent-alias", { workspace_path: workspacePath, parent });
+      }
+      canonicalWorkspacePath = Path.join(parent, name);
+      if (canonicalWorkspacePath !== workspacePath) {
+        return rejected("workspace-destination-not-canonical", { workspace_path: workspacePath, canonical_destination: canonicalWorkspacePath });
+      }
+    } else {
+      if (workspaceKind !== "directory") {
+        return rejected("workspace-not-an-existing-directory", { workspace_path: workspacePath, path_kind: workspaceKind });
+      }
+      canonicalWorkspacePath = await runtime.fileSystem.realpath(workspacePath);
+      if (canonicalWorkspacePath !== workspacePath) {
+        return rejected("workspace-path-alias", { workspace_path: workspacePath, canonical_workspace_path: canonicalWorkspacePath });
+      }
+    }
+    const workspaceKey = missionWorkspaceKey(commonDirectory, canonicalWorkspacePath);
+    const integrationKey = missionIntegrationTargetKey(commonDirectory, inspected.integrationTarget);
+    if (workspaceKey !== inspected.localWorkspaceKey || integrationKey !== inspected.integrationTargetKey) {
+      return rejected("derived-resource-key-mismatch", {
+        common_directory: commonDirectory,
+        workspace_path: canonicalWorkspacePath,
+        expected_workspace_key: workspaceKey,
+        saved_workspace_key: inspected.localWorkspaceKey,
+        expected_integration_target_key: integrationKey,
+        saved_integration_target_key: inspected.integrationTargetKey,
+      });
+    }
+    return { commonDirectory, workspacePath: canonicalWorkspacePath, workspaceKey };
+  } catch (error) {
+    return rejected("workspace-identity-check-failed", {
+      common_directory: commonDirectory,
+      workspace_path: workspacePath,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+const preparedWorkspaceEffect = (
+  inspected: InspectedMissionRepository,
+  repository: GitRepository,
+  state: "prepared" | "git-prepared-attachment-failed",
+): Record<string, unknown> => ({
+  repository_id: inspected.repositoryId,
+  workspace_path: repository.root,
+  workspace_id: inspected.localWorkspaceKey,
+  branch: inspected.resolvedBranch,
+  integration_target: inspected.integrationTarget,
+  starting_checkpoint: inspected.startingCheckpoint,
+  state,
+});
+
+const prepareRepositories = async (
+  runtime: MissionWorkspaceRuntime,
+  recordHome: string,
+  missionId: MissionId,
+  repositories: readonly InspectedMissionRepository[],
+  context: MissionWorkspacePreparationContext,
+  reconcile: boolean,
+): Promise<MissionWorkspacePreparationResult> => {
+  if (!uuidV4.test(missionId)) return failure("mission_identity_invalid", "Workspace preparation requires a valid mission identity.");
+  const recordHomeRepository = await inspectGitRepository(runtime, recordHome);
+  if ("kind" in recordHomeRepository) return recordHomeRepository;
+  if (repositories.some((repository) => repository.recordHomeCommonDirectory !== recordHomeRepository.commonDirectory ||
+      (reconcile && repository.recordHomePath !== recordHomeRepository.root))) {
+    return failure("record_home_changed", "The selected record home no longer matches the saved mission identity.", {
+      record_home_path: recordHomeRepository.root,
+    }, "Preserve the mission facts and selected resources, then select the original record home before retrying.");
+  }
+  const canonicalCoordinates: CanonicalWorkspaceCoordinates[] = [];
+  for (const inspected of repositories) {
+    const coordinates = await verifyCanonicalWorkspaceCoordinates(runtime, inspected);
+    if ("kind" in coordinates) {
+      return failure(coordinates.code, coordinates.message, { ...coordinates.details, partial_effects: [] }, coordinates.recovery);
+    }
+    canonicalCoordinates.push(coordinates);
+  }
+  const prepared: PreparedMissionRepository[] = [];
+  const partialEffects: Record<string, unknown>[] = [];
+  for (let index = 0; index < repositories.length; index += 1) {
+    const inspected = repositories[index]!;
+    const coordinates = canonicalCoordinates[index]!;
+    const ownerBase: Omit<MissionCoordinationOwner, "token"> = {
+      machine_id: runtime.identity.machine_id,
+      process_id: runtime.identity.process_id,
+      process_incarnation_id: runtime.identity.process_incarnation_id,
+      mission_id: missionId,
+      resource_scope: `code-workspace:${coordinates.workspaceKey}`,
+    };
+    const acquired = await runtime.coordination.acquire({
+      commonDirectory: coordinates.commonDirectory,
+      location: { kind: "code-workspace" },
+      resourceKey: coordinates.workspaceKey,
+      owner: ownerBase,
+    });
+    if (acquired.kind === "failed") {
+      return failure(acquired.code, acquired.message, { ...acquired.details, partial_effects: partialEffects }, acquired.recovery);
+    }
+
+    let repository: GitRepository | undefined;
+    let attachmentWritten = false;
+    let operationFailure: MissionStartupFailure | undefined;
+    let releaseFailure: MissionStartupFailure | undefined;
+    try {
+      const preparation = reconcile
+        ? await reconcileSavedRepository(runtime, inspected, recordHome, context)
+        : await runBranchPreparation(runtime, inspected, recordHome, context);
+      if ("kind" in preparation) {
+        operationFailure = preparation;
+      } else {
+        repository = preparation;
+        try {
+          operationFailure = await writeAttachment(runtime, inspected, missionId, repository);
+          attachmentWritten = operationFailure === undefined;
+        } catch (error) {
+          operationFailure = failure("workspace_attachment_write_failed", "Kepler could not inspect or record the prepared workspace attachment.", {
+            repository_id: inspected.repositoryId,
+            workspace_id: inspected.localWorkspaceKey,
+            attachment_path: Path.join(inspected.recordHomeCommonDirectory, "kepler", "missions", missionId, "workspaces", `${inspected.localWorkspaceKey}.json`),
+            message: error instanceof Error ? error.message : String(error),
+          }, "Keep the prepared Git state and retry this same mission after resolving the local attachment error.");
+        }
+      }
+    } catch (error) {
+      operationFailure = failure("workspace_preparation_failed", "Git workspace preparation failed unexpectedly.", {
+        repository_id: inspected.repositoryId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      try {
+        const released = await acquired.lease.release();
+        if (released.kind === "failed") releaseFailure = released;
+      } catch (error) {
+        releaseFailure = failure("coordination_release_failed", "The workspace coordination claim could not be released safely.", {
+          resource_key: inspected.localWorkspaceKey,
+          lock_path: acquired.lease.lockPath,
+          message: error instanceof Error ? error.message : String(error),
+        }, "Preserve the coordination owner artifact and reconcile it before retrying; do not remove another holder's lock.");
+      }
+    }
+
+    if (operationFailure) {
+      const nestedEffects = Array.isArray(operationFailure.details.partial_effects)
+        ? operationFailure.details.partial_effects as Record<string, unknown>[]
+        : [];
+      const currentEffects = repository
+        ? [preparedWorkspaceEffect(inspected, repository, attachmentWritten ? "prepared" : "git-prepared-attachment-failed")]
+        : [];
+      const recovery = releaseFailure
+        ? `${operationFailure.recovery} The workspace coordination claim may remain held. ${releaseFailure.recovery}`
+        : operationFailure.recovery;
+      return failure(operationFailure.code, operationFailure.message, {
+        ...operationFailure.details,
+        partial_effects: [...partialEffects, ...nestedEffects, ...currentEffects],
+        ...(releaseFailure ? { coordination_release: releaseFailure } : {}),
+      }, recovery);
+    }
+    if (releaseFailure) {
+      const currentEffects = repository && attachmentWritten
+        ? [preparedWorkspaceEffect(inspected, repository, "prepared")]
+        : [];
+      return failure("coordination_release_failed", "The workspace was prepared, but its coordination claim could not be released safely.", {
+        ...releaseFailure.details,
+        coordination_release: releaseFailure,
+        partial_effects: [...partialEffects, ...currentEffects],
+      }, releaseFailure.recovery);
+    }
+    if (!repository || !attachmentWritten) {
+      return failure("workspace_preparation_failed", "Workspace preparation did not produce a verified Git workspace and attachment.", {
+        repository_id: inspected.repositoryId,
+        partial_effects: partialEffects,
+      });
+    }
+    partialEffects.push(preparedWorkspaceEffect(inspected, repository, "prepared"));
+    prepared.push({
+      repositoryId: inspected.repositoryId,
+      context: inspected.context,
+      branch: inspected.resolvedBranch,
+      integrationTarget: inspected.integrationTarget,
+      startingCheckpoint: inspected.startingCheckpoint,
+      localWorkspaceKey: inspected.localWorkspaceKey,
+      workspacePath: repository.root,
+    });
+  }
+  return { kind: "prepared", repositories: prepared };
+};
+
 export const createMissionWorkspacePreparation = (
   runtime: MissionWorkspaceRuntime,
 ): MissionWorkspacePreparation => ({
+
+  identifyRecordHome: async (recordHome: string): Promise<MissionRecordHomeIdentity | MissionStartupFailure> => {
+    const repository = await inspectGitRepository(runtime, recordHome);
+    if ("kind" in repository) return repository;
+    return { root: repository.root, gitDirectory: repository.gitDirectory, commonDirectory: repository.commonDirectory };
+  },
   inspect: async (recordHome, request: MissionStartupRequest) => {
     const recordHomeRepository = await inspectGitRepository(runtime, recordHome);
     if ("kind" in recordHomeRepository) return recordHomeRepository;
@@ -769,7 +1265,7 @@ export const createMissionWorkspacePreparation = (
     const repositories: InspectedMissionRepository[] = [];
     const resourceKeys = new Set<string>();
     for (const selection of request.repositories) {
-      const inspected = await inspectOne(runtime, recordHomeCommonDirectory, request.recordHomeRepositoryId, selection);
+      const inspected = await inspectOne(runtime, recordHomeRepository.root, recordHomeCommonDirectory, request.recordHomeRepositoryId, selection);
       if ("kind" in inspected) return inspected;
       if (resourceKeys.has(inspected.localWorkspaceKey)) {
         return failure("duplicate_selected_workspace", "The request selects the same canonical Git worktree more than once.", {
@@ -782,111 +1278,8 @@ export const createMissionWorkspacePreparation = (
     }
     return { kind: "inspected", repositories };
   },
-  prepare: async (recordHome, missionId, repositories, context): Promise<MissionWorkspacePreparationResult> => {
-    if (!uuidV4.test(missionId)) {
-      return failure("mission_identity_invalid", "Workspace preparation requires a valid mission identity.");
-    }
-    const recordHomeRepository = await inspectGitRepository(runtime, recordHome);
-    if ("kind" in recordHomeRepository) return recordHomeRepository;
-    if (repositories.some((repository) => repository.recordHomeCommonDirectory !== recordHomeRepository.commonDirectory)) {
-      return failure("record_home_changed", "The selected record home's Git common directory changed after mission inspection.", {
-        record_home_path: recordHomeRepository.root,
-      }, "Preserve the mission facts and selected resources, then reconcile the record-home binding before retrying.");
-    }
-    const prepared: PreparedMissionRepository[] = [];
-    const partialEffects: Record<string, unknown>[] = [];
-    for (const inspected of repositories) {
-      const ownerBase: Omit<MissionCoordinationOwner, "token"> = {
-        machine_id: runtime.identity.machine_id,
-        process_id: runtime.identity.process_id,
-        process_incarnation_id: runtime.identity.process_incarnation_id,
-        mission_id: missionId,
-        resource_scope: `code-workspace:${inspected.localWorkspaceKey}`,
-      };
-      const acquired = await runtime.coordination.acquire({
-        commonDirectory: inspected.commonDirectory,
-        location: { kind: "code-workspace" },
-        resourceKey: inspected.localWorkspaceKey,
-        owner: ownerBase,
-      });
-      if (acquired.kind === "failed") {
-        return failure(
-          acquired.code,
-          acquired.message,
-          { ...acquired.details, partial_effects: partialEffects },
-          acquired.recovery,
-        );
-      }
-
-      let repository: GitRepository | MissionStartupFailure;
-      try {
-        repository = await runBranchPreparation(runtime, inspected, recordHome, context);
-      } catch (error) {
-        repository = failure("workspace_preparation_failed", "Git workspace preparation failed unexpectedly.", {
-          repository_id: inspected.repositoryId,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-      if ("kind" in repository) {
-        const released = await acquired.lease.release();
-        return failure(
-          repository.code,
-          repository.message,
-          { ...repository.details, partial_effects: [...partialEffects, ...(Array.isArray(repository.details.partial_effects) ? repository.details.partial_effects as Record<string, unknown>[] : [])], ...(released.kind === "failed" ? { coordination_release: released } : {}) },
-          repository.recovery,
-        );
-      }
-
-      const attachmentFailure = await writeAttachment(runtime, inspected, missionId, repository);
-      if (attachmentFailure) {
-        const released = await acquired.lease.release();
-        return failure(
-          attachmentFailure.code,
-          attachmentFailure.message,
-          {
-            ...attachmentFailure.details,
-            partial_effects: [...partialEffects, {
-              repository_id: inspected.repositoryId,
-              workspace_path: repository.root,
-              workspace_id: inspected.localWorkspaceKey,
-              branch: inspected.resolvedBranch,
-              integration_target: inspected.integrationTarget,
-              starting_checkpoint: inspected.startingCheckpoint,
-              state: "git-prepared-attachment-failed",
-            }],
-            ...(released.kind === "failed" ? { coordination_release: released } : {}),
-          },
-          attachmentFailure.recovery,
-        );
-      }
-      partialEffects.push({
-        repository_id: inspected.repositoryId,
-        workspace_path: repository.root,
-        workspace_id: inspected.localWorkspaceKey,
-        branch: inspected.resolvedBranch,
-        integration_target: inspected.integrationTarget,
-        starting_checkpoint: inspected.startingCheckpoint,
-        state: "prepared",
-      });
-      const release = await acquired.lease.release();
-      if (release.kind === "failed") {
-        return failure(
-          "coordination_release_failed",
-          "The workspace was prepared, but its coordination claim could not be released safely.",
-          { ...release.details, partial_effects: partialEffects },
-          release.recovery,
-        );
-      }
-      prepared.push({
-        repositoryId: inspected.repositoryId,
-        context: inspected.context,
-        branch: inspected.resolvedBranch,
-        integrationTarget: inspected.integrationTarget,
-        startingCheckpoint: inspected.startingCheckpoint,
-        localWorkspaceKey: inspected.localWorkspaceKey,
-        workspacePath: repository.root,
-      });
-    }
-    return { kind: "prepared", repositories: prepared };
-  },
+  prepare: async (recordHome, missionId, repositories, context) =>
+    await prepareRepositories(runtime, recordHome, missionId, repositories, context, false),
+  reconcile: async (recordHome, missionId, repositories, context) =>
+    await prepareRepositories(runtime, recordHome, missionId, repositories, context, true),
 });

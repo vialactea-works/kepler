@@ -2,6 +2,20 @@
 
 Kepler records workflow history and repository checkpoints separately from agent sessions. A command timeout, missing response, or stopped chat does not show that a worker stopped or that a write failed. Preserve the project, history, partial changes, and any lock until you verify their state.
 
+## Continue mission preparation
+
+Confirm that the original startup command has ended; a timeout alone does not prove this. Keep its mission ID, original record home, partial Git resources, journals, and local recovery material. Continue with:
+
+```bash
+kepler mission prepare --mission <mission-id> --project <original-record-home>
+```
+
+Use the exact full lowercase UUIDv4 from the original result. Repeating `mission create` creates another mission. `mission prepare` checks actual canonical resources under scoped coordination and performs only missing work from the saved instructions. It preserves the starting commits or explicit no-commit conditions and retries exact pending event envelopes. It does not reset, roll back, remove locks, or start a stage.
+
+The local instructions are at `<record-home Git common directory>/kepler/missions/<mission-id>/workspaces/startup/intent.json`. They are not workflow authority. Do not edit them, attachments, or journals to force recovery. If an older incomplete mission lacks required facts, or material or history conflicts, preserve it and resolve the reported condition explicitly. Kepler does not reconstruct the original choices from current refs or paths. Only a complete matching saved startup event missing its final newline can use the existing exact-event append recovery; other damaged tails remain unchanged and blocked.
+
+A success with `data.historical: true` reports recorded preparation only. It needs no local intent or attachments and omits local workspace IDs and paths. It does not check current execution readiness or repair missing bindings. Inspect stage and workspace prerequisites separately before execution. If an operation and lock release both fail, retain both reported failures and partial-effect facts; failure guidance grants no lock-removal or repair authority.
+
 ## Resume Construction work
 
 1. **Stop duplicate work.** Confirm through the coding-agent host that the exact worker run ended. Do not treat a timeout or lost session as proof.

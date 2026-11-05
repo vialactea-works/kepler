@@ -265,6 +265,111 @@ describe("compiled CLI E2E", () => {
     expect(after).toBe(before);
   }, 120_000);
 
+  it("prepares an interrupted mission under the same ID without starting a Construction stage", async () => {
+    const e2e = await createHarness("native");
+    const repository = e2e.resources.repositoryDirectory;
+    const heldWorktree = Path.join(e2e.resources.rootDirectory, "held-branch-worktree");
+    await addProjectMarker(repository);
+    e2e.resources.runGit(repository, "add", ".kepler/marker");
+    e2e.resources.runGit(repository, "commit", "-q", "-m", "Add Kepler project marker");
+    e2e.resources.runGit(repository, "worktree", "add", "-q", "-b", "feature/recovery-held", heldWorktree, "main");
+    const request = {
+      title: "Continue interrupted mission preparation",
+      request: "Prepare the selected workspace without starting a Construction stage.",
+      workflow: "standard",
+      recordHomeRepositoryId: "record-home",
+      contexts: [],
+      repositories: [{
+        repositoryId: "record-home",
+        workspace: { kind: "existing", path: repository },
+        branch: { kind: "existing", name: "feature/recovery-held" },
+        integrationTarget: "refs/heads/main",
+      }],
+    };
+    const create = e2e.cli.run([
+      "mission", "create", "--project", repository, "--request", JSON.stringify(request),
+    ]);
+    expect(create.exitCode).toBe(1);
+    expect(create.stderr).toBe("");
+    const failedData = envelope(create.stdout).data;
+    expect(failedData).toMatchObject({ code: "branch_switch_failed" });
+    const failureDetails = failedData.details as Record<string, unknown>;
+    const missionId = failureDetails.mission_id;
+    expect(typeof missionId).toBe("string");
+    if (typeof missionId !== "string") return;
+    const historyRoot = Path.join(repository, ".kepler", "missions", missionId, "history", "construction");
+    const journalName = (await Fs.readdir(historyRoot))[0]!;
+    const journalPath = Path.join(historyRoot, journalName);
+    const createdOnly = (await Fs.readFile(journalPath, "utf8")).trimEnd().split("\n");
+    expect(createdOnly.map((line) => (JSON.parse(line) as { type: string }).type)).toEqual(["construction.mission-created"]);
+    const createdEventId = (JSON.parse(createdOnly[0]!) as { id: string }).id;
+
+    e2e.resources.runGit(repository, "worktree", "remove", heldWorktree);
+    const prepared = e2e.cli.run(["mission", "prepare", "--mission", missionId, "--project", repository]);
+    expect(prepared.exitCode).toBe(0);
+    expect(prepared.stderr).toBe("");
+    expect(envelope(prepared.stdout).data).toMatchObject({
+      mission_id: missionId,
+      record_home: repository,
+      execution_started: false,
+    });
+    const repeated = e2e.cli.run(["mission", "prepare", "--mission", missionId, "--project", repository]);
+    expect(repeated.exitCode).toBe(0);
+    expect(envelope(repeated.stdout).data).toMatchObject({ mission_id: missionId, execution_started: false });
+    const unit = e2e.cli.run([
+      "workflow", "construction", "unit", "create", "recovered-mission-unit", "--mission", missionId, "--project", repository,
+    ]);
+    expect(unit.exitCode).toBe(0);
+    expect(unit.stderr).toBe("");
+    expect(envelope(unit.stdout).data).toMatchObject({
+      mission_id: missionId,
+      workflow: "standard",
+      execution_started: false,
+    });
+    const commonDirectory = Path.resolve(repository, e2e.resources.runGit(repository, "rev-parse", "--git-common-dir"));
+    const intentPath = Path.join(commonDirectory, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const attachmentDirectory = Path.join(commonDirectory, "kepler", "missions", missionId, "workspaces");
+    const attachmentName = (await Fs.readdir(attachmentDirectory)).find((name) => /^[a-f0-9]{64}\.json$/.test(name));
+    expect(attachmentName).toBeDefined();
+    if (!attachmentName) return;
+    const attachmentPath = Path.join(attachmentDirectory, attachmentName);
+    await Fs.rm(intentPath);
+    await Fs.rm(attachmentPath);
+    await Fs.writeFile(Path.join(repository, "README.md"), "# Progress after mission preparation\n");
+    e2e.resources.runGit(repository, "add", "README.md");
+    e2e.resources.runGit(repository, "commit", "-q", "-m", "Progress after mission preparation");
+    const progressedHead = e2e.resources.runGit(repository, "rev-parse", "HEAD");
+    const historicalPrepare = e2e.cli.run(["mission", "prepare", "--mission", missionId, "--project", repository]);
+    expect(historicalPrepare.exitCode).toBe(0);
+    const historicalData = envelope(historicalPrepare.stdout).data;
+    expect(historicalData).toMatchObject({ mission_id: missionId, historical: true, execution_started: false });
+    expect(JSON.stringify(historicalData.workspaces)).not.toContain("workspace_id");
+    expect(JSON.stringify(historicalData.workspaces)).not.toContain("workspace_path");
+    expect(historicalData).not.toHaveProperty("execution_ready");
+    expect(e2e.resources.runGit(repository, "rev-parse", "HEAD")).toBe(progressedHead);
+    expect(await exists(intentPath)).toBe(false);
+    expect(await exists(attachmentPath)).toBe(false);
+
+    const events = (await Promise.all((await Fs.readdir(historyRoot)).map(async (file) =>
+      (await Fs.readFile(Path.join(historyRoot, file), "utf8")).trimEnd().split("\n")
+        .map((line) => JSON.parse(line) as { id: string; type: string; caused_by: readonly string[] }),
+    ))).flat();
+    expect(events.map((event) => event.type).sort()).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+      "construction.unit-created",
+    ].sort());
+    expect(new Set(events.map((event) => event.id)).size).toBe(events.length);
+    const createdEvents = events.filter((event) => event.type === "construction.mission-created");
+    const preparedEvents = events.filter((event) => event.type === "construction.mission-workspaces-prepared");
+    expect(createdEvents).toHaveLength(1);
+    expect(preparedEvents).toHaveLength(1);
+    expect(events.some((event) => event.type.includes("stage-attempt"))).toBe(false);
+    expect(createdEvents[0]?.id).toBe(createdEventId);
+    expect(preparedEvents[0]?.caused_by).toEqual([createdEventId]);
+    expect(e2e.resources.runGit(repository, "branch", "--show-current")).toBe("feature/recovery-held");
+  }, 120_000);
+
   it("creates a Unit of Work through the compiled CLI and rejects invalid or duplicate creation", async () => {
     const e2e = await createHarness("native");
     const repository = e2e.resources.repositoryDirectory;

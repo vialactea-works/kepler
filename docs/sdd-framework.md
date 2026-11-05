@@ -19,7 +19,7 @@ A stage advances only when its own inputs, evidence, approvals, and completion c
 
 ## Entry and project scope
 
-A clear request can enter Construction directly. Existing application code, tests, and completed Initialization or Inception phases are not prerequisites. Greenfield work is supported when the selected record-home and workspaces satisfy the CLI's project and mission requirements. Mission creation prepares only the requested workspaces and does not start a stage.
+A clear request can enter Construction directly. Existing application code, tests, and completed Initialization or Inception phases are not prerequisites. Greenfield work is supported when the selected record-home and workspaces satisfy the CLI's project and mission requirements. Mission creation prepares only the requested workspaces and does not start a stage. Continue interrupted startup with `kepler mission prepare --mission <mission-id> [--project <record-home>]`; do not allocate another mission as a retry. Recorded preparation is historical evidence, not current workspace readiness.
 
 Project-scoped commands select the current Git working-tree root by default or an explicit root with `--project`. The selected record-home must satisfy the v3 `.kepler/` and Git requirements. Do not use a nested directory as the project root or assume that mission creation migrates older records. See the [CLI guide](cli.md) and [mission contract](specs/v3/mission.md).
 

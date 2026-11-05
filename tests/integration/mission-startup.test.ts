@@ -5,13 +5,15 @@ import * as Os from "node:os";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
-import { MissionStartup } from "../../packages/cli/src/construction/mission-startup.js";
+import { MissionStartup, type MissionWorkspacePreparation } from "../../packages/cli/src/construction/mission-startup.js";
 import {
   createMissionWorkspacePreparation,
   missionIntegrationTargetKey,
   missionWorkspaceKey,
 } from "../../packages/cli/src/construction/mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace-runtime.js";
+import type { MissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace.js";
+import { createNodeMissionStartupRecoveryRuntime, type MissionStartupIntentFileSystem } from "../../packages/cli/src/construction/mission-startup-recovery-runtime.js";
 import { createEventJournal } from "../../packages/cli/src/history/journal.js";
 import { ProjectResolver } from "../../packages/cli/src/cli/project-selection.js";
 import { createProjectSelectionRuntime } from "../../packages/cli/src/cli/project-selection-runtime.js";
@@ -110,12 +112,58 @@ const createRepository = async (
   return root;
 };
 
-const createStartup = (cwd: string, nextIdentity: () => string = randomUUID): MissionStartup => {
+const trackWorkspaceClaims = (runtime: MissionWorkspaceRuntime) => {
+  const attempts: string[] = [];
+  const trackedRuntime: MissionWorkspaceRuntime = {
+    ...runtime,
+    coordination: {
+      ...runtime.coordination,
+      acquire: async (request) => {
+        if (request.location.kind === "code-workspace") attempts.push(request.resourceKey);
+        return await runtime.coordination.acquire(request);
+      },
+    },
+  };
+  return { runtime: trackedRuntime, attempts };
+};
+
+const holdWorkspaceClaim = async (
+  runtime: MissionWorkspaceRuntime,
+  common: string,
+  workspacePath: string,
+  missionId: string,
+) => {
+  const resourceKey = missionWorkspaceKey(common, workspacePath);
+  const request = {
+    commonDirectory: common,
+    location: { kind: "code-workspace" as const },
+    resourceKey,
+    owner: {
+      ...runtime.identity,
+      mission_id: missionId,
+      resource_scope: `code-workspace:${resourceKey}`,
+    },
+  };
+  const acquired = await runtime.coordination.acquire(request);
+  if (acquired.kind !== "acquired") throw new Error(`Could not hold canonical workspace claim: ${JSON.stringify(acquired)}`);
+  return {
+    resourceKey,
+    lease: acquired.lease,
+    tryAcquire: async () => await runtime.coordination.acquire(request),
+  };
+};
+
+const createStartupWithRuntime = (
+  cwd: string,
+  workspaceRuntime: MissionWorkspaceRuntime,
+  nextIdentity: () => string = randomUUID,
+  intentFileSystem?: MissionStartupIntentFileSystem,
+): MissionStartup => {
   const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => cwd }));
-  const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd });
   return new MissionStartup({
     projects: { resolve: (project) => projects.resolve(project) },
     workspaces: createMissionWorkspacePreparation(workspaceRuntime),
+    recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, intentFileSystem),
     journals: {
       create: (recordHome, missionId, journalId) => createEventJournal({
         recordHome,
@@ -129,6 +177,9 @@ const createStartup = (cwd: string, nextIdentity: () => string = randomUUID): Mi
     producer: { name: "kepler-cli", version: "0.10.3" },
   });
 };
+
+const createStartup = (cwd: string, nextIdentity: () => string = randomUUID): MissionStartup =>
+  createStartupWithRuntime(cwd, createNodeMissionWorkspaceRuntime({ cwd }), nextIdentity);
 
 const makeRequest = (
   repositoryId: string,
@@ -162,6 +213,66 @@ const readEvents = async (recordHome: string, missionId: string): Promise<Record
 
 const commonDirectory = async (repository: string, environment: GitEnvironment): Promise<string> =>
   await Fs.realpath(Path.resolve(repository, git(repository, environment, "rev-parse", "--git-common-dir")));
+
+const isWorkspaceAttachmentPath = (path: string): boolean => /[/\\]workspaces[/\\][a-f0-9]{64}\.json$/.test(path);
+
+const createStartupWithOnePreparationFailure = (
+  cwd: string,
+  workspaceRuntime: MissionWorkspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd }),
+): MissionStartup => {
+  const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => cwd }));
+  const baseWorkspaces = createMissionWorkspacePreparation(workspaceRuntime);
+  let failOnce = true;
+  const workspaces: MissionWorkspacePreparation = {
+    ...baseWorkspaces,
+    prepare: async (recordHome, missionId, repositories, context) => {
+      if (failOnce) {
+        failOnce = false;
+        return {
+          kind: "failed",
+          code: "workspace_preparation_failed",
+          message: "injected interruption before workspace mutation",
+          details: {},
+          recovery: "Retry the original mission.",
+        };
+      }
+      return baseWorkspaces.prepare(recordHome, missionId, repositories, context);
+    },
+  };
+  return new MissionStartup({
+    projects: { resolve: (project) => projects.resolve(project) },
+    workspaces,
+    recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
+    journals: {
+      create: (recordHome, missionId, journalId) => createEventJournal({
+        recordHome,
+        missionId,
+        phase: CONSTRUCTION_PHASE,
+        journalId,
+      }),
+    },
+    identities: { next: randomUUID },
+    now: () => "2026-10-21T14:00:00.000Z",
+    producer: { name: "kepler-cli", version: "0.10.3" },
+  });
+};
+
+const createBranchLockedMission = async (name: string) => {
+  const environment = await createEnvironment(name);
+  const repository = await createRepository(environment, "record-home");
+  const linked = Path.join(environment.parent, "held-branch-worktree");
+  const branch = `feature/${name}`;
+  git(repository, environment, "worktree", "add", "-q", "-b", branch, linked, "main");
+  const startup = createStartup(environment.parent);
+  const interrupted = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository, {
+    branch: { kind: "existing", name: branch },
+  })));
+  expect(interrupted).toMatchObject({ kind: "failed", code: "branch_switch_failed", details: { mission_id: expect.any(String) } });
+  if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") {
+    throw new Error("Expected branch conflict after durable mission creation");
+  }
+  return { environment, repository, linked, branch, startup, missionId: interrupted.details.mission_id };
+};
 
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => Fs.rm(root, { recursive: true, force: true })));
@@ -229,6 +340,50 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       starting_checkpoint: { kind: "commit", commit: startingCommit },
     });
     expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+  });
+
+  it("returns historical prepared facts when intent and attachment are absent after HEAD advances", async () => {
+    const environment = await createEnvironment("prepared-history-without-intent");
+    const repository = await createRepository(environment, "record-home");
+    const startup = createStartup(environment.parent);
+    const original = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(original).toMatchObject({ kind: "prepared", historical: false });
+    if (original.kind !== "prepared" || original.repositories[0] === undefined) return;
+    const missionId = original.missionId;
+    const common = await commonDirectory(repository, environment);
+    const missionDirectory = Path.join(common, "kepler", "missions", missionId);
+    const intentPath = Path.join(missionDirectory, "workspaces", "startup", "intent.json");
+    const attachmentPath = Path.join(missionDirectory, "workspaces", `${original.repositories[0].localWorkspaceKey}.json`);
+    expect(await Fs.readFile(intentPath).then(() => true)).toBe(true);
+    expect(await Fs.access(Path.join(missionDirectory, "startup-intent.json")).then(() => true, () => false)).toBe(false);
+    expect(await Fs.readFile(attachmentPath).then(() => true)).toBe(true);
+    const historyBefore = await readEvents(repository, missionId);
+    await Fs.rm(intentPath);
+    await Fs.rm(attachmentPath);
+    await Fs.writeFile(Path.join(repository, "README.md"), "# Work progressed after preparation\n");
+    git(repository, environment, "add", "README.md");
+    git(repository, environment, "commit", "-q", "-m", "Progress after preparation");
+    const progressedHead = git(repository, environment, "rev-parse", "HEAD");
+
+    const historical = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(historical).toMatchObject({ kind: "prepared", missionId, recordHome: repository, historical: true });
+    if (historical.kind !== "prepared") return;
+    expect(historical.repositories).toEqual([{
+      repositoryId: "record-home",
+      context: { kind: "existing" },
+      branch: "main",
+      integrationTarget: "refs/heads/main",
+      startingCheckpoint: { kind: "commit", commit: expect.any(String) },
+    }]);
+    expect(historical.repositories[0]).not.toHaveProperty("localWorkspaceKey");
+    expect(historical.repositories[0]).not.toHaveProperty("workspacePath");
+    expect(historical).not.toHaveProperty("executionReady");
+    expect(git(repository, environment, "rev-parse", "HEAD")).toBe(progressedHead);
+    expect(await Fs.readFile(attachmentPath).then(() => true, () => false)).toBe(false);
+    expect(await readEvents(repository, missionId)).toEqual(historyBefore);
   });
 
   it.each([
@@ -330,6 +485,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
+      recovery: createNodeMissionStartupRecoveryRuntime(runtime),
       journals: {
         create: (recordHomePath, missionId, journalId) => createEventJournal({
           recordHome: recordHomePath,
@@ -578,6 +734,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
+      recovery: createNodeMissionStartupRecoveryRuntime(runtime),
       journals: {
         create: (recordHomePath, missionId, journalId) => createEventJournal({
           recordHome: recordHomePath,
@@ -624,11 +781,281 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     expect(independentResult.kind).toBe("prepared");
   });
 
+  it.each([
+    { state: "missing", expectedCode: "mission_recovery_material_missing" },
+    { state: "malformed", expectedCode: "mission_recovery_intent_read_failed" },
+    { state: "symlinked", expectedCode: "mission_recovery_intent_read_failed" },
+  ])("fails safely when saved recovery data is $state", async ({ state, expectedCode }) => {
+    const { environment, repository, linked, startup, missionId } = await createBranchLockedMission(`intent-${state}`);
+    const common = await commonDirectory(repository, environment);
+    const intentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const originalIntent = await Fs.readFile(intentPath);
+    if (state === "missing") await Fs.rm(intentPath);
+    else if (state === "malformed") await Fs.writeFile(intentPath, "{ malformed\n");
+    else {
+      const savedPath = `${intentPath}.saved`;
+      await Fs.rename(intentPath, savedPath);
+      await Fs.symlink(savedPath, intentPath);
+    }
+    const journalPath = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const journalName = (await Fs.readdir(journalPath))[0]!;
+    const journalFile = Path.join(journalPath, journalName);
+    const beforeHistory = await Fs.readFile(journalFile);
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recovered).toMatchObject({ kind: "failed", code: expectedCode });
+    expect(await Fs.readFile(journalFile)).toEqual(beforeHistory);
+    expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+    expect(await Fs.readFile(state === "symlinked" ? `${intentPath}.saved` : intentPath).then(() => true, () => false)).toBe(state !== "missing");
+    expect(originalIntent.length).toBeGreaterThan(0);
+    expect(await Fs.readdir(Path.join(common, "kepler", "missions", missionId, "workspaces")).catch(() => [])).toEqual(["startup"]);
+    expect(git(repository, environment, "worktree", "list", "--porcelain")).toContain(`worktree ${linked}`);
+  });
+
+  it.each(["workspace", "common-directory"] as const)("rejects a self-consistent saved %s alias before the code-workspace claim", async (aliasKind) => {
+    const environment = await createEnvironment(`saved-${aliasKind}-alias`);
+    const repository = await createRepository(environment, "record-home");
+    const linked = Path.join(environment.parent, "held-alias-worktree");
+    const branch = `feature/saved-${aliasKind}-alias`;
+    git(repository, environment, "worktree", "add", "-q", "-b", branch, linked, "main");
+    const baseRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const tracked = trackWorkspaceClaims(baseRuntime);
+    const startup = createStartupWithRuntime(environment.parent, tracked.runtime);
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository, { branch: { kind: "existing", name: branch } })),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "branch_switch_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    git(repository, environment, "worktree", "remove", linked);
+    const common = await commonDirectory(repository, environment);
+    const canonicalWorkspacePath = await Fs.realpath(repository);
+    const intentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const intent = JSON.parse(await Fs.readFile(intentPath, "utf8")) as { repositories: Array<Record<string, unknown>> };
+    const savedRepository = intent.repositories[0]!;
+    let aliasPath: string;
+    let aliasWorkspaceKey: string;
+    if (aliasKind === "workspace") {
+      aliasPath = Path.join(environment.parent, "workspace-alias");
+      await Fs.symlink(canonicalWorkspacePath, aliasPath, "dir");
+      savedRepository.workspacePath = aliasPath;
+      aliasWorkspaceKey = missionWorkspaceKey(common, aliasPath);
+      savedRepository.localWorkspaceKey = aliasWorkspaceKey;
+    } else {
+      aliasPath = Path.join(environment.parent, "common-directory-alias");
+      await Fs.symlink(common, aliasPath, "dir");
+      savedRepository.commonDirectory = aliasPath;
+      savedRepository.integrationTargetKey = missionIntegrationTargetKey(aliasPath, "refs/heads/main");
+      aliasWorkspaceKey = missionWorkspaceKey(aliasPath, canonicalWorkspacePath);
+      savedRepository.localWorkspaceKey = aliasWorkspaceKey;
+    }
+    const tamperedIntent = `${JSON.stringify(intent, null, 2)}\n`;
+    await Fs.writeFile(intentPath, tamperedIntent);
+    const historyDirectory = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const historyPath = Path.join(historyDirectory, (await Fs.readdir(historyDirectory))[0]!);
+    const beforeHistory = await Fs.readFile(historyPath);
+    const beforeStatus = git(repository, environment, "status", "--porcelain=v1", "--untracked-files=all");
+    const beforeReadme = await Fs.readFile(Path.join(repository, "README.md"));
+    const beforeWorktrees = git(repository, environment, "worktree", "list", "--porcelain");
+    const canonicalClaim = await holdWorkspaceClaim(baseRuntime, common, canonicalWorkspacePath, missionId);
+    const attachmentsDirectory = Path.join(common, "kepler", "missions", missionId, "workspaces");
+    tracked.attempts.length = 0;
+
+    try {
+      const rejected = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+      expect(rejected).toMatchObject({ kind: "failed", code: "workspace_recovery_identity_changed" });
+      expect(tracked.attempts).toEqual([]);
+      expect(await canonicalClaim.tryAcquire()).toMatchObject({ kind: "failed", code: "resource_contended" });
+      expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+      expect(git(repository, environment, "status", "--porcelain=v1", "--untracked-files=all")).toBe(beforeStatus);
+      expect(await Fs.readFile(Path.join(repository, "README.md"))).toEqual(beforeReadme);
+      expect(await Fs.readFile(historyPath)).toEqual(beforeHistory);
+      expect(await Fs.readFile(intentPath, "utf8")).toBe(tamperedIntent);
+      expect(git(repository, environment, "worktree", "list", "--porcelain")).toBe(beforeWorktrees);
+      expect(await Fs.access(Path.join(attachmentsDirectory, `${aliasWorkspaceKey}.json`)).then(() => true, () => false)).toBe(false);
+      expect(await Fs.access(Path.join(attachmentsDirectory, `${canonicalClaim.resourceKey}.json`)).then(() => true, () => false)).toBe(false);
+      expect(await Fs.lstat(aliasPath).then((stat) => stat.isSymbolicLink())).toBe(true);
+    } finally {
+      await canonicalClaim.lease.release();
+    }
+  });
+
+  it("rejects a missing new-worktree destination under an aliased parent before claiming or creating it", async () => {
+    const environment = await createEnvironment("new-worktree-aliased-parent");
+    const repository = await createRepository(environment, "record-home");
+    const canonicalParent = Path.join(environment.parent, "canonical-workspaces");
+    const aliasParent = Path.join(environment.parent, "workspace-parent-alias");
+    await Fs.mkdir(canonicalParent);
+    const canonicalDestination = Path.join(canonicalParent, "new-worktree");
+    const aliasDestination = Path.join(aliasParent, "new-worktree");
+    const baseRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const tracked = trackWorkspaceClaims(baseRuntime);
+    const startup = createStartupWithOnePreparationFailure(environment.parent, tracked.runtime);
+    const interrupted = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest(
+      "application",
+      canonicalDestination,
+      {
+        workspace: { kind: "new", path: canonicalDestination, source: repository },
+        branch: { kind: "new", name: "feature/aliased-parent", base: "main" },
+      },
+    )));
+    expect(interrupted).toMatchObject({ kind: "failed", code: "workspace_preparation_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    await Fs.symlink(canonicalParent, aliasParent, "dir");
+    const common = await commonDirectory(repository, environment);
+    const intentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const intent = JSON.parse(await Fs.readFile(intentPath, "utf8")) as { repositories: Array<Record<string, unknown>> };
+    const savedRepository = intent.repositories[0]!;
+    savedRepository.workspacePath = aliasDestination;
+    const aliasWorkspaceKey = missionWorkspaceKey(common, aliasDestination);
+    savedRepository.localWorkspaceKey = aliasWorkspaceKey;
+    const tamperedIntent = `${JSON.stringify(intent, null, 2)}\n`;
+    await Fs.writeFile(intentPath, tamperedIntent);
+    const historyDirectory = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const historyPath = Path.join(historyDirectory, (await Fs.readdir(historyDirectory))[0]!);
+    const beforeHistory = await Fs.readFile(historyPath);
+    const beforeStatus = git(repository, environment, "status", "--porcelain=v1", "--untracked-files=all");
+    const beforeReadme = await Fs.readFile(Path.join(repository, "README.md"));
+    const beforeWorktrees = git(repository, environment, "worktree", "list", "--porcelain");
+    const canonicalClaim = await holdWorkspaceClaim(baseRuntime, common, canonicalDestination, missionId);
+    const attachmentsDirectory = Path.join(common, "kepler", "missions", missionId, "workspaces");
+    tracked.attempts.length = 0;
+
+    try {
+      const rejected = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+      expect(rejected).toMatchObject({ kind: "failed", code: "workspace_recovery_identity_changed" });
+      expect(tracked.attempts).toEqual([]);
+      expect(await canonicalClaim.tryAcquire()).toMatchObject({ kind: "failed", code: "resource_contended" });
+      expect(await Fs.access(canonicalDestination).then(() => true, () => false)).toBe(false);
+      expect(await Fs.access(aliasDestination).then(() => true, () => false)).toBe(false);
+      expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+      expect(git(repository, environment, "branch", "--list", "feature/aliased-parent")).toBe("");
+      expect(git(repository, environment, "status", "--porcelain=v1", "--untracked-files=all")).toBe(beforeStatus);
+      expect(await Fs.readFile(Path.join(repository, "README.md"))).toEqual(beforeReadme);
+      expect(await Fs.readFile(historyPath)).toEqual(beforeHistory);
+      expect(await Fs.readFile(intentPath, "utf8")).toBe(tamperedIntent);
+      expect(git(repository, environment, "worktree", "list", "--porcelain")).toBe(beforeWorktrees);
+      expect(await Fs.access(Path.join(attachmentsDirectory, `${aliasWorkspaceKey}.json`)).then(() => true, () => false)).toBe(false);
+      expect(await Fs.access(Path.join(attachmentsDirectory, `${canonicalClaim.resourceKey}.json`)).then(() => true, () => false)).toBe(false);
+    } finally {
+      await canonicalClaim.lease.release();
+    }
+  });
+
+  it("rejects an intent replaced by a symlink after validation but before descriptor open", async () => {
+    const environment = await createEnvironment("intent-replacement-race");
+    const repository = await createRepository(environment, "record-home");
+    const linked = Path.join(environment.parent, "held-intent-race-worktree");
+    const branch = "feature/intent-race-held";
+    git(repository, environment, "worktree", "add", "-q", "-b", branch, linked, "main");
+    const actualRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let intentPath = "";
+    let replaceAtOpen = false;
+    let savedPath = "";
+    const intentFileSystem: MissionStartupIntentFileSystem = {
+      open: async (path, flags) => {
+        if (replaceAtOpen && path === intentPath) {
+          replaceAtOpen = false;
+          savedPath = `${path}.saved`;
+          await Fs.rename(path, savedPath);
+          await Fs.symlink(savedPath, path);
+        }
+        return Fs.open(path, flags);
+      },
+    };
+    const startup = createStartupWithRuntime(environment.parent, actualRuntime, randomUUID, intentFileSystem);
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository, { branch: { kind: "existing", name: branch } })),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "branch_switch_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    const common = await commonDirectory(repository, environment);
+    intentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const beforeIntent = await Fs.readFile(intentPath);
+    const beforeHistory = await Fs.readFile(Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE,
+      (await Fs.readdir(Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE)))[0]!));
+    const workspaceKey = missionWorkspaceKey(common, await Fs.realpath(repository));
+    const workspaceLockPath = Path.join(common, "kepler", "workspaces", workspaceKey);
+    expect(await Fs.access(workspaceLockPath).then(() => true, () => false)).toBe(false);
+    replaceAtOpen = true;
+
+    const rejected = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(rejected).toMatchObject({ kind: "failed", code: "mission_recovery_intent_read_failed" });
+    expect(await Fs.lstat(intentPath).then((stat) => stat.isSymbolicLink())).toBe(true);
+    expect(await Fs.readFile(savedPath)).toEqual(beforeIntent);
+    expect(await Fs.readFile(Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE,
+      (await Fs.readdir(Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE)))[0]!))).toEqual(beforeHistory);
+    expect(await Fs.access(workspaceLockPath).then(() => true, () => false)).toBe(false);
+    expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+    expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual(["construction.mission-created"]);
+  });
+
+  it("blocks incomplete, unsupported, conflicting, and downstream-only history without rewriting it", async () => {
+    const { environment, repository, startup, missionId } = await createBranchLockedMission("history-safety");
+    const historyDirectory = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const journalName = (await Fs.readdir(historyDirectory))[0]!;
+    const journalPath = Path.join(historyDirectory, journalName);
+    const originalBytes = await Fs.readFile(journalPath, "utf8");
+    const originalEvent = JSON.parse(originalBytes.trimEnd()) as Record<string, unknown>;
+    const intentPath = Path.join(await commonDirectory(repository, environment), "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const intent = JSON.parse(await Fs.readFile(intentPath, "utf8")) as { preparedEvent: Record<string, unknown> };
+    const scenarios = [
+      { state: "unsupported", bytes: `${JSON.stringify({ ...originalEvent, envelope_version: 99 })}\n`, code: "mission_history_not_recoverable" },
+      { state: "conflicting", bytes: `${JSON.stringify({ ...originalEvent, data: { ...(originalEvent.data as Record<string, unknown>), title: "Conflicting title" } })}\n`, code: "mission_history_conflict" },
+      { state: "changed-unterminated-tail", bytes: JSON.stringify({ ...originalEvent, data: { ...(originalEvent.data as Record<string, unknown>), title: "Changed saved event" } }), code: "mission_history_not_recoverable" },
+      { state: "unsupported-unterminated-tail", bytes: JSON.stringify({ ...originalEvent, type: "construction.future-event" }), code: "mission_history_not_recoverable" },
+      { state: "truncated-unterminated-tail", bytes: originalBytes.trimEnd().slice(0, -1), code: "mission_history_not_recoverable" },
+      { state: "ambiguous-unterminated-tail", bytes: `${originalBytes}${originalBytes.trimEnd()}`, code: "mission_history_not_recoverable" },
+      { state: "uncertain-tail", bytes: `${originalBytes.trimEnd()}\n{`, code: "mission_history_not_recoverable" },
+      { state: "downstream-only", bytes: `${JSON.stringify(intent.preparedEvent)}\n`, code: "mission_history_not_recoverable" },
+    ];
+    for (const scenario of scenarios) {
+      await Fs.writeFile(journalPath, scenario.bytes);
+      const result = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+      expect(result, scenario.state).toMatchObject({ kind: "failed", code: scenario.code });
+      expect(await Fs.readFile(journalPath, "utf8")).toBe(scenario.bytes);
+      expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+      expect(git(repository, environment, "worktree", "list", "--porcelain")).toContain("feature/history-safety");
+    }
+  });
+
+  it.each(["commit", "no-commit"] as const)("refuses startup %s drift without resetting or re-baselining", async (checkpointKind) => {
+    const environment = await createEnvironment(`checkpoint-drift-${checkpointKind}`);
+    const repository = await createRepository(environment, "record-home", { commit: checkpointKind === "commit" });
+    const startup = createStartupWithOnePreparationFailure(environment.parent);
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "workspace_preparation_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    const progressedReadme = `# ${checkpointKind} checkpoint drift\n`;
+    await Fs.writeFile(Path.join(repository, "README.md"), progressedReadme);
+    git(repository, environment, "add", checkpointKind === "no-commit" ? "." : "README.md");
+    git(repository, environment, "commit", "-q", "-m", `Advance ${checkpointKind} checkpoint`);
+    const driftHead = git(repository, environment, "rev-parse", "HEAD");
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recovered).toMatchObject({ kind: "failed", code: "workspace_recovery_conflict" });
+    expect(git(repository, environment, "rev-parse", "HEAD")).toBe(driftHead);
+    expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+    expect(await Fs.readFile(Path.join(repository, "README.md"), "utf8")).toBe(progressedReadme);
+    expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual(["construction.mission-created"]);
+  });
+
   it("reports a successfully created worktree when post-mutation verification fails", async () => {
     const environment = await createEnvironment("post-mutation-failure");
     const recordHome = await createRepository(environment, "record-home");
     const workspacePath = Path.join(environment.parent, "created-worktree");
     const actualRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let failPostCreationInspection = true;
     const runtime = createNodeMissionWorkspaceRuntime({
       cwd: environment.parent,
       fileSystem: actualRuntime.fileSystem,
@@ -636,7 +1063,8 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       identity: actualRuntime.identity,
       git: {
         run: async (cwd, args) => {
-          if (cwd === workspacePath && args[0] === "rev-parse" && args[1] === "--is-bare-repository") {
+          if (failPostCreationInspection && cwd === workspacePath && args[0] === "rev-parse" && args[1] === "--is-bare-repository") {
+            failPostCreationInspection = false;
             return { status: 128, stdout: "", stderr: "injected post-creation inspection failure" };
           }
           return actualRuntime.git.run(cwd, args);
@@ -648,6 +1076,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
+      recovery: createNodeMissionStartupRecoveryRuntime(runtime),
       journals: {
         create: (recordHomePath, missionId, journalId) => createEventJournal({
           recordHome: recordHomePath,
@@ -684,7 +1113,523 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     if (typeof missionId !== "string") return;
     expect((await Fs.lstat(Path.join(workspacePath, ".git"))).isFile()).toBe(true);
     expect(git(workspacePath, environment, "branch", "--show-current")).toBe("feature/created-before-failure");
-    expect((await readEvents(recordHome, missionId)).map((event) => event.type)).toEqual(["construction.mission-created"]);
+    const createdEvents = await readEvents(recordHome, missionId);
+    expect(createdEvents.map((event) => event.type)).toEqual(["construction.mission-created"]);
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(recordHome, missionId));
+    expect(recovered).toMatchObject({ kind: "prepared", missionId, historical: false, repositories: [{ repositoryId: "application", branch: "feature/created-before-failure", workspacePath }] });
+    expect((await Fs.lstat(Path.join(workspacePath, ".git"))).isFile()).toBe(true);
+    const events = await readEvents(recordHome, missionId);
+    expect(events.map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
+    expect(events[0]?.id).toBe(createdEvents[0]?.id);
+    expect(events[1]?.caused_by).toEqual([createdEvents[0]?.id]);
+  });
+
+  it("retries the exact saved creation envelope after creation append failed before writing", async () => {
+    const environment = await createEnvironment("created-event-retry");
+    const repository = await createRepository(environment, "record-home");
+    const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let failCreatedAppend = true;
+    const startup = new MissionStartup({
+      projects: { resolve: (project) => projects.resolve(project) },
+      workspaces: createMissionWorkspacePreparation(workspaceRuntime),
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
+      journals: {
+        create: (recordHome, missionId, journalId) => {
+          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
+          return {
+            path: journal.path,
+            read: journal.read,
+            append: async (event) => {
+              if (failCreatedAppend && typeof event === "object" && event !== null &&
+                  "type" in event && event.type === "construction.mission-created") {
+                failCreatedAppend = false;
+                throw new Error("injected creation append failure before write");
+              }
+              return journal.append(event);
+            },
+          };
+        },
+      },
+      identities: { next: randomUUID },
+      now: () => "2026-10-21T14:00:00.000Z",
+      producer: { name: "kepler-cli", version: "0.10.3" },
+    });
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "mission_record_failed", details: { mission_id: expect.any(String), event_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    const common = await commonDirectory(repository, environment);
+    const intentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const saved = JSON.parse(await Fs.readFile(intentPath, "utf8")) as { createdEvent: unknown; preparedEvent: unknown };
+    expect((saved.createdEvent as Record<string, unknown>).id).toBe(interrupted.details.event_id);
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recovered).toMatchObject({ kind: "prepared", missionId });
+    const history = await readEvents(repository, missionId);
+    expect(history).toEqual([saved.createdEvent, saved.preparedEvent]);
+    expect(history.map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
+  });
+
+  it("recovers a complete saved creation event whose only missing byte is the final LF", async () => {
+    const environment = await createEnvironment("creation-event-missing-lf");
+    const repository = await createRepository(environment, "record-home");
+    const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let removeCreationTerminator = true;
+    let unterminatedJournalPath: string | undefined;
+    const startup = new MissionStartup({
+      projects: { resolve: (project) => projects.resolve(project) },
+      workspaces: createMissionWorkspacePreparation(workspaceRuntime),
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
+      journals: {
+        create: (recordHome, missionId, journalId) => {
+          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
+          return {
+            path: journal.path,
+            read: journal.read,
+            append: async (event) => {
+              if (removeCreationTerminator && typeof event === "object" && event !== null &&
+                  "type" in event && event.type === "construction.mission-created") {
+                await journal.append(event);
+                removeCreationTerminator = false;
+                unterminatedJournalPath = journal.path;
+                const bytes = await Fs.readFile(journal.path);
+                expect(bytes.at(-1)).toBe(10);
+                await Fs.writeFile(journal.path, bytes.subarray(0, bytes.length - 1));
+                throw new Error("interrupted after complete creation bytes but before final LF");
+              }
+              return journal.append(event);
+            },
+          };
+        },
+      },
+      identities: { next: randomUUID },
+      now: () => "2026-10-21T14:00:00.000Z",
+      producer: { name: "kepler-cli", version: "0.10.3" },
+    });
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "mission_record_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string" || !unterminatedJournalPath) return;
+    const missionId = interrupted.details.mission_id;
+    const common = await commonDirectory(repository, environment);
+    const intentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const saved = JSON.parse(await Fs.readFile(intentPath, "utf8")) as { createdEvent: unknown; preparedEvent: unknown };
+    const originalTail = await Fs.readFile(unterminatedJournalPath, "utf8");
+    expect(JSON.parse(originalTail)).toEqual(saved.createdEvent);
+    expect(originalTail.endsWith("\n")).toBe(false);
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recovered).toMatchObject({ kind: "prepared", missionId });
+    expect((await readEvents(repository, missionId))).toEqual([saved.createdEvent, saved.preparedEvent]);
+    expect((await Fs.readFile(unterminatedJournalPath, "utf8")).endsWith("\n")).toBe(true);
+  });
+
+  it("recovers a complete saved prepared event whose only missing byte is the final LF", async () => {
+    const environment = await createEnvironment("prepared-event-missing-lf");
+    const repository = await createRepository(environment, "record-home");
+    const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let removePreparedTerminator = true;
+    let unterminatedJournalPath: string | undefined;
+    const startup = new MissionStartup({
+      projects: { resolve: (project) => projects.resolve(project) },
+      workspaces: createMissionWorkspacePreparation(workspaceRuntime),
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
+      journals: {
+        create: (recordHome, missionId, journalId) => {
+          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
+          return {
+            path: journal.path,
+            read: journal.read,
+            append: async (event) => {
+              const appended = await journal.append(event);
+              if (removePreparedTerminator && typeof event === "object" && event !== null &&
+                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
+                removePreparedTerminator = false;
+                unterminatedJournalPath = journal.path;
+                const bytes = await Fs.readFile(journal.path);
+                expect(bytes.at(-1)).toBe(10);
+                await Fs.writeFile(journal.path, bytes.subarray(0, bytes.length - 1));
+                throw new Error("interrupted after complete prepared bytes but before final LF");
+              }
+              return appended;
+            },
+          };
+        },
+      },
+      identities: { next: randomUUID },
+      now: () => "2026-10-21T14:00:00.000Z",
+      producer: { name: "kepler-cli", version: "0.10.3" },
+    });
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "workspace_preparation_record_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string" || !unterminatedJournalPath) return;
+    const missionId = interrupted.details.mission_id;
+    const common = await commonDirectory(repository, environment);
+    const intentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
+    const saved = JSON.parse(await Fs.readFile(intentPath, "utf8")) as {
+      createdEvent: unknown;
+      preparedEvent: unknown;
+      repositories: readonly { localWorkspaceKey: string }[];
+    };
+    const originalTail = await Fs.readFile(unterminatedJournalPath, "utf8");
+    expect(originalTail.endsWith("\n")).toBe(false);
+    expect(JSON.parse(originalTail.split("\n").at(-1)!)).toEqual(saved.preparedEvent);
+    const workspaceKey = saved.repositories[0]?.localWorkspaceKey;
+    expect(workspaceKey).toBeDefined();
+    if (!workspaceKey) return;
+    const attachmentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", `${workspaceKey}.json`);
+    const attachmentBefore = await Fs.readFile(attachmentPath);
+    await Fs.writeFile(Path.join(repository, "README.md"), "# Progress after unterminated preparation\n");
+    git(repository, environment, "add", "README.md");
+    git(repository, environment, "commit", "-q", "-m", "Progress after unterminated preparation");
+    const progressedHead = git(repository, environment, "rev-parse", "HEAD");
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recovered).toMatchObject({ kind: "prepared", missionId, recordHome: repository, historical: true });
+    if (recovered.kind !== "prepared") return;
+    expect(recovered.repositories[0]).not.toHaveProperty("localWorkspaceKey");
+    expect(recovered.repositories[0]).not.toHaveProperty("workspacePath");
+    expect(git(repository, environment, "rev-parse", "HEAD")).toBe(progressedHead);
+    expect(await Fs.readFile(attachmentPath)).toEqual(attachmentBefore);
+    expect((await Fs.readFile(unterminatedJournalPath, "utf8")).endsWith("\n")).toBe(true);
+    expect(await readEvents(repository, missionId)).toEqual([saved.createdEvent, saved.preparedEvent]);
+  });
+
+  it("retries a failed prepared-event append with the exact saved event IDs", async () => {
+    const environment = await createEnvironment("prepared-event-retry");
+    const repository = await createRepository(environment, "record-home");
+    const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let failPreparedAppend = true;
+    const startup = new MissionStartup({
+      projects: { resolve: (project) => projects.resolve(project) },
+      workspaces: createMissionWorkspacePreparation(workspaceRuntime),
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
+      journals: {
+        create: (recordHome, missionId, journalId) => {
+          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
+          return {
+            path: journal.path,
+            read: journal.read,
+            append: async (event) => {
+              if (failPreparedAppend && typeof event === "object" && event !== null &&
+                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
+                failPreparedAppend = false;
+                throw new Error("injected prepared append failure");
+              }
+              return journal.append(event);
+            },
+          };
+        },
+      },
+      identities: { next: randomUUID },
+      now: () => "2026-10-21T14:00:00.000Z",
+      producer: { name: "kepler-cli", version: "0.10.3" },
+    });
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "workspace_preparation_record_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    const preparedEventId = interrupted.details.event_id;
+    expect(typeof preparedEventId).toBe("string");
+    const common = await commonDirectory(repository, environment);
+    const workspaceId = missionWorkspaceKey(common, repository);
+    const attachmentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", `${workspaceId}.json`);
+    const attachmentBefore = await Fs.readFile(attachmentPath);
+    const firstHistory = await readEvents(repository, missionId);
+    expect(firstHistory.map((event) => event.type)).toEqual(["construction.mission-created"]);
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+    expect(recovered).toMatchObject({ kind: "prepared", missionId });
+    const history = await readEvents(repository, missionId);
+    expect(history.map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
+    expect(history[0]?.id).toBe(firstHistory[0]?.id);
+    expect(history[1]?.id).toBe(preparedEventId);
+    expect(history[1]?.caused_by).toEqual([history[0]?.id]);
+    expect(await Fs.readFile(attachmentPath)).toEqual(attachmentBefore);
+  });
+
+  it("returns a recorded preparation as historical state after the append succeeded and the HEAD progressed", async () => {
+    const environment = await createEnvironment("prepared-event-after-write");
+    const repository = await createRepository(environment, "record-home");
+    const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let failAfterPreparedWrite = true;
+    const startup = new MissionStartup({
+      projects: { resolve: (project) => projects.resolve(project) },
+      workspaces: createMissionWorkspacePreparation(workspaceRuntime),
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
+      journals: {
+        create: (recordHome, missionId, journalId) => {
+          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
+          return {
+            path: journal.path,
+            read: journal.read,
+            append: async (event) => {
+              const appended = await journal.append(event);
+              if (failAfterPreparedWrite && typeof event === "object" && event !== null &&
+                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
+                failAfterPreparedWrite = false;
+                throw new Error("injected response loss after prepared append");
+              }
+              return appended;
+            },
+          };
+        },
+      },
+      identities: { next: randomUUID },
+      now: () => "2026-10-21T14:00:00.000Z",
+      producer: { name: "kepler-cli", version: "0.10.3" },
+    });
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "workspace_preparation_record_failed", details: { mission_id: expect.any(String), event_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    const historyBefore = await readEvents(repository, missionId);
+    expect(historyBefore.map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
+    expect(historyBefore[1]?.id).toBe(interrupted.details.event_id);
+    const common = await commonDirectory(repository, environment);
+    const workspaceId = missionWorkspaceKey(common, repository);
+    const attachmentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", `${workspaceId}.json`);
+    const attachmentBefore = await Fs.readFile(attachmentPath);
+    const originalCheckpoint = (historyBefore[1]?.data as Record<string, unknown>).repositories as Array<Record<string, unknown>>;
+    const expectedStartingCheckpoint = originalCheckpoint[0]?.starting_checkpoint;
+    await Fs.writeFile(Path.join(repository, "README.md"), "# Progress after startup preparation\n");
+    git(repository, environment, "add", "README.md");
+    git(repository, environment, "commit", "-q", "-m", "Progress after mission preparation");
+    const progressedHead = git(repository, environment, "rev-parse", "HEAD");
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recovered).toMatchObject({
+      kind: "prepared",
+      missionId,
+      repositories: [{ startingCheckpoint: expectedStartingCheckpoint }],
+    });
+    expect(git(repository, environment, "rev-parse", "HEAD")).toBe(progressedHead);
+    expect(await Fs.readFile(attachmentPath)).toEqual(attachmentBefore);
+    expect(await readEvents(repository, missionId)).toEqual(historyBefore);
+  });
+
+  it("preserves a conflicting saved workspace attachment during recovery", async () => {
+    const environment = await createEnvironment("attachment-conflict");
+    const repository = await createRepository(environment, "record-home");
+    const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let failPreparedAppend = true;
+    const startup = new MissionStartup({
+      projects: { resolve: (project) => projects.resolve(project) },
+      workspaces: createMissionWorkspacePreparation(workspaceRuntime),
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
+      journals: {
+        create: (recordHome, missionId, journalId) => {
+          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
+          return {
+            path: journal.path,
+            read: journal.read,
+            append: async (event) => {
+              if (failPreparedAppend && typeof event === "object" && event !== null &&
+                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
+                failPreparedAppend = false;
+                throw new Error("injected prepared append failure");
+              }
+              return journal.append(event);
+            },
+          };
+        },
+      },
+      identities: { next: randomUUID },
+      now: () => "2026-10-21T14:00:00.000Z",
+      producer: { name: "kepler-cli", version: "0.10.3" },
+    });
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "workspace_preparation_record_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    const common = await commonDirectory(repository, environment);
+    const workspaceId = missionWorkspaceKey(common, repository);
+    const attachmentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", `${workspaceId}.json`);
+    const attachment = JSON.parse(await Fs.readFile(attachmentPath, "utf8")) as Record<string, unknown>;
+    const conflictingAttachment = `${JSON.stringify({ ...attachment, branch: "feature/unauthorized" }, null, 2)}\n`;
+    await Fs.writeFile(attachmentPath, conflictingAttachment);
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recovered).toMatchObject({ kind: "failed", code: "workspace_attachment_conflict" });
+    expect(await Fs.readFile(attachmentPath, "utf8")).toBe(conflictingAttachment);
+    expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual(["construction.mission-created"]);
+  });
+
+  it("releases the fresh-preparation workspace lease after an attachment probe throws and safely retries", async () => {
+    const environment = await createEnvironment("fresh-attachment-probe-failure");
+    const repository = await createRepository(environment, "record-home");
+    const actualRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let failAttachmentProbe = true;
+    const runtime = createNodeMissionWorkspaceRuntime({
+      cwd: environment.parent,
+      git: actualRuntime.git,
+      coordination: actualRuntime.coordination,
+      identity: actualRuntime.identity,
+      fileSystem: {
+        ...actualRuntime.fileSystem,
+        pathKind: async (path) => {
+          if (failAttachmentProbe && isWorkspaceAttachmentPath(path)) {
+            failAttachmentProbe = false;
+            throw new Error("injected attachment path probe failure");
+          }
+          return actualRuntime.fileSystem.pathKind(path);
+        },
+      },
+    });
+    const startup = createStartupWithRuntime(environment.parent, runtime);
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository)),
+    );
+    expect(interrupted).toMatchObject({
+      kind: "failed",
+      code: "workspace_attachment_write_failed",
+      details: { mission_id: expect.any(String), partial_effects: [{ state: "git-prepared-attachment-failed" }] },
+    });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    const partialEffect = (interrupted.details.partial_effects as Array<Record<string, unknown>>)[0];
+    const workspaceId = partialEffect?.workspace_id;
+    expect(typeof workspaceId).toBe("string");
+    if (typeof workspaceId !== "string") return;
+    const common = await commonDirectory(repository, environment);
+    const lockPath = Path.join(common, "kepler", "workspaces", workspaceId);
+    expect(await Fs.access(lockPath).then(() => true, () => false)).toBe(false);
+    expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+    expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual(["construction.mission-created"]);
+
+    const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recovered).toMatchObject({ kind: "prepared", missionId, repositories: [{ branch: "main" }] });
+    expect(await Fs.access(lockPath).then(() => true, () => false)).toBe(false);
+    expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
+  });
+
+  it("releases the recovery workspace lease after attachment write failure and safely retries", async () => {
+    const environment = await createEnvironment("recovery-attachment-write-failure");
+    const repository = await createRepository(environment, "record-home");
+    const linked = Path.join(environment.parent, "held-attachment-branch-worktree");
+    const branch = "feature/recovery-attachment-write";
+    git(repository, environment, "worktree", "add", "-q", "-b", branch, linked, "main");
+    const actualRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    let failAttachmentWrite = false;
+    const runtime = createNodeMissionWorkspaceRuntime({
+      cwd: environment.parent,
+      git: actualRuntime.git,
+      coordination: actualRuntime.coordination,
+      identity: actualRuntime.identity,
+      fileSystem: {
+        ...actualRuntime.fileSystem,
+        writeFileExclusive: async (path, content) => {
+          if (failAttachmentWrite && isWorkspaceAttachmentPath(path)) {
+            throw new Error("injected attachment write failure");
+          }
+          return actualRuntime.fileSystem.writeFileExclusive(path, content);
+        },
+      },
+    });
+    const startup = createStartupWithRuntime(environment.parent, runtime);
+    const interrupted = await withGitEnvironment(environment, () =>
+      startup.execute(repository, makeRequest("record-home", repository, {
+        branch: { kind: "existing", name: branch },
+      })),
+    );
+    expect(interrupted).toMatchObject({ kind: "failed", code: "branch_switch_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    git(repository, environment, "worktree", "remove", linked);
+    failAttachmentWrite = true;
+
+    const recoveredAttempt = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(recoveredAttempt).toMatchObject({
+      kind: "failed",
+      code: "workspace_attachment_write_failed",
+      details: { partial_effects: [{ branch, state: "git-prepared-attachment-failed" }] },
+    });
+    const common = await commonDirectory(repository, environment);
+    const workspaceId = missionWorkspaceKey(common, await Fs.realpath(repository));
+    const lockPath = Path.join(common, "kepler", "workspaces", workspaceId);
+    const attachmentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", `${workspaceId}.json`);
+    expect(await Fs.access(lockPath).then(() => true, () => false)).toBe(false);
+    expect(await Fs.access(attachmentPath).then(() => true, () => false)).toBe(false);
+    expect(git(repository, environment, "branch", "--show-current")).toBe(branch);
+    expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual(["construction.mission-created"]);
+    failAttachmentWrite = false;
+
+    const retried = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
+
+    expect(retried).toMatchObject({ kind: "prepared", missionId, repositories: [{ branch }] });
+    expect(await Fs.access(lockPath).then(() => true, () => false)).toBe(false);
+    expect(await Fs.access(attachmentPath).then(() => true, () => false)).toBe(true);
+    expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
+  });
+
+  it("serializes concurrent same-mission recovery and preserves one event per startup fact", async () => {
+    const environment = await createEnvironment("same-mission-recovery");
+    const repository = await createRepository(environment, "record-home");
+    const linked = Path.join(environment.parent, "held-branch-worktree");
+    git(repository, environment, "worktree", "add", "-q", "-b", "feature/recovery-held", linked, "main");
+    const startup = createStartup(environment.parent);
+    const interrupted = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository, {
+      branch: { kind: "existing", name: "feature/recovery-held" },
+    })));
+    expect(interrupted).toMatchObject({ kind: "failed", code: "branch_switch_failed", details: { mission_id: expect.any(String) } });
+    if (interrupted.kind !== "failed" || typeof interrupted.details.mission_id !== "string") return;
+    const missionId = interrupted.details.mission_id;
+    git(repository, environment, "worktree", "remove", linked);
+
+    const results = await withGitEnvironment(environment, () => Promise.all([
+      startup.prepare(repository, missionId),
+      startup.prepare(repository, missionId),
+    ]));
+    expect(results.some((result) => result.kind === "prepared")).toBe(true);
+    expect(results.every((result) => result.kind === "prepared" || result.code === "resource_contended")).toBe(true);
+    expect(git(repository, environment, "branch", "--show-current")).toBe("feature/recovery-held");
+    expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
   });
 
   it("does not create the record-home marker during project resolution", async () => {

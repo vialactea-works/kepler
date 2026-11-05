@@ -1,6 +1,6 @@
 ---
 name: kepler-mission-startup
-description: "Create a Kepler mission and prepare only its explicitly selected repositories, workspaces, branches, and Integration targets before any stage starts."
+description: "Create a Kepler mission or continue interrupted preparation by exact mission ID, using only its selected repositories, workspaces, branches, and Integration targets without starting a stage."
 ---
 
 # Start a mission
@@ -44,3 +44,15 @@ The request fields are `title`, `request`, `workflow`, `recordHomeRepositoryId`,
 A success result returns the generated `mission_id`, record home, prepared workspace bindings, branch, Integration target, and starting commit or explicit `no-commit` condition. Confirm `execution_started` is `false`; this operation creates no stage attempt. Preserve the returned mission and workspace identities for later CLI operations.
 
 On failure, inspect the structured `code`, `details`, and `recovery`. Preparation can leave a recorded mission and known partial effects. Preserve them, inspect the actual Git and filesystem state, and reconcile before retrying. Do not reset, stash, switch dirty work, delete, publish, or edit history to make a retry pass. An unrelated dirty workspace does not block a separate selected workspace.
+
+## Continue an interrupted startup
+
+Confirm that the original startup command has ended; do not infer this from a timeout. Keep its mission ID and original record home, then use:
+
+```sh
+kepler mission prepare --mission <mission-id> --project <original-record-home-root>
+```
+
+Use the exact full lowercase UUIDv4 from the original result. Do not repeat `mission create` as a retry; it allocates a new identity. The CLI uses saved resolved instructions and exact pending event envelopes, verifies canonical resource identities and fixed starting checkpoints under coordination, and completes only missing authorized work. Do not change the instructions, attachments, checkpoints, or history to make recovery pass. If facts are missing or conflict, preserve all material and report the failure instead of reconstructing the original choices.
+
+Confirm `execution_started` is `false`. A success with `historical: true` returns recorded preparation facts and omits local workspace IDs and paths. It needs no local intent or attachments, does not recreate them, and does not establish current execution readiness. A newly completed preparation returns `historical: false` with verified local bindings. Check the owning operation's current prerequisites before starting execution.

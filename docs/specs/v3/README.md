@@ -10,7 +10,7 @@ This reference contains approved Construction MVP contracts and deferred design 
 
 [Skills](skills.md) sets version 3 skill names and responsibilities.
 
-[CLI commands and contracts](cli.md) defines the approved CLI interfaces under SH122. Details left unspecified remain implementation choices.
+[CLI commands and contracts](cli.md) defines the approved CLI interfaces under SH122 and the later mission preparation recovery amendment under SH125. Details left unspecified remain implementation choices.
 
 [Mission](mission.md) owns the accepted mission identity, record-home, workspace, storage, checkpoint, recovery, and pre-mission contracts.
 

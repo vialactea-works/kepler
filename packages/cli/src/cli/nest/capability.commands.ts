@@ -6,7 +6,7 @@ import { parseProjectSelector, ProjectResolver } from "../project-selection.js";
 import { appendSelectorValue, parseScopeSelectors, type ScopeSelectorFailure } from "../scope-selectors.js";
 import { generateUuid } from "../uuid.js";
 import { parseStrictJson } from "../../json/strict-json.js";
-import { MissionStartup } from "../../construction/mission-startup.js";
+import { MissionStartup, type MissionStartupPrepared } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
 import { UnitQueries } from "../../construction/unit-queries.js";
 import { ConstructionQueries } from "../../construction/scoped-queries.js";
@@ -74,6 +74,26 @@ const reportSelectorFailure = (
   message: failure.message,
   details: failure.details,
   recovery,
+});
+
+const missionStartupSuccess = (result: MissionStartupPrepared) => ({
+  status: "success" as const,
+  data: {
+    mission_id: result.missionId,
+    workflow: "standard",
+    record_home: result.recordHome,
+    workspaces: result.repositories.map((repository) => ({
+      repository_id: repository.repositoryId,
+      context: repository.context,
+      ...(repository.localWorkspaceKey === undefined ? {} : { workspace_id: repository.localWorkspaceKey }),
+      ...(repository.workspacePath === undefined ? {} : { workspace_path: repository.workspacePath }),
+      branch: repository.branch,
+      integration_target: repository.integrationTarget,
+      starting_checkpoint: repository.startingCheckpoint,
+    })),
+    ...(result.historical ? { historical: true } : {}),
+    execution_started: false,
+  },
 });
 
 @SubCommand({ name: "author", description: "Read effective Git author identity" })
@@ -455,31 +475,58 @@ export class MissionCreateCommand extends CommandRunner {
       reportFailure(this.reporter, result);
       return;
     }
-    this.reporter.report({
-      status: "success",
-      data: {
-        mission_id: result.missionId,
-        workflow: "standard",
-        record_home: result.recordHome,
-        workspaces: result.repositories.map((repository) => ({
-          repository_id: repository.repositoryId,
-          context: repository.context,
-          workspace_id: repository.localWorkspaceKey,
-          workspace_path: repository.workspacePath,
-          branch: repository.branch,
-          integration_target: repository.integrationTarget,
-          starting_checkpoint: repository.startingCheckpoint,
-        })),
-        execution_started: false,
-      },
-    });
+    this.reporter.report(missionStartupSuccess(result));
+  }
+}
+
+@SubCommand({ name: "prepare", description: "Continue preparing one recorded mission" })
+export class MissionPrepareCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly startup: MissionStartup,
+  ) {
+    super();
+  }
+
+  @Option({ flags: "--project <path>", description: "Select the original mission record home" })
+  parseProject(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  @Option({ flags: "--mission <mission-id>", description: "Continue the exact recorded mission UUIDv4" })
+  parseMission(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const selected = projectSelector(options);
+    if (selected.kind === "failed") {
+      reportFailure(this.reporter, selected);
+      return;
+    }
+    const mission = optionValue(options ?? {}, "mission");
+    if (typeof mission !== "string") {
+      reportFailure(this.reporter, typeof mission === "object" ? mission : {
+        code: "required_selector_missing",
+        message: "Mission preparation requires exactly one --mission UUIDv4 value.",
+        details: { required: ["mission"] },
+        recovery: "Provide the exact ID returned by the interrupted mission create operation.",
+      });
+      return;
+    }
+    const result = await this.startup.prepare(selected.project, mission);
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    this.reporter.report(missionStartupSuccess(result));
   }
 }
 
 @Command({
   name: "mission",
-  description: "Create and prepare a mission",
-  subCommands: [MissionCreateCommand],
+  description: "Create or prepare a mission",
+  subCommands: [MissionCreateCommand, MissionPrepareCommand],
 })
 export class MissionCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) {

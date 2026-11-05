@@ -57,6 +57,7 @@ import { ConstructionDiffPackageSources } from "../../construction/diff-package-
 import { GitDiffPackageAdapter } from "../../workbench/git-diff-package.js";
 import { GitDiffPackageService } from "../../workbench/diff-package.js";
 import { createNodeMissionWorkspaceRuntime } from "../../construction/mission-workspace-runtime.js";
+import { createNodeMissionStartupRecoveryRuntime } from "../../construction/mission-startup-recovery-runtime.js";
 import { MetadataLinter } from "../metadata-lint.js";
 import { PROJECT_SELECTION_RUNTIME, ProjectSelectionModule } from "../project-selection.module.js";
 import {
@@ -107,6 +108,7 @@ import {
   MetadataLintCommand,
   MissionCommand,
   MissionCreateCommand,
+  MissionPrepareCommand,
   UuidCommand,
   WorkflowCommand,
 } from "./capability.commands.js";
@@ -181,6 +183,7 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
     StageStart,
     MissionCommand,
     MissionCreateCommand,
+    MissionPrepareCommand,
     {
       provide: AuditContextResolver,
       useFactory: (projects: ProjectResolver, queries: ConstructionQueries) => new AuditContextResolver(
@@ -362,21 +365,25 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
     },
     {
       provide: MissionStartup,
-      useFactory: (projects: ProjectResolver) => new MissionStartup({
-        projects: { resolve: (project) => projects.resolve(project) },
-        workspaces: createMissionWorkspacePreparation(createNodeMissionWorkspaceRuntime()),
-        journals: {
-          create: (recordHome, missionId, journalId) => createEventJournal({
-            recordHome,
-            missionId,
-            journalId,
-            phase: CONSTRUCTION_PHASE,
-          }),
-        },
-        identities: { next: randomUUID },
-        now: () => new Date().toISOString(),
-        producer: { name: "kepler", version: cliVersion },
-      }),
+      useFactory: (projects: ProjectResolver) => {
+        const workspaceRuntime = createNodeMissionWorkspaceRuntime();
+        return new MissionStartup({
+          projects: { resolve: (project) => projects.resolve(project) },
+          workspaces: createMissionWorkspacePreparation(workspaceRuntime),
+          recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
+          journals: {
+            create: (recordHome, missionId, journalId) => createEventJournal({
+              recordHome,
+              missionId,
+              journalId,
+              phase: CONSTRUCTION_PHASE,
+            }),
+          },
+          identities: { next: randomUUID },
+          now: () => new Date().toISOString(),
+          producer: { name: "kepler", version: cliVersion },
+        });
+      },
       inject: [ProjectResolver],
     },
     {

@@ -43,6 +43,8 @@ kepler workflow construction unit create --help
 
 Create a mission with `kepler mission create`, prepare the selected workspaces, then create a Unit of Work bound to the `standard` workflow. Existing application code and tests are not prerequisites. The record-home still must meet the CLI's Git and `.kepler/` project-selection requirements. Mission creation does not start a stage.
 
+If startup is interrupted, use `kepler mission prepare --mission <mission-id> --project <record-home>` to continue the same mission. Repeating `mission create` allocates another identity. A historical preparation result does not prove current workspace readiness. See [startup recovery](docs/recovery.md#continue-mission-preparation).
+
 Follow the Standard skills in order. For each task in Implementation, Kepler keeps Code Generation, independent non-author Code Validation, and checked Code Integration as separate Activities. The CLI records state and evidence; the orchestrating host dispatches agents. Kepler does not make delivery permission automatic. Review [the workflow guide](docs/sdd-framework.md), [the skill reference](docs/skills.md), and [recovery guidance](docs/recovery.md).
 
 ## CLI and documentation

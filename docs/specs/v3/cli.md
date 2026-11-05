@@ -2,7 +2,7 @@
 
 [Version 3 reference](README.md) | [CLI infrastructure](runtime.md)
 
-**Status:** Approved by the requester under [SH122](authoring_progress.md#completed-shared-decisions).
+**Status:** Approved by the requester under [SH122](authoring_progress.md#completed-shared-decisions), with the later mission preparation recovery amendment under SH125.
 
 ## Purpose and status
 
@@ -18,7 +18,7 @@ The following decisions are part of this approved contract.
 
 - Use `kepler workflow <phase>` for phase-owned workflow operations. Construction commands belong under `kepler workflow construction`.
 - Use descriptive root capabilities, such as `git`, `lint`, `audit`, and `mission`. Do not add generic `util` or `commons` groups.
-- Use the requester-approved root `kepler mission create` operation for mission creation and selected workspace preparation. This operation does not start a stage.
+- Use the requester-approved root `kepler mission create` operation for new mission identity and selected workspace preparation. Use `kepler mission prepare` to continue the original startup by its exact mission ID. Neither operation starts a stage.
 - Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted.
 - Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Use the accepted [Construction lint interface](#kepler-workflow-construction-lint) for task-graph checks.
 - Use the accepted [setup interface](#kepler-setup) for Kepler's bundled resources and default settings. Native hosts or skill managers own [agent resource installation](installation.md#agent-resource-ownership).
@@ -185,7 +185,8 @@ Any later human result mode must be opt-in.
 | --- | --- | --- |
 | `kepler setup` | Accepted root interface | Install compatible bundled resources and missing default settings. |
 | `kepler uuid` | Accepted root interface | Return one UUIDv4 in `data.uuid`. |
-| `kepler mission create` | Accepted root interface | Record a mission and prepare its explicitly selected workspaces without starting a stage. |
+| `kepler mission create` | Accepted root interface | Record a new mission and prepare its explicitly selected workspaces without starting a stage. |
+| `kepler mission prepare` | Accepted root interface under SH125 | Continue the same startup by exact mission ID, or return its recorded preparation result. |
 | `kepler git author` | Accepted under SH60 | Return effective repository Git values in `data.name` and `data.email`. |
 | `kepler git diff-package validation` | Accepted under `git` | Package a task's generated output for Code Validation. |
 | `kepler git diff-package integration` | Accepted under `git` | Package a prepared combined candidate for Code Integration inspection. |
@@ -271,7 +272,25 @@ Select a branch as `{ "kind": "current" }`, `{ "kind": "default" }`, `{ "kind": 
 
 Record mission creation before workspace effects. Success returns `data.mission_id`, `data.record_home`, `data.workspaces`, and `data.execution_started: false`. Each workspace result identifies its repository, context, local workspace ID and path, branch, Integration target, and starting commit or explicit `no-commit` condition. The command creates no stage attempt and does not start Functional Design.
 
-Preparation failures keep the creation fact and report known partial effects in the common failure `details`. Do not claim readiness, delete or roll back prepared resources, or repair/publish Git state automatically. Keep the mission unstarted until its required workspace binding is recorded. Do not add a mission registry, Initialization stage, workflow engine, raw journal operation, or generic execution-start command.
+Save the resolved startup instructions before creation append or Git changes under the [Mission recovery contract](mission.md#continue-mission-preparation). On failure, preserve recorded facts and report known partial effects, the allocated mission ID, and continuation guidance in the common failure result. Continue with `mission prepare`; repeating `mission create` allocates a new identity. Do not claim readiness, delete or roll back prepared resources, or repair/publish Git state automatically. Keep the mission unstarted until its required workspace binding is recorded. Do not add a mission registry, Initialization stage, workflow engine, raw journal operation, or generic execution-start command.
+
+### `kepler mission prepare`
+
+**Accepted under SH125.** Continue the original startup with its full lowercase UUIDv4:
+
+```text
+kepler mission prepare --mission <mission-id> [--project <path>]
+```
+
+Select the original record-home working-tree root under the shared project-selection rules. This command takes no replacement mission request and does not allocate a new mission identity or start a stage.
+
+Read and validate the complete mission history before using local recovery material. A valid recorded preparation returns `success`, `data.historical: true`, and the recorded repository bindings. Omit local `workspace_id` and `workspace_path` fields from this historical result. It needs no local startup intent or attachment and makes no workspace changes. It does not establish current execution readiness or recreate missing attachments.
+
+An incomplete startup requires valid saved instructions for its original identities, paths, branches, checkpoints, and exact pending events. Under mission and canonical resource coordination, reuse verified matching resources and perform only missing authorized work. Retry creation append if necessary; record preparation only after every selected resource is verified. Reject changed starting commits or no-commit conditions, conflicting attachments, aliases in saved coordinates, uncertain resources, and unsupported or conflicting history. Do not infer ownership from an occupied path.
+
+A newly completed preparation returns `data.historical: false` and its verified local workspace IDs and paths. Both success cases return `mission_id`, `workflow: "standard"`, `record_home`, `workspaces`, and `execution_started: false`. Workspace bindings retain repository, context, branch, Integration target, and starting checkpoint facts.
+
+Preserve the exact saved envelopes on append retry. Only a complete matching saved startup event whose final newline is missing can use the existing [same-write recovery](runtime.md#interrupted-event-write-recovery); uncertain tails remain blocked and unchanged. Older incomplete missions without required recovery material fail with missing-fact details instead of reconstructed selections. Failures retain known operation and release facts and do not grant repair or lock-removal authority.
 
 ### `kepler git author`
 

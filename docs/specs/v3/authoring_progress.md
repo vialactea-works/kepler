@@ -81,7 +81,7 @@ The seven whole-contract rows record approval of Planning, Implementation, Gener
 
 ## Review result
 
-The register has 286 unique IDs: 271 completed decisions, 0 implementation choices, 14 deferred, 1 retired, and 0 pending.
+The register has 287 unique IDs: 272 completed decisions, 0 implementation choices, 14 deferred, 1 retired, and 0 pending.
 
 The requester accepted 78 decisions for the Construction contracts: 16 for Planning, 24 for Implementation and Activity, 16 for Review, and 18 for Deliver. The shared approvals in that group are SH52 and SH77-SH79. SH61 and SH74 were accepted separately. This settlement keeps that historical 78-decision group unchanged.
 
@@ -89,7 +89,7 @@ SH100, SH101, IE32, IE33, and UR17 record the later diff-package capability and 
 
 SH51 and SH53-SH56 settle opaque material references, progress queries, normal transitions, approval recording, and interaction recording. SH57-SH63 settle revision, pause and resume, unit creation, current-author lookup, effort records, queries, and structured later selections. SH64-SH66 settle lock directories, owner-record facts, and cross-workspace coordination. SH67 accepts manual lock recovery under those rules.
 
-SH112-SH117 record Construction lint, UUID generation, setup, Standard binding, intended targets, and native resource ownership. SH118-SH121 settle mission identity, record home, checkpoint sets, and the pre-mission boundary. These decisions do not claim implementation or certified agent behavior.
+SH112-SH117 record Construction lint, UUID generation, setup, Standard binding, intended targets, and native resource ownership. SH118-SH121 settle mission identity, record home, checkpoint sets, and the pre-mission boundary. SH125 records the later exact-ID mission preparation recovery amendment. These decisions do not claim implementation or certified agent behavior.
 
 The seven whole-contract acceptance rows stay distinct. CN22 keeps the accepted Implementation model. CN20 lists deferred protocol definitions. Specification acceptance does not approve a specific Unit of Work or show implementation.
 
@@ -239,6 +239,7 @@ Every decision in this section is complete. The linked specification contains it
 | SH122 | CLI contract approval | The requester approved the complete [CLI contract](cli.md), including its specified command names, arguments, output fields, and operation rules. Unspecified details remain implementation choices. This does not approve an executing unit or show implementation or release. |
 | SH123 | Unit of Work contract approval | The requester approved the complete [Unit of Work contract](unit-of-work.md), including identity, cohesion, coverage, dependencies, verification, deployment, walking skeletons, and decomposition. SH75 and SH76 stay deferred. This does not approve a particular unit or its implementation. |
 | SH124 | Installation contract approval | The requester approved the complete [installation contract](installation.md), including its installation-generation field names, meanings, and location. Unspecified encodings and mechanisms remain implementation choices. This does not claim tested host support or authorize installation, deployment, or migration. |
+| SH125 | Mission preparation recovery | On 2026-11-05, the requester approved [`kepler mission prepare --mission <mission-id> [--project <path>]`](cli.md#kepler-mission-prepare) to continue the original startup by exact UUIDv4. Keep `mission create` responsible for new identity and use shared preparation logic. Persist resolved local instructions before Git effects and exact pending envelopes before append. Journals remain authoritative. Reconcile only verified matching resources under existing coordination, preserve fixed starting checkpoints and uncertain material, and reject conflicts without automatic repair or lock removal. Recorded preparation returns a historical no-op, not current readiness. Older incomplete missions with missing facts fail explicitly. See [Mission recovery](mission.md#continue-mission-preparation); encoding and unspecified result details remain implementation choices. |
 
 ## MVP implementation choices
 

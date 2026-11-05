@@ -8,6 +8,7 @@ The `kepler` CLI installs as a standalone executable with a sidecar bundle. Run 
 | --- | --- |
 | `kepler setup` | Install a compatible bundle generation, templates, guidelines, and missing default settings. |
 | `kepler mission create` | Create a mission and prepare only its selected workspaces. |
+| `kepler mission prepare` | Continue interrupted startup by exact mission ID, or read its recorded preparation result. |
 | `kepler workflow construction unit` | Create, list, or inspect a Unit of Work. |
 | `kepler workflow construction stage` | Inspect, start, pause, resume, or complete a Construction stage attempt. |
 | `kepler workflow construction task` | List and inspect authored tasks, read readiness, and admit an eligible task. |
@@ -37,6 +38,18 @@ kepler workflow construction unit show --unit <unit-id> --project <record-home>
 ```
 
 Mission request fields and accepted resource effects depend on the installed CLI contract. Use `kepler mission create --help` and the [mission contract](specs/v3/mission.md) before creating a mission. Mission creation does not start a stage; unit creation records the Standard workflow binding.
+
+## Continue mission preparation
+
+After an interrupted startup, keep the mission ID and original record home:
+
+```bash
+kepler mission prepare --mission <mission-id> --project <record-home>
+```
+
+Use the full lowercase UUIDv4. Do not repeat `mission create` as a recovery retry; it allocates a new mission. Preparation verifies the saved selections and fixed checkpoints, reuses matching resources, and performs only missing authorized work. It does not start a stage.
+
+`data.historical: true` means preparation was already recorded. That result omits local workspace IDs and paths and does not prove current readiness or recreate missing attachments. A newly completed preparation returns `historical: false` with its verified local bindings. Missing recovery facts, changed starting checkpoints, conflicting resources, and uncertain history cause failure without automatic repair. See [recovery guidance](recovery.md#continue-mission-preparation).
 
 ## Construction execution
 

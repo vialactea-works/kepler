@@ -11,6 +11,7 @@ import { CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.j
 import { MissionStartup } from "../../packages/cli/src/construction/mission-startup.js";
 import { createMissionWorkspacePreparation } from "../../packages/cli/src/construction/mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace-runtime.js";
+import { createNodeMissionStartupRecoveryRuntime } from "../../packages/cli/src/construction/mission-startup-recovery-runtime.js";
 import { createNodeStageStartRuntime, StageStart } from "../../packages/cli/src/construction/stage-start.js";
 import { createNodeUnitCreateRecords } from "../../packages/cli/src/construction/unit-create-runtime.js";
 import { UnitCreate } from "../../packages/cli/src/construction/unit-create.js";
@@ -62,6 +63,7 @@ const createFixture = async (withCommit = true, withSecondaryRepository = false)
   const mission = await new MissionStartup({
     projects: { resolve: (project) => projects.resolve(project) },
     workspaces: createMissionWorkspacePreparation(workspace),
+    recovery: createNodeMissionStartupRecoveryRuntime(workspace),
     journals: {
       create: (recordHome, missionId, journalId) => createEventJournal({
         recordHome,

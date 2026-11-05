@@ -174,6 +174,20 @@ A greenfield repository can have no commit yet. Record that condition without in
 
 On preparation failure, report known created resources and partial changes in the common error `details`. Keep uncertain or unrelated material. Do not claim readiness or reverse changes automatically.
 
+### Continue mission preparation
+
+Use [`kepler mission prepare`](cli.md#kepler-mission-prepare) with the original full mission UUIDv4 and record home to continue interrupted startup. `mission create` retains new-identity semantics. Neither operation starts a stage or grants execution authority.
+
+Before creation append or Git changes, save immutable resolved instructions in the existing mission-local preparation area. Keep original repository and record-home identities, local paths, workspace and branch choices, and fixed starting commits or explicit no-commit conditions. Save exact pending event envelopes before append. Retain their IDs, timestamps, producer, causes, payloads, and journal identity on retry. These instructions are not mission existence, membership, or completion authority.
+
+Reconcile actual resources under mission and canonical resource coordination. Verify saved paths and derived keys against actual canonical coordinates before acquiring a checkout claim. Recheck identity before Git mutation. Reuse only matching intended resources and complete only missing authorized work. Reject conflicts or uncertainty without overwrite, reset, rollback, adoption of unknown paths, or automatic lock removal. A changed starting commit or no-commit condition blocks incomplete preparation; do not replace the original baseline.
+
+Record preparation only after all selected resources pass verification. Keep known partial effects and operation failures if release also fails. Attempt to release acquired claims on error paths; a failed release does not authorize removal or takeover.
+
+A valid recorded preparation is a historical no-op. Return its recorded binding facts without requiring current HEAD to match the starting checkpoint, requiring local intent or attachments, or changing workspaces. Omit local workspace IDs and paths from the historical result. Do not treat it as current execution readiness or a repair of missing local bindings.
+
+If an older incomplete mission lacks required local facts, report those missing facts instead of reconstructing them from current paths or refs. Unsupported, conflicting, or uncertain history blocks recovery. The existing exact-event append protocol may complete a matching saved startup record that lacks only its final newline; it must not repair an unknown or truncated tail.
+
 ## Local storage and concurrency
 
 Keep mission-local runtime data under the record repository's Git common directory:
@@ -186,6 +200,8 @@ Keep mission-local runtime data under the record repository's Git common directo
 ```
 
 `workspaces/` contains this machine's attachments and preparation observations. `coordination/` contains live mission and unit coordination. Neither is versioned workflow authority.
+
+The current CLI stores immutable startup instructions at `workspaces/startup/intent.json`, with format `kepler.mission-startup-intent.v1`. This local encoding holds the resolved instructions and exact pending creation and preparation envelopes. It stays outside versioned `.kepler/` history. Validate its format, identity bindings, and file identity before use; reject malformed or substituted material. Do not edit it to force recovery. The instruction file is not a second state store or a portable replacement for phase journals.
 
 Shared checkout ownership must also cover writers from other missions or record homes. Keep those claims within the code repository's local Git coordination domain:
 
