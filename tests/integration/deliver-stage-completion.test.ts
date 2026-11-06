@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../../packages/cli/src/audit/context.js";
 import { CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION, CONSTRUCTION_PHASE, CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, validateConstructionEvent, type ConstructionEventRecord, type DeliverOutcome, type StageAttemptId } from "../../packages/cli/src/construction/events.js";
 import { DeliverStageCompletion, createNodeDeliverStageCompletionRuntime } from "../../packages/cli/src/construction/deliver-stage-completion.js";
+import { createNodeRepositoryArtifactFileSystem } from "../../packages/cli/src/construction/artifacts.js";
+import { createNodeConstructionMaterialReader } from "../../packages/cli/src/construction/node-material-reader.js";
 import { MissionHandoffPreflight } from "../../packages/cli/src/construction/mission-handoff-preflight.js";
 import { missionWorkspaceKey } from "../../packages/cli/src/construction/mission-workspace.js";
 import type { ScopeSelectors } from "../../packages/cli/src/cli/scope-selectors.js";
@@ -409,7 +411,10 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
     unit,
   } as unknown as Extract<AuditHistoryReadResult, { kind: "loaded" }>;
   const contexts = { readUnit: async () => loaded } as unknown as AuditContextResolver;
-  const runtime = createNodeDeliverStageCompletionRuntime({ name: "kepler-test", version: "0.10.3" });
+  const runtime = createNodeDeliverStageCompletionRuntime(
+    { name: "kepler-test", version: "0.10.3" },
+    createNodeConstructionMaterialReader(createNodeRepositoryArtifactFileSystem()),
+  );
   const handoffPreflight = new MissionHandoffPreflight({ git: runtime.workspace.git, fileSystem: runtime.workspace.fileSystem });
   const service = new DeliverStageCompletion(contexts, runtime, handoffPreflight);
   const selectors = { unit: unitId, stage: "deliver", attempt: attemptId } as ScopeSelectors;

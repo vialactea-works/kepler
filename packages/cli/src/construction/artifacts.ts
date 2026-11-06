@@ -174,12 +174,14 @@ export const writeVerifiedRepositoryFile = async (
   }
 };
 
-const defaultFileSystem: RepositoryArtifactFileSystem = {
+export const createNodeRepositoryArtifactFileSystem = (): RepositoryArtifactFileSystem => ({
   readFile: (path) => Fs.readFile(path, "utf8"),
   writeFile: writeVerifiedRepositoryFile,
   realpath: (path) => Fs.realpath(path),
   stat: (path) => Fs.stat(path),
-};
+});
+
+const defaultFileSystem = createNodeRepositoryArtifactFileSystem();
 
 const requiredArtifactNames: Partial<Record<ArtifactType, string>> = {
   "unit-of-work": "unit-of-work.md",

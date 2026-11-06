@@ -10,6 +10,8 @@ import {
   createNodeFunctionalDesignStageCompletionRuntime,
   FunctionalDesignStageCompletion,
 } from "../../packages/cli/src/construction/stage-completion.js";
+import { createNodeRepositoryArtifactFileSystem } from "../../packages/cli/src/construction/artifacts.js";
+import { createNodeConstructionMaterialReader } from "../../packages/cli/src/construction/node-material-reader.js";
 import { ProjectResolver } from "../../packages/cli/src/cli/project-selection.js";
 import { auditFixture, createAuditHistory } from "../e2e/fixtures/histories/audit.js";
 
@@ -107,7 +109,10 @@ export const createStageCompletionService = (
   fixture: FunctionalDesignTestFixture,
 ): FunctionalDesignStageCompletion => new FunctionalDesignStageCompletion(
   fixture.contexts,
-  createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler-test", version: "0.10.3" }),
+  createNodeFunctionalDesignStageCompletionRuntime(
+    { name: "kepler-test", version: "0.10.3" },
+    createNodeConstructionMaterialReader(createNodeRepositoryArtifactFileSystem()),
+  ),
 );
 
 export const recordFunctionalDesignEvidence = async (

@@ -6,9 +6,8 @@ import { hasRequesterParticipant } from "../audit/participants.js";
 import { validateStageStartAuthority } from "./stage-authority.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
-import { readFunctionalDesignMaterial } from "./stage-completion.js";
 import { runWithConstructionRevisionFence } from "./unit-control.js";
-import { readStageArtifactMaterial, type StageArtifactMaterial } from "./stage-artifact-material.js";
+import type { ConstructionMaterialReader, StageArtifactMaterial } from "./material-reader.js";
 import {
   CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
@@ -37,6 +36,7 @@ import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheck
 
 export interface QualityStageCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
+  readonly materialReader: ConstructionMaterialReader;
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
@@ -303,7 +303,12 @@ export class QualityRequirementsStageCompletion {
         ...authority.details,
       });
     }
-    const functionalDesign = await readFunctionalDesignMaterial(loaded.root, loaded.missionId, loaded.unit.unitId, persistedUnitDirectory);
+    const functionalDesign = await this.runtime.materialReader.readFunctionalDesignMaterial({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory,
+    });
     if (functionalDesign.kind === "invalid") return failure("functional_design_material_invalid", "Current Functional Design inputs failed validation.", { diagnostics: functionalDesign.diagnostics });
     if (!sameArtifactBindings(upstream.record.artifact_bindings, functionalDesign.material.artifactBindings)) {
       return failure("functional_design_material_stale", "The accepted Functional Design material changed after its completion assessment.", {
@@ -311,7 +316,7 @@ export class QualityRequirementsStageCompletion {
         current_bindings: functionalDesign.material.artifactBindings,
       });
     }
-    const materialResult = await readStageArtifactMaterial({
+    const materialResult = await this.runtime.materialReader.readStageArtifactMaterial({
       repositoryRoot: loaded.root,
       missionId: loaded.missionId,
       unitId: loaded.unit.unitId,
@@ -461,10 +466,12 @@ export class QualityRequirementsStageCompletion {
 
 export const createNodeQualityStageCompletionRuntime = (
   producer: { readonly name: string; readonly version: string },
+  materialReader: ConstructionMaterialReader,
 ): QualityStageCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
     workspace,
+    materialReader,
     identities: { next: randomUUID },
     now: () => new Date().toISOString(),
     producer,

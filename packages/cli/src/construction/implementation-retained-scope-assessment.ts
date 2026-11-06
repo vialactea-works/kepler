@@ -9,9 +9,8 @@ import { validateStageStartAuthority } from "./stage-authority.js";
 import { readFunctionalDesignCompletionRecord, sameArtifactBindings } from "./functional-design-completion.js";
 import { readQualityRequirementsCompletionRecord } from "./quality-requirements-completion.js";
 import { readImplementationPlanningCompletionRecord } from "./implementation-planning-completion.js";
-import { readFunctionalDesignMaterial } from "./stage-completion.js";
-import { readStageArtifactMaterial } from "./stage-artifact-material.js";
-import { readPlanningMaterial } from "./planning-stage-completion.js";
+import type { ConstructionMaterialReader } from "./material-reader.js";
+import { createPlanningMaterialRequest } from "./material-reader.js";
 import type { ImplementationStageCompletionRuntime } from "./implementation-stage-completion.js";
 import { captureStageCheckpoints } from "./stage-start.js";
 import { recordHomeRepositoryId, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
@@ -182,12 +181,22 @@ export class ImplementationRetainedScopeAssessment {
       ? readImplementationPlanningCompletionRecord(planningFact.event.data.implementation_planning_assessment) : undefined;
     if (!fdRecord || !qualityRecord || !planningRecord) return failure("implementation_upstream_assessment_invalid", "Current upstream completion records do not satisfy their typed assessment contracts.");
     const persistedDirectory = loaded.unit.created?.event.type === "construction.unit-created" ? loaded.unit.created.event.data.directory : undefined;
-    const fdMaterial = await readFunctionalDesignMaterial(loaded.root, loaded.missionId, loaded.unit.unitId, persistedDirectory);
-    const qualityMaterial = await readStageArtifactMaterial({
+    const fdMaterial = await this.runtime.materialReader.readFunctionalDesignMaterial({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory: persistedDirectory,
+    });
+    const qualityMaterial = await this.runtime.materialReader.readStageArtifactMaterial({
       repositoryRoot: loaded.root, missionId: loaded.missionId, unitId: loaded.unit.unitId, persistedUnitDirectory: persistedDirectory,
       primaryArtifact: "quality.md", supportFolder: "quality-requirements",
     });
-    const planningMaterial = await readPlanningMaterial(loaded, persistedDirectory);
+    const planningMaterial = await this.runtime.materialReader.readPlanningMaterial(createPlanningMaterialRequest({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory: persistedDirectory,
+    }, loaded.history.events));
     if (fdMaterial.kind !== "valid" || qualityMaterial.kind !== "valid" || planningMaterial.kind !== "valid") {
       return failure("implementation_upstream_material_invalid", "Current upstream artifacts or task graph failed validation before retained Activity assessment.", {
         functional_design: fdMaterial.kind === "invalid" ? fdMaterial.diagnostics : [],
@@ -330,10 +339,11 @@ export class ImplementationRetainedScopeAssessment {
 
 export const createNodeImplementationRetainedScopeAssessmentRuntime = (
   producer: { readonly name: string; readonly version: string },
+  materialReader: ConstructionMaterialReader,
 ): ImplementationRetainedScopeAssessmentRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
-    workspace, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer,
+    workspace, materialReader, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer,
     journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) },
   };
 };

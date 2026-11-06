@@ -7,9 +7,8 @@ import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { CONSTRUCTION_PHASE, CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, isImplementationCompletionAssessedData, isUnitOfWorkReviewCompletionRecord, validateConstructionEvent, type ArtifactBinding, type MissionId, type StageAttemptId, type UnitId, type UnitOfWorkReviewCompletionRecord } from "./events.js";
 import { sameArtifactBindings } from "./functional-design-completion.js";
-import { readFunctionalDesignMaterial } from "./stage-completion.js";
-import { readStageArtifactMaterial } from "./stage-artifact-material.js";
-import { readPlanningMaterial } from "./planning-stage-completion.js";
+import type { ConstructionMaterialReader } from "./material-reader.js";
+import { createPlanningMaterialRequest } from "./material-reader.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 import { captureStageCheckpoints } from "./stage-start.js";
@@ -20,6 +19,7 @@ import { runWithConstructionRevisionFence } from "./unit-control.js";
 
 export interface UnitOfWorkReviewCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
+  readonly materialReader: ConstructionMaterialReader;
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
@@ -142,9 +142,19 @@ export class UnitOfWorkReviewStageCompletion {
         checkpointKey(request.final_checkpoints) !== checkpointKey(implementationAssessment.final_checkpoints) ||
         checkpointKey(request.final_checkpoints) !== checkpointKey(implementationData.checkpoints)) return fail("review_material_binding_invalid", "Review must identify the current Implementation completion, reviewed material, and exact integrated checkpoints.");
     const persistedDirectory = loaded.unit.created?.event.type === "construction.unit-created" ? loaded.unit.created.event.data.directory : undefined;
-    const functional = await readFunctionalDesignMaterial(loaded.root, loaded.missionId, loaded.unit.unitId, persistedDirectory);
-    const quality = await readStageArtifactMaterial({ repositoryRoot: loaded.root, missionId: loaded.missionId, unitId: loaded.unit.unitId, persistedUnitDirectory: persistedDirectory, primaryArtifact: "quality.md", supportFolder: "quality-requirements" });
-    const planning = await readPlanningMaterial(loaded, persistedDirectory);
+    const functional = await this.runtime.materialReader.readFunctionalDesignMaterial({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory: persistedDirectory,
+    });
+    const quality = await this.runtime.materialReader.readStageArtifactMaterial({ repositoryRoot: loaded.root, missionId: loaded.missionId, unitId: loaded.unit.unitId, persistedUnitDirectory: persistedDirectory, primaryArtifact: "quality.md", supportFolder: "quality-requirements" });
+    const planning = await this.runtime.materialReader.readPlanningMaterial(createPlanningMaterialRequest({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory: persistedDirectory,
+    }, loaded.history.events));
     if (functional.kind !== "valid" || quality.kind !== "valid" || planning.kind !== "valid") return fail("review_upstream_material_invalid", "Review requires current valid Functional Design, Quality Requirements, Planning, and task-graph material.", {
       functional_design: functional.kind === "invalid" ? functional.diagnostics : [],
       quality: quality.kind === "invalid" ? quality.diagnostics : [],
@@ -293,7 +303,10 @@ export class UnitOfWorkReviewStageCompletion {
   }
 }
 
-export const createNodeUnitOfWorkReviewCompletionRuntime = (producer: { readonly name: string; readonly version: string }): UnitOfWorkReviewCompletionRuntime => {
+export const createNodeUnitOfWorkReviewCompletionRuntime = (
+  producer: { readonly name: string; readonly version: string },
+  materialReader: ConstructionMaterialReader,
+): UnitOfWorkReviewCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
-  return { workspace, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer, journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) } };
+  return { workspace, materialReader, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer, journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) } };
 };

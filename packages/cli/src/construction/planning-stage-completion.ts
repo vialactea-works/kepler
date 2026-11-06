@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
@@ -18,7 +17,6 @@ import {
   type StageAttemptId,
   type UnitId,
 } from "./events.js";
-import { validateConstructionArtifact } from "./artifacts.js";
 import { readFunctionalDesignCompletionRecord, sameArtifactBindings } from "./functional-design-completion.js";
 import {
   readQualityRequirementsCompletionRecord,
@@ -30,10 +28,9 @@ import {
   type ImplementationPlanningCompletionRecord,
   type ImplementationPlanningCompletionRequest,
 } from "./implementation-planning-completion.js";
-import { readFunctionalDesignMaterial } from "./stage-completion.js";
-import { readStageArtifactMaterial, type StageArtifactMaterial } from "./stage-artifact-material.js";
-import { readTaskGraph, type TaskGraph } from "./task-graph.js";
-import { validateTaskGraphPathOperands } from "./task-graph-paths.js";
+import type { ConstructionMaterialReader, PlanningMaterial } from "./material-reader.js";
+export type { PlanningMaterial } from "./material-reader.js";
+import { createPlanningMaterialRequest } from "./material-reader.js";
 import type { ConstructionHistoryFact } from "./projection.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
@@ -43,6 +40,7 @@ import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheck
 
 export interface PlanningStageCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
+  readonly materialReader: ConstructionMaterialReader;
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
@@ -54,12 +52,6 @@ export interface PlanningStageCompletionRuntime {
 export type PlanningStageCompletionResult =
   | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
   | { readonly kind: "failed"; readonly data: Readonly<Record<string, unknown>> };
-
-export interface PlanningMaterial extends StageArtifactMaterial {
-  readonly graphRef: GraphReference;
-  readonly taskIds: readonly string[];
-  readonly graph: TaskGraph;
-}
 
 interface ValidPlanningFacts {
   readonly evidence: readonly ConstructionHistoryFact[];
@@ -96,12 +88,6 @@ const propagateReadFailure = (result: Extract<AuditHistoryReadResult, { kind: "f
   failure(result.code, result.message, result.details, result.recovery);
 const sameGraphReference = (left: unknown, right: GraphReference): boolean =>
   isRecord(left) && left.graph_id === right.graph_id && left.content_version === right.content_version;
-const localArtifactLinkPath = (url: string): string | undefined => {
-  if (url.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(url)) return undefined;
-  const path = url.split(/[?#]/, 1)[0];
-  try { return decodeURIComponent(path ?? ""); } catch { return undefined; }
-};
-
 const currentFunctionalDesignRecord = (
   loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
 ): { readonly kind: "valid"; readonly record: FunctionalDesignCompletionRecord; readonly completion: ConstructionHistoryFact } | {
@@ -150,98 +136,6 @@ const requesterInstructionEvent = (
       fact.event.data.stage_attempt_id !== attemptId || !hasRequesterParticipant(fact.event.data.participants) ||
       !fact.event.caused_by.includes(startEventId)) return undefined;
   return fact;
-};
-
-export const readPlanningMaterial = async (
-  loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
-  persistedUnitDirectory: unknown,
-): Promise<{ readonly kind: "valid"; readonly material: PlanningMaterial } | {
-  readonly kind: "invalid";
-  readonly diagnostics: readonly Readonly<Record<string, unknown>>[];
-}> => {
-  const packageResult = await readStageArtifactMaterial({
-    repositoryRoot: loaded.root,
-    missionId: loaded.missionId,
-    unitId: loaded.unit.unitId,
-    persistedUnitDirectory,
-    primaryArtifact: "plan.md",
-    supportFolder: "implementation-planning",
-  });
-  if (packageResult.kind === "invalid") return packageResult;
-  const unitRoot = packageResult.material.unitDirectory;
-  const planArtifact = await validateConstructionArtifact({
-    repositoryRoot: loaded.root,
-    artifactPath: `${unitRoot}/plan.md`,
-    ownership: { kind: "unit", unitId: loaded.unit.unitId, unitRoot },
-  });
-  if (planArtifact.kind === "invalid") {
-    return { kind: "invalid", diagnostics: planArtifact.diagnostics.map((item) => ({ path: item.sourcePath, code: item.code, message: item.message })) };
-  }
-  const planId = planArtifact.artifact.metadata.id;
-  const planUnitId = planArtifact.artifact.metadata.unit_id;
-  if (!nonEmpty(planId) || !nonEmpty(planUnitId) || planArtifact.artifact.metadata.type !== "implementation-plan") {
-    return { kind: "invalid", diagnostics: [{ path: `${unitRoot}/plan.md`, code: "plan-identity-invalid", message: "The canonical plan must identify its implementation-plan artifact and owning unit." }] };
-  }
-  const missionFacts = loaded.history.events.filter((record) =>
-    record.event?.type === "construction.mission-created" && record.event.data.mission_id === loaded.missionId &&
-    isRecord(record.event.data.record_home) && nonEmpty(record.event.data.record_home.repository_id),
-  );
-  if (missionFacts.length !== 1) {
-    return { kind: "invalid", diagnostics: [{ path: unitRoot, code: "record-home-ambiguous", message: "One record-home repository identity is required to validate graph paths." }] };
-  }
-  const missionData = missionFacts[0]?.event?.data;
-  const recordHomeRepositoryId = isRecord(missionData?.record_home) ? missionData.record_home.repository_id : undefined;
-  if (!nonEmpty(recordHomeRepositoryId)) {
-    return { kind: "invalid", diagnostics: [{ path: unitRoot, code: "record-home-missing", message: "The mission record-home repository identity is unavailable." }] };
-  }
-  const graphRelativePath = `${unitRoot}/tasks-dag.json`;
-  let graphRealPath: string;
-  try { graphRealPath = await Fs.realpath(Path.resolve(loaded.root, graphRelativePath)); }
-  catch { graphRealPath = ""; }
-  const planPath = Path.resolve(loaded.root, `${unitRoot}/plan.md`);
-  let graphIsLinked = false;
-  for (const link of planArtifact.artifact.links) {
-    if (link.kind !== "link") continue;
-    const linkPath = localArtifactLinkPath(link.url);
-    if (linkPath === undefined || graphRealPath.length === 0) continue;
-    const target = Path.isAbsolute(linkPath)
-      ? Path.resolve(loaded.root, `.${linkPath}`)
-      : Path.resolve(Path.dirname(planPath), linkPath);
-    try {
-      if (await Fs.realpath(target) === graphRealPath) graphIsLinked = true;
-    } catch { continue; }
-  }
-  if (!graphIsLinked) {
-    return { kind: "invalid", diagnostics: [{ path: `${unitRoot}/plan.md`, code: "task-graph-link-missing", message: "The canonical plan must link the current tasks-dag.json graph." }] };
-  }
-  const pathDiagnostics = await validateTaskGraphPathOperands(
-    [{ id: recordHomeRepositoryId, path: loaded.root }],
-    [{ repositoryId: recordHomeRepositoryId, basePath: ".", path: graphRelativePath, pointer: "" }],
-  );
-  if (pathDiagnostics.length > 0) {
-    return { kind: "invalid", diagnostics: pathDiagnostics.map((item) => ({ path: graphRelativePath, code: item.code, message: item.message, pointer: item.pointer })) };
-  }
-  let graphSource: string;
-  try {
-    graphSource = await Fs.readFile(Path.join(loaded.root, graphRelativePath), "utf8");
-  } catch {
-    return { kind: "invalid", diagnostics: [{ path: graphRelativePath, code: "task-graph-unavailable", message: "The canonical task graph cannot be read." }] };
-  }
-  const executionIdentities = [...new Set(loaded.history.events.flatMap((record) => record.event ? [String(record.event.id)] : []))];
-  const graph = readTaskGraph(graphSource, {
-    unitDirectoryId: loaded.unit.unitId,
-    planUnitId,
-    planArtifactId: planId,
-    executionIdentities,
-  });
-  if (graph.kind === "invalid") {
-    return { kind: "invalid", diagnostics: graph.diagnostics.map((item) => ({ path: graphRelativePath, code: item.code, pointer: item.pointer, message: item.message })) };
-  }
-  const graphRef: GraphReference = {
-    graph_id: graph.graph.id as GraphReference["graph_id"],
-    content_version: `sha256:${createHash("sha256").update(graphSource, "utf8").digest("hex")}`,
-  };
-  return { kind: "valid", material: { ...packageResult.material, graphRef, taskIds: graph.graph.tasks.map((task) => task.id).sort(), graph: graph.graph } };
 };
 
 const mergeBindings = (
@@ -429,7 +323,12 @@ export class ImplementationPlanningStageCompletion {
     const persistedUnitDirectory = loaded.unit.created?.event.type === "construction.unit-created" ? loaded.unit.created.event.data.directory : undefined;
     const functionalDesignRecord = currentFunctionalDesignRecord(loaded);
     if (functionalDesignRecord.kind === "invalid") return failure("functional_design_completion_invalid", "Planning requires one current validated Functional Design completion.", functionalDesignRecord.details);
-    const functionalDesignMaterial = await readFunctionalDesignMaterial(loaded.root, loaded.missionId, loaded.unit.unitId, persistedUnitDirectory);
+    const functionalDesignMaterial = await this.runtime.materialReader.readFunctionalDesignMaterial({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory,
+    });
     if (functionalDesignMaterial.kind === "invalid" || !sameArtifactBindings(functionalDesignRecord.record.artifact_bindings, functionalDesignMaterial.material?.artifactBindings)) {
       return failure("functional_design_material_stale", "Current Functional Design artifacts differ from the accepted completion material.", {
         diagnostics: functionalDesignMaterial.kind === "invalid" ? functionalDesignMaterial.diagnostics : [],
@@ -450,7 +349,7 @@ export class ImplementationPlanningStageCompletion {
       "The current Implementation Planning attempt must bind its accepted upstream completions and any authorized reopen chain.",
       authority.details,
     );
-    const qualityMaterial = await readStageArtifactMaterial({
+    const qualityMaterial = await this.runtime.materialReader.readStageArtifactMaterial({
       repositoryRoot: loaded.root, missionId: loaded.missionId, unitId: loaded.unit.unitId, persistedUnitDirectory,
       primaryArtifact: "quality.md", supportFolder: "quality-requirements",
     });
@@ -460,7 +359,12 @@ export class ImplementationPlanningStageCompletion {
         diagnostics: qualityMaterial.kind === "invalid" ? qualityMaterial.diagnostics : [],
       });
     }
-    const materialResult = await readPlanningMaterial(loaded, persistedUnitDirectory);
+    const materialResult = await this.runtime.materialReader.readPlanningMaterial(createPlanningMaterialRequest({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory,
+    }, loaded.history.events));
     if (materialResult.kind === "invalid") return failure("planning_artifacts_invalid", "Planning artifacts, task graph, linked support, or graph paths failed validation.", { diagnostics: materialResult.diagnostics });
     const material = materialResult.material;
     const reviewedBindings = mergeBindings(
@@ -629,10 +533,11 @@ export class ImplementationPlanningStageCompletion {
 
 export const createNodePlanningStageCompletionRuntime = (
   producer: { readonly name: string; readonly version: string },
+  materialReader: ConstructionMaterialReader,
 ): PlanningStageCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
-    workspace, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer,
+    workspace, materialReader, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer,
     journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) },
   };
 };

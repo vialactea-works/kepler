@@ -15,6 +15,8 @@ import { ActivityExecution, createNodeActivityExecutionRuntime } from "../../con
 import { IntegrationExecution, createNodeIntegrationExecutionRuntime } from "../../construction/integration-execution.js";
 import { ConstructionLint } from "../../construction/construction-lint.js";
 import { createNodeUnitQueryFileSystem } from "../../construction/unit-queries-runtime.js";
+import { createNodeRepositoryArtifactFileSystem } from "../../construction/artifacts.js";
+import { createNodeConstructionMaterialReader } from "../../construction/node-material-reader.js";
 import { createNodeUnitCreateRecords, machineLocalDate } from "../../construction/unit-create-runtime.js";
 import {
   createNodeFunctionalDesignStageCompletionRuntime,
@@ -122,6 +124,7 @@ import {
 import { ResultModule } from "./result.module.js";
 
 const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
+const constructionMaterialReader = createNodeConstructionMaterialReader(createNodeRepositoryArtifactFileSystem());
 
 @Module({
   imports: [ResultModule, ProjectSelectionModule],
@@ -209,7 +212,7 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
       provide: FunctionalDesignStageCompletion,
       useFactory: (contexts: AuditContextResolver) => new FunctionalDesignStageCompletion(
         contexts,
-        createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+        createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
       ),
       inject: [AuditContextResolver],
     },
@@ -217,7 +220,7 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
       provide: ImplementationPlanningStageCompletion,
       useFactory: (contexts: AuditContextResolver) => new ImplementationPlanningStageCompletion(
         contexts,
-        createNodePlanningStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+        createNodePlanningStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
       ),
       inject: [AuditContextResolver],
     },
@@ -225,7 +228,7 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
       provide: ImplementationStageCompletion,
       useFactory: (contexts: AuditContextResolver) => new ImplementationStageCompletion(
         contexts,
-        createNodeImplementationStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+        createNodeImplementationStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
       ),
       inject: [AuditContextResolver],
     },
@@ -233,7 +236,7 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
       provide: ImplementationRetainedScopeAssessment,
       useFactory: (contexts: AuditContextResolver) => new ImplementationRetainedScopeAssessment(
         contexts,
-        createNodeImplementationRetainedScopeAssessmentRuntime({ name: "kepler", version: cliVersion }),
+        createNodeImplementationRetainedScopeAssessmentRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
       ),
       inject: [AuditContextResolver],
     },
@@ -241,7 +244,7 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
       provide: UnitOfWorkReviewStageCompletion,
       useFactory: (contexts: AuditContextResolver) => new UnitOfWorkReviewStageCompletion(
         contexts,
-        createNodeUnitOfWorkReviewCompletionRuntime({ name: "kepler", version: cliVersion }),
+        createNodeUnitOfWorkReviewCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
       ),
       inject: [AuditContextResolver],
     },
@@ -249,7 +252,7 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
       provide: DeliverStageCompletion,
       useFactory: (contexts: AuditContextResolver, handoffPreflight: MissionHandoffPreflight) => new DeliverStageCompletion(
         contexts,
-        createNodeDeliverStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+        createNodeDeliverStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
         handoffPreflight,
       ),
       inject: [AuditContextResolver, MissionHandoffPreflight],
@@ -258,7 +261,7 @@ const cliVersion = process.env.KEPLER_CLI_RELEASE ?? CLI_RELEASE;
       provide: QualityRequirementsStageCompletion,
       useFactory: (contexts: AuditContextResolver) => new QualityRequirementsStageCompletion(
         contexts,
-        createNodeQualityStageCompletionRuntime({ name: "kepler", version: cliVersion }),
+        createNodeQualityStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
       ),
       inject: [AuditContextResolver],
     },

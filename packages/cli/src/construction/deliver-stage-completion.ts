@@ -7,7 +7,7 @@ import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { CONSTRUCTION_DELIVER_COMPLETION_EVENT_VERSION, CONSTRUCTION_PHASE, isDeliverCompletionRecord, isUnitOfWorkReviewCompletionRecord, validateConstructionEvent, type DeliverCompletionRecord, type MissionId, type StageAttemptId, type UnitId } from "./events.js";
 import { sameArtifactBindings } from "./functional-design-completion.js";
-import { readStageArtifactMaterial } from "./stage-artifact-material.js";
+import type { ConstructionMaterialReader } from "./material-reader.js";
 import { MissionHandoffPreflight, type MissionHandoffObjectRequirement } from "./mission-handoff-preflight.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
@@ -19,6 +19,7 @@ import { runWithConstructionRevisionFence } from "./unit-control.js";
 
 export interface DeliverStageCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
+  readonly materialReader: ConstructionMaterialReader;
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
@@ -141,7 +142,7 @@ export class DeliverStageCompletion {
         checkpointKey(request.reviewed_checkpoints) !== checkpointKey(reviewAssessment.final_checkpoints) ||
         reviewAssessment.handoff.status !== "ready") return fail("deliver_review_binding_invalid", "Deliver must bind the current ready Review result and its reviewed checkpoint set.");
     const persistedDirectory = loaded.unit.created?.event.type === "construction.unit-created" ? loaded.unit.created.event.data.directory : undefined;
-    const deliveryMaterial = await readStageArtifactMaterial({ repositoryRoot: loaded.root, missionId: loaded.missionId, unitId: loaded.unit.unitId, persistedUnitDirectory: persistedDirectory, primaryArtifact: "delivery.md", supportFolder: "deliver" });
+    const deliveryMaterial = await this.runtime.materialReader.readStageArtifactMaterial({ repositoryRoot: loaded.root, missionId: loaded.missionId, unitId: loaded.unit.unitId, persistedUnitDirectory: persistedDirectory, primaryArtifact: "delivery.md", supportFolder: "deliver" });
     if (deliveryMaterial.kind !== "valid") return fail("deliver_instructions_invalid", "The current delivery.md and linked Deliver support failed artifact validation.", { diagnostics: deliveryMaterial.diagnostics });
     const expectedBindings = [...reviewAssessment.reviewed_material_bindings, ...deliveryMaterial.material.artifactBindings];
     if (new Set(expectedBindings.map((binding) => binding.artifact_id)).size !== expectedBindings.length || !sameArtifactBindings(request.artifact_bindings, expectedBindings)) return fail("deliver_material_binding_invalid", "Delivery evidence must bind the reviewed material and current delivery instructions by identity and content hash.");
@@ -324,7 +325,10 @@ export class DeliverStageCompletion {
   }
 }
 
-export const createNodeDeliverStageCompletionRuntime = (producer: { readonly name: string; readonly version: string }): DeliverStageCompletionRuntime => {
+export const createNodeDeliverStageCompletionRuntime = (
+  producer: { readonly name: string; readonly version: string },
+  materialReader: ConstructionMaterialReader,
+): DeliverStageCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
-  return { workspace, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer, journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) } };
+  return { workspace, materialReader, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer, journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) } };
 };

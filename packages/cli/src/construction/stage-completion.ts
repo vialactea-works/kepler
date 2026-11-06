@@ -1,11 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
 import { createEventJournal, type EventJournal } from "../history/journal.js";
-import { validateConstructionArtifact } from "./artifacts.js";
 import { pendingRevisionBarrierFor } from "./revision-state.js";
 import { runWithConstructionUnitControl } from "./unit-control.js";
 import {
@@ -21,12 +19,15 @@ import {
   type FunctionalDesignCompletionRequest,
 } from "./functional-design-completion.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
+import type { ConstructionMaterialReader, FunctionalDesignMaterial } from "./material-reader.js";
+export type { FunctionalDesignMaterial } from "./material-reader.js";
 import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
 import { captureStageCheckpoints } from "./stage-start.js";
 import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
 
 export interface FunctionalDesignStageCompletionRuntime {
   readonly workspace: MissionWorkspaceRuntime;
+  readonly materialReader: ConstructionMaterialReader;
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
@@ -39,12 +40,6 @@ export type FunctionalDesignStageCompletionResult =
   | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
   | { readonly kind: "failed"; readonly data: Readonly<Record<string, unknown>> };
 
-export interface FunctionalDesignMaterial {
-  readonly artifactBindings: readonly { readonly artifact_id: string; readonly content_version: string }[];
-  readonly artifactPaths: readonly string[];
-  readonly unitDirectory: string;
-}
-
 interface ValidatedMaterialFacts {
   readonly evidence: readonly ConstructionHistoryFact[];
   readonly approval: ConstructionHistoryFact;
@@ -56,12 +51,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const isNonEmpty = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
-const contained = (root: string, path: string): boolean => {
-  const relative = Path.relative(root, path);
-  return relative === "" || (!relative.startsWith(`..${Path.sep}`) && relative !== ".." && !Path.isAbsolute(relative));
-};
-const normalized = (value: string): string => value.split(Path.sep).join("/");
-
 const failure = (
   code: string,
   message: string,
@@ -74,132 +63,6 @@ const failure = (
 
 const propagateReadFailure = (result: Extract<AuditHistoryReadResult, { kind: "failed" }>): FunctionalDesignStageCompletionResult =>
   failure(result.code, result.message, result.details, result.recovery);
-
-const parseLinkPath = (url: string): string | undefined => {
-  if (url.startsWith("//") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(url)) return undefined;
-  const suffix = url.search(/[?#]/);
-  const rawPath = suffix < 0 ? url : url.slice(0, suffix);
-  if (rawPath.length === 0) return undefined;
-  try {
-    return decodeURIComponent(rawPath);
-  } catch {
-    return undefined;
-  }
-};
-
-export const readFunctionalDesignMaterial = async (
-  repositoryRoot: string,
-  missionId: string,
-  unitId: string,
-  persistedUnitDirectory: unknown,
-): Promise<{ readonly kind: "valid"; readonly material: FunctionalDesignMaterial } | {
-  readonly kind: "invalid";
-  readonly diagnostics: readonly Readonly<Record<string, unknown>>[];
-}> => {
-  const canonicalDirectory = `construction/units-of-work/${unitId}`;
-  if (typeof persistedUnitDirectory !== "string" || persistedUnitDirectory !== canonicalDirectory) {
-    return { kind: "invalid", diagnostics: [{
-      path: persistedUnitDirectory,
-      code: "unit-directory-mismatch",
-      message: "The unit-created directory does not match the canonical Construction Unit of Work path.",
-      expected: canonicalDirectory,
-    }] };
-  }
-  const unitDirectory = `.kepler/missions/${missionId}/${persistedUnitDirectory}`;
-  const absoluteUnitDirectory = Path.resolve(repositoryRoot, unitDirectory);
-  const functionalDesignDirectory = Path.join(absoluteUnitDirectory, "details", "functional-design");
-  const requiredPaths = [`${unitDirectory}/unit-of-work.md`, `${unitDirectory}/design.md`];
-  const pending = [...requiredPaths];
-  const visited = new Set<string>();
-  const artifacts: Array<{
-    readonly path: string;
-    readonly id: string;
-    readonly contentVersion: string;
-    readonly links: readonly { readonly url: string }[];
-  }> = [];
-  const diagnostics: Readonly<Record<string, unknown>>[] = [];
-
-  while (pending.length > 0) {
-    const artifactPath = pending.shift();
-    if (artifactPath === undefined || visited.has(artifactPath)) continue;
-    visited.add(artifactPath);
-    const validation = await validateConstructionArtifact({
-      repositoryRoot,
-      artifactPath,
-      ownership: { kind: "unit", unitId, unitRoot: unitDirectory },
-    });
-    if (validation.kind === "invalid") {
-      diagnostics.push(...validation.diagnostics.map((item) => ({
-        path: item.sourcePath,
-        code: item.code,
-        message: item.message,
-      })));
-      continue;
-    }
-    const artifact = validation.artifact;
-    artifacts.push({
-      path: artifactPath,
-      id: artifact.metadata.id,
-      contentVersion: `sha256:${createHash("sha256").update(artifact.source, "utf8").digest("hex")}`,
-      links: artifact.links,
-    });
-    for (const link of artifact.links) {
-      const linkPath = parseLinkPath(link.url);
-      if (linkPath === undefined) continue;
-      const target = Path.isAbsolute(linkPath)
-        ? Path.resolve(repositoryRoot, `.${linkPath}`)
-        : Path.resolve(Path.dirname(Path.resolve(repositoryRoot, artifactPath)), linkPath);
-      if (!contained(functionalDesignDirectory, target)) continue;
-      if (Path.extname(target).toLowerCase() !== ".md") {
-        diagnostics.push({ path: artifactPath, code: "invalid-functional-design-support", message: `Linked Functional Design support must be Markdown: ${link.url}` });
-        continue;
-      }
-      let realTarget: string;
-      try {
-        realTarget = await Fs.realpath(target);
-      } catch {
-        diagnostics.push({ path: artifactPath, code: "missing-functional-design-support", message: `Linked Functional Design support does not exist: ${link.url}` });
-        continue;
-      }
-      if (!contained(functionalDesignDirectory, realTarget)) {
-        diagnostics.push({ path: artifactPath, code: "outside-functional-design-support", message: `Linked Functional Design support must remain under details/functional-design/: ${link.url}` });
-        continue;
-      }
-      pending.push(normalized(Path.relative(repositoryRoot, realTarget)));
-    }
-  }
-
-  if (diagnostics.length > 0) return { kind: "invalid", diagnostics };
-  if (!requiredPaths.every((required) => visited.has(required))) {
-    return {
-      kind: "invalid",
-      diagnostics: [{ path: unitDirectory, code: "required-artifact-missing", message: "Both unit-of-work.md and design.md are required." }],
-    };
-  }
-  if (new Set(artifacts.map((artifact) => artifact.id)).size !== artifacts.length) {
-    return {
-      kind: "invalid",
-      diagnostics: [{ path: unitDirectory, code: "duplicate-artifact-id", message: "Functional Design material contains duplicate artifact identities." }],
-    };
-  }
-  const sortedArtifacts = artifacts.sort((left, right) => left.path.localeCompare(right.path));
-  const primaryPaths = requiredPaths.map((path) => normalized(Path.relative(absoluteUnitDirectory, Path.resolve(repositoryRoot, path))));
-  const supportPaths = sortedArtifacts
-    .map((artifact) => normalized(Path.relative(absoluteUnitDirectory, Path.resolve(repositoryRoot, artifact.path))))
-    .filter((path) => path.startsWith("details/functional-design/"));
-  const artifactBindings = sortedArtifacts.map((artifact) => ({
-    artifact_id: artifact.id,
-    content_version: artifact.contentVersion,
-  }));
-  return {
-    kind: "valid",
-    material: {
-      artifactBindings,
-      artifactPaths: [...primaryPaths, ...supportPaths],
-      unitDirectory,
-    },
-  };
-};
 
 const checkpointKey = (value: unknown): string | undefined => {
   if (!Array.isArray(value)) return undefined;
@@ -387,12 +250,12 @@ export class FunctionalDesignStageCompletion {
     const persistedUnitDirectory = created?.event.type === "construction.unit-created"
       ? created.event.data.directory
       : undefined;
-    const materialResult = await readFunctionalDesignMaterial(
-      loaded.root,
-      loaded.missionId,
-      loaded.unit.unitId,
+    const materialResult = await this.runtime.materialReader.readFunctionalDesignMaterial({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
       persistedUnitDirectory,
-    );
+    });
     if (materialResult.kind === "invalid") return failure("functional_design_artifacts_invalid", "Functional Design artifacts or linked stage-supporting documents failed validation.", { diagnostics: materialResult.diagnostics }, "Correct the reported artifacts and rerun completion.");
     const material = materialResult.material;
     const handoff = request.assessments.handoff;
@@ -533,10 +396,12 @@ export class FunctionalDesignStageCompletion {
 
 export const createNodeFunctionalDesignStageCompletionRuntime = (
   producer: { readonly name: string; readonly version: string },
+  materialReader: ConstructionMaterialReader,
 ): FunctionalDesignStageCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
     workspace,
+    materialReader,
     identities: { next: randomUUID },
     now: () => new Date().toISOString(),
     producer,
