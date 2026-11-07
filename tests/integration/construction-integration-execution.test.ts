@@ -74,20 +74,24 @@ const fact = (event: ConstructionEventRecord): ConstructionHistoryFact => ({
   event,
 });
 
-const setup = async (includeSecondPreparedRepository = false, includeExtraValidationOutput = false) => {
+const setup = async (includeSecondPreparedRepository = false, includeExtraValidationOutput = false, noOpCandidate = false) => {
   const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-integration-execution-"));
   temporaryRoots.push(root);
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.name", "Kepler Integration test");
   git(root, "config", "user.email", "integration@example.invalid");
   await Fs.writeFile(Path.join(root, "README.md"), "Integration execution fixture\n", "utf8");
+  if (noOpCandidate) await Fs.writeFile(Path.join(root, "generated.txt"), "Generated task output\n", "utf8");
   git(root, "add", "README.md");
+  if (noOpCandidate) git(root, "add", "generated.txt");
   git(root, "commit", "-q", "-m", "Create Integration baseline");
   const baseline = git(root, "rev-parse", "HEAD");
   git(root, "switch", "-q", "-c", "feature");
-  await Fs.writeFile(Path.join(root, "generated.txt"), "Generated task output\n", "utf8");
-  git(root, "add", "generated.txt");
-  git(root, "commit", "-q", "-m", "Generate task output");
+  if (!noOpCandidate) {
+    await Fs.writeFile(Path.join(root, "generated.txt"), "Generated task output\n", "utf8");
+    git(root, "add", "generated.txt");
+    git(root, "commit", "-q", "-m", "Generate task output");
+  }
   const generated = git(root, "rev-parse", "HEAD");
   git(root, "switch", "-q", "-c", "candidate-diverged", baseline);
   await Fs.writeFile(Path.join(root, "diverged.txt"), "Diverged candidate\n", "utf8");
@@ -471,9 +475,17 @@ const setup = async (includeSecondPreparedRepository = false, includeExtraValida
     implementationAttempt: implementationAttemptId,
     attempt: integrationAttemptId,
   };
-  const runtime = (processId: number, afterFirstUnitControlRelease?: () => void) => {
+  const runtime = (
+    processId: number,
+    afterFirstUnitControlRelease?: () => void,
+    beforeIntegrationTargetRead?: () => Promise<void>,
+    failNextIntegrationRelease?: () => boolean,
+    afterUnitControlAcquire?: () => Promise<void>,
+  ) => {
     const base = createNodeIntegrationExecutionRuntime({ name: "kepler-test", version: "0.10.3" });
     let triggered = false;
+    let targetReadTriggered = false;
+    let unitControlAcquireTriggered = false;
     return {
       ...base,
       journals: {
@@ -486,8 +498,8 @@ const setup = async (includeSecondPreparedRepository = false, includeExtraValida
               const result = await journal.append(event);
               const recorded = event as ConstructionEventRecord;
               historyRecords.push({ event: recorded });
+              const preparedFact = fact(recorded);
               if (recorded.type === "construction.integration-prepared") {
-                const preparedFact = fact(recorded);
                 const mutableActivity = integrationActivity as unknown as {
                   readonly facts: ConstructionHistoryFact[];
                   readonly prepared: ConstructionHistoryFact[];
@@ -496,6 +508,12 @@ const setup = async (includeSecondPreparedRepository = false, includeExtraValida
                 mutableActivity.facts.push(preparedFact);
                 mutableActivity.prepared.push(preparedFact);
                 mutableActivity.attempts[0]?.facts.push(preparedFact);
+              } else if (recorded.type === "construction.evidence-recorded" && recorded.data.activity === "code-integration") {
+                (unit.evidence as Array<{ readonly fact: ConstructionHistoryFact; readonly binding: "activity-attempt" }>).push({
+                  fact: preparedFact,
+                  binding: "activity-attempt",
+                });
+                (integrationActivity.attempts[0]?.facts as ConstructionHistoryFact[] | undefined)?.push(preparedFact);
               }
               return result;
             },
@@ -504,13 +522,31 @@ const setup = async (includeSecondPreparedRepository = false, includeExtraValida
       },
       workspace: {
         ...base.workspace,
+        git: {
+          ...base.workspace.git,
+          run: async (...args: Parameters<typeof base.workspace.git.run>) => {
+            const result = await base.workspace.git.run(...args);
+            const argv = args[1];
+            if (!targetReadTriggered && beforeIntegrationTargetRead && argv[0] === "show-ref" && argv[1] === "--verify" &&
+                argv[2] === "--quiet" && argv[3] === "refs/heads/main") {
+              targetReadTriggered = true;
+              await beforeIntegrationTargetRead();
+            }
+            return result;
+          },
+        },
         identity: { machine_id: "integration-test-host", process_id: processId, process_incarnation_id: randomUUID() },
         coordination: {
           ...base.workspace.coordination,
           acquire: async (request: Parameters<typeof base.workspace.coordination.acquire>[0]) => {
             const acquired = await base.workspace.coordination.acquire(request);
-            if (acquired.kind === "failed" || !afterFirstUnitControlRelease || triggered ||
-                request.owner.resource_scope !== `construction/unit-control/${unitId}`) return acquired;
+            if (acquired.kind === "failed") return acquired;
+            if (!unitControlAcquireTriggered && afterUnitControlAcquire &&
+                request.owner.resource_scope === `construction/unit-control/${unitId}`) {
+              unitControlAcquireTriggered = true;
+              await afterUnitControlAcquire();
+            }
+            if (!afterFirstUnitControlRelease || triggered || request.owner.resource_scope !== `construction/unit-control/${unitId}`) return acquired;
             const release = acquired.lease.release;
             return {
               ...acquired,
@@ -527,12 +563,27 @@ const setup = async (includeSecondPreparedRepository = false, includeExtraValida
               },
             };
           },
+          release: async (...args: Parameters<typeof base.workspace.coordination.release>) => {
+            if (failNextIntegrationRelease?.()) return {
+              kind: "failed" as const,
+              code: "test_release_failed",
+              message: "The fixture failed the first Integration release.",
+              details: {},
+              recovery: "Retry the acceptance release.",
+            };
+            return base.workspace.coordination.release(...args);
+          },
         },
       },
     };
   };
-  const execution = (processId: number, afterFirstUnitControlRelease?: () => void) =>
-    new IntegrationExecution(contexts, queries, runtime(processId, afterFirstUnitControlRelease));
+  const execution = (
+    processId: number,
+    afterFirstUnitControlRelease?: () => void,
+    beforeIntegrationTargetRead?: () => Promise<void>,
+    failNextIntegrationRelease?: () => boolean,
+    afterUnitControlAcquire?: () => Promise<void>,
+  ) => new IntegrationExecution(contexts, queries, runtime(processId, afterFirstUnitControlRelease, beforeIntegrationTargetRead, failNextIntegrationRelease, afterUnitControlAcquire));
   const setRevisionBarrier = () => {
     const interaction = historyEvent("construction.interaction-recorded", {
       mission_id: missionId,
@@ -577,8 +628,34 @@ const setup = async (includeSecondPreparedRepository = false, includeExtraValida
     execution,
     setRevisionBarrier,
     addIntegrationEvidence,
+    integrationEvidenceEvents: (check: IntegrationEvidenceCheck) => historyRecords.flatMap(({ event }) =>
+      event.type === "construction.evidence-recorded" && event.data.activity === "code-integration" && event.data.check === check ? [event] : []),
+    acceptedEvents: () => historyRecords.flatMap(({ event }) => event.type === "construction.integration-accepted" ? [event] : []),
     setPlanSource: (source: string) => { executionContext = { ...executionContext, planSource: source }; },
+    setIntegrationInputs: () => {
+      (integrationStarted.data as Record<string, unknown>).inputs = [{ reference: "plan:changed", purpose: "Changed the actual Integration inputs." }];
+    },
+    setPlanningBindings: () => {
+      const assessment = planningCompletion.data.implementation_planning_assessment as Record<string, unknown>;
+      assessment.reviewed_material_bindings = [...planningBindings, { artifact_id: randomUUID(), content_version: "sha256:changed-plan" }];
+    },
   };
+};
+
+const prepareAcceptance = async (fixture: Awaited<ReturnType<typeof setup>>, execution: IntegrationExecution) => {
+  const acquired = await execution.lock(fixture.selectors);
+  if (acquired.kind !== "success") throw new Error(`Integration lock failed: ${acquired.kind === "failed" ? acquired.code : "unknown"}`);
+  const prepared = await execution.prepare(fixture.selectors, acquired.data.lock_token as string, {
+    captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+    candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+  });
+  if (prepared.kind !== "success") throw new Error(`Integration preparation failed: ${prepared.kind === "failed" ? prepared.code : "unknown"}`);
+  const preparedEventId = String(prepared.data.prepared_event_id);
+  for (const check of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] satisfies readonly IntegrationEvidenceCheck[]) {
+    fixture.addIntegrationEvidence(preparedEventId, check);
+  }
+  git(fixture.root, "update-ref", "refs/heads/main", fixture.generated);
+  return { lockToken: String(acquired.data.lock_token), preparedEventId };
 };
 
 afterEach(async () => {
@@ -656,6 +733,317 @@ describe("Construction Integration execution", () => {
       String(prepared.data.prepared_event_id),
     );
     expect(lateAcceptance).toMatchObject({ kind: "failed", code: "revision_barrier_pending" });
+  });
+
+  it.each([
+    { check: "code-integration-typecheck" as const, status: "failed" as const },
+    { check: "code-integration-typecheck" as const, status: "inconclusive" as const },
+    { check: "code-integration-self-review" as const, status: "failed" as const },
+  ])("keeps the Integration lock and rejects $status replacement evidence for $check", async ({ check, status }) => {
+    const fixture = await setup();
+    const evidenceWriter = fixture.execution(41020);
+    const acquired = await evidenceWriter.lock(fixture.selectors);
+    expect(acquired.kind).toBe("success");
+    if (acquired.kind !== "success") return;
+    const prepared = await evidenceWriter.prepare(fixture.selectors, acquired.data.lock_token as string, {
+      captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+    });
+    expect(prepared.kind).toBe("success");
+    if (prepared.kind !== "success") return;
+    for (const requiredCheck of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] satisfies readonly IntegrationEvidenceCheck[]) {
+      fixture.addIntegrationEvidence(String(prepared.data.prepared_event_id), requiredCheck);
+    }
+    git(fixture.root, "update-ref", "refs/heads/main", fixture.generated);
+
+    const acceptance = fixture.execution(41021, undefined, async () => {
+      const replacement = await evidenceWriter.recordEvidence(fixture.selectors, acquired.data.lock_token as string, {
+        prepared_event_id: prepared.data.prepared_event_id,
+        check,
+        executor: "orchestrator:test-worker",
+        result: { status, summary: `The latest ${check} result is ${status}.` },
+        ...(check === "code-integration-self-review" ? {} : {
+          check_command: { repository_id: "repo-main", executable: "bun", argv: ["run", "typecheck"] },
+        }),
+        output_refs: [`result:replacement-${check}`],
+        conditions: check === "code-integration-self-review"
+          ? ["Integration bindings match the accepted candidate and actual inputs.", ...taskDefinition.acceptance_criteria]
+          : [],
+      });
+      expect(replacement).toMatchObject({ kind: "success", data: { check, result: { status } } });
+    });
+    const result = await acceptance.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+
+    expect(result).toMatchObject({ kind: "failed", code: "integration_check_failed", details: { check } });
+    expect(fixture.integrationEvidenceEvents(check)).toHaveLength(2);
+    expect(fixture.acceptedEvents()).toHaveLength(0);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41020), fixture.commonDirectory, fixture.missionId, unitId)).toMatchObject({ kind: "held" });
+  });
+
+  it("binds a changed successful proof only after an explicit acceptance retry", async () => {
+    const fixture = await setup();
+    const evidenceWriter = fixture.execution(41022);
+    const acquired = await evidenceWriter.lock(fixture.selectors);
+    expect(acquired.kind).toBe("success");
+    if (acquired.kind !== "success") return;
+    const prepared = await evidenceWriter.prepare(fixture.selectors, acquired.data.lock_token as string, {
+      captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+    });
+    expect(prepared.kind).toBe("success");
+    if (prepared.kind !== "success") return;
+    for (const check of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] satisfies readonly IntegrationEvidenceCheck[]) {
+      fixture.addIntegrationEvidence(String(prepared.data.prepared_event_id), check);
+    }
+    const original = fixture.integrationEvidenceEvents("code-integration-typecheck")[0]!;
+    git(fixture.root, "update-ref", "refs/heads/main", fixture.generated);
+    let replacementEventId = "";
+    let replacementEvidenceId = "";
+    const acceptance = fixture.execution(41023, undefined, async () => {
+      const replacement = await evidenceWriter.recordEvidence(fixture.selectors, acquired.data.lock_token as string, {
+        prepared_event_id: prepared.data.prepared_event_id,
+        check: "code-integration-typecheck",
+        executor: "orchestrator:test-worker",
+        result: { status: "passed", summary: "The replacement typecheck passed." },
+        check_command: { repository_id: "repo-main", executable: "bun", argv: ["run", "typecheck"] },
+        output_refs: ["result:replacement-typecheck"],
+        conditions: [],
+      });
+      expect(replacement.kind).toBe("success");
+      if (replacement.kind === "success") {
+        replacementEventId = String(replacement.data.id);
+        replacementEvidenceId = String(replacement.data.evidence_id);
+      }
+    });
+
+    const staleAttempt = await acceptance.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+    expect(staleAttempt).toMatchObject({ kind: "failed", code: "integration_evidence_changed", details: { changed_checks: ["code-integration-typecheck"] } });
+    expect(fixture.acceptedEvents()).toHaveLength(0);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41022), fixture.commonDirectory, fixture.missionId, unitId)).toMatchObject({ kind: "held" });
+
+    const retry = await acceptance.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+    expect(retry).toMatchObject({ kind: "success", data: { lock_released: true } });
+    const accepted = fixture.acceptedEvents();
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]!.caused_by).toContain(replacementEventId);
+    expect(accepted[0]!.caused_by).not.toContain(String(original.id));
+    const repositoryResults = accepted[0]!.data.repository_results as readonly { readonly evidence_ids: readonly string[] }[];
+    expect(repositoryResults[0]!.evidence_ids).toContain(replacementEvidenceId);
+    expect(repositoryResults[0]!.evidence_ids).not.toContain(String(original.data.evidence_id));
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41022), fixture.commonDirectory, fixture.missionId, unitId)).toEqual({ kind: "clear" });
+  });
+
+  it("accepts unchanged current Integration evidence and releases the lock", async () => {
+    const fixture = await setup();
+    const execution = fixture.execution(41024);
+    const acquired = await execution.lock(fixture.selectors);
+    expect(acquired.kind).toBe("success");
+    if (acquired.kind !== "success") return;
+    const prepared = await execution.prepare(fixture.selectors, acquired.data.lock_token as string, {
+      captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+    });
+    expect(prepared.kind).toBe("success");
+    if (prepared.kind !== "success") return;
+    for (const check of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] satisfies readonly IntegrationEvidenceCheck[]) {
+      fixture.addIntegrationEvidence(String(prepared.data.prepared_event_id), check);
+    }
+    git(fixture.root, "update-ref", "refs/heads/main", fixture.generated);
+
+    const accepted = await execution.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+
+    expect(accepted).toMatchObject({ kind: "success", data: { lock_released: true, candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated }] } });
+    expect(fixture.acceptedEvents()).toHaveLength(1);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41024), fixture.commonDirectory, fixture.missionId, unitId)).toEqual({ kind: "clear" });
+  });
+
+  it("releases an already accepted candidate on retry without appending a duplicate", async () => {
+    const fixture = await setup();
+    let failRelease = true;
+    const execution = fixture.execution(41025, undefined, undefined, () => {
+      const shouldFail = failRelease;
+      failRelease = false;
+      return shouldFail;
+    });
+    const acquired = await execution.lock(fixture.selectors);
+    expect(acquired.kind).toBe("success");
+    if (acquired.kind !== "success") return;
+    const prepared = await execution.prepare(fixture.selectors, acquired.data.lock_token as string, {
+      captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+    });
+    expect(prepared.kind).toBe("success");
+    if (prepared.kind !== "success") return;
+    for (const check of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] satisfies readonly IntegrationEvidenceCheck[]) {
+      fixture.addIntegrationEvidence(String(prepared.data.prepared_event_id), check);
+    }
+    git(fixture.root, "update-ref", "refs/heads/main", fixture.generated);
+
+    const first = await execution.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+    expect(first).toMatchObject({ kind: "failed", code: "integration_lock_release_failed" });
+    expect(fixture.acceptedEvents()).toHaveLength(1);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41025), fixture.commonDirectory, fixture.missionId, unitId)).toMatchObject({ kind: "held" });
+
+    const retry = await execution.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+    expect(retry).toMatchObject({ kind: "success", data: { lock_released: true } });
+    expect(fixture.acceptedEvents()).toHaveLength(1);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41025), fixture.commonDirectory, fixture.missionId, unitId)).toEqual({ kind: "clear" });
+  });
+
+  it("rejects acceptance when a newer preparation supersedes the selected candidate at the fence", async () => {
+    const fixture = await setup();
+    const preparationWriter = fixture.execution(41026);
+    const acquired = await preparationWriter.lock(fixture.selectors);
+    expect(acquired.kind).toBe("success");
+    if (acquired.kind !== "success") return;
+    const prepared = await preparationWriter.prepare(fixture.selectors, acquired.data.lock_token as string, {
+      captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+    });
+    expect(prepared.kind).toBe("success");
+    if (prepared.kind !== "success") return;
+    for (const check of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] satisfies readonly IntegrationEvidenceCheck[]) {
+      fixture.addIntegrationEvidence(String(prepared.data.prepared_event_id), check);
+    }
+    git(fixture.root, "update-ref", "refs/heads/main", fixture.generated);
+
+    const acceptance = fixture.execution(41027, undefined, async () => {
+      git(fixture.root, "update-ref", "refs/heads/main", fixture.baseline);
+      const replacement = await preparationWriter.prepare(fixture.selectors, acquired.data.lock_token as string, {
+        captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+        candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+      });
+      expect(replacement.kind).toBe("success");
+      git(fixture.root, "update-ref", "refs/heads/main", fixture.generated);
+    });
+    const result = await acceptance.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+
+    expect(result).toMatchObject({ kind: "failed", code: "integration_preparation_not_current" });
+    expect(fixture.acceptedEvents()).toHaveLength(0);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41026), fixture.commonDirectory, fixture.missionId, unitId)).toMatchObject({ kind: "held" });
+  });
+
+  it("keeps an accepted Integration lock held if recovery discovers newer failed evidence", async () => {
+    const fixture = await setup();
+    const evidenceWriter = fixture.execution(41028);
+    let failRelease = true;
+    const originalExecutor = fixture.execution(41029, undefined, undefined, () => {
+      const shouldFail = failRelease;
+      failRelease = false;
+      return shouldFail;
+    });
+    const acquired = await originalExecutor.lock(fixture.selectors);
+    expect(acquired.kind).toBe("success");
+    if (acquired.kind !== "success") return;
+    const prepared = await originalExecutor.prepare(fixture.selectors, acquired.data.lock_token as string, {
+      captured_inputs: acquired.data.captured_inputs as readonly IntegrationInputCheckpoint[],
+      candidate_checkpoints: [{ repository_id: "repo-main", commit: fixture.generated } satisfies RepositoryCheckpoint],
+    });
+    expect(prepared.kind).toBe("success");
+    if (prepared.kind !== "success") return;
+    for (const check of ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"] satisfies readonly IntegrationEvidenceCheck[]) {
+      fixture.addIntegrationEvidence(String(prepared.data.prepared_event_id), check);
+    }
+    git(fixture.root, "update-ref", "refs/heads/main", fixture.generated);
+    const accepted = await originalExecutor.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+    expect(accepted).toMatchObject({ kind: "failed", code: "integration_lock_release_failed" });
+    expect(fixture.acceptedEvents()).toHaveLength(1);
+
+    const recovery = fixture.execution(41030, undefined, async () => {
+      const replacement = await evidenceWriter.recordEvidence(fixture.selectors, acquired.data.lock_token as string, {
+        prepared_event_id: prepared.data.prepared_event_id,
+        check: "code-integration-build",
+        executor: "orchestrator:test-worker",
+        result: { status: "failed", summary: "The latest build failed during release recovery." },
+        check_command: { repository_id: "repo-main", executable: "bun", argv: ["run", "build"] },
+        output_refs: ["result:replacement-build"],
+        conditions: [],
+      });
+      expect(replacement).toMatchObject({ kind: "success" });
+    });
+    const retry = await recovery.accept(fixture.selectors, acquired.data.lock_token as string, String(prepared.data.prepared_event_id));
+
+    expect(retry).toMatchObject({ kind: "failed", code: "integration_check_failed", details: { check: "code-integration-build" } });
+    expect(fixture.acceptedEvents()).toHaveLength(1);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41029), fixture.commonDirectory, fixture.missionId, unitId)).toMatchObject({ kind: "held" });
+  });
+
+  it("does not append acceptance after an earlier safe release, including a replacement owner", async () => {
+    const fixture = await setup(false, false, true);
+    const evidenceWriter = fixture.execution(41101);
+    const { lockToken, preparedEventId } = await prepareAcceptance(fixture, evidenceWriter);
+    expect(fixture.generated).toBe(fixture.baseline);
+    const releaseOwner = fixture.execution(41102);
+    const replacementOwner = fixture.execution(41103);
+    let releaseResult: Awaited<ReturnType<typeof releaseOwner.release>> | undefined;
+    let replacementToken = "";
+    const acceptance = fixture.execution(41104, undefined, async () => {
+      releaseResult = await releaseOwner.release(fixture.selectors, lockToken);
+      expect(releaseResult).toMatchObject({ kind: "success", data: { aborted: true, lock_released: true } });
+      const replacement = await replacementOwner.lock(fixture.selectors);
+      expect(replacement.kind).toBe("success");
+      if (replacement.kind === "success") replacementToken = String(replacement.data.lock_token);
+    });
+
+    const result = await acceptance.accept(fixture.selectors, lockToken, preparedEventId);
+
+    expect({ result, acceptanceCount: fixture.acceptedEvents().length }).toMatchObject({
+      result: { kind: "failed", code: "integration_lock_owner_mismatch" },
+      acceptanceCount: 0,
+    });
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41103), fixture.commonDirectory, fixture.missionId, unitId)).toMatchObject({ kind: "held" });
+    expect(await releaseOwner.release(fixture.selectors, lockToken)).toMatchObject({ kind: "failed", code: "integration_lock_owner_mismatch" });
+    expect(await replacementOwner.release(fixture.selectors, replacementToken)).toMatchObject({ kind: "success", data: { aborted: true, lock_released: true } });
+    expect(releaseResult).toMatchObject({ kind: "success", data: { aborted: true } });
+  });
+
+  it("does not report a false abort when acceptance owns unit control first", async () => {
+    const fixture = await setup(false, false, true);
+    const evidenceWriter = fixture.execution(41105);
+    const { lockToken, preparedEventId } = await prepareAcceptance(fixture, evidenceWriter);
+    const releaseOwner = fixture.execution(41106);
+    let releaseResult: Awaited<ReturnType<typeof releaseOwner.release>> | undefined;
+    const acceptance = fixture.execution(41107, undefined, undefined, undefined, async () => {
+      releaseResult = await releaseOwner.release(fixture.selectors, lockToken);
+    });
+
+    const result = await acceptance.accept(fixture.selectors, lockToken, preparedEventId);
+
+    expect({ releaseResult, result }).toMatchObject({
+      releaseResult: { kind: "failed", code: "resource_contended" },
+      result: { kind: "success", data: { lock_released: true } },
+    });
+    expect(fixture.acceptedEvents()).toHaveLength(1);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41107), fixture.commonDirectory, fixture.missionId, unitId)).toEqual({ kind: "clear" });
+  });
+
+  it.each([
+    {
+      subject: "accepted Planning bindings",
+      failure: "integration_evidence_binding_invalid",
+      change: (fixture: Awaited<ReturnType<typeof setup>>) => fixture.setPlanningBindings(),
+    },
+    {
+      subject: "actual Integration inputs",
+      failure: "integration_scope_changed",
+      change: (fixture: Awaited<ReturnType<typeof setup>>) => fixture.setIntegrationInputs(),
+    },
+    {
+      subject: "the current task command contract",
+      failure: "integration_task_definition_stale",
+      change: (fixture: Awaited<ReturnType<typeof setup>>) => fixture.setPlanSource(planSource.replace("bun run typecheck", "bun run changed-typecheck")),
+    },
+  ])("fails acceptance when $subject changes at the fence", async ({ subject, failure, change }) => {
+    const fixture = await setup();
+    const evidenceWriter = fixture.execution(41108);
+    const { lockToken, preparedEventId } = await prepareAcceptance(fixture, evidenceWriter);
+    const acceptance = fixture.execution(41109, undefined, async () => change(fixture));
+
+    const result = await acceptance.accept(fixture.selectors, lockToken, preparedEventId);
+
+    expect(result, `Unexpected result after changing ${subject}`).toMatchObject({ kind: "failed", code: failure });
+    expect(fixture.acceptedEvents()).toHaveLength(0);
+    expect(await inspectConstructionIntegrationLock(fixture.runtime(41108), fixture.commonDirectory, fixture.missionId, unitId)).toMatchObject({ kind: "held" });
   });
 
   it("rejects a multi-repository workspace before acquiring the Integration lock", async () => {

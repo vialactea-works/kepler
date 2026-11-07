@@ -25,7 +25,7 @@ The following decisions are part of this approved contract.
 - Use the accepted [UUID interface](#kepler-uuid) to generate one UUIDv4 without creating an artifact or task.
 - Apply the accepted [Standard workflow binding](#workflow-binding) to each Construction unit and its mission.
 - Apply the accepted [Mission contract](mission.md) for mission identity, record-home selection, workspace facts, membership, and pre-mission boundaries. Do not infer mission membership or add command options from that policy.
-- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence interface](#kepler-audit-record-evidence), [approval interface](#kepler-audit-record-approval), [interaction interface](#kepler-audit-record-interaction), and [audit queries](#kepler-audit-list) are accepted under SH109, SH55-SH56, SH63, and SH110. Do not add separate Construction evidence, approval, or interaction namespaces.
+- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence interface](#kepler-audit-record-evidence), [approval interface](#kepler-audit-record-approval), [interaction interface](#kepler-audit-record-interaction), and [audit queries](#kepler-audit-list) are accepted under SH109, SH55-SH56, SH63, and SH110. Do not add separate Construction audit namespaces. The [Integration lifecycle](#integration-operations) records its prepared-candidate checks and self-review through the selected `integration evidence` operation; do not duplicate those records through audit.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
 - Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Record later changes through structured selections in existing interaction records. Do not add an effort setter command. Keep the requester's effort authority and agreed adjustment rules.
 - Use a direct `kepler workflow construction revise` operation. Do not add a revision namespace.
@@ -51,7 +51,7 @@ Construction owns its transition rules. A workflow selects stage order. The [Sta
 
 The command inventory below defines accepted interfaces under SH122. Earlier decision IDs keep their original scope. Details not specified by this contract remain implementation choices.
 
-Do not add commands for future Initialization or Inception phases. Do not add a workflow engine, state registry, or utility registry. Exclude generic status changes, force operations, migrations, and public lock manipulation.
+Do not add commands for future Initialization or Inception phases. Do not add a workflow engine, state registry, or utility registry. Exclude generic status changes, force operations, migrations, and generic lock administration. The scoped [Construction Integration lifecycle](#integration-operations) is permitted; it does not authorize force-unlock or out-of-band lock manipulation.
 
 ### Scope and selectors
 
@@ -201,11 +201,12 @@ Any later human result mode must be opt-in.
 | `kepler workflow construction unit show` | Accepted query under SH53 | Read one Unit of Work, its state, effort, and workflow binding. |
 | `kepler workflow construction lint` | Accepted phase interface | Validate the selected unit's canonical task graph without changing it. |
 | `kepler workflow construction stage <operation>` | Accepted `show`, `start`, `complete`, `pause`, and `resume` under SH53-SH54 and SH58 | Read or change one unit-scoped stage attempt under its contract. |
-| `kepler workflow construction task <operation>` | Accepted `list`, `show`, `ready`, `admit`, and `integrate` under SH53-SH54 | Read task state, admit a task, or integrate its result. |
+| `kepler workflow construction task <operation>` | Accepted `list`, `show`, `ready`, and `admit` under SH53-SH54 | Read task state or admit a task. |
 | `kepler workflow construction activity <operation>` | Accepted `show`, `start`, `complete`, `pause`, and `resume` under SH53-SH54 and SH58 | Read or change one task-scoped Activity attempt under its contract. |
+| `kepler workflow construction integration <operation>` | Separate `lock`, `prepare`, `evidence`, `accept`, and `release` under SH54 and the requester's 2026-10-31 decision | Coordinate checked candidate acceptance and safe incomplete-work release for one Code Integration attempt. |
 | `kepler workflow construction revise` | Accepted under SH57 | Apply an authorized revision within the selected stage or Activity scope. |
 
-Here, `<kind>` is `approval` or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
+Here, `<kind>` is `approval` or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, and `admit`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`. Integration operations are `lock`, `prepare`, `evidence`, `accept`, and `release`.
 
 The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors), including SH54 mission selection where no unit supplies context. The accepted [evidence interface](#kepler-audit-record-evidence) fixes its stdin request and success identity fields. The [approval](#kepler-audit-record-approval) and [interaction](#kepler-audit-record-interaction) interfaces fix their typed requests. The [audit query interfaces](#kepler-audit-list) fix history selection and results. Operation arguments and result fields not specified by their contracts remain implementation choices.
 
@@ -596,7 +597,6 @@ Task operations use `--unit <unit-id>`. An operation on one task also uses `--ta
 | `task show` | **Accepted under SH53.** Show one task definition, current scope, attempt links, evidence, and progress. Do not change state. |
 | `task ready` | **Accepted under SH53.** Report graph dependencies, predecessor outputs known in the unit's integrated state, blockers, and known prerequisite facts or unknowns. Do not admit or start the task. |
 | `task admit` | **Accepted under SH54.** Admit one ready task and capture the current repository-qualified unit integration set as its fixed baseline. Show predecessor-output inclusion from history or provenance, not timestamps alone. Do not create an admission commit, task attempt, or automatic dispatch. |
-| `task integrate` | **Accepted under SH54.** Acquire the unit integration lock. Read the current repository-qualified checkpoint set and prepare the combined candidate set. Run typechecking, the project build, and the full application test suite across the required repositories. Accept only the checked candidate set and record each necessary repository result. Release the lock when the operation ends. |
 
 `task ready` does not interpret free-form acceptance criteria or prove unknown external availability. It reports graph facts, known blockers, and unknown conditions. The orchestrator compares the criteria and prerequisites with available facts before it reports readiness under the task contract.
 
@@ -616,7 +616,7 @@ Use `--unit <unit-id>`, `--task <task-id>`, `--activity <activity>`, and `--impl
 | --- | --- |
 | `activity start` | **Accepted under SH54.** Start one Activity occurrence for an admitted task under the active Implementation attempt. Create its distinct attempt when execution starts. Enforce at most one active attempt for that occurrence. |
 | `activity show` | **Accepted under SH53.** Read one Activity occurrence and its attempts, evidence bindings, and current state. Do not write or advance state. |
-| `activity complete` | **Accepted under SH54.** Record completion only when that Activity's conditions and evidence hold for its current attempt. Code Integration can complete only with a matching accepted candidate from `task integrate`. |
+| `activity complete` | **Accepted under SH54.** Record completion only when that Activity's conditions and evidence hold for its current attempt. Code Integration can complete only with a matching accepted candidate from `kepler workflow construction integration accept`. |
 | `activity pause` | **Accepted under SH58.** Block new affected work. Keep the attempt identity, history, and active-scope reservation. Acknowledge a completed pause only after workers stop and locks reconcile. |
 | `activity resume` | **Accepted under SH58.** Verify inputs and ownership, then resume the same attempt. Keep its active-scope reservation. Unrelated work continues. |
 
@@ -625,6 +625,30 @@ Code Generation owns implementation, typechecking, related tests, and self-revie
 A local correction, failed command, pause, resume, or new session keeps the current unended attempt. An authorized return creates a new Activity attempt when that Activity executes again. An Integration-only retry stays within its current Code Integration attempt. Do not add task-coding or protocol-run attempt identities.
 
 Phase-owned event payload details, completion guards, and evidence payload types beyond the shared [record minimum](runtime.md#evidence-and-approval-bindings) remain implementation work. An Activity completion does not complete the enclosing Implementation stage or Unit of Work.
+
+## Integration operations
+
+### `kepler workflow construction integration`
+
+Under SH54 and the requester's 2026-10-31 interface decision, keep separate `lock`, `prepare`, `evidence`, `accept`, and `release` operations. Do not add `task integrate`. These are scoped Code Integration lifecycle operations, not generic lock administration.
+
+Use the exact `--unit <unit-id>`, `--task <task-id>`, `--activity code-integration`, `--implementation-attempt <attempt-id>`, and `--attempt <attempt-id>` selectors. `--project <path>` is optional and selects the record home. Do not infer an active scope. The current shared parser shows a superset of operation options in help; the following table identifies each operation's effective inputs.
+
+| Operation | Additional inputs | Behavior |
+| --- | --- | --- |
+| `integration lock` | None. | Acquire the unit's long Integration lock, then capture the current Integration inputs. Return `lock_token` and the captured repository binding. Retain the token for this exact scope. |
+| `integration prepare` | `--lock-token <token>` and `--request <json>`. | Validate and record the caller-supplied immutable candidate. The request supplies `captured_inputs` matching lock acquisition and repository-qualified `candidate_checkpoints`. Return `prepared_event_id`. |
+| `integration evidence` | `--lock-token <token>` and `--request <json>`. | Validate and record a check result or self-review for the exact preparation and current Activity. The JSON request supplies `prepared_event_id`, check, actual executor, result, output references, conditions, and the required repository-qualified command for a command check. |
+| `integration accept` | `--lock-token <token>` and `--prepared-event-id <event-id>`. | Accept only the current preparation covered by required successful proof, record its exact proof and candidate bindings, then perform replacement-safe release. Retain any accepted partial effect if release or post-append verification fails. |
+| `integration release` | `--lock-token <token>`. | Release incomplete work only when there is no acceptance for the attempt, the current owner still matches, and the live target equals the lock-captured input. This does not complete or end the Activity attempt. |
+
+The orchestrator's assigned caller combines task output with the lock-captured state and runs typechecking, the project build, and the full application test suite against the candidate while holding the lock. The CLI does not execute those commands. It validates each declared command against the exact repository-qualified command in both the accepted plan and the admitted task's verification contract, then records the supplied actual result. Do not autodetect commands, execute arbitrary prose, or treat a recorded result as independent proof of truthful execution. Keep the accepted check duties and caller responsibility for actual checks, retained output, and self-review.
+
+At acceptance, revalidate the current attempt, preparation, actual inputs, accepted Planning bindings, declared commands, successful evidence, and long-lock ownership under short unit-scoped control. Failed or inconclusive current checks prevent acceptance. If successful proof changes after acceptance starts, keep the lock and retry acceptance explicitly so its event cites current proof. Preserve causal order; timestamps do not select current evidence. A matching already-recorded acceptance can recover release without appending a duplicate only while its proof, candidate, and lock remain valid.
+
+Serialize incomplete-work release with acceptance under the same short unit-control boundary. A pending revision barrier prevents new acceptance; it does not alone forbid an otherwise safe incomplete-work release. Changed or unreadable targets, uncertain ownership, and unresolved partial effects keep the claim for reconciliation. Do not report an abort after acceptance or append acceptance after the claim was released. Ordinary token-scoped release does not permit force-unlock, removal of another owner's claim, automatic takeover, or rollback. Manual deadlock recovery remains under SH67 and separate operator authority.
+
+The current executable supports one repository per unit and rejects multi-repository Integration before lock acquisition. This is a shipping limit, not a change to the accepted repository-qualified Activity contract. A successful acceptance does not grant requester approval or complete the enclosing Activity, Implementation stage, Unit of Work, or delivery.
 
 ## Revision operation
 
@@ -692,7 +716,7 @@ This example shows the failure structure, not agreed error-code values or `detai
 }
 ```
 
-These rules add no storage path or lock command. Apply the accepted [runtime coordination contract](runtime.md#short-scoped-coordination) and [Mission storage policy](mission.md#local-storage-and-concurrency).
+These recovery rules add no storage path or generic lock-management command. Apply the accepted [runtime coordination contract](runtime.md#short-scoped-coordination) and [Mission storage policy](mission.md#local-storage-and-concurrency).
 
 - Validate inputs and authorization before changing state.
 - Return a nonzero status when the requested operation fails. Do not return a successful transition result for an incomplete write.
@@ -702,7 +726,7 @@ These rules add no storage path or lock command. Apply the accepted [runtime coo
 - Keep query and lint commands read-only. Projection rebuilds and history queries do not rerun checks or create approvals.
 - Keep local journal order. Use causal links for cross-journal causes. Do not use timestamps to invent a global ordering.
 
-Exact SH87 append and import mechanisms, projections, and physical storage remain implementation choices under [CLI infrastructure](runtime.md#execution-state-representation). SH64-SH66 accept lock directories, required owner-record facts, and cross-workspace coordination. The [Mission contract](mission.md#local-storage-and-concurrency) sets their local paths. Exact key encodings and record fields remain implementation choices. SH67 accepts manual lock-artifact removal under its recovery limits. This policy adds no lock-management command.
+Exact SH87 append and import mechanisms, projections, and physical storage remain implementation choices under [CLI infrastructure](runtime.md#execution-state-representation). SH64-SH66 accept lock directories, required owner-record facts, and cross-workspace coordination. The [Mission contract](mission.md#local-storage-and-concurrency) sets their local paths. Exact key encodings and record fields remain implementation choices. SH67 accepts manual lock-artifact removal under its recovery limits. This recovery policy adds no generic lock-management command; the scoped Integration lifecycle stays separate.
 
 ### Exit codes
 

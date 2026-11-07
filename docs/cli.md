@@ -61,7 +61,7 @@ The Standard workflow contains Functional Design, Quality Requirements, Implemen
 
 Implementation runs three task-scoped Activities in order: Code Generation, independent non-author Code Validation, and checked Code Integration. The CLI records attempts, evidence, and transitions. The host's orchestrator dispatches workers. Integration checks the prepared combined candidate while holding the unit lock; accept only the candidate that passed the required checks.
 
-Use the stage, task, activity, and integration help for exact request schemas:
+Use the stage, task, activity, and integration help for supported selectors and options:
 
 ```bash
 kepler workflow construction stage --help
@@ -70,7 +70,13 @@ kepler workflow construction activity --help
 kepler workflow construction integration --help
 ```
 
-The CLI does not infer approval, select an implicit active scope, dispatch agents, or treat a commit as proof that checks passed. Record evidence through `kepler audit record evidence` with the operation's typed request.
+The CLI does not infer approval, select an implicit active scope, dispatch agents, or treat a commit as proof that checks passed. Record ordinary stage and Activity evidence through `kepler audit record evidence` with the operation's typed request. The Integration lifecycle records its prepared-candidate evidence through its own `integration evidence` operation; do not duplicate that record.
+
+### Checked Integration
+
+Use the separate `integration lock`, `prepare`, `evidence`, `accept`, and `release` operations. Each selects the exact unit, task, Code Integration Activity, Implementation attempt, and Activity attempt. Retain the returned lock token and preparation event ID. The assigned caller runs the required typecheck, build, and full-suite commands while holding the lock; the CLI validates and records supplied results, not command execution. Current executable Integration supports one repository per unit and rejects multi-repository scope before acquiring the lock.
+
+Acceptance rechecks current proof, material, attempt, and long-lock ownership under unit-scoped coordination. A newer failed or inconclusive check blocks acceptance. If successful proof changes during the operation, `integration_evidence_changed` requires an explicit acceptance retry against that proof; it does not waive checks. Keep the lock until safe acceptance or incomplete-work release. `integration release` cannot abort accepted work or release a changed or uncertain target. See the [Integration operation contract](specs/v3/cli.md#integration-operations) and [recovery guidance](recovery.md).
 
 ## Audit and diff packages
 

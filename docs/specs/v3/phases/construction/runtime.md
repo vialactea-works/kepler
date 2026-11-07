@@ -230,7 +230,7 @@ Then stop affected workers and reconcile actual effects and locks before replace
 
 Unknown worker stopping, ownership, or effects block affected restart. Independent valid units continue.
 
-Manual lock removal remains available under SH67 after workers stop and effects reconcile. Do not add automatic takeover, timeout success, kill frameworks, public cancellation or force commands, lock-management commands, or proof protocols.
+Manual lock removal remains available under SH67 after workers stop and effects reconcile. Do not add automatic takeover, timeout success, kill frameworks, public cancellation or force commands, generic lock-management commands, or proof protocols. Normal scoped Integration release remains subject to its ownership, target, and acceptance checks.
 
 ## Inspection-source facts
 

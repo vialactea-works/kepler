@@ -25,6 +25,12 @@ A success with `data.historical: true` reports recorded preparation only. It nee
 5. **Resume only a safe, paused attempt.** Use the owning `stage resume` or `activity resume` operation for the exact attempt after confirming its inputs and ownership remain valid. A retry of a failed command does not require a new attempt. Start a new attempt only when an authorized transition requires one.
 6. **Reopen only through revision authority.** If an upstream artifact invalidates later work, report the material facts and use the authorized `kepler workflow construction revise` operation. Do not change journal records or projections to force a transition.
 
+### Integration acceptance and release
+
+If acceptance reports `integration_evidence_changed`, inspect the current prepared candidate and latest check records. Keep the same lock token and attempt. Retry acceptance explicitly only when the current required checks succeeded and their bindings remain valid; do not re-record old results as new proof. Failed or inconclusive current evidence prevents acceptance.
+
+A failed response can follow a recorded acceptance when target verification or lock release fails. Preserve that acceptance, the lock, and all partial effects. Reconcile history, target, proof, and ownership, then use the same prepared event with `integration accept` for eligible release recovery without a duplicate acceptance. Do not use `integration release` to abort an accepted attempt. Normal incomplete-work release is safe only for the current token owner when the target still matches the lock-captured input. Unit-control contention can require a later retry; it is not proof that release or abort occurred. Missing or replaced ownership does not permit takeover or removal of another holder's claim.
+
 The CLI does not provide a global status command. Use the owning stage, task, Activity, audit, or integration operation for the scope you are recovering. Workers do not authorize their own scope changes. An unrelated unit can continue only when its inputs, contracts, and resources remain independent.
 
 ## Interrupted installation or setup

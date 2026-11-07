@@ -10,7 +10,7 @@ import { captureStageCheckpoints, createNodeStageStartRuntime, type StageStartRu
 import { readImplementationPlanningCompletionRecord } from "./implementation-planning-completion.js";
 import { admittedTaskContract } from "./task-admission.js";
 import { isPlannedIntegrationCommand } from "./integration-command-contract.js";
-import { runWithConstructionRevisionFence } from "./unit-control.js";
+import { runWithConstructionRevisionFence, runWithConstructionUnitControl } from "./unit-control.js";
 import { retainedActivityFor } from "./retained-activity.js";
 
 export interface IntegrationEvidenceRequest {
@@ -828,6 +828,11 @@ export class IntegrationExecution {
     if (!isIntegrationInputSet(prepared.event.data.captured_inputs) || integrationInputKey(prepared.event.data.captured_inputs) !== integrationInputKey(verified.snapshot.captured_inputs)) {
       return fail("integration_captured_inputs_mismatch", "The prepared event does not preserve the lock-captured Integration input set.");
     }
+    const preparedInputs = prepared.event.data.inputs;
+    const actualInputs = state.state.integrationStart.event.data.inputs;
+    if (!isMaterialInputSet(preparedInputs) || !isMaterialInputSet(actualInputs) || !sameInputs(preparedInputs, actualInputs)) {
+      return fail("integration_input_binding_invalid", "The prepared candidate does not preserve the current Integration Activity's actual inputs.");
+    }
     const accepted = historyEvents(state.state.loaded).filter((event) => event.type === "construction.integration-accepted" &&
       event.data.prepared_event_id === prepared.event.id && event.data.task_id === scope.taskId &&
       event.data.stage_attempt_id === scope.implementationAttemptId && event.data.activity_attempt_id === scope.activityAttemptId);
@@ -846,6 +851,11 @@ export class IntegrationExecution {
       required_binding_condition: requiredBindingCondition,
       missing_acceptance_criteria: missingCriteria,
     });
+    if (!this.integrationEvidenceBindingsValid(state.state.loaded, state.state.execution, scope, prepared, evidence.value)) {
+      return fail("integration_evidence_binding_invalid", "Current Integration evidence must match the prepared candidate, actual inputs, accepted Planning bindings, and planned commands.", {
+        prepared_event_id: prepared.event.id,
+      });
+    }
     const candidateCheckpoint = candidate[0]!;
     const currentTarget = await readInputs(this.runtime, state.state.loaded, [verified.snapshot.repository]);
     if (!currentTarget || currentTarget.length !== 1 || currentTarget[0]!.repository_id !== candidateCheckpoint.repository_id ||
@@ -857,50 +867,52 @@ export class IntegrationExecution {
     }
     if (accepted.length === 1) {
       const event = accepted[0]!;
-      if (stable(event.data.candidate_checkpoints) !== stable(candidate) || !sameAcceptedEvidence(event, evidence.value) ||
-          !this.integrationEvidenceCommandsBound(state.state.execution, evidence.value)) {
+      if (stable(event.data.candidate_checkpoints) !== stable(candidate) || !sameAcceptedEvidence(event, evidence.value, prepared.event.id)) {
         return fail("integration_acceptance_conflict", "The existing acceptance event differs from the current prepared candidate or its current successful evidence.", { acceptance_event_id: event.id });
       }
-      return this.releaseAccepted(boundRequest, token, verified.snapshot, event, candidate);
     }
-    const existing = this.existingIdentities(state.state.loaded);
-    const eventId = uuidIdentity(this.runtime, existing);
-    const journalId = uuidIdentity(this.runtime, new Set([...existing, ...(eventId ? [eventId] : [])]));
-    if (!eventId || !journalId) return fail("integration_identity_conflict", "Kepler could not allocate unique Integration acceptance event identities.");
-    const checkEvidence = [
-      evidence.value.get("code-integration-typecheck")!,
-      evidence.value.get("code-integration-build")!,
-      evidence.value.get("code-integration-full-test-suite")!,
-    ];
-    const repositoryResults = [{ repository_id: candidateCheckpoint.repository_id, evidence_ids: checkEvidence.map((fact) => fact.event.data.evidence_id) }];
-    const event = {
-      id: eventId,
-      phase: CONSTRUCTION_PHASE,
-      type: "construction.integration-accepted",
-      envelope_version: 1,
-      event_version: CONSTRUCTION_EVENT_VERSION,
-      journal_id: journalId,
-      recorded_at: this.runtime.now(),
-      producer: this.runtime.producer,
-      caused_by: [...new Set([prepared.event.id, ...checkEvidence.map((fact) => fact.event.id), selfReview.event.id])],
-      data: {
-        mission_id: state.state.loaded.missionId,
-        unit_id: scope.unitId,
-        stage: "implementation",
-        stage_attempt_id: scope.implementationAttemptId,
-        task_id: scope.taskId,
-        activity: "code-integration",
-        activity_attempt_id: scope.activityAttemptId,
-        prepared_event_id: prepared.event.id,
-        candidate_checkpoints: candidate,
-        repository_results: repositoryResults,
-        authority_event_ids: [selfReview.event.id],
-      },
-    };
-    const validated = validateConstructionEvent(event);
-    if (validated.status !== "valid") return fail("integration_accept_event_invalid", "The typed Integration acceptance event failed Construction validation.", {
-      issues: validated.status === "invalid" ? validated.issues : [validated.reason],
-    });
+    let acceptanceEvent: ConstructionEventRecord | undefined;
+    if (accepted.length === 0) {
+      const existing = this.existingIdentities(state.state.loaded);
+      const eventId = uuidIdentity(this.runtime, existing);
+      const journalId = uuidIdentity(this.runtime, new Set([...existing, ...(eventId ? [eventId] : [])]));
+      if (!eventId || !journalId) return fail("integration_identity_conflict", "Kepler could not allocate unique Integration acceptance event identities.");
+      const checkEvidence = [
+        evidence.value.get("code-integration-typecheck")!,
+        evidence.value.get("code-integration-build")!,
+        evidence.value.get("code-integration-full-test-suite")!,
+      ];
+      const repositoryResults = [{ repository_id: candidateCheckpoint.repository_id, evidence_ids: checkEvidence.map((fact) => fact.event.data.evidence_id) }];
+      const event = {
+        id: eventId,
+        phase: CONSTRUCTION_PHASE,
+        type: "construction.integration-accepted",
+        envelope_version: 1,
+        event_version: CONSTRUCTION_EVENT_VERSION,
+        journal_id: journalId,
+        recorded_at: this.runtime.now(),
+        producer: this.runtime.producer,
+        caused_by: [...new Set([prepared.event.id, ...checkEvidence.map((fact) => fact.event.id), selfReview.event.id])],
+        data: {
+          mission_id: state.state.loaded.missionId,
+          unit_id: scope.unitId,
+          stage: "implementation",
+          stage_attempt_id: scope.implementationAttemptId,
+          task_id: scope.taskId,
+          activity: "code-integration",
+          activity_attempt_id: scope.activityAttemptId,
+          prepared_event_id: prepared.event.id,
+          candidate_checkpoints: candidate,
+          repository_results: repositoryResults,
+          authority_event_ids: [selfReview.event.id],
+        },
+      };
+      const validated = validateConstructionEvent(event);
+      if (validated.status !== "valid") return fail("integration_accept_event_invalid", "The typed Integration acceptance event failed Construction validation.", {
+        issues: validated.status === "invalid" ? validated.issues : [validated.reason],
+      });
+      acceptanceEvent = validated.event;
+    }
     const guarded = await runWithConstructionRevisionFence({
       workspace: this.runtime.workspace,
       commonDirectory: state.state.commonDirectory,
@@ -919,6 +931,11 @@ export class IntegrationExecution {
       },
       failure: fail,
       operation: async (latest): Promise<IntegrationExecutionResult> => {
+        const currentLock = await this.readLockSnapshot(boundRequest, token, scope);
+        if (currentLock.kind === "failed") return currentLock;
+        if (stable(currentLock.snapshot) !== stable(verified.snapshot)) return fail("integration_lock_snapshot_changed", "The Integration lock owner or captured target changed before acceptance.", {
+          resource_key: boundRequest.resourceKey,
+        }, "Preserve the current owner and reconcile the lock snapshot before retrying acceptance.");
         const currentParent = currentParentStart(latest.unit, scope.implementationAttemptId);
         const currentTask = latest.unit.tasks.find((item) => item.taskId === scope.taskId);
         const currentActivity = currentTask?.activities.find((item) => item.activity === "code-integration");
@@ -934,18 +951,61 @@ export class IntegrationExecution {
             activity_state: currentAttempt?.state,
           });
         }
-        const currentAccepted = currentActivity.accepted.filter((fact) => fact.event.type === "construction.integration-accepted" &&
-          fact.event.data.prepared_event_id === prepared.event.id && fact.event.data.activity_attempt_id === scope.activityAttemptId);
-        if (currentAccepted.length > 1) return fail("integration_acceptance_ambiguous", "The current history contains multiple acceptances for this prepared candidate.", {
-          event_ids: currentAccepted.map((fact) => fact.event.id),
+        const currentState = await this.readScope(scope, project);
+        if (currentState.kind === "failed") return currentState;
+        const current = currentState.state;
+        if (current.loaded.root !== state.state.loaded.root || current.loaded.missionId !== state.state.loaded.missionId ||
+            !sameStrings(historyEvents(latest).map((event) => String(event.id)), historyEvents(current.loaded).map((event) => String(event.id))) ||
+            current.parentStart.event.id !== state.state.parentStart.event.id || current.admission.event.id !== state.state.admission.event.id ||
+            current.generationCompletion.event.id !== state.state.generationCompletion.event.id ||
+            current.validationCompletion.event.id !== state.state.validationCompletion.event.id ||
+            current.integrationStart.event.id !== state.state.integrationStart.event.id ||
+            stable(current.execution.graphRef) !== stable(state.state.execution.graphRef) ||
+            stable(current.execution.taskDefinitionRef) !== stable(state.state.execution.taskDefinitionRef)) {
+          return fail("integration_scope_changed", "The current task, activity, task contract, or history changed before the prepared candidate could be accepted.");
+        }
+        const currentPreparedResult = this.preparedFact(latest, scope, prepared.event.id);
+        if (currentPreparedResult.kind === "failed") return currentPreparedResult;
+        const currentPrepared = currentPreparedResult.fact;
+        const currentPreparedInputs = currentPrepared.event.data.inputs;
+        const currentActualInputs = current.integrationStart.event.data.inputs;
+        if (stable(currentPrepared.event) !== stable(prepared.event) ||
+            !isIntegrationInputSet(currentPrepared.event.data.captured_inputs) ||
+            integrationInputKey(currentPrepared.event.data.captured_inputs) !== integrationInputKey(verified.snapshot.captured_inputs) ||
+            !isMaterialInputSet(currentPreparedInputs) || !isMaterialInputSet(currentActualInputs) ||
+            !sameInputs(currentPreparedInputs, currentActualInputs) || !sameInputs(currentPreparedInputs, preparedInputs)) {
+          return fail("integration_scope_changed", "The current preparation no longer matches the lock-captured inputs and actual Integration Activity inputs.");
+        }
+        const currentEvidence = this.currentEvidenceForPrepared(latest, historyEvents(latest), scope, currentPrepared.event.id);
+        if (currentEvidence.kind === "failed") return currentEvidence;
+        if (!this.integrationEvidenceCommandsBound(current.execution, currentEvidence.value)) return fail("integration_check_command_unbound", "One or more current check records are not bound to exact repository-qualified commands in both planning artifacts.", {
+          prepared_event_id: currentPrepared.event.id,
         });
-        if (currentAccepted.length === 1) {
-          const priorEvent = currentAccepted[0]!.event;
-          if (priorEvent.type !== "construction.integration-accepted" || stable(priorEvent.data.candidate_checkpoints) !== stable(candidate) ||
-              !sameAcceptedEvidence(priorEvent, evidence.value)) {
-            return fail("integration_acceptance_conflict", "The current acceptance differs from the checked candidate or successful evidence.", { acceptance_event_id: priorEvent.id });
-          }
-          return this.releaseAccepted(boundRequest, token, verified.snapshot, priorEvent, candidate);
+        if (!this.integrationEvidenceBindingsValid(latest, current.execution, scope, currentPrepared, currentEvidence.value)) {
+          return fail("integration_evidence_binding_invalid", "Current Integration evidence no longer matches the prepared candidate, actual inputs, accepted Planning bindings, and planned commands.", {
+            prepared_event_id: currentPrepared.event.id,
+          });
+        }
+        const checks: readonly IntegrationEvidenceCheck[] = ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"];
+        const changedEvidence = checks.filter((check) => evidence.value.get(check)?.event.id !== currentEvidence.value.get(check)?.event.id);
+        if (changedEvidence.length > 0) return fail("integration_evidence_changed", "Successful Integration evidence changed after acceptance began; retry acceptance explicitly to bind the new proof.", {
+          prepared_event_id: currentPrepared.event.id,
+          changed_checks: changedEvidence,
+          previous_event_ids: Object.fromEntries(changedEvidence.map((check) => [check, evidence.value.get(check)?.event.id])),
+          current_event_ids: Object.fromEntries(changedEvidence.map((check) => [check, currentEvidence.value.get(check)?.event.id])),
+        }, "Keep the Integration lock held and explicitly retry acceptance against the current successful evidence.");
+        const currentAccepted = historyEvents(latest).filter((event) => event.type === "construction.integration-accepted" &&
+          event.data.prepared_event_id === currentPrepared.event.id && event.data.unit_id === scope.unitId &&
+          event.data.task_id === scope.taskId && event.data.stage_attempt_id === scope.implementationAttemptId &&
+          event.data.activity === "code-integration" && event.data.activity_attempt_id === scope.activityAttemptId);
+        if (currentAccepted.length > 1) return fail("integration_acceptance_ambiguous", "The current history contains multiple acceptances for this prepared candidate.", {
+          event_ids: currentAccepted.map((event) => event.id),
+        });
+        const priorAcceptance = currentAccepted[0];
+        if (priorAcceptance && (stable(priorAcceptance.data.candidate_checkpoints) !== stable(candidate) ||
+            !priorAcceptance.caused_by.some((cause) => String(cause) === currentPrepared.event.id) ||
+            !sameAcceptedEvidence(priorAcceptance, currentEvidence.value, currentPrepared.event.id))) {
+          return fail("integration_acceptance_conflict", "The current acceptance differs from the prepared candidate or current successful evidence.", { acceptance_event_id: priorAcceptance.id });
         }
         const currentTarget = await readInputs(this.runtime, latest, [verified.snapshot.repository]);
         if (!currentTarget || currentTarget.length !== 1 || currentTarget[0]!.repository_id !== candidateCheckpoint.repository_id ||
@@ -954,15 +1014,17 @@ export class IntegrationExecution {
             expected_candidate: candidate, current_target: currentTarget,
           }, "Keep the lock held, reconcile the repository target, rerun required checks if its material changed, and retry acceptance.");
         }
-        const appended = await this.append(latest, validated.event);
+        if (priorAcceptance) return this.releaseAccepted(boundRequest, token, verified.snapshot, priorAcceptance, candidate);
+        if (!acceptanceEvent) return fail("integration_acceptance_unavailable", "The acceptance event was not prepared for the current evidence set; retry acceptance.");
+        const appended = await this.append(latest, acceptanceEvent);
         if (appended.kind === "failed") return appended;
         const afterAppend = await readInputs(this.runtime, latest, [verified.snapshot.repository]);
         if (!afterAppend || afterAppend.length !== 1 || !("commit" in afterAppend[0]!) || afterAppend[0]!.commit !== candidateCheckpoint.commit) {
           return fail("integration_target_changed_after_acceptance", "The repository target changed during acceptance; the accepted event is retained and the lock remains held for reconciliation.", {
-            acceptance_event_id: validated.event.id, expected_candidate: candidate, current_target: afterAppend,
+            acceptance_event_id: acceptanceEvent.id, expected_candidate: candidate, current_target: afterAppend,
           }, "Preserve the acceptance event and lock. Reconcile repository effects before retrying or manually recovering the lock.");
         }
-        return this.releaseAccepted(boundRequest, token, verified.snapshot, validated.event, candidate);
+        return this.releaseAccepted(boundRequest, token, verified.snapshot, acceptanceEvent, candidate);
       },
     });
     if (guarded.kind === "failed") return fail(guarded.code, guarded.message, guarded.details, guarded.recovery);
@@ -972,46 +1034,65 @@ export class IntegrationExecution {
   async release(selectors: ScopeSelectors, token: string | undefined, project?: string): Promise<IntegrationExecutionResult> {
     const scope = validateScope(selectors);
     if (!scope || !uuidV4(token)) return fail("invalid_integration_scope", "Integration release requires exact Integration scope selectors and the lock token returned by lock acquisition.");
-    const state = await this.readScope(scope, project);
-    if (state.kind === "failed") return state;
-    const request = lockRequest(this.runtime, state.state.commonDirectory, state.state.loaded.missionId, scope);
-    const verified = await this.readLockSnapshot(request, token, scope);
-    if (verified.kind === "failed") return verified;
-    const accepted = historyEvents(state.state.loaded).filter((event) => event.type === "construction.integration-accepted" &&
-      event.data.unit_id === scope.unitId && event.data.task_id === scope.taskId &&
-      event.data.stage_attempt_id === scope.implementationAttemptId && event.data.activity_attempt_id === scope.activityAttemptId);
-    if (accepted.length > 0) return fail("integration_already_accepted", "An accepted Integration attempt cannot be aborted or released through the failure path.", {
-      accepted_event_ids: accepted.map((event) => event.id),
-    }, "Reconcile acceptance through the exact prepared event and replacement-safe acceptance release path.");
-    const captured = await captureStageCheckpoints(this.runtime, state.state.loaded, state.state.commonDirectory);
-    if (captured.kind === "failed") return fail("integration_release_target_uncertain", "Kepler cannot verify the prepared repository binding; the Integration lock remains held.", captured.details);
-    if (captured.repositoryRoots.length !== 1 || !sameRepository(captured.repositoryRoots[0]!, verified.snapshot.repository)) {
-      return fail("integration_release_target_uncertain", "The prepared repository binding changed; the Integration lock remains held.", {
-        repository_ids: captured.repositoryRoots.map((item) => item.repository_id),
-      });
-    }
-    const currentInputs = await readInputs(this.runtime, state.state.loaded, [integrationRepository(captured.repositoryRoots[0]!)]);
-    if (!currentInputs || integrationInputKey(currentInputs) !== integrationInputKey(verified.snapshot.captured_inputs)) {
-      return fail("integration_release_target_changed", "Failed or incomplete Integration work can release its lock only while the live target still equals the captured input; the lock remains held.", {
-        captured_inputs: verified.snapshot.captured_inputs,
-        current_inputs: currentInputs,
-      }, "Keep the lock held and reconcile the target. Do not accept or release a changed or uncertain candidate.");
-    }
-    const released = await this.releaseLongLock(releaseRequestForSnapshot(request, verified.snapshot), token);
-    if (released.kind === "failed") return fail("integration_lock_release_failed", "The Integration target still matches its captured input, but replacement-safe lock release could not be confirmed.", {
-      captured_inputs: verified.snapshot.captured_inputs,
-      ...released.details,
-    }, released.recovery);
-    return { kind: "success", data: {
-      lock_released: true,
-      aborted: true,
-      mission_id: state.state.loaded.missionId,
-      unit_id: scope.unitId,
-      task_id: scope.taskId,
-      implementation_attempt_id: scope.implementationAttemptId,
-      activity_attempt_id: scope.activityAttemptId,
-      captured_inputs: verified.snapshot.captured_inputs,
-    } };
+    const initial = await this.readScope(scope, project);
+    if (initial.kind === "failed") return initial;
+    const initialState = initial.state;
+    const guarded = await runWithConstructionUnitControl(
+      this.runtime.workspace,
+      initialState.commonDirectory,
+      initialState.loaded.missionId,
+      scope.unitId,
+      async (): Promise<IntegrationExecutionResult> => {
+        const currentState = await this.readScope(scope, project);
+        if (currentState.kind === "failed") return currentState;
+        const current = currentState.state;
+        if (current.loaded.root !== initialState.loaded.root || current.loaded.missionId !== initialState.loaded.missionId ||
+            current.commonDirectory !== initialState.commonDirectory) {
+          return fail("integration_scope_changed", "Integration ownership changed before its lock could be released.");
+        }
+        const request = lockRequest(this.runtime, current.commonDirectory, current.loaded.missionId, scope);
+        const verified = await this.readLockSnapshot(request, token, scope);
+        if (verified.kind === "failed") return verified;
+        const accepted = historyEvents(current.loaded).filter((event) => event.type === "construction.integration-accepted" &&
+          event.data.mission_id === current.loaded.missionId && event.data.unit_id === scope.unitId && event.data.task_id === scope.taskId &&
+          event.data.stage_attempt_id === scope.implementationAttemptId && event.data.activity === "code-integration" &&
+          event.data.activity_attempt_id === scope.activityAttemptId);
+        if (accepted.length > 0) return fail("integration_already_accepted", "An accepted Integration attempt cannot be aborted or released through the failure path.", {
+          accepted_event_ids: accepted.map((event) => event.id),
+        }, "Reconcile acceptance through the exact prepared event and replacement-safe acceptance release path.");
+        const captured = await captureStageCheckpoints(this.runtime, current.loaded, current.commonDirectory);
+        if (captured.kind === "failed") return fail("integration_release_target_uncertain", "Kepler cannot verify the prepared repository binding; the Integration lock remains held.", captured.details);
+        if (captured.repositoryRoots.length !== 1 || !sameRepository(captured.repositoryRoots[0]!, verified.snapshot.repository)) {
+          return fail("integration_release_target_uncertain", "The prepared repository binding changed; the Integration lock remains held.", {
+            repository_ids: captured.repositoryRoots.map((item) => item.repository_id),
+          });
+        }
+        const currentInputs = await readInputs(this.runtime, current.loaded, [integrationRepository(captured.repositoryRoots[0]!)]);
+        if (!currentInputs || integrationInputKey(currentInputs) !== integrationInputKey(verified.snapshot.captured_inputs)) {
+          return fail("integration_release_target_changed", "Failed or incomplete Integration work can release its lock only while the live target still equals the captured input; the lock remains held.", {
+            captured_inputs: verified.snapshot.captured_inputs,
+            current_inputs: currentInputs,
+          }, "Keep the lock held and reconcile the target. Do not accept or release a changed or uncertain candidate.");
+        }
+        const released = await this.releaseLongLock(releaseRequestForSnapshot(request, verified.snapshot), token);
+        if (released.kind === "failed") return fail("integration_lock_release_failed", "The Integration target still matches its captured input, but replacement-safe lock release could not be confirmed.", {
+          captured_inputs: verified.snapshot.captured_inputs,
+          ...released.details,
+        }, released.recovery);
+        return { kind: "success", data: {
+          lock_released: true,
+          aborted: true,
+          mission_id: current.loaded.missionId,
+          unit_id: scope.unitId,
+          task_id: scope.taskId,
+          implementation_attempt_id: scope.implementationAttemptId,
+          activity_attempt_id: scope.activityAttemptId,
+          captured_inputs: verified.snapshot.captured_inputs,
+        } };
+      },
+    );
+    if (guarded.kind === "failed") return fail(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
   }
 
   private integrationEvidenceCommandsBound(execution: TaskExecutionContext, evidence: ReadonlyMap<string, ConstructionHistoryFact>): boolean {
@@ -1021,6 +1102,39 @@ export class IntegrationExecution {
       if (!fact || fact.event.type !== "construction.evidence-recorded" || !isRepositoryCheckpointSet(fact.event.data.checkpoints)) return false;
       const command = fact.event.data.check_command;
       return isIntegrationEvidenceCommand(command) && command.repository_id === fact.event.data.checkpoints[0]?.repository_id &&
+        isPlannedIntegrationCommand(execution.task, execution.planSource, check, command);
+    });
+  }
+
+  private integrationEvidenceBindingsValid(
+    loaded: Extract<AuditHistoryReadResult, { readonly kind: "loaded" }>,
+    execution: TaskExecutionContext,
+    scope: IntegrationScope,
+    prepared: ConstructionHistoryFact,
+    evidence: ReadonlyMap<string, ConstructionHistoryFact>,
+  ): boolean {
+    const candidate = prepared.event.data.candidate_checkpoints;
+    const inputs = prepared.event.data.inputs;
+    const artifactBindings = acceptedPlanningBindings(loaded.unit);
+    if (prepared.event.type !== "construction.integration-prepared" || !isRepositoryCheckpointSet(candidate) || candidate.length !== 1 ||
+        !isMaterialInputSet(inputs) || !artifactBindings) return false;
+    const checks: readonly IntegrationEvidenceCheck[] = ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite", "code-integration-self-review"];
+    return checks.every((check) => {
+      const fact = evidence.get(check);
+      if (!fact || fact.event.type !== "construction.evidence-recorded" || fact.event.data.stage !== "implementation" ||
+          fact.event.data.unit_id !== scope.unitId || fact.event.data.task_id !== scope.taskId ||
+          fact.event.data.stage_attempt_id !== scope.implementationAttemptId || fact.event.data.activity !== "code-integration" ||
+          fact.event.data.activity_attempt_id !== scope.activityAttemptId || fact.event.data.check !== check ||
+          !fact.event.caused_by.some((cause) => String(cause) === prepared.event.id) ||
+          !isRepositoryCheckpointSet(fact.event.data.checkpoints) || stable(fact.event.data.checkpoints) !== stable(candidate) ||
+          !sameInputs(fact.event.data.inputs, inputs) || stable(fact.event.data.artifact_bindings) !== stable(artifactBindings)) return false;
+      if (check === "code-integration-self-review") {
+        const conditions = fact.event.data.conditions;
+        return isStringList(conditions) && conditions.includes("Integration bindings match the accepted candidate and actual inputs.") &&
+          execution.task.acceptance_criteria.every((criterion) => conditions.includes(criterion));
+      }
+      const command = fact.event.data.check_command;
+      return isIntegrationEvidenceCommand(command) && command.repository_id === candidate[0]?.repository_id &&
         isPlannedIntegrationCommand(execution.task, execution.planSource, check, command);
     });
   }
@@ -1473,15 +1587,28 @@ const latestCausalFact = (events: readonly ConstructionEventRecord[], candidates
   return leaves.length === 1 ? leaves[0] : undefined;
 };
 
-const sameAcceptedEvidence = (acceptance: ConstructionEventRecord, evidence: ReadonlyMap<string, ConstructionHistoryFact>): boolean => {
+const sameAcceptedEvidence = (
+  acceptance: ConstructionEventRecord,
+  evidence: ReadonlyMap<string, ConstructionHistoryFact>,
+  preparedEventId: string,
+): boolean => {
   if (acceptance.type !== "construction.integration-accepted" || !Array.isArray(acceptance.data.repository_results) || acceptance.data.repository_results.length !== 1) return false;
   const repository = acceptance.data.repository_results[0];
   if (!isRecord(repository) || !Array.isArray(repository.evidence_ids)) return false;
-  const expected = ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite"].map((check) => evidence.get(check)?.event.data.evidence_id);
-  const actual = repository.evidence_ids;
-  const selfReview = evidence.get("code-integration-self-review")?.event.id;
-  return sameStrings(actual.filter((id): id is string => typeof id === "string"), expected.filter((id): id is string => typeof id === "string") as string[]) &&
-    Array.isArray(acceptance.data.authority_event_ids) && acceptance.data.authority_event_ids.length === 1 && acceptance.data.authority_event_ids[0] === selfReview;
+  const checks: readonly Exclude<IntegrationEvidenceCheck, "code-integration-self-review">[] = ["code-integration-typecheck", "code-integration-build", "code-integration-full-test-suite"];
+  const checkFacts = checks.map((check) => evidence.get(check));
+  const selfReview = evidence.get("code-integration-self-review");
+  const expectedEvidenceIds = checkFacts.map((fact) => fact?.event.data.evidence_id);
+  const expectedCauses = [preparedEventId, ...checkFacts.map((fact) => fact?.event.id), selfReview?.event.id];
+  const repositoryId = checkFacts[0]?.event.type === "construction.evidence-recorded" &&
+    isRepositoryCheckpointSet(checkFacts[0].event.data.checkpoints) ? checkFacts[0].event.data.checkpoints[0]?.repository_id : undefined;
+  return typeof repository.repository_id === "string" && repository.repository_id === repositoryId &&
+    repository.evidence_ids.every((id) => typeof id === "string") && expectedEvidenceIds.every((id) => typeof id === "string") &&
+    sameStrings(repository.evidence_ids as string[], expectedEvidenceIds as string[]) &&
+    Array.isArray(acceptance.caused_by) && expectedCauses.every((id) => typeof id === "string") &&
+    sameStrings(acceptance.caused_by.map(String), expectedCauses as string[]) &&
+    Array.isArray(acceptance.data.authority_event_ids) && acceptance.data.authority_event_ids.length === 1 &&
+    acceptance.data.authority_event_ids[0] === selfReview?.event.id;
 };
 
 export const createNodeIntegrationExecutionRuntime = (producer: { readonly name: string; readonly version: string }): IntegrationExecutionRuntime =>
