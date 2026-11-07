@@ -33,6 +33,8 @@ npx skills add ~/.kepler-dist/bundle/skills \
   --skill kepler-research
 ```
 
+Keep each complete skill directory, including `references/` files, when installing or copying skills. The stage skills include their reopening questionnaires. Planning carries its task-graph contract, example, and schema in `kepler-plan/references/task-graph.md`; those resources do not require a Kepler source checkout.
+
 Add `--global` to install for your user rather than the current project. Select agent targets with the skill manager's `--agent` option when needed. Read the manager's preview before approving writes; its installation directory and overwrite behavior belong to that tool.
 
 The sidecar includes four Claude Code agent definitions under `~/.kepler-dist/bundle/agents/claude-code/v1/`. Claude Code loads project definitions from `.claude/agents/` and user definitions from `~/.claude/agents/`. Review the definitions and existing names before copying them. Installing them does not prove that Claude Code loaded them or that an agent follows its prompt. For current host behavior, see the [Claude Code subagent documentation](https://code.claude.com/docs/en/sub-agents).
@@ -40,6 +42,8 @@ The sidecar includes four Claude Code agent definitions under `~/.kepler-dist/bu
 ## Setup and installed resources
 
 Run `kepler setup` to recheck the selected compatible bundle and install its templates and guidelines in `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/`. Setup creates default settings only when absent and records an installation receipt. It keeps existing settings, unknown files, and user-modified resources. It does not install host-native skills or agents, create project artifacts, migrate history, or certify a host.
+
+Before installation writes, setup validates the manifest and payload digests and requires all six v3 Construction templates: `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, `delivery.md`, and `supporting-document.md` under `templates/v3/construction/`. Extra templates or placeholders do not replace a missing required file. An incomplete bundle fails with `invalid_bundle` and leaves existing resources, settings, and the receipt unchanged.
 
 The release installer runs setup after installing the binary and bundle. Run `kepler setup` again to verify or complete that Kepler-owned installation. If setup reports a necessary-path conflict or incompatible bundle, keep the current installation and inspect the named path; do not force an overwrite.
 

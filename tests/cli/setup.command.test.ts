@@ -23,6 +23,14 @@ import {
 } from "../../packages/cli/src/cli/setup-runtime.js";
 import { createSetupBundleFixture } from "../helpers/setup-bundle-fixture.js";
 
+const constructionTemplatePaths = [
+  "templates/v3/construction/unit-of-work.md",
+  "templates/v3/construction/design.md",
+  "templates/v3/construction/quality.md",
+  "templates/v3/construction/plan.md",
+  "templates/v3/construction/delivery.md",
+  "templates/v3/construction/supporting-document.md",
+];
 const paths: SetupGlobalPaths = {
   home: "/isolated/.config/vialactea-works/kepler",
   templates: "/isolated/.config/vialactea-works/kepler/templates",
@@ -44,7 +52,7 @@ function makeFiles(overrides: Partial<SetupFiles> = {}): SetupFiles {
     pendingRecoveryPaths: () => [],
     applyPlan: () => ({
       createdFiles: [
-        "templates/v3/construction/design.md",
+        ...constructionTemplatePaths,
         "guidelines/general/01-code-style.md",
       ],
       updatedFiles: [],
@@ -113,7 +121,7 @@ describe("SetupCommand", () => {
       expect(result.status).toBe("success");
       expect(result.data.compatibility).toEqual({ check: "compatible" });
       expect(result.data.created_files).toEqual([
-        "templates/v3/construction/design.md",
+        ...constructionTemplatePaths,
         "guidelines/general/01-code-style.md",
       ]);
       expect(result.data.updated_files).toEqual([]);

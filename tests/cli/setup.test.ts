@@ -3,15 +3,58 @@ import * as Fs from "node:fs";
 import * as Path from "node:path";
 import * as Os from "node:os";
 import {
+  bundleManifestContentDigest,
   parseInstallationRecord,
   sha256Digest,
+  type BundleManifest,
 } from "../../packages/cli/src/cli/installation-record.js";
-import { SetupApplyFailure, SetupService } from "../../packages/cli/src/cli/setup.service.js";
+import {
+  SetupApplyFailure,
+  SetupFailure,
+  SetupService,
+} from "../../packages/cli/src/cli/setup.service.js";
 import { createSetupRuntime } from "../../packages/cli/src/cli/setup-runtime.js";
 import { createSetupBundleFixture } from "../helpers/setup-bundle-fixture.js";
 
 const cliRelease = "0.10.3";
 const encoder = new TextEncoder();
+const constructionTemplatePaths = [
+  "templates/v3/construction/unit-of-work.md",
+  "templates/v3/construction/design.md",
+  "templates/v3/construction/quality.md",
+  "templates/v3/construction/plan.md",
+  "templates/v3/construction/delivery.md",
+  "templates/v3/construction/supporting-document.md",
+];
+
+function bundleMissingTemplate(
+  snapshot: ReturnType<typeof createSetupBundleFixture>,
+  missingPath: string,
+): ReturnType<typeof createSetupBundleFixture> {
+  const files = [
+    ...snapshot.files.filter((file) => file.path !== missingPath),
+    { path: "templates/extra.md", contents: encoder.encode("# Extra\n") },
+    {
+      path: "templates/v3/construction/.gitkeep",
+      contents: encoder.encode(""),
+    },
+  ];
+  const manifest = JSON.parse(snapshot.manifest) as BundleManifest;
+  const base: BundleManifest = {
+    ...manifest,
+    files: Object.fromEntries(
+      files.map((file) => [file.path, sha256Digest(file.contents)]),
+    ),
+    content_digest: sha256Digest(new Uint8Array()),
+  };
+  return {
+    manifest: JSON.stringify({
+      ...base,
+      content_digest: bundleManifestContentDigest(base),
+    }),
+    files,
+  };
+}
 
 function writeBundle(
   bundleRoot: string,
@@ -80,14 +123,18 @@ describe("SetupService filesystem integration", () => {
     expect(Fs.readFileSync(settingsPath, "utf8")).toContain("name: rtk");
     const record = parseInstallationRecord(Fs.readFileSync(recordPath, "utf8"));
     expect(record.generation_id).toBe(result.generation_id);
-    expect(record.bundle_release.installed_files).toEqual({
-      "guidelines/general/01-code-style.md": sha256Digest(
-        Fs.readFileSync(guidelinePath),
-      ),
-      "templates/v3/construction/design.md": sha256Digest(
-        Fs.readFileSync(templatePath),
-      ),
-    });
+    expect(Object.keys(record.bundle_release.installed_files).sort()).toEqual(
+      [
+        "guidelines/general/01-code-style.md",
+        ...constructionTemplatePaths,
+      ].sort(),
+    );
+    expect(record.bundle_release.installed_files["templates/v3/construction/design.md"]).toBe(
+      sha256Digest(Fs.readFileSync(templatePath)),
+    );
+    expect(record.bundle_release.installed_files["guidelines/general/01-code-style.md"]).toBe(
+      sha256Digest(Fs.readFileSync(guidelinePath)),
+    );
     expect(result.host_binding.host.check).toBe("not_checked");
     expect(result.skills.every((skill) => skill.check === "not_checked")).toBe(
       true,
@@ -134,6 +181,52 @@ describe("SetupService filesystem integration", () => {
     ).toBe("# Updated design template\n");
     expect(Fs.readFileSync(settingsPath, "utf8")).toBe(originalSettings);
     expect(Fs.readFileSync(userFile, "utf8")).toBe("user-owned content\n");
+  });
+
+  it("rejects a self-consistent bundle missing a required template before changing the installed home", () => {
+    createService(tmpHome, bundleRoot).setup();
+    const home = Path.join(tmpHome, ".config/vialactea-works/kepler");
+    const settingsPath = Path.join(home, "settings.yaml");
+    const recordPath = Path.join(home, "installation.json");
+    const extraTemplatePath = Path.join(home, "templates/extra.md");
+    const placeholderPath = Path.join(
+      home,
+      "templates/v3/construction/.gitkeep",
+    );
+    Fs.writeFileSync(settingsPath, "models: {}\n");
+    const existingPaths = [
+      ...constructionTemplatePaths.map((path) =>
+        Path.join(home, ...path.split("/")),
+      ),
+      Path.join(home, "guidelines/general/01-code-style.md"),
+      settingsPath,
+      recordPath,
+    ];
+    const before = existingPaths.map((path) => Fs.readFileSync(path));
+    const incomplete = bundleMissingTemplate(
+      createSetupBundleFixture(),
+      "templates/v3/construction/design.md",
+    );
+    writeBundle(bundleRoot, incomplete);
+
+    let failure: unknown;
+    try {
+      createService(tmpHome, bundleRoot).setup();
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(SetupFailure);
+    expect(failure).toMatchObject({
+      code: "invalid_bundle",
+      message:
+        "Missing required v3 Construction template: templates/v3/construction/design.md",
+    });
+    existingPaths.forEach((path, index) => {
+      expect(Fs.readFileSync(path)).toEqual(before[index]);
+    });
+    expect(Fs.existsSync(extraTemplatePath)).toBe(false);
+    expect(Fs.existsSync(placeholderPath)).toBe(false);
   });
 
   it("preserves a user-modified owned file and reports a necessary-path conflict", () => {

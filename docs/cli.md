@@ -24,6 +24,10 @@ The `kepler` CLI installs as a standalone executable with a sidecar bundle. Run 
 
 The root also exposes `kepler workbench` for the earlier change-based workflow. Its commands do not convert or resume v3 mission records. See [Limits](#version-boundaries).
 
+## Validate setup resources
+
+`kepler setup` checks the selected manifest, payload digests, compatibility, and all six required v3 Construction templates before installation writes. A self-consistent manifest does not make an incomplete bundle valid. Missing required templates produce `invalid_bundle`; existing resources, settings, and the installation receipt stay unchanged. See the [required template inventory](installation.md#setup-and-installed-resources).
+
 ## Select a project and scope
 
 Project-scoped commands use the working directory unless you pass `--project <path>`. Select the Git working-tree root, not a nested directory. The project must contain `.kepler/`; Kepler does not initialize or migrate it during project selection. A unit operation uses the exact Unit of Work ID. A task operation also uses its exact task ID and enclosing Implementation attempt when required. Read the command's `--help` for required selectors.

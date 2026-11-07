@@ -43,7 +43,20 @@ The requester controls the requested outcome and material consequential trade-of
 
 ## Reopening questionnaire
 
-Answer all six questions from [Deliver: Reopening questionnaire](../../docs/specs/v3/phases/construction/deliver.md#reopening-questionnaire): changed outcome/destination/recipient/acceptance; source differs or lacks provenance; prerequisite/permission/target change; actual effects or verification invalidate outcome; failure/partial effect invalidates recovery/recipient handoff; implementation/upstream change needed rather than delivery-only correction. Report facts and proposed earliest boundary; the orchestrator decides authorization.
+Evaluate each question against the current delivery request, selected material, actual effects, verification, and recovery. Report every answer, supporting facts, uncertainty, and proposed earliest boundary to the orchestrator.
+
+1. Is a change to the requested delivery outcome, destination, recipient, or acceptance condition necessary?
+2. Does selected material differ from the reviewed implementation or lack required provenance?
+3. Does a missing prerequisite, permission, or changed target condition invalidate the delivery procedure?
+4. Do actual effects or required verification results invalidate the claimed outcome?
+5. Does a failure or partial effect invalidate the planned recovery, retry, or recipient handoff?
+6. Is an implementation or upstream contract change necessary rather than a delivery-only correction?
+
+A Yes answer gives the orchestrator a reason to examine this stage as a possible revision boundary. All No answers identify no independent reason to reopen it for this finding, but do not exempt a downstream stage from a cascade authorized upstream. Answers do not authorize reopening or expand existing authority for external operations.
+
+The Deliver agent reports findings and proposes a boundary; it does not authorize reopening or start a revision cascade. The orchestrator compares the finding with current evidence and decisions, then decides whether to continue, investigate, or authorize reopening from the earliest affected stage. It records that decision. After authorization, the orchestrator reopens the affected stage and every downstream stage within the selected scope. Previous completion does not establish completion for revised work. Local instruction or operation corrections can stay within the active Deliver attempt when upstream contracts remain valid.
+
+These rules follow the accepted contracts at `docs/specs/v3/phases/construction/deliver.md#reopening-questionnaire` and `docs/specs/v3/revision.md`; those paths identify source provenance and are not runtime dependencies.
 
 ## Recovery boundaries
 

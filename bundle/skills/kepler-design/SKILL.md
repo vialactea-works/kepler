@@ -27,4 +27,17 @@ Give the orchestrator the unit directory, current `unit-of-work.md`, `design.md`
 
 ## Reopening questionnaire
 
-Use all six questions in [Functional Design: Reopening questionnaire](../../docs/specs/v3/phases/construction/functional-design.md#reopening-questionnaire). Report answers, evidence, and the proposed boundary. A change confined to a later-stage contract does not reopen valid Functional Design.
+Evaluate each question against the agreed Functional Design, including linked supporting files. Report each answer, evidence, uncertainty, and proposed revision boundary to the orchestrator.
+
+1. Is a change to the intended outcome, scope, or exclusions of the Unit of Work necessary?
+2. Is a change to domain behavior, acceptance criteria, failure behavior, or boundary conditions necessary?
+3. Is a change to the meaning of domain terms, concepts, relationships, business rules, invariants, states, or responsibilities necessary?
+4. Is a change to interaction-boundary ownership or the functional contract, its inputs, outputs, errors, or compatibility obligations necessary?
+5. Does it invalidate an assumption or decision that the agreed functional design depends on?
+6. Does it expose an unresolved required functional decision or show that a Functional Design completion condition is no longer met?
+
+A Yes answer gives the orchestrator a reason to examine this stage as a possible revision boundary. All No answers identify no independent reason to reopen it for this finding, but do not exempt a downstream stage from a cascade authorized upstream. A later-stage-only change does not reopen valid Functional Design while its contract and outputs remain valid.
+
+The stage agent reports findings and proposes a boundary; it does not authorize reopening or start a revision cascade. The orchestrator compares the finding with current evidence and decisions, then decides whether to continue, investigate, or authorize reopening from the earliest affected stage. It records that decision. After authorization, the orchestrator reopens the affected stage and every downstream stage within the selected scope. Previous completion does not establish completion for revised work.
+
+After authorized reopening, repeat Functional Design self-review and obtain the requester's explicit approval of the revised design through CLI-owned JSON journal events. Only the requester can request external review. These rules follow the accepted contracts at `docs/specs/v3/phases/construction/functional-design.md#reopening-questionnaire` and `docs/specs/v3/revision.md`; those paths identify source provenance and are not runtime dependencies.

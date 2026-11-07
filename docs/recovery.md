@@ -31,6 +31,8 @@ The CLI does not provide a global status command. Use the owning stage, task, Ac
 
 The installer and `kepler setup` manage different parts of installation. Setup preserves user-modified resources and reports necessary-path conflicts. If setup reports a conflict or interrupted update, keep the existing files and installation receipt. Inspect the paths named in the failure and compare them with the selected compatible sidecar. Do not delete unknown files, hand-edit the receipt, or force an overwrite. If the current generation cannot be verified, do not start new work with it; keep active work with the generation that created it and obtain an authorized repair decision.
 
+If setup reports `invalid_bundle` with a missing required v3 template, obtain the complete compatible sidecar. Extra templates, placeholders, or a recalculated digest do not supply the missing resource. Rejected setup does not change the existing Kepler resources, settings, or receipt.
+
 Host skill managers own skill installation, and Claude Code owns native role loading. Check their own installation results separately. A successful `kepler setup` result does not show that the host loaded a skill or agent definition.
 
 ## Earlier change-based work

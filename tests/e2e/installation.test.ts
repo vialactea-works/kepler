@@ -74,12 +74,19 @@ async function updateManifest(
   update: {
     readonly bundleRelease?: string;
     readonly cliReleases?: readonly string[];
+    readonly removeFile?: string;
     readonly file?: { readonly path: string; readonly contents: Uint8Array };
   },
 ): Promise<BundleManifest> {
   const manifestPath = Path.join(bundleRoot, "manifest.json");
   const current = parseBundleManifest(await Fs.readFile(manifestPath, "utf8"));
   const files: Record<string, ContentDigest> = { ...current.files };
+  if (update.removeFile) {
+    await Fs.rm(Path.join(bundleRoot, ...update.removeFile.split("/")), {
+      force: true,
+    });
+    delete files[update.removeFile];
+  }
   if (update.file) {
     await Fs.writeFile(
       Path.join(bundleRoot, ...update.file.path.split("/")),
@@ -285,6 +292,10 @@ if (platformTarget) {
         globalHome,
         "templates/v3/construction/design.md",
       );
+      const guidelinePath = Path.join(
+        globalHome,
+        "guidelines/general/01-code-style.md",
+      );
       const settingsPath = Path.join(globalHome, "settings.yaml");
       const unknownPath = Path.join(globalHome, "templates/user-owned.md");
       const recordPath = Path.join(globalHome, "installation.json");
@@ -324,12 +335,47 @@ if (platformTarget) {
       expect(parseCliResult(standaloneSetup.stdout)).toMatchObject({ status: "success" });
       expect(
         parseInstallationRecord(await Fs.readFile(recordPath, "utf8")).bundle_release.release,
-      ).toBe("kepler-bundle-3.0.1");
+      ).toBe("kepler-bundle-3.0.2");
 
       const settings = "extensions:\n  - name: rtk\n    enabled: false\n";
       await Fs.writeFile(settingsPath, settings);
       await Fs.writeFile(unknownPath, "user-owned resource\n");
       const firstRecord = parseInstallationRecord(await Fs.readFile(recordPath, "utf8"));
+      const installedRecord = await Fs.readFile(recordPath);
+      const installedTemplate = await Fs.readFile(templatePath);
+      const installedGuideline = await Fs.readFile(guidelinePath);
+      const incompleteRoot = Path.join(resourceRoot, "incomplete-override");
+      await Fs.cp(sidecarRoot, incompleteRoot, { recursive: true });
+      await updateManifest(incompleteRoot, {
+        removeFile: "templates/v3/construction/design.md",
+        file: {
+          path: "templates/arbitrary.md",
+          contents: new TextEncoder().encode("# Extra template\n"),
+        },
+      });
+      const incomplete = await runInstalledSetup(
+        executablePath,
+        home,
+        incompleteRoot,
+      );
+      expect(incomplete.exitCode).toBe(1);
+      expect(parseCliResult(incomplete.stdout)).toMatchObject({
+        status: "failed",
+        data: {
+          code: "invalid_bundle",
+          message: expect.stringContaining(
+            "Missing required v3 Construction template: templates/v3/construction/design.md",
+          ),
+        },
+      });
+      expect(await Fs.readFile(recordPath)).toEqual(installedRecord);
+      expect(await Fs.readFile(templatePath)).toEqual(installedTemplate);
+      expect(await Fs.readFile(guidelinePath)).toEqual(installedGuideline);
+      expect(await Fs.readFile(settingsPath, "utf8")).toBe(settings);
+      await expect(
+        Fs.access(Path.join(globalHome, "templates/arbitrary.md")),
+      ).rejects.toThrow();
+
       const repeated = await runInstalledSetup(executablePath, home);
       expect(repeated.exitCode).toBe(0);
       expect(repeated.stderr).toBe("");

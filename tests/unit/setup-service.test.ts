@@ -26,6 +26,14 @@ const paths: SetupGlobalPaths = {
 };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const constructionTemplatePaths = [
+  "templates/v3/construction/unit-of-work.md",
+  "templates/v3/construction/design.md",
+  "templates/v3/construction/quality.md",
+  "templates/v3/construction/plan.md",
+  "templates/v3/construction/delivery.md",
+  "templates/v3/construction/supporting-document.md",
+];
 
 function makePorts(options: {
   bundle?: ReturnType<typeof createSetupBundleFixture>;
@@ -121,10 +129,10 @@ describe("SetupService", () => {
     expect(ports.events.indexOf("paths")).toBeLessThan(
       ports.events.indexOf("ensure"),
     );
-    expect(result.templates).toEqual(["templates/v3/construction/design.md"]);
+    expect(result.templates).toEqual(constructionTemplatePaths);
     expect(result.guidelines).toEqual(["guidelines/general/01-code-style.md"]);
     expect(result.created_files).toEqual([
-      "templates/v3/construction/design.md",
+      ...constructionTemplatePaths,
       "guidelines/general/01-code-style.md",
     ]);
     expect(result.updated_files).toEqual([]);
@@ -138,7 +146,7 @@ describe("SetupService", () => {
     expect(result.skills.every((skill) => skill.check === "not_checked")).toBe(
       true,
     );
-    expect(plan.resourceWrites).toHaveLength(2);
+    expect(plan.resourceWrites).toHaveLength(constructionTemplatePaths.length + 1);
     expect(plan.resourceWrites.every((write) => write.expectedCurrentDigest === null)).toBe(
       true,
     );

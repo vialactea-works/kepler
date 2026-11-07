@@ -37,6 +37,15 @@ export class SetupBundleError extends Error {
   }
 }
 
+const requiredConstructionTemplatePaths = [
+  "templates/v3/construction/unit-of-work.md",
+  "templates/v3/construction/design.md",
+  "templates/v3/construction/quality.md",
+  "templates/v3/construction/plan.md",
+  "templates/v3/construction/delivery.md",
+  "templates/v3/construction/supporting-document.md",
+];
+
 export function validateSetupBundle(
   snapshot: SetupBundleSnapshot,
   cliRelease: string,
@@ -133,13 +142,19 @@ export function validateSetupBundle(
     }
   }
 
-  const hasTemplates = [...files.keys()].some(
-    (path) => path.startsWith("templates/") && !path.endsWith("/.gitkeep"),
-  );
+  for (const path of requiredConstructionTemplatePaths) {
+    if (!files.has(path)) {
+      throw new SetupBundleError(
+        "invalid_bundle",
+        `Missing required v3 Construction template: ${path}`,
+      );
+    }
+  }
+
   const hasGuidelines = [...files.keys()].some(
     (path) => path.startsWith("guidelines/") && !path.endsWith("/.gitkeep"),
   );
-  if (!hasTemplates || !hasGuidelines) {
+  if (!hasGuidelines) {
     throw new SetupBundleError(
       "invalid_bundle",
       "The selected bundle must include template and guideline resources.",

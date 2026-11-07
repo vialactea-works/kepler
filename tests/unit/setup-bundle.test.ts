@@ -8,6 +8,7 @@ import {
   type BundleManifest,
 } from "../../packages/cli/src/cli/installation-record.js";
 import {
+  SetupBundleError,
   validateSetupBundle,
   type SetupBundleSnapshot,
 } from "../../packages/cli/src/cli/setup-bundle.js";
@@ -29,6 +30,14 @@ const skills = [
   "kepler-research",
 ];
 const standardSkills = new Set(skills.slice(0, 8));
+const requiredTemplatePaths = [
+  "templates/v3/construction/unit-of-work.md",
+  "templates/v3/construction/design.md",
+  "templates/v3/construction/quality.md",
+  "templates/v3/construction/plan.md",
+  "templates/v3/construction/delivery.md",
+  "templates/v3/construction/supporting-document.md",
+];
 const bindings = [
   ["architect", "kepler-architect"],
   ["orchestrator", "kepler-orchestrator"],
@@ -80,10 +89,10 @@ function fixtureBundle(): SetupBundleSnapshot {
     contents: encoder.encode(`${agent_id}\n`),
   }));
   const files = [
-    {
-      path: "templates/v3/construction/design.md",
-      contents: encoder.encode("# Design template\n"),
-    },
+    ...requiredTemplatePaths.map((path) => ({
+      path,
+      contents: encoder.encode(`# ${path.split("/").at(-1)}\n`),
+    })),
     {
       path: "guidelines/general/01-code-style.md",
       contents: encoder.encode("# Code style\n"),
@@ -241,6 +250,33 @@ describe("validateSetupBundle", () => {
     ).toThrow("Duplicate bundle file");
   });
 
+  it.each(requiredTemplatePaths)(
+    "rejects a self-consistent bundle missing required template %s",
+    (missingPath) => {
+      const bundle = fixtureBundle();
+      const incomplete = withFiles(bundle, [
+        ...bundle.files.filter((file) => file.path !== missingPath),
+        { path: "templates/extra.md", contents: encoder.encode("# Extra\n") },
+        {
+          path: "templates/v3/construction/.gitkeep",
+          contents: encoder.encode(""),
+        },
+      ]);
+      let caught: unknown;
+      try {
+        validateSetupBundle(incomplete, cliRelease);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(SetupBundleError);
+      expect(caught).toMatchObject({
+        code: "invalid_bundle",
+        message: `Missing required v3 Construction template: ${missingPath}`,
+      });
+    },
+  );
+
   it("rejects bundles that omit either installable resource group", () => {
     const bundle = fixtureBundle();
 
@@ -255,7 +291,7 @@ describe("validateSetupBundle", () => {
         withFiles(bundle, bundle.files.filter((file) => !file.path.startsWith("templates/"))),
         cliRelease,
       ),
-    ).toThrow("must include template and guideline resources");
+    ).toThrow(`Missing required v3 Construction template: ${requiredTemplatePaths[0]}`);
   });
 
   it("rejects a modified manifest aggregate digest", () => {

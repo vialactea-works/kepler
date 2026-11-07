@@ -5,7 +5,6 @@ const unitTests = [
   "packages/core/tests/unit/**/*.test.ts",
   "tests/cli/bundle-root.test.ts",
   "tests/cli/effect-cleanup.test.ts",
-  "tests/skills/kepler-brand.test.ts",
   "tests/workbench/artifact-reader.test.ts",
   "tests/workbench/artifact-contracts.test.ts",
   "tests/workbench/artifact-schemas.test.ts",

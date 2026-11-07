@@ -8,6 +8,7 @@ import {
   type BundleManifest,
   type ContentDigest,
 } from "../packages/cli/src/cli/installation-record.js";
+import { validateSetupBundle } from "../packages/cli/src/cli/setup-bundle.js";
 
 const projectRoot = Path.resolve(import.meta.dirname, "..");
 const bundleRoot = Path.join(projectRoot, "bundle");
@@ -88,14 +89,15 @@ if (typeof rootPackage.version !== "string" || rootPackage.version.trim().length
 
 syncSkillResources();
 
+const bundleFiles = listBundleFiles(bundleRoot);
 const files = Object.fromEntries(
-  listBundleFiles(bundleRoot).map((path) => [
+  bundleFiles.map((path) => [
     path,
     sha256Digest(Fs.readFileSync(Path.join(bundleRoot, ...path.split("/")))),
   ]),
 );
 const skillsRelease =
-  process.env.KEPLER_SKILLS_RELEASE ?? "kepler-skills-3.0.0";
+  process.env.KEPLER_SKILLS_RELEASE ?? "kepler-skills-3.0.1";
 const hostBindingsRelease =
   process.env.KEPLER_CLAUDE_CODE_BINDINGS_RELEASE ??
   "claude-code-bindings-1.0.0";
@@ -116,7 +118,7 @@ const compatibility: BundleCompatibility = {
 };
 const base: BundleManifest = {
   manifest_format_version: 1,
-  bundle_release: process.env.KEPLER_BUNDLE_RELEASE ?? "kepler-bundle-3.0.1",
+  bundle_release: process.env.KEPLER_BUNDLE_RELEASE ?? "kepler-bundle-3.0.2",
   files,
   content_digest: sha256Digest(new Uint8Array()),
   compatibility,
@@ -125,8 +127,16 @@ const manifest: BundleManifest = {
   ...base,
   content_digest: bundleManifestContentDigest(base),
 };
-parseBundleManifest(JSON.stringify(manifest));
-Fs.writeFileSync(
-  Path.join(bundleRoot, "manifest.json"),
-  `${JSON.stringify(manifest, null, 2)}\n`,
+const manifestContents = `${JSON.stringify(manifest, null, 2)}\n`;
+parseBundleManifest(manifestContents);
+validateSetupBundle(
+  {
+    manifest: manifestContents,
+    files: bundleFiles.map((path) => ({
+      path,
+      contents: Fs.readFileSync(Path.join(bundleRoot, ...path.split("/"))),
+    })),
+  },
+  rootPackage.version,
 );
+Fs.writeFileSync(Path.join(bundleRoot, "manifest.json"), manifestContents);

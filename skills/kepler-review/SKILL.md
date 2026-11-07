@@ -56,7 +56,19 @@ Review the complete unit outcome, including relevant unchanged behavior, interac
 
 ## Reopening questionnaire
 
-Answer all five questions from [Unit of Work Review: Reopening questionnaire](../../docs/specs/v3/phases/construction/unit-of-work-review.md#reopening-questionnaire): does a finding invalidate the whole-unit conclusion/coverage; does material or a relevant input differ; is a blocker unresolved or missing authorization; does evidence fail to prove upstream completion or unit acceptance; is applicable requester acceptance stale or insufficient? Report answers and proposed earliest boundary. The orchestrator decides reopening.
+Evaluate each question against the current review material and relevant inputs. Report every answer, supporting facts, uncertainty, and the proposed earliest boundary to the orchestrator.
+
+1. Does a finding invalidate the whole-unit conclusion, review coverage, or assessment of a required obligation?
+2. Does the reviewed material or a relevant input differ from what the review evidence covers?
+3. Is a blocking finding unresolved or missing an authorized correction decision?
+4. Does evidence fail to prove required upstream completion or an applicable unit acceptance condition?
+5. Does an applicable requester acceptance no longer cover the current reviewed material or consequential decision?
+
+A Yes answer gives the orchestrator a reason to examine this stage as a possible revision boundary. All No answers identify no independent reason to reopen it for this finding, but do not exempt a downstream stage from a cascade authorized upstream.
+
+The reviewer reports findings and proposes a boundary; it does not authorize reopening or start a revision cascade. The orchestrator compares the finding with current evidence and decisions, then decides whether to continue, investigate, or authorize reopening from the earliest affected stage. It records that decision. After authorization, the orchestrator reopens the affected stage and every downstream stage within the selected scope. Previous completion does not establish completion for revised work. Satisfy this stage's conditions again after authorized reopening, including any applicable requester acceptance.
+
+These rules follow the accepted contracts at `docs/specs/v3/phases/construction/unit-of-work-review.md#reopening-questionnaire` and `docs/specs/v3/revision.md`; those paths identify source provenance and are not runtime dependencies.
 
 ## Handoff
 

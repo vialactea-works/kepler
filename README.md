@@ -29,7 +29,9 @@ npx skills add ~/.kepler-dist/bundle/skills \
   --skill kepler-research
 ```
 
-Run `kepler setup` to install compatible templates and guidelines and create missing default settings. Setup preserves settings and user-modified resources. It does not install skills or host-native agent definitions. See [installation](docs/installation.md) for Claude Code role definitions, upgrades, and target limits.
+Keep each skill directory and its bundled references together. The stage skills include their reopening questions; Planning includes the task-graph field contract, example, and schema.
+
+Run `kepler setup` to install compatible templates and guidelines and create missing default settings. Setup rejects bundles missing any of the six required v3 Construction templates before installation writes. It preserves settings and user-modified resources. It does not install skills or host-native agent definitions. See [installation](docs/installation.md) for Claude Code role definitions, upgrades, and target limits.
 
 ## Start a workflow
 

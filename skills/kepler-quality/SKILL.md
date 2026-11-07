@@ -27,4 +27,16 @@ Give the orchestrator and Implementation Planning the unit directory, accepted `
 
 ## Reopening questionnaire
 
-Use all five questions in [Quality Requirements: Reopening questionnaire](../../docs/specs/v3/phases/construction/quality-requirements.md#reopening-questionnaire). Report answers and proposed boundary; only the orchestrator authorizes reopening.
+Evaluate each question against the current quality requirements and relevant linked files. Report each answer, findings, evidence, uncertainty, and proposed boundary to the orchestrator.
+
+1. Does the finding change which quality requirements apply to the unit?
+2. Does it change a target, constraint, acceptance condition, or the material covered?
+3. Does it change relevant operating conditions, supported environments, dependencies, or an existing guarantee?
+4. Does it invalidate an assumption or quality trade-off on which the requirements depend?
+5. Does it expose a material quality question that is unresolved or invalidate a completion condition?
+
+A Yes answer gives the orchestrator a reason to examine this stage as a possible revision boundary. All No answers identify no independent reason to reopen it for this finding, but do not exempt a downstream stage from a cascade authorized upstream. A required functional-behavior change can move the boundary to Functional Design; report it without revising functional behavior here.
+
+The stage agent reports findings and proposes a boundary; it does not authorize reopening or start a revision cascade. The orchestrator compares the finding with current evidence and decisions, then decides whether to continue, investigate, or authorize reopening from the earliest affected stage. It records that decision. After authorization, the orchestrator reopens the affected stage and every downstream stage within the selected scope. Previous completion does not establish completion for revised work.
+
+After authorized reopening, satisfy this stage's completion conditions again, including self-review and the requester's explicit approval of the revised quality requirements. These rules follow the accepted contracts at `docs/specs/v3/phases/construction/quality-requirements.md#reopening-questionnaire` and `docs/specs/v3/revision.md`; those paths identify source provenance and are not runtime dependencies.

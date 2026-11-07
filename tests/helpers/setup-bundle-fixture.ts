@@ -20,6 +20,14 @@ const skillIds = [
   "kepler-research",
 ];
 const requiredSkills = new Set(skillIds.slice(0, 8));
+const constructionTemplatePaths = [
+  "templates/v3/construction/unit-of-work.md",
+  "templates/v3/construction/design.md",
+  "templates/v3/construction/quality.md",
+  "templates/v3/construction/plan.md",
+  "templates/v3/construction/delivery.md",
+  "templates/v3/construction/supporting-document.md",
+];
 const hostRoles = [
   ["architect", "kepler-architect"],
   ["orchestrator", "kepler-orchestrator"],
@@ -39,10 +47,14 @@ export function createSetupBundleFixture(
   options: SetupBundleFixtureOptions = {},
 ): SetupBundleSnapshot {
   const files = [
-    {
-      path: "templates/v3/construction/design.md",
-      contents: encoder.encode(options.templateContent ?? "# Design template\n"),
-    },
+    ...constructionTemplatePaths.map((path) => ({
+      path,
+      contents: encoder.encode(
+        path.endsWith("/design.md")
+          ? options.templateContent ?? "# Design template\n"
+          : `# ${path.split("/").at(-1)}\n`,
+      ),
+    })),
     {
       path: "guidelines/general/01-code-style.md",
       contents: encoder.encode(options.guidelineContent ?? "# Code style\n"),

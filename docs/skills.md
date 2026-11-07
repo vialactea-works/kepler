@@ -2,7 +2,9 @@
 
 Kepler ships eleven versioned portable skills. Eight are entry skills in the Standard Construction workflow; three support work when their procedures call for them. The host loads the skill files and controls agent dispatch. A skill file describes a procedure, not proof that a host or agent followed it.
 
-Install skills from the same sidecar generation as the CLI. See [installation](installation.md#install-skills-and-claude-code-role-definitions). Read the full `SKILL.md` for required inputs, CLI operations, checks, evidence, and handoffs.
+Install skills from the same sidecar generation as the CLI. See [installation](installation.md#install-skills-and-claude-code-role-definitions). Keep each complete skill directory, including its reference files. Read the full `SKILL.md` for required inputs, CLI operations, checks, evidence, and handoffs.
+
+The stage skills contain their reopening questionnaires without links to an uninstalled source checkout. `kepler-plan/references/task-graph.md` supplies the closed graph field contract, identity rules, example, and Draft 2020-12 schema. The schema covers structural constraints; use Construction lint for supported structural and semantic checks. Lint does not prove requirement coverage or technical correctness.
 
 ## Standard workflow
 
