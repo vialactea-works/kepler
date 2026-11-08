@@ -3,6 +3,7 @@ import * as Path from "node:path";
 import { markdownArtifactReader } from "@vialactea-works/kepler-core";
 import { CONSTRUCTION_ACTIVITIES, CONSTRUCTION_STAGES, type ConstructionActivity, type ConstructionStage } from "./events.js";
 import { readTaskGraph, type TaskGraph, type TaskGraphTask } from "./task-graph.js";
+import { discoverTaskPrerequisiteEvidence } from "./task-prerequisite-evidence.js";
 import type { ConstructionActivityProjection, ConstructionTaskProjection, ConstructionUnitProjection } from "./projection.js";
 import type { GraphReference, TaskDefinitionReference } from "./events.js";
 import type { UnitQueryContextResult, UnitQueryFailure, UnitQueryFileSystem, UnitQueries } from "./unit-queries.js";
@@ -219,6 +220,13 @@ const activityProjection = (
   activity: ConstructionActivity,
 ): ConstructionActivityProjection | undefined => task?.activities.find((candidate) => candidate.activity === activity);
 
+const currentImplementationAttemptId = (unit: ConstructionUnitProjection | undefined): string | undefined => {
+  const stage = unit?.stages.find((candidate) => candidate.stage === "implementation");
+  if (!stage || !stage.currentAttemptId || !["running", "waiting", "pausing", "paused", "completed"].includes(stage.state)) return undefined;
+  const attempts = stage.attempts.filter((attempt) => attempt.attemptId === stage.currentAttemptId);
+  return attempts.length === 1 && attempts[0]?.state === stage.state ? stage.currentAttemptId : undefined;
+};
+
 const integratedFacts = (task: ConstructionTaskProjection | undefined): { readonly eventIds: readonly string[]; readonly outputRefs: readonly string[] } => {
   if (!task || task.state !== "complete" || task.completion?.event.type !== "construction.task-completed") {
     return { eventIds: [], outputRefs: [] };
@@ -377,7 +385,6 @@ export class ConstructionQueries {
     if (!definition) return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId });
     const current = taskProjection(loaded.context.unit, taskId);
     const details = this.readiness(loaded.graph, loaded.context.unit, definition);
-    const knownFacts = this.knownPrerequisiteFacts(loaded.context.unit, current);
     return {
       kind: "task-readiness",
       record_home: loaded.context.recordHome,
@@ -387,7 +394,7 @@ export class ConstructionQueries {
       task_state: current?.state ?? details.taskState,
       readiness: details.readiness,
       dependencies: details.dependencies,
-      known_prerequisite_facts: knownFacts,
+      known_prerequisite_facts: details.knownPrerequisiteFacts,
       unknown_prerequisites: details.unknownPrerequisites,
       blockers: details.blockers,
       unknowns: [...new Set([...details.unknowns, ...projectionUnknowns(loaded.context.unit)])].sort((left, right) => left.localeCompare(right)),
@@ -497,16 +504,15 @@ export class ConstructionQueries {
     const projected = taskProjection(unit, definition.id);
     const blockers: string[] = [];
     const unknowns = projectionUnknowns(unit);
-    const unknownPrerequisites = definition.prerequisites.map((prerequisite, index) => ({
-      index,
-      description: prerequisite.description,
-      needed_for: prerequisite.needed_for,
-      needed_when: prerequisite.needed_when,
-      blocking: prerequisite.blocking,
-      condition: prerequisite.condition,
-      reason: prerequisite.reason,
-      status: "unknown",
-    }));
+    const prerequisiteEvidence = discoverTaskPrerequisiteEvidence(
+      definition.prerequisites,
+      unit?.evidence.map(({ fact }) => fact) ?? [],
+      {
+        taskId: definition.id,
+        implementationAttemptId: currentImplementationAttemptId(unit),
+        historyBlocked: unit === undefined || unit.blocked,
+      },
+    );
     const dependencies = definition.depends_on.map((dependency) => {
       const predecessor = graph.tasks.find((task) => task.id === dependency.task_id);
       const predecessorProjection = taskProjection(unit, dependency.task_id);
@@ -522,8 +528,11 @@ export class ConstructionQueries {
         integrated_output_refs: integrated.outputRefs,
       };
     });
-    for (const prerequisite of definition.prerequisites) {
-      if (prerequisite.needed_for === "implementation" && prerequisite.blocking) blockers.push(`blocking-prerequisite-unverified:${prerequisite.description}`);
+    for (const [index, prerequisite] of definition.prerequisites.entries()) {
+      if (prerequisite.needed_for === "implementation" && prerequisite.blocking &&
+          prerequisiteEvidence.unknownPrerequisites.some((unknown) => unknown.index === index)) {
+        blockers.push(`blocking-prerequisite-unverified:${prerequisite.description}`);
+      }
     }
     if (projected?.state === "blocked" && blockers.length === 0) blockers.push("task-runtime-state-blocked");
     let readiness: ReadinessDetails["readiness"];
@@ -549,25 +558,10 @@ export class ConstructionQueries {
       taskState,
       readiness,
       dependencies,
-      knownPrerequisiteFacts: this.knownPrerequisiteFacts(unit, projected),
-      unknownPrerequisites,
+      knownPrerequisiteFacts: prerequisiteEvidence.knownFacts,
+      unknownPrerequisites: prerequisiteEvidence.unknownPrerequisites,
       blockers: [...new Set(blockers)].sort((left, right) => left.localeCompare(right)),
       unknowns: [...new Set(unknowns)].sort((left, right) => left.localeCompare(right)),
     };
-  }
-
-  private knownPrerequisiteFacts(
-    unit: ConstructionUnitProjection | undefined,
-    task: ConstructionTaskProjection | undefined,
-  ): readonly Record<string, unknown>[] {
-    const rawIds = task?.admission?.event.data.prerequisite_evidence;
-    if (!Array.isArray(rawIds)) return [];
-    const selectedIds = new Set(rawIds.filter((id): id is string => typeof id === "string"));
-    if (selectedIds.size === 0) return [];
-    return (unit?.evidence ?? []).flatMap(({ fact }) => {
-      const data = fact.event.data;
-      if (typeof data.evidence_id !== "string" || !selectedIds.has(data.evidence_id)) return [];
-      return [{ evidence_id: data.evidence_id, event_id: fact.event.id, type: fact.event.type }];
-    });
   }
 }

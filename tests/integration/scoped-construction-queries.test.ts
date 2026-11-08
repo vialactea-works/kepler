@@ -68,10 +68,25 @@ describe("scoped Construction queries", () => {
   it("projects stage, task, readiness, and Activity state with original links without writing", async () => {
     const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-scoped-queries-"));
     temporaryRoots.push(root);
+    const implementationPrerequisite = {
+      description: "The required task-owned proof is recorded.",
+      needed_for: "implementation" as const,
+      needed_when: "Before admission",
+      blocking: true,
+      condition: "opaque:query-prerequisite#proof",
+      reason: "Admission requires this proof.",
+    };
+    const queryGraph = {
+      ...graph,
+      tasks: [task, {
+        ...dependentTask,
+        prerequisites: [implementationPrerequisite, ...dependentTask.prerequisites],
+      }],
+    };
     const unitRoot = Path.join(root, ".kepler", "missions", missionId, "construction", "units-of-work", unitId);
     await Fs.mkdir(unitRoot, { recursive: true });
     await Fs.mkdir(Path.join(root, ".git"));
-    await Fs.writeFile(Path.join(unitRoot, "tasks-dag.json"), `${JSON.stringify(graph, null, 2)}\n`);
+    await Fs.writeFile(Path.join(unitRoot, "tasks-dag.json"), `${JSON.stringify(queryGraph, null, 2)}\n`);
     await Fs.writeFile(Path.join(unitRoot, "plan.md"), `---\nid: ${planArtifactId}\ntype: implementation-plan\nschema_version: 3\nunit_id: ${unitId}\nauthor: Query Test <query@example.invalid>\n---\n# Plan\n\n## Technical solution\n\nUse the authored task contracts.\n\n## Task graph context\n\nThe graph is [tasks-dag.json](tasks-dag.json).\n\n## Verification strategy\n\nRun the focused checks.\n\n## Decisions and open questions\n\nNo open decisions.\n`);
     const journal = createEventJournal({ recordHome: root, missionId, journalId, phase: CONSTRUCTION_PHASE });
     const missionCreatedId = randomUUID();
@@ -109,6 +124,24 @@ describe("scoped Construction queries", () => {
       checkpoints: [],
       authority_event_ids: [],
     }, [creationId]));
+    const prerequisiteEvidenceId = randomUUID();
+    const prerequisiteEvidenceEventId = randomUUID();
+    await journal.append(event(prerequisiteEvidenceEventId, "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: unitId,
+      evidence_id: prerequisiteEvidenceId,
+      stage: "implementation",
+      stage_attempt_id: implementationAttemptId,
+      task_id: dependentTask.id,
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: implementationPrerequisite.condition, purpose: "Exact task prerequisite proof." }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The required task-owned proof is recorded." },
+      output_refs: [],
+      conditions: [],
+    }, [implementationStartId]));
     const baselineId = randomUUID();
     await journal.append(event(baselineId, "construction.unit-baseline-selected", {
       mission_id: missionId,
@@ -190,10 +223,12 @@ describe("scoped Construction queries", () => {
     const tasks = await queries.taskList(unitId);
     const shownTask = await queries.taskShow(unitId, task.id);
     const readiness = await queries.taskReady(unitId, dependentTask.id);
+    const shownDependentTask = await queries.taskShow(unitId, dependentTask.id);
     const activity = await queries.activityShow(unitId, task.id, "code-generation", implementationAttemptId);
     const lintResult = await lint.execute(unitId);
     const after = await snapshot(root);
 
+    expect(stage).toMatchObject({ unknowns: [] });
     expect(stage).toMatchObject({
       kind: "stage-shown",
       stage: "implementation",
@@ -205,7 +240,7 @@ describe("scoped Construction queries", () => {
       kind: "tasks-listed",
       tasks: [
         { task_id: task.id, state: "waiting" },
-        { task_id: dependentTask.id, state: "blocked" },
+        { task_id: dependentTask.id, state: "blocked", blockers: [`predecessor-not-integrated:${task.id}`] },
       ],
     });
     expect(shownTask).toMatchObject({
@@ -225,8 +260,13 @@ describe("scoped Construction queries", () => {
       kind: "task-readiness",
       readiness: "blocked",
       dependencies: [{ task_id: task.id, status: "not_integrated", declared_outputs: task.outputs, integration_events: [], integrated_output_refs: [] }],
+      known_prerequisite_facts: [{ evidence_id: prerequisiteEvidenceId, event_id: prerequisiteEvidenceEventId, type: "construction.evidence-recorded" }],
       unknown_prerequisites: [{ description: dependentTask.prerequisites[0]?.description, blocking: true, status: "unknown" }],
-      blockers: expect.arrayContaining([`predecessor-not-integrated:${task.id}`]),
+      blockers: [`predecessor-not-integrated:${task.id}`],
+    });
+    expect(shownDependentTask).toMatchObject({
+      kind: "task-shown",
+      blockers: [`predecessor-not-integrated:${task.id}`],
     });
     expect(activity).toMatchObject({
       kind: "activity-shown",
@@ -245,6 +285,37 @@ describe("scoped Construction queries", () => {
     });
     expect(lintResult).toEqual({ kind: "valid", findings: [] });
     expect(after).toEqual(before);
+
+    const rawPrerequisiteEvidenceId = randomUUID();
+    await journal.append(event(randomUUID(), "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: unitId,
+      evidence_id: rawPrerequisiteEvidenceId,
+      stage: "implementation",
+      stage_attempt_id: implementationAttemptId,
+      task_id: dependentTask.id,
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: implementationPrerequisite.condition, purpose: "Exact but unbound prerequisite proof." }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The unbound prerequisite is claimed as satisfied." },
+      output_refs: [],
+      conditions: [],
+    }, [creationId]));
+    const beforeUnsafeQuery = await snapshot(root);
+    const unsafeReadiness = await queries.taskReady(unitId, dependentTask.id);
+    expect(unsafeReadiness).toMatchObject({
+      readiness: "unknown",
+      known_prerequisite_facts: [],
+      unknown_prerequisites: expect.arrayContaining([
+        expect.objectContaining({ description: implementationPrerequisite.description, status: "unknown" }),
+      ]),
+      blockers: expect.arrayContaining([
+        `blocking-prerequisite-unverified:${implementationPrerequisite.description}`,
+      ]),
+    });
+    expect(await snapshot(root)).toEqual(beforeUnsafeQuery);
 
     const graphPath = Path.join(unitRoot, "tasks-dag.json");
     const invalidGraph = { ...graph, unsupported: true };

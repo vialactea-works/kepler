@@ -553,7 +553,7 @@ Branch each milestone from the latest `wt/feat-kepler-v3-worktree-20261020` inte
 
 ## Final acceptance checklist
 
-Checked items passed the 2026-10-31 audit or the later CLI, mission recovery, completion material, portable resource, and Integration updates below. Unchecked items have acceptance gaps or incomplete verification; milestone checkboxes do not override these conclusions.
+Items 1 through 7 passed the audit or later verified implementation updates below. Item 8 is closed under the requester's revised verification scope: the additional native-target verification gap is rejected, not passed. The unexecuted targets remain unverified. Milestone checkboxes do not override recorded evidence or requester decisions.
 
 - [x] Use the accepted authority, attempt, evidence, approval, and completion contracts for all six Standard stages and all three task Activities.
 - [x] Add behavior tests for all accepted CLI operations, including all five audit surfaces and all three diff-package scopes. Use the shared JSON/exit/stream contracts.
@@ -562,13 +562,19 @@ Checked items passed the 2026-10-31 audit or the later CLI, mission recovery, co
 - [x] Keep authored code TypeScript-only. Use interfaces extensively and keep them replaceable. Include exported runtime and type contracts in tests.
 - [x] Use Vitest unit tests as the broad base. Use real integration tests to show collaborations. Use `execa` E2E tests with the playbook-inspired layers. Keep smoke tests out of v3 validation.
 - [x] Keep all eleven skills, four native definitions, v3 templates, compatible installation resources, and user documentation complete and consistent. Do not add live-agent/skill-text tests or certification claims.
-- [ ] Complete verification only when necessary checks pass on identified material. Record actual commands and results. Keep evidence content available. State native-target gaps. Do not invent results. This plan does not give authority for release, deployment, migration, rollback, or destructive cleanup.
+- [x] Complete required verification on identified material and retain actual commands, results, and evidence. State which targets were not executed; do not invent results. Additional native-target verification is not required for this acceptance: the requester rejected that gap on 2026-11-07. This plan does not give authority for release, deployment, migration, rollback, or destructive cleanup.
 
 ### Final acceptance audit: 2026-10-31
 
-**Conclusion: not fully accepted.** The original audit passed three checklist items, found four acceptance gaps, and left final verification partial. The requester resolved the Integration command-interface finding through the decision below. Later CLI, mission recovery, completion material, resource, and Integration updates closed the gaps in items 1 through 7. Item 8 remains partial because other native targets were not executed here. The separate readiness-reporting finding and legacy fixture-cleanup defect remain recorded below.
+**Checklist status: closed under the revised verification scope.** The original audit passed three checklist items, found four acceptance gaps, and left final verification partial. Later verified implementation updates closed items 1 through 7. On 2026-11-07, the requester rejected additional native-target verification as unnecessary, closing the remaining gap in item 8 without claiming those runs passed. The readiness-reporting finding is resolved by the verified update below. The legacy fixture-cleanup defect remains open.
 
 **Original audit material:** `8861ded2b8de9772a94b4b1d151a381b0a407ddf` on `wt/feat-kepler-v3-worktree-20261020`, initially clean. The audit combined three independent read-only reviews, parent source inspection, existing verification gates, and in-memory diagnostics. During that audit, only this plan was edited; code, specifications, tests, bundle resources, and milestone history were not changed. The later working-tree test changes and their verification are recorded separately below. The audit conclusions do not grant requester approval or release authority. The following decision has its own explicit scope.
+
+#### Requester decision: Additional native-target verification
+
+On 2026-11-07, the requester stated that native verification was unnecessary and directed closure of that gap as **rejected**. Additional native runs on Linux arm64 and macOS x86_64/arm64 are not required to close this acceptance checklist. This decision supersedes the earlier partial/open status for that verification gap in the dated updates below.
+
+Existing native Linux x86_64 results and retained evidence remain valid. The other targets remain unexecuted and unverified; rejection is not a passing test result or a certification claim. No additional native verification was performed for this decision. It does not remove existing CI jobs or release checks, authorize release or deployment, or close the separate readiness-reporting and fixture-cleanup findings.
 
 #### Requester decision: Integration command interface
 
@@ -738,6 +744,39 @@ Cleanup removed this run's five identified legacy diff roots and its task-owned 
 
 No commit or push was made for gap 1. No release, deployment, migration, real user-home or native skill-manager installation, live-agent evaluation, smoke test, or certification was performed. Checklist item 1 closes here. Item 8 stays partial: native macOS and arm64 execution remains unverified. The readiness-reporting finding and existing fixture-cleanup defect remain separate open work.
 
+#### Prerequisite readiness update: 2026-11-07
+
+**Readiness-reporting finding: resolved, implemented, reviewed, and verified.** This work follows the requester's approval of shared prerequisite-evidence validation. It starts at signed `ac1651d19a97e5e4e0175d18de5fbc457f4962d1`. The pre-existing `PLAN_V3.md` change rejects additional native-target verification; that decision is preserved and is not a passing target result.
+
+Public red regressions reproduced the reporting mismatch. Readiness previously made every prerequisite unknown and looked for known proof only through an existing admission. Real-history tests also found that replay treated valid pre-admission proof as task work, blocking history that the audit recorder already permitted. The recorder separately rejected fresh proof after any historical admission, although admission already supported a later Implementation attempt.
+
+A shared pure evaluator now validates unique passed `task-prerequisite` facts for the exact task and current Implementation attempt, without Activity scope, using exact opaque input references for the prerequisite condition or description. `task ready` reports applicable prerequisite evidence/event IDs before admission and does not also report those prerequisites as unknown. List and show use the same coverage for derived state and blockers; `task show` keeps its separate general evidence view. Optional and verification facts do not become admission gates. Only uncovered blocking Implementation prerequisites add prerequisite blockers; other dependency and runtime blockers remain. Admission still requires explicit evidence IDs and independently checks its normal conditions.
+
+Standalone prerequisite facts remain evidence without creating an admitted task or Activity. Replay validates their running parent at the recording boundary and their direct cause from the parent's current start or resume. Unbound, unrelated, or causally invalid parent proof blocks the unit even if another fact already projects the task. The recorder allows fresh proof after an earlier attempt's admission, but still requires the selected current running parent and authored task. Legitimate proof stays known for the same uniquely current waiting, pausing, paused, or completed parent. A different attempt cannot reuse it. Queries remain read-only; no probe, reference resolution, freshness policy, automatic admission, or external-availability guarantee was added.
+
+The initial independent reviews found two P1 defects in the first correction: unbound raw proof could bypass replay validation, and a running-only query scope lost valid facts after pause or completion. Both were reproduced and corrected. Public tests now cover invalid causal parents even for an already projected task, blocked query/admission without journal writes, paused/completed reporting, invalid/failed/duplicate/wrong-task/wrong-attempt proof, exact opaque matching, non-gating facts, and explicit old-proof rejection before fresh public recording. Exported prerequisite types have compile-time examples. Renewed regression review returned `PASS (review-only)` and contract review returned `OK with notes`, with no remaining P0/P1/P2 finding.
+
+**Verification material:** five production files and eight TypeScript test files, based on `ac1651d19a97e5e4e0175d18de5fbc457f4962d1`, local Linux x86_64, Bun `1.4.0`. The first full run passed seven gates, but two complete-workflow E2E cases failed because the shared graph fixture now required proof while those consumers still supplied empty evidence IDs. The parent corrected only that E2E setup to record proof through the public audit CLI and select its returned IDs, and added type-contract examples to the existing unit test. No application source or admission guard changed. A bounded independent review found no P0/P1/P2 issue in these two test-only changes.
+
+| Command | Observed result |
+| --- | --- |
+| `bun run check:typescript-sources` | Passed in the full run and test-only retry. |
+| `bun run typecheck` | Passed in both runs, including the type-contract examples. |
+| `bun run check:version` | Passed; workspace `0.11.0`, bundle `kepler-bundle-3.0.2`. |
+| `bun run build` | Core and CLI passed; the E2E retry built both again. |
+| `bun run test:unit` | Final retry: 67 files, 885 tests; 10.68 seconds. First run: 884 tests before the added type-contract case. |
+| `bun run test:integration` | 46 files, 702 tests; 412.29 seconds. Production and integration/CLI test hashes are unchanged in the final retry. |
+| `bun run test:package` | Packed-Core consumer passed; 1 test; 27.97 seconds. It also belongs to the integration project. Core source is unchanged. |
+| `KEPLER_E2E_DOCKER_IMAGE=kepler-readiness-ac1651d-nxvem3:1.4.0 bun run test:e2e` | Final retry: 7 files, all 76 tests; 828.13 seconds. Complete greenfield/existing workflows and the prerequisite/re-admission boundaries passed. |
+
+The failed first E2E run is retained, not counted as success. Its full frozen file hashes matched after failure. The retry snapshot differs in exactly the two documented test files; all five production files and all three integration/CLI files match their passing full-run hashes. All 14 retry snapshot paths, including the pre-existing plan change, matched after the successful retry. Only documentation and this plan were synchronized after executable verification. The final snapshot and post-documentation checks are retained with the gate evidence.
+
+Cleanup removed seven proved test-owned roots (five legacy diff roots and two early CLI experiment roots) and this run's exact Docker image tag. All 58 baseline roots were preserved. Automatic legacy fixture cleanup remains separate work; manual removal does not close that defect.
+
+**Retained evidence:** `/home/caio/.local/state/kepler/acceptance/2026-11-07-ac1651d-readiness-teE3r2/`. It records red/green regressions, both parent gate runs, exact snapshots/hashes, initial and renewed reviews, test-only review, recovery handoffs, and cleanup. `SHA256SUMS` identifies the retained files. Timed-out and output-routing-failed runs are recovery history, not final acceptance proof.
+
+The readiness gap closes here. Additional native-target verification remains **closed/rejected**; Linux arm64 and both macOS targets remain unexecuted and unverified for this acceptance. Existing CI/release checks are unchanged. The fixture-cleanup defect remains open, and one-repository Integration remains an explicit MVP limit. No commit, push, release, deployment, migration, user-home installation, live-agent evaluation, smoke test, or certification was performed for this change.
+
 #### CLI behavior-test update: 2026-11-05
 
 Eight new integration tests in `tests/cli/capability.command.test.ts` cover the real Nest command parser and providers. Each fixture uses public mission and unit creation commands in a temporary Git repository. Successful cases cover `task list`, `task show`, ready and blocked `task ready` results, and Construction lint. Failure cases cover unknown tasks for `show` and `ready`, plus an invalid task graph for lint. All cases check the JSON response, final newline, stderr, and exit code. Repository snapshots verify unchanged files, history, and Git metadata after each query.
@@ -759,7 +798,7 @@ Active LSP checks found no errors or warnings in the changed test file. `git dif
 | 5. TypeScript, replaceable interfaces, and public contracts | Accepted after 2026-11-06 material-reader update | All seven completion/assessment consumers require an injected `ConstructionMaterialReader`. The Node adapter reuses the supplied artifact filesystem throughout artifact and graph validation. Virtual-filesystem and public completion unit tests prove the boundary; type checks cover all seven runtime contracts, and real-filesystem integration plus full CLI/E2E gates passed. See the completion material isolation update above and `packages/cli/src/construction/material-reader.ts`. |
 | 6. Test pyramid and executable gates | Accepted | Vitest unit tests form the broad base; real Git/filesystem/journal/framework integrations and execa CLI E2E are present. The original audit discovered all 114 tracked test files exactly once across the three projects. All gates passed and no active smoke suite/script was found. This accepts the requested pyramid and gate structure, not exhaustive coverage or agent behavior. The test-residue cleanup caveat below remains. |
 | 7. Shipped resources and documentation | Accepted after 2026-11-06 resource update | All eleven skills and four native definitions are complete in the 57-payload bundle. Stage questionnaires and Planning's full graph reference travel inside installable skill directories. Setup and generation reject any missing required v3 template; behavioral tests prove failure preserves the existing installation. Excluded skill-text assertions are removed, packaging integrity checks remain, and local full gates passed. See the portable resource update above. The 2026-11-07 Integration update completes the separate specification synchronization. |
-| 8. Complete verification and retained evidence | Partial | All existing local gates were rerun on the identified source, and complete output is retained. Native Linux x86_64 installer/standalone execution passed. Linux arm64 and both macOS targets were not executed or independently verified in this audit, so full target verification remains open. No cross-compilation or configured CI job is counted as native execution. |
+| 8. Complete verification and retained evidence | Closed; additional native-verification gap rejected | Required local gates passed on identified material and complete evidence is retained. On 2026-11-07, the requester rejected additional native-target verification as unnecessary for this acceptance. Native Linux x86_64 execution passed; Linux arm64 and both macOS targets remain unexecuted and unverified. No new target result, cross-compilation, configured CI job, or certification is presented as native execution proof. |
 
 #### Remaining contract and resource gaps
 
@@ -770,9 +809,9 @@ Active LSP checks found no errors or warnings in the changed test file. `git dif
 
 #### Additional static findings and scope limits
 
-The original Integration stale-evidence hypothesis was dynamically reproduced and resolved by the 2026-11-07 update above. The following separate finding was checked against source but was **not dynamically reproduced** during the original audit:
+The original Integration stale-evidence hypothesis was dynamically reproduced and resolved by the 2026-11-07 Integration update above. The original audit checked the following separate finding against source without dynamically reproducing it at that time. The later [prerequisite readiness update](#prerequisite-readiness-update-2026-11-07) reproduced and resolved it:
 
-- `ConstructionQueries.readiness` initially marks every prerequisite unknown, while its known-fact lookup only follows an existing admission. It does not report otherwise valid pre-admission prerequisite evidence that admission can consume (`packages/cli/src/construction/scoped-queries.ts:496-572`; `packages/cli/src/construction/task-admission.ts:121-148`).
+- **Readiness reporting (resolved):** the original query marked every prerequisite unknown and looked for known proof only through an existing admission. Shared validation, pre-admission discovery, causal replay checks, and verified public CLI behavior now close that finding.
 
 M10 explicitly records single-repository Integration and externally executed worker checks. This audit retains those documented implementation limits rather than treating them as newly discovered policy decisions. M16.3 is not proof that multi-repository Integration acceptance works: the current implementation rejects it before acquisition. No exhaustive API-coverage or live-agent certification claim follows from this audit.
 

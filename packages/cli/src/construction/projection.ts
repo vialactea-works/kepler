@@ -82,6 +82,7 @@ export interface ConstructionProjectionIssue {
     | "invalid-revision-authorization"
     | "invalid-revision-transition"
     | "invalid-task-admission"
+    | "invalid-task-prerequisite-evidence"
     | "invalid-task-completion"
     | "duplicate-unit-baseline";
   readonly message: string;
@@ -649,6 +650,14 @@ const sameActivityScope = (left: ConstructionHistoryFact, right: ConstructionHis
   return a.mission_id === b.mission_id && a.unit_id === b.unit_id && a.stage === b.stage &&
     a.stage_attempt_id === b.stage_attempt_id && a.task_id === b.task_id && a.activity === b.activity &&
     a.activity_attempt_id === b.activity_attempt_id;
+};
+
+const isStandaloneTaskPrerequisiteEvidence = (fact: ConstructionHistoryFact): boolean => {
+  if (fact.event.type !== "construction.evidence-recorded") return false;
+  const data = fact.event.data;
+  return data.stage === "implementation" && typeof data.stage_attempt_id === "string" &&
+    typeof data.task_id === "string" && data.activity === undefined && data.activity_attempt_id === undefined &&
+    data.check === "task-prerequisite";
 };
 
 const evidenceBindingMatches = (
@@ -2706,6 +2715,18 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     }
     return activeParent === boundaryStageAttemptId && parentState === "running";
   };
+  for (const fact of order.uniqueFacts) {
+    if (!isStandaloneTaskPrerequisiteEvidence(fact) ||
+        implementationParentCurrentAt(fact) && completionHasCurrentStartCause(fact, false)) continue;
+    const unitId = factUnitId(fact);
+    addIssue({
+      code: "invalid-task-prerequisite-evidence",
+      message: "Standalone task-prerequisite evidence is not directly bound to its current running Implementation parent start or resume",
+      scope: unitId ? { missionId: history.missionId, unitId } : { missionId: history.missionId },
+      eventIds: [fact.event.id],
+    });
+  }
+
   const validActivityStarts = new Set<string>();
   const staleActivityStarts = new Set<string>();
   const invalidActivityParentTransitions = new Set<string>();
@@ -2884,6 +2905,7 @@ export const projectConstruction = (history: HistoryCollection): ConstructionPro
     }
     const created = creationFacts.length === 1 ? creationFacts[0] : undefined;
     const taskIds = [...new Set(unitFacts.flatMap((fact) => {
+      if (isStandaloneTaskPrerequisiteEvidence(fact)) return [];
       const id = stringField(fact.event.data, "task_id");
       return id ? [id] : [];
     }))].sort(compareString);

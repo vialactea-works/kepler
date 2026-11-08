@@ -11,6 +11,7 @@ import { captureStageCheckpoints, createNodeStageStartRuntime, type StageStartRu
 import { plannedIntegrationCommands } from "./integration-command-contract.js";
 import { runWithConstructionRevisionFence } from "./unit-control.js";
 import { recordTaskCompletionUnderControl } from "./task-completion.js";
+import { validateSelectedTaskPrerequisiteEvidence } from "./task-prerequisite-evidence.js";
 import { retainedActivityFor } from "./retained-activity.js";
 import {
   CONSTRUCTION_EVENT_VERSION,
@@ -109,42 +110,6 @@ const planningGraphRef = (unit: ConstructionUnitProjection): GraphReference | un
   if (!completion || completion.event.type !== "construction.stage-attempt-completed") return undefined;
   const record = readImplementationPlanningCompletionRecord(completion.event.data.implementation_planning_assessment);
   return record?.graph_ref;
-};
-
-const evidenceFact = (unit: ConstructionUnitProjection, evidenceId: string): ConstructionHistoryFact | undefined => {
-  const matches = unit.evidence.map((item) => item.fact).filter((fact) =>
-    fact.event.type === "construction.evidence-recorded" && fact.event.data.evidence_id === evidenceId,
-  );
-  return matches.length === 1 ? matches[0] : undefined;
-};
-
-const selectedEvidence = (
-  unit: ConstructionUnitProjection,
-  evidenceIds: readonly string[],
-  attemptId: string,
-  taskId: string,
-  task: TaskExecutionContext["task"],
-): { readonly kind: "valid"; readonly facts: readonly ConstructionHistoryFact[] } | { readonly kind: "invalid"; readonly missing: readonly string[]; readonly invalid: readonly string[] } => {
-  const facts = evidenceIds.map((id) => evidenceFact(unit, id));
-  const invalid: string[] = [];
-  for (const [index, fact] of facts.entries()) {
-    const id = evidenceIds[index]!;
-    if (!fact || fact.event.type !== "construction.evidence-recorded" || fact.event.data.stage !== "implementation" ||
-        fact.event.data.stage_attempt_id !== attemptId || fact.event.data.task_id !== taskId ||
-        fact.event.data.activity !== undefined || fact.event.data.check !== "task-prerequisite" ||
-        !isRecord(fact.event.data.result) || fact.event.data.result.status !== "passed" ||
-        !Array.isArray(fact.event.data.inputs)) invalid.push(id);
-  }
-  const missing = task.prerequisites.flatMap((prerequisite) => {
-    if (!prerequisite.blocking || prerequisite.needed_for !== "implementation") return [];
-    const covered = facts.some((fact) => fact?.event.type === "construction.evidence-recorded" &&
-      Array.isArray(fact.event.data.inputs) && fact.event.data.inputs.some((input) => isRecord(input) &&
-        [prerequisite.condition, prerequisite.description].includes(String(input.reference))));
-    return covered ? [] : [prerequisite.description];
-  });
-  return missing.length > 0 || invalid.length > 0
-    ? { kind: "invalid", missing, invalid }
-    : { kind: "valid", facts: facts.filter((fact): fact is ConstructionHistoryFact => fact !== undefined) };
 };
 
 const readTargetCheckpoints = async (
@@ -460,7 +425,12 @@ export class TaskAdmission {
       if (reconciled.kind === "failed") return failure(reconciled.code, reconciled.message, reconciled.details, reconciled.recovery);
       return reconciled.value;
     }
-    const selectedPrerequisites = selectedEvidence(unit, request.prerequisite_evidence_ids, implementationAttemptId, taskId, execution.task);
+    const selectedPrerequisites = validateSelectedTaskPrerequisiteEvidence(
+      execution.task.prerequisites,
+      unit.evidence.map(({ fact }) => fact),
+      { taskId, implementationAttemptId },
+      request.prerequisite_evidence_ids,
+    );
     if (selectedPrerequisites.kind === "invalid") return failure("task_prerequisite_unverified", "Blocking implementation prerequisites require passed, task-scoped evidence tied to the current Implementation attempt.", {
       missing_prerequisites: selectedPrerequisites.missing, invalid_evidence_ids: selectedPrerequisites.invalid,
     });

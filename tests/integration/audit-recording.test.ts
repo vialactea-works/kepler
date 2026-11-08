@@ -5,6 +5,8 @@ import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuditContextResolver, createNodeAuditContextFileSystem, createNodeAuditJournalFactory } from "../../packages/cli/src/audit/context.js";
 import { AuditRecording } from "../../packages/cli/src/audit/recording.js";
+import { TaskAdmission, type TaskAdmissionRuntime } from "../../packages/cli/src/construction/task-admission.js";
+import type { ConstructionQueries } from "../../packages/cli/src/construction/scoped-queries.js";
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
 import { createEventJournal } from "../../packages/cli/src/history/journal.js";
 import { ProjectResolver } from "../../packages/cli/src/cli/project-selection.js";
@@ -154,18 +156,22 @@ const createProject = async (): Promise<string> => {
   return root;
 };
 
-const createRecorder = (root: string) => {
+const createAuditContexts = (root: string) => {
   const projects = new ProjectResolver({
     cwd: () => root,
     fileSystem: { realpath: (path) => Fs.realpath(path), directoryExists: async (path) => (await Fs.stat(path)).isDirectory() },
     git: { isBareRepository: async () => ({ status: 0, stdout: "false\n", stderr: "" }), repositoryRoot: async () => ({ status: 0, stdout: `${root}\n`, stderr: "" }), configValue: async () => ({ status: 0, stdout: "", stderr: "" }) },
   });
-  const contexts = new AuditContextResolver({
+  return new AuditContextResolver({
     projects,
     fileSystem: createNodeAuditContextFileSystem(),
     journals: createNodeAuditJournalFactory(),
     identities: { next: randomUUID },
   });
+};
+
+const createRecorder = (root: string) => {
+  const contexts = createAuditContexts(root);
   return new AuditRecording(contexts, {
     identities: { next: randomUUID },
     now: () => "2026-10-21T12:02:00Z",
@@ -208,6 +214,68 @@ describe("audit recording with real journals", () => {
         checkpoints: [{ repository_id: "repo-main", commit: "design-checkpoint" }],
       },
     });
+  });
+
+  it("rejects admission when raw prerequisite proof lacks its current parent cause without appending", async () => {
+    const root = await createProject();
+    const journal = createEventJournal({ recordHome: root, missionId, journalId: initialJournalId, phase: CONSTRUCTION_PHASE });
+    const evidenceId = randomUUID();
+    await journal.append({
+      id: randomUUID(),
+      phase: CONSTRUCTION_PHASE,
+      type: "construction.evidence-recorded",
+      envelope_version: 1,
+      event_version: CONSTRUCTION_EVENT_VERSION,
+      journal_id: initialJournalId,
+      recorded_at: "2026-10-21T12:02:00Z",
+      producer: { name: "kepler", version: "0.10.3" },
+      caused_by: [],
+      data: {
+        mission_id: missionId,
+        unit_id: unitId,
+        stage: "implementation",
+        stage_attempt_id: implementationAttemptId,
+        task_id: taskId,
+        evidence_id: evidenceId,
+        artifact_bindings: [],
+        checkpoints: [],
+        inputs: [{ reference: "opaque:unbound-prerequisite", purpose: "Forged prerequisite proof" }],
+        check: "task-prerequisite",
+        executor: "requester",
+        result: { status: "passed", summary: "The raw proof claims the prerequisite is satisfied." },
+        output_refs: [],
+        conditions: [],
+      },
+    });
+    const journalPath = Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE, `${initialJournalId}.jsonl`);
+    const beforeAdmission = await Fs.readFile(journalPath);
+    const result = await new TaskAdmission(
+      createAuditContexts(root),
+      { taskExecutionContext: async () => ({ kind: "failed", code: "unexpected-admission-query", message: "Unsafe history reached the graph query.", details: {}, recovery: "Do not retry." }) } as unknown as ConstructionQueries,
+      {
+        workspace: {
+          git: { run: async () => ({ status: 0, stdout: `${root}\n`, stderr: "" }) },
+          fileSystem: { realpath: async (path: string) => Fs.realpath(path) },
+          coordination: {
+            acquire: async () => ({ kind: "acquired", lease: { release: async () => ({ kind: "released" }) } }),
+          },
+          identity: { machine_id: "test-machine", process_id: "test-process", process_incarnation_id: "test-incarnation" },
+        },
+      } as unknown as TaskAdmissionRuntime,
+    ).execute({ unit: unitId, task: taskId, implementationAttempt: implementationAttemptId }, {
+      prerequisite_evidence_ids: [evidenceId],
+    });
+
+    expect(result).toMatchObject({
+      kind: "failed",
+      code: "audit_scope_unavailable",
+      details: {
+        projection_issues: expect.arrayContaining([
+          expect.objectContaining({ code: "invalid-task-prerequisite-evidence" }),
+        ]),
+      },
+    });
+    expect(await Fs.readFile(journalPath)).toEqual(beforeAdmission);
   });
 
   it("records a verification event with direct provenance to prior same-attempt evidence", async () => {

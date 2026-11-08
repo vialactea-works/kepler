@@ -72,6 +72,12 @@ kepler workflow construction integration --help
 
 The CLI does not infer approval, select an implicit active scope, dispatch agents, or treat a commit as proof that checks passed. Record ordinary stage and Activity evidence through `kepler audit record evidence` with the operation's typed request. The Integration lifecycle records its prepared-candidate evidence through its own `integration evidence` operation; do not duplicate that record.
 
+### Prerequisite readiness
+
+`task ready`, `task list`, and `task show` use recorded prerequisite proof before admission. A passed `task-prerequisite` fact must name the task and its current Implementation attempt, have no Activity scope, and cover the exact condition or description through an input reference. `task ready` returns known prerequisite evidence/event IDs and remaining unknown prerequisites. List and show use the same coverage for state and blockers; `task show` keeps its general evidence view. Only missing blocking Implementation prerequisites add admission blockers; dependency and runtime blockers remain separate.
+
+Valid facts stay known when the same current parent pauses or completes. A different current attempt needs its own proof. Recording new proof still requires a running parent. `task admit` still requires explicitly selected evidence IDs and independently checks admission conditions. Readiness does not write history, admit work, probe services, or prove external availability. See the [task operation contract](specs/v3/cli.md#task-operations).
+
 ### Checked Integration
 
 Use the separate `integration lock`, `prepare`, `evidence`, `accept`, and `release` operations. Each selects the exact unit, task, Code Integration Activity, Implementation attempt, and Activity attempt. Retain the returned lock token and preparation event ID. The assigned caller runs the required typecheck, build, and full-suite commands while holding the lock; the CLI validates and records supplied results, not command execution. Current executable Integration supports one repository per unit and rejects multi-repository scope before acquiring the lock.

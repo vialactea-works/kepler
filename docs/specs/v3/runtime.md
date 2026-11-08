@@ -403,6 +403,10 @@ Exact journal append, import, and projection mechanisms remain implementation wo
 
 Admission is the start boundary for selecting a task's baseline.
 
+**Implementation note:** standalone task-prerequisite evidence can precede admission. It remains evidence, not a task start, admission, or Activity attempt. Replay requires a valid running Implementation parent at the fact's causal boundary and a direct cause from that parent's current start or resume. Invalid standalone proof blocks the unit, including when another fact already projects the task. Valid proof recorded before a later pause or completion stays inspectable under the same current attempt; it does not authorize work under a different attempt.
+
+Readiness and admission share scope, result, identity, and exact opaque-reference matching rules. Query discovery does not select proof for admission. The caller supplies explicit evidence IDs, and admission checks them with its current running parent and other conditions. An admission under an earlier Implementation attempt does not prevent recording fresh prerequisite proof for a new current running attempt. A current-attempt admission still excludes the special pre-admission recording path.
+
 1. **Readiness.** Make sure that the plan lets execution start. Make sure that all necessary predecessor outputs are in the unit's integrated state.
 2. **Select the baseline.** Capture the current repository-qualified integration set for the unit at admission. It must include all necessary predecessor outputs. Record that set as the task's fixed baseline.
 3. **Keep the recorded baseline.** Once admitted, the task keeps that baseline. Later commits alone do not invalidate it or force it to restart. Compare the evidence with its covered material and relevant inputs, then report whether it still applies.

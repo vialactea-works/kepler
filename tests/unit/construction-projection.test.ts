@@ -2226,4 +2226,227 @@ describe("Construction history projection", () => {
       reliable: false,
     });
   });
+
+  it("retains standalone pre-admission task-prerequisite evidence without inventing a task state", () => {
+    const unitCreated = created("event-pre-admission-unit-created", ids.unit, "journal-prerequisite");
+    const started = stageStart("event-pre-admission-stage-start", ids.stageAttempt, ids.unit, "journal-prerequisite", [unitCreated.id]);
+    const evidence = event("event-pre-admission-prerequisite-proof", "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      evidence_id: ids.dependentSourceEvidence,
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: "opaque: prerequisite#exact", purpose: "Prerequisite evidence" }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The prerequisite is satisfied." },
+      output_refs: [],
+      conditions: [],
+    }, "journal-prerequisite", [started.id]);
+    const projection = projectConstruction(collectHistory(missionId, [source(
+      "origin://pre-admission-prerequisite",
+      "journal-prerequisite",
+      [unitCreated, started, evidence],
+    )]));
+    const unit = projection.units[0];
+
+    expect(unit?.blocked).toBe(false);
+    expect(unit?.stages.find((stage) => stage.stage === "implementation")).toMatchObject({ state: "running", currentAttemptId: ids.stageAttempt });
+    expect(unit?.tasks).toEqual([]);
+    expect(unit?.evidence.map(({ fact }) => fact.event.id)).toContain(evidence.id);
+    expect(unit?.projectionIssues.map((issue) => issue.code)).not.toContain("attempt-transition-without-start");
+  });
+
+  it.each([
+    ["empty parent cause", []],
+    ["unrelated parent cause", ["event-pre-admission-unit-created"]],
+  ] as const)("fails closed on a standalone prerequisite fact with %s", (_name, causedBy) => {
+    const unitCreated = created("event-unbound-prerequisite-unit-created", ids.unit, "journal-unbound-prerequisite");
+    const started = stageStart("event-unbound-prerequisite-stage-start", ids.stageAttempt, ids.unit,
+      "journal-unbound-prerequisite", [unitCreated.id]);
+    const unrelated = created("event-pre-admission-unit-created", ids.otherUnit, "journal-unbound-prerequisite");
+    const evidence = event("event-unbound-prerequisite-proof", "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      evidence_id: ids.dependentSourceEvidence,
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: "opaque: prerequisite#exact", purpose: "Prerequisite evidence" }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The prerequisite is satisfied." },
+      output_refs: [],
+      conditions: [],
+    }, "journal-unbound-prerequisite", causedBy);
+    const projection = projectConstruction(collectHistory(missionId, [source(
+      "origin://unbound-prerequisite",
+      "journal-unbound-prerequisite",
+      [unitCreated, started, unrelated, evidence],
+    )]));
+    const unit = projection.units.find((candidate) => candidate.unitId === ids.unit);
+
+    expect(unit?.blocked).toBe(true);
+    expect(unit?.evidence.map(({ fact }) => fact.event.id)).toContain(evidence.id);
+    expect(unit?.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-prerequisite-evidence");
+  });
+
+  it("preserves proof recorded before a pause but rejects proof recorded after it", () => {
+    const unitCreated = created("event-paused-prerequisite-unit-created", ids.unit, "journal-paused-prerequisite");
+    const started = stageStart("event-paused-prerequisite-stage-start", ids.stageAttempt, ids.unit,
+      "journal-paused-prerequisite", [unitCreated.id]);
+    const proofBeforePause = event("event-prerequisite-before-pause", "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      evidence_id: ids.dependentSourceEvidence,
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: "opaque: prerequisite#exact", purpose: "Prerequisite evidence" }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The prerequisite is satisfied." },
+      output_refs: [],
+      conditions: [],
+    }, "journal-paused-prerequisite", [started.id]);
+    const pauseRequested = event("event-prerequisite-pause-requested", "construction.stage-pause-requested", {
+      mission_id: missionId, unit_id: ids.unit, stage: "implementation", stage_attempt_id: ids.stageAttempt,
+      reason: "Pause after recording the prerequisite proof.",
+    }, "journal-paused-prerequisite", [started.id]);
+    const paused = event("event-prerequisite-paused", "construction.stage-paused", {
+      mission_id: missionId, unit_id: ids.unit, stage: "implementation", stage_attempt_id: ids.stageAttempt,
+      reason: "Pause after recording the prerequisite proof.",
+    }, "journal-paused-prerequisite", [pauseRequested.id]);
+    const validProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://prerequisite-before-pause",
+      "journal-paused-prerequisite",
+      [unitCreated, started, proofBeforePause, pauseRequested, paused],
+    )]));
+    expect(validProjection.units[0]?.blocked).toBe(false);
+    expect(validProjection.units[0]?.stages.find((stage) => stage.stage === "implementation")).toMatchObject({
+      state: "paused", currentAttemptId: ids.stageAttempt,
+    });
+    expect(validProjection.units[0]?.evidence.map(({ fact }) => fact.event.id)).toContain(proofBeforePause.id);
+
+    const proofAfterPause = event("event-prerequisite-after-pause", "construction.evidence-recorded", {
+      ...proofBeforePause.data,
+      evidence_id: "60000000-0000-4000-8000-000000000077",
+    }, "journal-paused-prerequisite", [paused.id]);
+    const invalidProjection = projectConstruction(collectHistory(missionId, [source(
+      "origin://prerequisite-after-pause",
+      "journal-paused-prerequisite",
+      [unitCreated, started, pauseRequested, paused, proofAfterPause],
+    )]));
+    expect(invalidProjection.units[0]?.blocked).toBe(true);
+    expect(invalidProjection.units[0]?.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-prerequisite-evidence");
+  });
+
+  it.each(["closed", "reopened"] as const)("rejects standalone prerequisite proof after a %s parent boundary", (boundary) => {
+    const journalId = `journal-prerequisite-${boundary}`;
+    const unitCreated = created(`event-prerequisite-${boundary}-unit-created`, ids.unit, journalId);
+    const started = stageStart(`event-prerequisite-${boundary}-start`, ids.stageAttempt, ids.unit, journalId, [unitCreated.id]);
+    const interaction = event(`event-prerequisite-${boundary}-interaction`, "construction.interaction-recorded", {
+      mission_id: missionId, unit_id: ids.unit, participants: ["requester"],
+      content: "Authorize a new Implementation parent scope.", references: [],
+    }, journalId, [started.id]);
+    const authorized = event(`event-prerequisite-${boundary}-authorization`, "construction.revision-authorized", {
+      mission_id: missionId, unit_id: ids.unit, revision_id: ids.revision,
+      orchestrator_decision: "Reopen Implementation", reason: "The prior parent is no longer usable.",
+      inputs: [{ reference: "evidence:revision", purpose: "Revision context" }],
+      stage: "implementation", stage_attempt_id: ids.stageAttempt,
+    }, journalId, [interaction.id]);
+    const ended = event(`event-prerequisite-${boundary}-ended`, "construction.stage-attempt-ended-by-revision", {
+      mission_id: missionId, unit_id: ids.unit, stage: "implementation", stage_attempt_id: ids.stageAttempt,
+      revision_id: ids.revision, reason: "Authorized revision.",
+    }, journalId, [authorized.id]);
+    const reopened = event(`event-prerequisite-${boundary}-reopened`, "construction.stage-reopened", {
+      mission_id: missionId, unit_id: ids.unit, stage: "implementation", stage_attempt_id: ids.stageAttempt,
+      revision_id: ids.revision, reason: "Open a replacement parent.",
+    }, journalId, [ended.id, authorized.id]);
+    const parentBoundary = boundary === "closed" ? ended : reopened;
+    const evidence = event(`event-prerequisite-${boundary}-proof`, "construction.evidence-recorded", {
+      mission_id: missionId, unit_id: ids.unit, stage: "implementation", stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask, evidence_id: ids.dependentSourceEvidence,
+      artifact_bindings: [], checkpoints: [],
+      inputs: [{ reference: "opaque: prerequisite#exact", purpose: "Prerequisite evidence" }],
+      check: "task-prerequisite", executor: "requester",
+      result: { status: "passed", summary: "The prerequisite is satisfied." }, output_refs: [], conditions: [],
+    }, journalId, [parentBoundary.id]);
+    const projection = projectConstruction(collectHistory(missionId, [source(
+      `origin://prerequisite-${boundary}`, journalId,
+      [unitCreated, started, interaction, authorized, ended, ...(boundary === "reopened" ? [reopened] : []), evidence],
+    )]));
+
+    expect(projection.units[0]?.blocked).toBe(true);
+    expect(projection.units[0]?.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-prerequisite-evidence");
+  });
+
+  it("marks invalid prerequisite evidence unsafe even when an admission event already projects its task", () => {
+    const unitCreated = created("event-admitted-invalid-prerequisite-unit-created", ids.unit, "journal-admitted-invalid-prerequisite");
+    const started = stageStart("event-admitted-invalid-prerequisite-start", ids.stageAttempt, ids.unit,
+      "journal-admitted-invalid-prerequisite", [unitCreated.id]);
+    const baseline = event("event-admitted-invalid-prerequisite-baseline", "construction.unit-baseline-selected", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      review_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      integration_targets: [{ repository_id: "repo-main", target: "main" }],
+    }, "journal-admitted-invalid-prerequisite", [unitCreated.id]);
+    const admission = taskAdmission(ids.unit, "journal-admitted-invalid-prerequisite", [started.id, baseline.id]);
+    const evidence = event("event-admitted-invalid-prerequisite-proof", "construction.evidence-recorded", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.task,
+      evidence_id: ids.dependentSourceEvidence,
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: "opaque: prerequisite#exact", purpose: "Prerequisite evidence" }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The prerequisite is satisfied." },
+      output_refs: [],
+      conditions: [],
+    }, "journal-admitted-invalid-prerequisite", [unitCreated.id]);
+    const projection = projectConstruction(collectHistory(missionId, [source(
+      "origin://admitted-invalid-prerequisite",
+      "journal-admitted-invalid-prerequisite",
+      [unitCreated, started, baseline, admission, evidence],
+    )]));
+
+    expect(projection.units[0]?.tasks.map((task) => task.taskId)).toContain(ids.task);
+    expect(projection.units[0]?.blocked).toBe(true);
+    expect(projection.units[0]?.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-prerequisite-evidence");
+  });
+
+  it("continues blocking task Activity transitions without a validated task admission", () => {
+    const unitCreated = created("event-unadmitted-work-unit-created", ids.unit, "journal-unadmitted-work");
+    const started = stageStart("event-unadmitted-work-stage-start", ids.stageAttempt, ids.unit, "journal-unadmitted-work", [unitCreated.id]);
+    const activityStart = event("event-unadmitted-work-activity-start", "construction.activity-attempt-started", {
+      mission_id: missionId,
+      unit_id: ids.unit,
+      stage: "implementation",
+      stage_attempt_id: ids.stageAttempt,
+      task_id: ids.dependentTask,
+      activity: "code-generation",
+      activity_attempt_id: ids.dependentActivityAttempt,
+      inputs: [],
+      checkpoints: [],
+    }, "journal-unadmitted-work", [started.id]);
+    const projection = projectConstruction(collectHistory(missionId, [source(
+      "origin://unadmitted-task-work",
+      "journal-unadmitted-work",
+      [unitCreated, started, activityStart],
+    )]));
+
+    expect(projection.units[0]?.blocked).toBe(true);
+    expect(projection.units[0]?.projectionIssues.map((issue) => issue.code)).toContain("attempt-transition-without-start");
+  });
 });

@@ -30,6 +30,14 @@ const planningArtifactId = "c1000000-0000-4000-8000-000000000001";
 const planningGraphId = "c2000000-0000-4000-8000-000000000002";
 const planningTaskId = "c3000000-0000-4000-8000-000000000003";
 const planningSecondTaskId = "c4000000-0000-4000-8000-000000000004";
+const planningSecondPrerequisite = {
+  description: "A current task-owned prerequisite proof is recorded.",
+  needed_for: "implementation" as const,
+  needed_when: "Before task admission",
+  blocking: true,
+  condition: "opaque:planning-prerequisite#exact",
+  reason: "Task admission requires this recorded condition.",
+};
 
 const projectArtifactSources = (unitId: string) => ({
   "unit-of-work.md": `---\nid: ${artifactIds["unit-of-work.md"]}\ntype: unit-of-work\nschema_version: 3\nunit_id: ${unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Unit of Work\n\n## Purpose\n\nMake the selected workflow behavior explicit.\n\n## Scope\n\nInclude the Functional Design contract.\n\n## Context\n\nKeep the current public behavior and constraints.\n`,
@@ -443,11 +451,11 @@ const createPlanningArtifacts = async (
       verification: [
         { scope: "typecheck", method: `Typecheck regression coverage with \`${typecheckCommand("tests/access-regression.ts")}\`.`, expected_result: "Typechecking passes." },
         { scope: "build", method: `${buildMethod} \`${buildCommand}\`.`, expected_result: buildExpected },
-        { scope: "full-test-suite", method: `Run the full test suite with \`${testCommand("tests/access-regression.ts")}\`.`, expected_result: "The regression tests pass." },
+        { scope: "full-test-suite", method: `Run the full test suite for regression coverage with \`${testCommand("tests/access-regression.ts")}\`.`, expected_result: "The regression tests pass." },
         { scope: "unit", method: "Run the access-policy unit test", expected_result: "A non-owner is denied." },
       ],
       depends_on: [],
-      prerequisites: [],
+      prerequisites: [planningSecondPrerequisite],
     }],
   };
   const graphSource = `${JSON.stringify(graph, null, 2)}\n`;
@@ -467,7 +475,8 @@ const createPlanningArtifacts = async (
     outputs: task.outputs,
     acceptance_criteria: task.acceptance_criteria,
     dependency_task_ids: [],
-    implementation_prerequisites: [],
+    implementation_prerequisites: task.prerequisites.filter((prerequisite) => prerequisite.blocking && prerequisite.needed_for === "implementation")
+      .map(({ description, condition }) => ({ description, condition })),
   }));
   return {
     artifactBindings: [planBinding],
@@ -481,6 +490,9 @@ const createPlanningArtifacts = async (
     taskContracts,
     verificationObligations: graph.tasks.flatMap((task) => task.verification.map((verification) =>
       `task:${task.id} ${verification.scope}: ${verification.method}; expected: ${verification.expected_result}`,
+    )),
+    prerequisiteConditions: graph.tasks.flatMap((task) => task.prerequisites.map((prerequisite) =>
+      `task:${task.id} ${prerequisite.description}; needed for ${prerequisite.needed_for} ${prerequisite.needed_when}; blocking: ${prerequisite.blocking}; condition: ${prerequisite.condition}; reason: ${prerequisite.reason}`,
     )),
     taskContract: taskContracts[0]!
   };
@@ -572,7 +584,7 @@ const planningCompletionRequest = (
       graph_ref: material.graphRef,
       task_ids: material.taskIds,
       verification_obligations: material.verificationObligations,
-      prerequisite_conditions: [],
+      prerequisite_conditions: material.prerequisiteConditions,
       coordination_constraints: ["Serialize repository integration per unit."],
       approval_required: false,
     },
@@ -1149,6 +1161,79 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(unknownPrerequisite.exitCode).toBe(1);
     expect(JSON.parse(unknownPrerequisite.stdout)).toMatchObject({ status: "failed", data: { code: "task_prerequisite_unverified" } });
     expect(await audit.journalSnapshot()).toBe(beforeUnknownPrerequisite);
+    const beforeUnknownSecondReadiness = await audit.journalSnapshot();
+    const unknownSecondReadiness = harness.cli.run([
+      "workflow", "construction", "task", "ready", "--unit", auditFixture.unitId,
+      "--task", planningSecondTaskId,
+    ]);
+    expect(unknownSecondReadiness.exitCode).toBe(0);
+    expect(JSON.parse(unknownSecondReadiness.stdout)).toMatchObject({
+      status: "success",
+      data: {
+        task_id: planningSecondTaskId,
+        readiness: "blocked",
+        known_prerequisite_facts: [],
+        unknown_prerequisites: [expect.objectContaining({ description: planningSecondPrerequisite.description, status: "unknown" })],
+        blockers: [`blocking-prerequisite-unverified:${planningSecondPrerequisite.description}`],
+      },
+    });
+    expect(await audit.journalSnapshot()).toBe(beforeUnknownSecondReadiness);
+    const missingSecondPrerequisiteAdmission = harness.cli.run([
+      "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
+      "--implementation-attempt", implementationAttempt,
+      "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [] }),
+    ]);
+    expect(missingSecondPrerequisiteAdmission.exitCode).toBe(1);
+    expect(JSON.parse(missingSecondPrerequisiteAdmission.stdout)).toMatchObject({
+      status: "failed",
+      data: { code: "task_prerequisite_unverified", details: { missing_prerequisites: [planningSecondPrerequisite.description] } },
+    });
+    const beforeMissingSecondPrerequisiteAdmission = await audit.journalSnapshot();
+    expect(beforeMissingSecondPrerequisiteAdmission).toBe(beforeUnknownSecondReadiness);
+    const prerequisiteEvidence = audit.record("evidence", {
+      unit: auditFixture.unitId,
+      task: planningSecondTaskId,
+      implementationAttempt,
+    }, {
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: planningSecondPrerequisite.condition, purpose: "Exact task prerequisite evidence." }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The current task prerequisite is satisfied." },
+      output_refs: [],
+    });
+    expect(prerequisiteEvidence.exitCode, JSON.stringify(prerequisiteEvidence.result)).toBe(0);
+    const prerequisiteEvidenceId = String(prerequisiteEvidence.result.data.evidence_id);
+    const beforeReadyWithEvidence = await audit.journalSnapshot();
+    const readyWithEvidence = harness.cli.run([
+      "workflow", "construction", "task", "ready", "--unit", auditFixture.unitId,
+      "--task", planningSecondTaskId,
+    ]);
+    expect(readyWithEvidence.exitCode).toBe(0);
+    expect(JSON.parse(readyWithEvidence.stdout)).toMatchObject({
+      status: "success",
+      data: {
+        task_id: planningSecondTaskId,
+        readiness: "ready",
+        known_prerequisite_facts: [{ evidence_id: prerequisiteEvidenceId, type: "construction.evidence-recorded" }],
+        unknown_prerequisites: [],
+        blockers: [],
+      },
+    });
+    expect(await audit.journalSnapshot()).toBe(beforeReadyWithEvidence);
+    const badSecondPrerequisiteEvidenceId = randomUUID();
+    const badSecondPrerequisiteAdmission = harness.cli.run([
+      "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
+      "--implementation-attempt", implementationAttempt,
+      "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [badSecondPrerequisiteEvidenceId] }),
+    ]);
+    expect(badSecondPrerequisiteAdmission.exitCode).toBe(1);
+    expect(JSON.parse(badSecondPrerequisiteAdmission.stdout)).toMatchObject({
+      status: "failed",
+      data: { code: "task_prerequisite_unverified", details: { invalid_evidence_ids: [badSecondPrerequisiteEvidenceId] } },
+    });
+    expect(await audit.journalSnapshot()).toBe(beforeReadyWithEvidence);
     const firstAdmissionProcess = await runCliWithExeca(harness, [
       "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningTaskId,
       "--implementation-attempt", implementationAttempt,
@@ -1156,6 +1241,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     const secondAdmissionProcess = await runCliWithExeca(harness, [
       "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
       "--implementation-attempt", implementationAttempt,
+      "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [prerequisiteEvidenceId] }),
     ]);
     const firstAdmissionResult = JSON.parse(firstAdmissionProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
     const secondAdmissionResult = JSON.parse(secondAdmissionProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
@@ -1699,6 +1785,36 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(postCompletionStageStartResult.status).toBe("success");
     const postCompletionAttempt = String(postCompletionStageStartResult.data.attempt_id);
     const postCompletionStartEventId = String(postCompletionStageStartResult.data.id);
+    const beforeOldPrerequisiteProofChecks = await audit.journalSnapshot();
+    const oldPrerequisiteReadiness = harness.cli.run([
+      "workflow", "construction", "task", "ready", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
+    ]);
+    expect(oldPrerequisiteReadiness.exitCode, oldPrerequisiteReadiness.stdout).toBe(0);
+    expect(JSON.parse(oldPrerequisiteReadiness.stdout)).toMatchObject({
+      status: "success",
+      data: {
+        known_prerequisite_facts: [],
+        unknown_prerequisites: [expect.objectContaining({ description: planningSecondPrerequisite.description, status: "unknown" })],
+        blockers: expect.arrayContaining([`blocking-prerequisite-unverified:${planningSecondPrerequisite.description}`]),
+      },
+    });
+    const oldProofAdmission = harness.cli.run([
+      "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
+      "--implementation-attempt", postCompletionAttempt,
+      "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [prerequisiteEvidenceId] }),
+    ]);
+    expect(oldProofAdmission.exitCode).toBe(1);
+    expect(JSON.parse(oldProofAdmission.stdout)).toMatchObject({
+      status: "failed",
+      data: {
+        code: "task_prerequisite_unverified",
+        details: {
+          missing_prerequisites: [planningSecondPrerequisite.description],
+          invalid_evidence_ids: [prerequisiteEvidenceId],
+        },
+      },
+    });
+    expect(await audit.journalSnapshot()).toBe(beforeOldPrerequisiteProofChecks);
     const priorImplementationEvents = (await readConstructionSources(harness)).flatMap(parseHistorySource);
     const postCompletionRetainedAssessments = [] as Array<Record<string, unknown>>;
     for (const taskId of [planningTaskId, planningSecondTaskId]) {
@@ -1741,11 +1857,28 @@ describe("Functional Design stage completion CLI E2E", () => {
     });
     expect(postCompletionRetainedAssessment.exitCode, JSON.stringify(postCompletionRetainedAssessment.result)).toBe(0);
     const postCompletionRetainedAssessmentId = String(postCompletionRetainedAssessment.result.data.id);
+    const postCompletionPrerequisiteEvidence = audit.record("evidence", {
+      unit: auditFixture.unitId,
+      task: planningSecondTaskId,
+      implementationAttempt: postCompletionAttempt,
+    }, {
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: planningSecondPrerequisite.condition, purpose: "Current task prerequisite evidence." }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The current task prerequisite is satisfied." },
+      output_refs: [],
+    });
+    expect(postCompletionPrerequisiteEvidence.exitCode, JSON.stringify(postCompletionPrerequisiteEvidence.result)).toBe(0);
+    const postCompletionPrerequisiteEvidenceId = String(postCompletionPrerequisiteEvidence.result.data.evidence_id);
     const postCompletionAdmissions = [] as Array<{ readonly taskId: string; readonly admissionId: string; readonly completionId: string; readonly integrationId: string }>;
     for (const taskId of [planningTaskId, planningSecondTaskId]) {
       const admission = harness.cli.run([
         "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", taskId,
-        "--implementation-attempt", postCompletionAttempt, "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [] }),
+        "--implementation-attempt", postCompletionAttempt, "--prerequisites", JSON.stringify({
+          prerequisite_evidence_ids: taskId === planningSecondTaskId ? [postCompletionPrerequisiteEvidenceId] : [],
+        }),
       ]);
       expect(admission.exitCode, admission.stdout).toBe(0);
       const admissionResult = JSON.parse(admission.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
@@ -2029,6 +2162,36 @@ describe("Functional Design stage completion CLI E2E", () => {
     const verificationBeforeOutcomeProjection = projectConstruction(collectHistoryFromSources(auditFixture.missionId, verificationBeforeOutcomeHistory, { completeness: "complete" }));
     expect(verificationBeforeOutcomeProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-completion-evidence");
     expect(verificationBeforeOutcomeProjection.units[0]?.blocked).toBe(true);
+
+    const completedImplementation = deliveredHistory.flatMap(parseHistorySource).find((record) =>
+      record.type === "construction.stage-attempt-completed" && historyData(record).unit_id === auditFixture.unitId &&
+      historyData(record).stage === "implementation" && historyData(record).stage_attempt_id === postCompletionAttempt);
+    if (!completedImplementation || typeof completedImplementation.id !== "string") {
+      throw new Error("The current Implementation parent completion is missing.");
+    }
+    await appendTypedConstructionEvent(harness, "construction.evidence-recorded", {
+      mission_id: auditFixture.missionId,
+      unit_id: auditFixture.unitId,
+      stage: "implementation",
+      stage_attempt_id: postCompletionAttempt,
+      task_id: planningSecondTaskId,
+      evidence_id: randomUUID(),
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: planningSecondPrerequisite.condition, purpose: "Prerequisite proof recorded after completion." }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The late proof must not reopen the completed parent." },
+      output_refs: [],
+      conditions: [],
+    }, [completedImplementation.id]);
+    const completedParentProjection = projectConstruction(collectHistoryFromSources(
+      auditFixture.missionId,
+      await readConstructionSources(harness),
+      { completeness: "complete" },
+    ));
+    expect(completedParentProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-prerequisite-evidence");
+    expect(completedParentProjection.units[0]?.blocked).toBe(true);
   }, 600_000);
 
   it("rejects a Quality Requirements attempt without Functional Design authority in completion and replay", async () => {
@@ -2310,14 +2473,34 @@ describe("Standard workflow CLI E2E", () => {
     } as const);
     const runTask = async (taskId: string, testFile: string) => {
       const taskIntegrationCommands = integrationCommands(testFile);
-      const admission = harness.cli.run([
-        "workflow", "construction", "task", "admit", "--unit", unitId, "--task", taskId,
-        "--implementation-attempt", implementationAttempt, "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [] }), "--project", root,
-      ]);
-      expect(admission.exitCode, admission.stdout).toBe(0);
       const taskIndex = planningMaterial.taskIds.indexOf(taskId);
       const taskContract = planningMaterial.taskContracts[taskIndex];
       if (!taskContract) throw new Error(`Missing plan contract for ${taskId}`);
+      const prerequisiteEvidenceIds: string[] = [];
+      for (const prerequisite of taskContract.implementation_prerequisites) {
+        const proof = audit.record("evidence", {
+          unit: unitId,
+          stage: "implementation",
+          task: taskId,
+          implementationAttempt,
+        }, {
+          artifact_bindings: planningMaterial.reviewedBindings,
+          checkpoints: [{ repository_id: repositoryId, commit: harness.resources.runGit(root, "rev-parse", "HEAD") }],
+          inputs: [{ reference: prerequisite.condition, purpose: prerequisite.description }],
+          check: "task-prerequisite",
+          executor: "requester",
+          result: { status: "passed", summary: "The required task-owned prerequisite proof is recorded." },
+          output_refs: [],
+          conditions: [],
+        });
+        expect(proof.exitCode, proof.stdout).toBe(0);
+        prerequisiteEvidenceIds.push(String(proof.result.data.evidence_id));
+      }
+      const admission = harness.cli.run([
+        "workflow", "construction", "task", "admit", "--unit", unitId, "--task", taskId,
+        "--implementation-attempt", implementationAttempt, "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: prerequisiteEvidenceIds }), "--project", root,
+      ]);
+      expect(admission.exitCode, admission.stdout).toBe(0);
       const activityEvidenceIds: string[] = [];
       let integrationEventId = "";
       for (const activity of ["code-generation", "code-validation", "code-integration"] as const) {

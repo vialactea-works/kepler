@@ -261,7 +261,10 @@ export class AuditContextResolver implements AuditRecordContextResolver {
         taskExists = false;
       }
       if (!taskExists) return invalidScope("Pre-admission prerequisite evidence must name a task in the current authored task graph.", { task_id: selectors.task });
-      if ((selectedTask?.admissions.length ?? 0) > 0 || stage?.state !== "running" ||
+      const admittedInCurrentAttempt = selectedTask?.admissions.some((fact) =>
+        fact.event.type === "construction.task-admitted" && fact.event.data.stage_attempt_id === selectors.implementationAttempt,
+      ) ?? false;
+      if (admittedInCurrentAttempt || stage?.state !== "running" ||
           stage.currentAttemptId !== selectors.implementationAttempt || !start) {
         return invalidScope("Pre-admission prerequisite evidence requires a graph task without prior admission under the current running Implementation attempt.", {
           task_id: selectors.task, implementation_attempt_id: selectors.implementationAttempt,

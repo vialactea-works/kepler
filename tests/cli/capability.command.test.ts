@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
@@ -6,7 +7,15 @@ import * as Path from "node:path";
 import type { INestApplicationContext } from "@nestjs/common";
 import { CommandFactory } from "nest-commander";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  EVENT_ENVELOPE_VERSION,
+  type EventEnvelope,
+  type EventId,
+  type JournalId,
+} from "../../packages/core/src/event-envelope.js";
+import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
 import { AppModule } from "../../packages/cli/src/cli/app.module.js";
+import { createEventJournal } from "../../packages/cli/src/history/journal.js";
 import { taskGraphExample } from "../fixtures/task-graph.js";
 
 interface CapturedCli {
@@ -87,6 +96,25 @@ const snapshot = async (root: string): Promise<string> => {
   await visit(root);
   return entries.join("\n");
 };
+
+const constructionEvent = (
+  id: string,
+  journalId: string,
+  type: string,
+  data: Record<string, unknown>,
+  causedBy: readonly string[] = [],
+): EventEnvelope<Record<string, unknown>> => ({
+  id: id as EventId,
+  phase: CONSTRUCTION_PHASE,
+  type,
+  envelope_version: EVENT_ENVELOPE_VERSION,
+  event_version: CONSTRUCTION_EVENT_VERSION,
+  journal_id: journalId as JournalId,
+  recorded_at: "2026-11-07T12:00:00.000Z",
+  producer: { name: "kepler", version: "0.11.0" },
+  caused_by: causedBy as EventId[],
+  data,
+});
 
 const withGitEnvironment = async <T>(
   globalConfig: string,
@@ -785,6 +813,78 @@ describe("Construction query CLI", () => {
       progress: { completed_activities: 0, total_activities: 3, complete: false },
       blockers: [],
       unknowns: [],
+    });
+  });
+
+  it("reports current passed prerequisite proof through the real Nest query command without writing", async () => {
+    const fixture = await createQueryFixture();
+    const task = fixture.graph.tasks[0]!;
+    const prerequisite = {
+      description: "Current task-scoped proof is recorded.",
+      needed_for: "implementation" as const,
+      needed_when: "Before admission",
+      blocking: true,
+      condition: "opaque:cli-prerequisite#exact",
+      reason: "Admission requires this fact.",
+    };
+    const graph = { ...fixture.graph, tasks: [{ ...task, prerequisites: [prerequisite] }, fixture.graph.tasks[1]!] };
+    await Fs.writeFile(fixture.graphPath, `${JSON.stringify(graph, null, 2)}\n`);
+    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", fixture.missionId, "history", "construction");
+    const journalFiles = (await Fs.readdir(historyDirectory)).filter((name) => name.endsWith(".jsonl"));
+    const records = (await Promise.all(journalFiles.map(async (name) =>
+      (await Fs.readFile(Path.join(historyDirectory, name), "utf8")).trimEnd().split("\n")
+        .map((line) => JSON.parse(line) as { id: string; journal_id: string; type: string }),
+    ))).flat();
+    const unitCreated = records.find((record) => record.type === "construction.unit-created");
+    if (!unitCreated) throw new Error("Expected the unit creation event.");
+    const implementationAttemptId = randomUUID();
+    const evidenceId = randomUUID();
+    const stageStartId = randomUUID();
+    const evidenceEventId = randomUUID();
+    const journal = createEventJournal({
+      recordHome: fixture.root,
+      missionId: fixture.missionId,
+      journalId: unitCreated.journal_id,
+      phase: CONSTRUCTION_PHASE,
+    });
+    await journal.append(constructionEvent(stageStartId, unitCreated.journal_id, "construction.stage-attempt-started", {
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      stage: "implementation",
+      stage_attempt_id: implementationAttemptId,
+      inputs: [],
+      checkpoints: [],
+      authority_event_ids: [],
+    }, [unitCreated.id]));
+    await journal.append(constructionEvent(evidenceEventId, unitCreated.journal_id, "construction.evidence-recorded", {
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      evidence_id: evidenceId,
+      stage: "implementation",
+      stage_attempt_id: implementationAttemptId,
+      task_id: task.id,
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: prerequisite.condition, purpose: "Exact prerequisite evidence." }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The task prerequisite is satisfied." },
+      output_refs: [],
+      conditions: [],
+    }, [stageStartId]));
+
+    const listed = await query(fixture, ["task", "list"]);
+    const shown = await query(fixture, ["task", "show", "--task", task.id]);
+    const ready = await query(fixture, ["task", "ready", "--task", task.id]);
+
+    expect(listed.tasks).toEqual(expect.arrayContaining([expect.objectContaining({ task_id: task.id, state: "ready", blockers: [] })]));
+    expect(shown).toMatchObject({ state: "ready", current_scope: { implementation_attempt_id: null }, blockers: [] });
+    expect(ready).toMatchObject({
+      task_id: task.id,
+      readiness: "ready",
+      known_prerequisite_facts: [{ evidence_id: evidenceId, event_id: evidenceEventId, type: "construction.evidence-recorded" }],
+      unknown_prerequisites: [],
+      blockers: [],
     });
   });
 

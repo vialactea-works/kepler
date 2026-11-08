@@ -25,6 +25,12 @@ A success with `data.historical: true` reports recorded preparation only. It nee
 5. **Resume only a safe, paused attempt.** Use the owning `stage resume` or `activity resume` operation for the exact attempt after confirming its inputs and ownership remain valid. A retry of a failed command does not require a new attempt. Start a new attempt only when an authorized transition requires one.
 6. **Reopen only through revision authority.** If an upstream artifact invalidates later work, report the material facts and use the authorized `kepler workflow construction revise` operation. Do not change journal records or projections to force a transition.
 
+### Prerequisite proof after interruption or revision
+
+Inspect `task ready` and the cited evidence under the exact unit and task. Valid facts remain visible when the same current Implementation parent pauses or completes. After a new Implementation attempt starts, old-attempt proof does not satisfy its prerequisites. Record fresh proof through `kepler audit record evidence` under the current running parent and task, then select its IDs explicitly for admission. An earlier attempt's admission does not prevent recording this new proof.
+
+If replay reports `invalid-task-prerequisite-evidence`, preserve the evidence and its parent start, resume, and revision facts. Unbound proof or proof recorded after a causally prior pause or closure blocks the unit. Do not delete a record, invent a cause, or edit a journal to force readiness. Resolve uncertain history through an authorized recovery decision. A readiness result grants no repair or work authority.
+
 ### Integration acceptance and release
 
 If acceptance reports `integration_evidence_changed`, inspect the current prepared candidate and latest check records. Keep the same lock token and attempt. Retry acceptance explicitly only when the current required checks succeeded and their bindings remain valid; do not re-record old results as new proof. Failed or inconclusive current evidence prevents acceptance.
