@@ -132,6 +132,7 @@ describe("mission handoff Git object preflight", () => {
     const globalConfig = Path.join(parent, "empty-global-config");
     await Fs.writeFile(globalConfig, "");
     const repository = await createRepository(parent, globalConfig, "application");
+    runGit(repository, globalConfig, "config", "gc.auto", "0");
     const objectsDirectory = Path.join(repository, "objects");
     await Fs.mkdir(objectsDirectory);
     const objectFiles = Array.from({ length: 8000 }, (_, index) => Path.join(

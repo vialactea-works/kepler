@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
 import * as Os from "node:os";
 import * as Path from "node:path";
@@ -26,12 +26,29 @@ import {
 
 const originalDirectory = process.cwd();
 const sourceCli = fileURLToPath(new URL("../../packages/cli/src/cli/main.ts", import.meta.url));
+const ownedDiffFixtureRoots: string[] = [];
+const cleanupExpectedPaths: string[] = [];
+const preservedFiles: { readonly path: string; readonly contents: string }[] = [];
+const preservedDirectories: string[] = [];
+let diffFixtureRoot: string | undefined;
+
+const createDiffFixtureRoot = (): string => {
+  const root = Fs.mkdtempSync(
+    Path.join(Fs.realpathSync(Os.tmpdir()), "kepler-diff-fixture-"),
+  );
+  ownedDiffFixtureRoots.push(root);
+  return root;
+};
 
 const sourceDiff = (cwd: string, changeDir: string, task: number) => {
   const result = spawnSync(
     "bun",
     [sourceCli, "workbench", "diff", "--task", `${task}`, "--change-dir", changeDir],
-    { cwd, encoding: "utf8", env: fixtureEnvironment },
+    {
+      cwd,
+      encoding: "utf8",
+      env: { ...fixtureEnvironment, TMPDIR: diffFixtureRoot },
+    },
   );
   return {
     status: result.status ?? -1,
@@ -161,9 +178,50 @@ const createSerialReservationFixture = (
   return { repo, changeDir, approval };
 };
 
+beforeEach(() => {
+  diffFixtureRoot = createDiffFixtureRoot();
+});
+
 afterEach(() => {
   process.chdir(originalDirectory);
-  cleanupRepos();
+  const cleanupErrors: unknown[] = [];
+  try {
+    cleanupRepos();
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  for (const root of ownedDiffFixtureRoots.splice(0)) {
+    try {
+      Fs.rmSync(root, { recursive: true, force: true });
+      expect(Fs.existsSync(root)).toBe(false);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  diffFixtureRoot = undefined;
+  for (const preserved of preservedFiles.splice(0)) {
+    try {
+      expect(Fs.readFileSync(preserved.path, "utf8")).toBe(preserved.contents);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  for (const directory of preservedDirectories.splice(0)) {
+    try {
+      Fs.rmSync(directory, { recursive: true, force: true });
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  for (const path of cleanupExpectedPaths.splice(0)) {
+    try {
+      expect(Fs.existsSync(path)).toBe(false);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  if (cleanupErrors.length > 0)
+    throw new AggregateError(cleanupErrors, "Diff fixture cleanup failed");
 });
 
 const inDirectory = (directory: string) => {
@@ -171,10 +229,30 @@ const inDirectory = (directory: string) => {
   return directory;
 };
 
+const defaultMakeTempFile = createDiffRuntime().fileSystem.makeTempFile;
+
+const ownDiffRuntimeOutput = (runtime: DiffRuntime): DiffRuntime => {
+  if (runtime.fileSystem.makeTempFile !== defaultMakeTempFile) return runtime;
+  return {
+    ...runtime,
+    fileSystem: {
+      ...runtime.fileSystem,
+      makeTempFile: (label: string) => {
+        if (diffFixtureRoot === undefined)
+          throw new Error("diff fixture output has no registered owner");
+        const directory = Fs.mkdtempSync(
+          Path.join(diffFixtureRoot, `kepler-diff-${label}-`),
+        );
+        return Path.join(directory, "package.diff");
+      },
+    },
+  };
+};
+
 const executeDiff = (
   args: DiffArguments,
   runtime: DiffRuntime = createDiffRuntime(),
-) => new DiffService(runtime).execute(args);
+) => new DiffService(ownDiffRuntimeOutput(runtime)).execute(args);
 
 const taskPlan = (task: number, title = "Test task") =>
   `### Task ${task}: ${title}\n`;
@@ -803,6 +881,51 @@ describe("diff package ranges", () => {
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("not an ancestor");
+  });
+
+  it("retains default packages during the test and cleans only fixture-owned output roots", async () => {
+    const repo = inDirectory(makeRepo());
+    const changeDir = makeChangeDir(repo, "add-auth");
+    prepareTask(repo, changeDir, 2);
+    await executeDiff({ mode: "record", task: "2", changeDir });
+    write(repo, "src/auth.ts", "export const auth = true\n");
+    commitAll(repo, "add auth");
+
+    const sentinelDirectory = Fs.mkdtempSync(
+      Path.join(Fs.realpathSync(Os.tmpdir()), "kepler-diff-unrelated-"),
+    );
+    preservedDirectories.push(sentinelDirectory);
+    const sentinelPath = Path.join(sentinelDirectory, "keep.txt");
+    const sentinelContents = "unrelated fixture data\n";
+    Fs.writeFileSync(sentinelPath, sentinelContents);
+    preservedFiles.push({ path: sentinelPath, contents: sentinelContents });
+
+    const packaged = await executeDiff({ mode: "task", task: "2", changeDir });
+    expect(packaged.exitCode, packaged.stderr).toBe(0);
+    expect(packaged.stdout).toContain(`Package: ${packaged.lastLine}`);
+    expect(Fs.readFileSync(packaged.lastLine, "utf8")).toContain("auth = true");
+    cleanupExpectedPaths.push(packaged.lastLine, Path.dirname(packaged.lastLine));
+
+    let failedOutputPath = "";
+    const runtime = createDiffRuntime({ cwd: () => repo });
+    const failedFileSystem: DiffFileSystemPort = {
+      ...runtime.fileSystem,
+      writeFile: (sourcePath: string) => {
+        failedOutputPath = sourcePath;
+        throw new Error("simulated default output failure");
+      },
+    };
+    const failed = await executeDiff(
+      { mode: "task", task: "2", changeDir },
+      createDiffRuntime({ cwd: () => repo, fileSystem: failedFileSystem }),
+    );
+
+    expect(failed.exitCode).toBe(2);
+    expect(failed.stdout).toBe("");
+    expect(failed.stderr).toContain("simulated default output failure");
+    expect(failedOutputPath).toContain("package.diff");
+    expect(Fs.existsSync(Path.dirname(failedOutputPath))).toBe(true);
+    cleanupExpectedPaths.push(Path.dirname(failedOutputPath));
   });
 
   it("stops before success when Git or output fails", async () => {
