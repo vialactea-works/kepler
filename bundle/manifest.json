@@ -1,11 +1,11 @@
 {
   "manifest_format_version": 1,
-  "bundle_release": "kepler-bundle-3.0.2",
+  "bundle_release": "kepler-bundle-3.0.3",
   "files": {
-    "agents/claude-code/v1/kepler-architect.md": "sha256:f85d179aabbf0f1ce042a27b038d1d2bcad1df96705002f71f082c0cf63cf034",
+    "agents/claude-code/v1/kepler-architect.md": "sha256:cde6bd8f24fbfd88f933bc876b2d77eff1dca0756dba2ab0c9aa4037187d53a6",
     "agents/claude-code/v1/kepler-coder.md": "sha256:515506090d041ef09c792114ffeac8fb39563da4b23ab27ebc0fd0f126c1478b",
-    "agents/claude-code/v1/kepler-orchestrator.md": "sha256:75c6bfa35d7b84ed8dc65908437a328e8c2d8036a68d2fdfda384957630d8d35",
-    "agents/claude-code/v1/kepler-reviewer.md": "sha256:5cb28461cbc4d6c23ab4b61ece9fb6c84ce143f1a3127e9355456c19a1bd38e7",
+    "agents/claude-code/v1/kepler-orchestrator.md": "sha256:f086b1e15baa0cdf48ae9e7cddf95cd4c5aa8f3b237cc0603a0975e4c5d98534",
+    "agents/claude-code/v1/kepler-reviewer.md": "sha256:f9c48be02dbce74ed92c4b26f70ed4a1356bf3d1c2b183da31ee3bc67e0497bc",
     "guidelines/.gitkeep": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "guidelines/general/01-code-style.md": "sha256:305c986ef2354604588b9f7ec71296dafb4a7c10b234f5bd1a49771b7e1561b3",
     "guidelines/general/guideline.yml": "sha256:818b23579aeaa461311e00fefc0da4484535557b54b085c9c7951b5ae0e56d2c",
@@ -23,20 +23,20 @@
     "guidelines/typescript/guideline.yml": "sha256:eb836d02c6186b21587b186ffb5b4b0aff6c463f4f0bac774b8e2e7fa0ac422e",
     "skills/kepler-code/SKILL.md": "sha256:c71dcc14dc53b625be5950acba4f2ff50032268065615e5ab31e7e48f1d059ad",
     "skills/kepler-code-feedback/SKILL.md": "sha256:ae4f87d822d19533a4acfbe65b5bf4a21d777f657b59b0e931843c583a249662",
-    "skills/kepler-design/SKILL.md": "sha256:f5e58469092a05790baf1f64e32880c3c55022a8de5f6895e3d939f2227476a3",
+    "skills/kepler-design/SKILL.md": "sha256:067ffa8751980ad32dad2ceb0d9e18e0e7cee5ef162855b5025dbf4a55558224",
     "skills/kepler-domain-modelling/NOTICE": "sha256:3fce890aabd543037c23faebd5d38c3031afab627ea13afb7d0713e2534b3258",
     "skills/kepler-domain-modelling/SKILL.md": "sha256:88d2355196e0689d2dc7b658b9501aa40622c15b007d72771e9fcc4cc2bfbf2d",
-    "skills/kepler-finish-work/SKILL.md": "sha256:f6bba96268bc4623d78138b2804a9c14b0528adf90c76f6479338a90b8ee84b8",
+    "skills/kepler-finish-work/SKILL.md": "sha256:1e9315a3e572e8c38b02f817afedcc312ef3b372aa5e024f1e383f866c9e3135",
     "skills/kepler-finish-work/references/spec-altitude.md": "sha256:1adbba982cdf1310b15d550b7efc40f19589fe87b8d3d70b23c70586cad6ea6c",
     "skills/kepler-grilling/NOTICE": "sha256:7af7889fb3cc4b435ba61637f254e47798ccd35ca937c6ef6dba88cc0b5dfe1c",
     "skills/kepler-grilling/SKILL.md": "sha256:dffe3918c2b5101ffcac8143c064375a1fdc246e02833a3acea3c257a542966f",
-    "skills/kepler-orchestrate/SKILL.md": "sha256:08cfee69b5b0000a9f690e481389e60a3f7d527138d08392adc3c234c5452368",
-    "skills/kepler-plan/SKILL.md": "sha256:94c298ed01d702106a365271dbd62541b124aa2fceb2f8ed1bb47b6c50acb9df",
+    "skills/kepler-orchestrate/SKILL.md": "sha256:1e6becd8793eba70bc7adc578c39140366f9111215e0d57123ae3dc031c0a82e",
+    "skills/kepler-plan/SKILL.md": "sha256:20e8af63f412a149ff31a314ed470d9bfbc73bd8e96417512ec6282ebe5f2a65",
     "skills/kepler-plan/references/task-graph.md": "sha256:bc51551c9fdeba9c5222c3c3fe993c1487eec142aa606f9f1c6353ca12b7dd0f",
-    "skills/kepler-quality/SKILL.md": "sha256:a0965b17a583b162905108e23d01cae8cebc7b9e18851b4088198077a1fcef41",
+    "skills/kepler-quality/SKILL.md": "sha256:82b622f989d98e1fadd5fd485cdf5d1d8d43fd37b10fe3f25f7967da7325788a",
     "skills/kepler-research/NOTICE": "sha256:71168255d925d0deb29bacc2f5e6f456b121b31aa9dd493ef660bee4675880cb",
     "skills/kepler-research/SKILL.md": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
-    "skills/kepler-review/SKILL.md": "sha256:37815a4db3080be85c212ac238b2b833cfb7d25e585a516e15edc886e00a8fd4",
+    "skills/kepler-review/SKILL.md": "sha256:64e06777b3d34ede9cf526e56fe6874498904989b72ad3478f58d942e09a97f9",
     "templates/README.md": "sha256:1f25a6f78410c6356a0c4154c2a8e119f08f763c10b0e78fc132f8948b1602fd",
     "templates/critique.md": "sha256:1cd7886f18cb6879699e87dc8f3f855714091b9d42ac520e6ce670b86d3d36fe",
     "templates/design.md": "sha256:0c30fd7f9db0c2766368f0b34b45d75727d12fe019b0e17b49ef2dc98ea1e4e9",
@@ -60,7 +60,7 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "content_digest": "sha256:3a2741578b59858f378fc9fc5b9d208b32586a35b8c9c91643669099541cd921",
+  "content_digest": "sha256:de5ce6948d43f322f601c54d325d9c06b31fd60b56df47595237d78c8b382904",
   "compatibility": {
     "cli_releases": [
       "0.11.0"
@@ -68,67 +68,67 @@
     "skills": [
       {
         "id": "kepler-design",
-        "release": "kepler-skills-3.0.1",
-        "digest": "sha256:f5e58469092a05790baf1f64e32880c3c55022a8de5f6895e3d939f2227476a3",
+        "release": "kepler-skills-3.0.2",
+        "digest": "sha256:067ffa8751980ad32dad2ceb0d9e18e0e7cee5ef162855b5025dbf4a55558224",
         "required": true
       },
       {
         "id": "kepler-quality",
-        "release": "kepler-skills-3.0.1",
-        "digest": "sha256:a0965b17a583b162905108e23d01cae8cebc7b9e18851b4088198077a1fcef41",
+        "release": "kepler-skills-3.0.2",
+        "digest": "sha256:82b622f989d98e1fadd5fd485cdf5d1d8d43fd37b10fe3f25f7967da7325788a",
         "required": true
       },
       {
         "id": "kepler-plan",
-        "release": "kepler-skills-3.0.1",
-        "digest": "sha256:94c298ed01d702106a365271dbd62541b124aa2fceb2f8ed1bb47b6c50acb9df",
+        "release": "kepler-skills-3.0.2",
+        "digest": "sha256:20e8af63f412a149ff31a314ed470d9bfbc73bd8e96417512ec6282ebe5f2a65",
         "required": true
       },
       {
         "id": "kepler-orchestrate",
-        "release": "kepler-skills-3.0.1",
-        "digest": "sha256:08cfee69b5b0000a9f690e481389e60a3f7d527138d08392adc3c234c5452368",
+        "release": "kepler-skills-3.0.2",
+        "digest": "sha256:1e6becd8793eba70bc7adc578c39140366f9111215e0d57123ae3dc031c0a82e",
         "required": true
       },
       {
         "id": "kepler-code",
-        "release": "kepler-skills-3.0.1",
+        "release": "kepler-skills-3.0.2",
         "digest": "sha256:c71dcc14dc53b625be5950acba4f2ff50032268065615e5ab31e7e48f1d059ad",
         "required": true
       },
       {
         "id": "kepler-code-feedback",
-        "release": "kepler-skills-3.0.1",
+        "release": "kepler-skills-3.0.2",
         "digest": "sha256:ae4f87d822d19533a4acfbe65b5bf4a21d777f657b59b0e931843c583a249662",
         "required": true
       },
       {
         "id": "kepler-review",
-        "release": "kepler-skills-3.0.1",
-        "digest": "sha256:37815a4db3080be85c212ac238b2b833cfb7d25e585a516e15edc886e00a8fd4",
+        "release": "kepler-skills-3.0.2",
+        "digest": "sha256:64e06777b3d34ede9cf526e56fe6874498904989b72ad3478f58d942e09a97f9",
         "required": true
       },
       {
         "id": "kepler-finish-work",
-        "release": "kepler-skills-3.0.1",
-        "digest": "sha256:f6bba96268bc4623d78138b2804a9c14b0528adf90c76f6479338a90b8ee84b8",
+        "release": "kepler-skills-3.0.2",
+        "digest": "sha256:1e9315a3e572e8c38b02f817afedcc312ef3b372aa5e024f1e383f866c9e3135",
         "required": true
       },
       {
         "id": "kepler-grilling",
-        "release": "kepler-skills-3.0.1",
+        "release": "kepler-skills-3.0.2",
         "digest": "sha256:dffe3918c2b5101ffcac8143c064375a1fdc246e02833a3acea3c257a542966f",
         "required": false
       },
       {
         "id": "kepler-domain-modelling",
-        "release": "kepler-skills-3.0.1",
+        "release": "kepler-skills-3.0.2",
         "digest": "sha256:88d2355196e0689d2dc7b658b9501aa40622c15b007d72771e9fcc4cc2bfbf2d",
         "required": false
       },
       {
         "id": "kepler-research",
-        "release": "kepler-skills-3.0.1",
+        "release": "kepler-skills-3.0.2",
         "digest": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
         "required": false
       }
@@ -137,26 +137,26 @@
       {
         "role": "architect",
         "agent_id": "kepler-architect",
-        "release": "claude-code-bindings-1.0.0",
-        "digest": "sha256:f85d179aabbf0f1ce042a27b038d1d2bcad1df96705002f71f082c0cf63cf034"
+        "release": "claude-code-bindings-1.0.1",
+        "digest": "sha256:cde6bd8f24fbfd88f933bc876b2d77eff1dca0756dba2ab0c9aa4037187d53a6"
       },
       {
         "role": "orchestrator",
         "agent_id": "kepler-orchestrator",
-        "release": "claude-code-bindings-1.0.0",
-        "digest": "sha256:75c6bfa35d7b84ed8dc65908437a328e8c2d8036a68d2fdfda384957630d8d35"
+        "release": "claude-code-bindings-1.0.1",
+        "digest": "sha256:f086b1e15baa0cdf48ae9e7cddf95cd4c5aa8f3b237cc0603a0975e4c5d98534"
       },
       {
         "role": "coder",
         "agent_id": "kepler-coder",
-        "release": "claude-code-bindings-1.0.0",
+        "release": "claude-code-bindings-1.0.1",
         "digest": "sha256:515506090d041ef09c792114ffeac8fb39563da4b23ab27ebc0fd0f126c1478b"
       },
       {
         "role": "reviewer",
         "agent_id": "kepler-reviewer",
-        "release": "claude-code-bindings-1.0.0",
-        "digest": "sha256:5cb28461cbc4d6c23ab4b61ece9fb6c84ce143f1a3127e9355456c19a1bd38e7"
+        "release": "claude-code-bindings-1.0.1",
+        "digest": "sha256:f9c48be02dbce74ed92c4b26f70ed4a1356bf3d1c2b183da31ee3bc67e0497bc"
       }
     ]
   }

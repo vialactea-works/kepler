@@ -97,10 +97,10 @@ const files = Object.fromEntries(
   ]),
 );
 const skillsRelease =
-  process.env.KEPLER_SKILLS_RELEASE ?? "kepler-skills-3.0.1";
+  process.env.KEPLER_SKILLS_RELEASE ?? "kepler-skills-3.0.2";
 const hostBindingsRelease =
   process.env.KEPLER_CLAUDE_CODE_BINDINGS_RELEASE ??
-  "claude-code-bindings-1.0.0";
+  "claude-code-bindings-1.0.1";
 const compatibility: BundleCompatibility = {
   cli_releases: [rootPackage.version],
   skills: skillIds.map((id) => ({
@@ -118,7 +118,7 @@ const compatibility: BundleCompatibility = {
 };
 const base: BundleManifest = {
   manifest_format_version: 1,
-  bundle_release: process.env.KEPLER_BUNDLE_RELEASE ?? "kepler-bundle-3.0.2",
+  bundle_release: process.env.KEPLER_BUNDLE_RELEASE ?? "kepler-bundle-3.0.3",
   files,
   content_digest: sha256Digest(new Uint8Array()),
   compatibility,

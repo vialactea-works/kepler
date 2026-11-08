@@ -9,6 +9,15 @@ description: Prepare, authorize, perform, verify, and hand off the delivery outc
 
 Use for the Standard Deliver stage after Unit of Work Review is complete for the current material. Deliver can end in an agreed repository handoff or another requested outcome. Publication, merge, release, and deployment are not automatic.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The completed Review handoff and reviewed checkpoint; current unit definition, design, quality requirements, plan, graph, and relevant support; review evidence and limitations; the requested outcome, recipient or destination, operation authority, prerequisites, target conditions, recovery constraints, and prior operation records when resuming. |
+| Lead agent | The `kepler-orchestrator` role owns readiness assessment, coordination, result verification, evidence, and recipient handoff. Lead role names describe responsibility; they do not authenticate a worker, select a model or topology, or add permission. |
+| Outputs | **Authored artifacts:** required unit-root `delivery.md` and useful linked detail when needed. **Authorized outcome:** the requested result, such as a repository handoff or another permitted effect. **CLI-owned evidence and records:** applicable authorization, additional-review results when requested by the requester, actual operations, outcome verification, and final approval only when required. **Handoff:** actual results, limitations, recovery information, and recipient responsibilities. No universal release or deployment artifact is required. |
+| Gates | **Entry:** Unit of Work Review is complete for current material, its result and evidence are available, and the requested outcome is known or the requester can resolve it before operations. **Before each operation:** confirm its authority and prerequisites. **Advance:** every required operation achieves its effect, outcome verification succeeds, blockers are resolved, self-review and requested reviews are complete, and evidence and handoff are complete. No universal final-approval or deployment gate applies. A successful operation exit alone does not prove the requested outcome or stage completion. |
+
 ## Inputs and authority
 
 Use the explicit unit and project scope and inspect current derived state:

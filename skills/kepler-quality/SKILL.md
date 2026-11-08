@@ -9,6 +9,15 @@ description: Define and review applicable quality requirements for a Constructio
 
 Use when Quality Requirements is the current Standard stage for a unit whose Functional Design is complete under its contract. Existing application code, production measurements, a complete `quality.md`, or Inception are not prerequisites.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The current unit definition and accepted `design.md` with relevant support; Functional Design concerns; requester instructions and Project references; and available source, operational information, and tests. Do not require Quality Requirements' own outputs before entry. |
+| Lead agent | The `kepler-architect` role owns context investigation, quality-question resolution with the requester, `quality.md`, and its consistency review. Lead role names describe responsibility; they do not authenticate a worker, select a model or topology, or add permission. |
+| Outputs | **Authored artifacts:** required `quality.md` and useful linked detail when needed. **CLI-owned evidence and records:** validation, self-review, required requester approval, and any requested external-review result. **Handoff:** quality targets, conditions, constraints, and questions for Implementation Planning. |
+| Gates | **Entry:** Functional Design is complete for the current unit and its current outputs are available. **Advance:** category applicability, quality targets, and their conditions are explicit; validation and self-review succeed; blocking findings and material choices are resolved; and requester approval is recorded. External review is required only when requested. A technical solution and application-test results are not required. File presence, a commit, process exit, or positive review alone does not complete the stage or authorize progression. |
+
 ## Procedure
 
 1. Inspect the explicit unit with `kepler workflow construction stage show --unit <unit-id> --stage quality-requirements [--project <path>]`. Confirm the Standard transition is available and review current attempt, effective effort, and evidence. Do not infer scope from an active directory or select a different unit. If blocked, report the derived blockers rather than bypassing them.

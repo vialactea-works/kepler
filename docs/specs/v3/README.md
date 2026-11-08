@@ -50,7 +50,7 @@ Intent documents belong to Inception. Their structure and organization terms are
 
 | Area | Location | Responsibility |
 | --- | --- | --- |
-| Core concepts | This directory. | Give shared concepts, artifact rules, effort, revision, and tracking rules. |
+| Core concepts | This directory. | Give shared concepts, artifact rules, effort, revision, and tracking rules. The [Stage contract](stage.md) defines four shared stage characteristics. |
 | Phase contracts | `phases/<phase>/` | Set phase-owned stage contracts and execution scopes. |
 | Construction Activities | [activities/](phases/construction/activities/README.md) within Construction. | Give compact contracts for Activities inside Implementation. |
 | Workflow composition | [workflows/standard/](workflows/standard/README.md) | Select stages and set their order and routing. |
@@ -63,7 +63,7 @@ A **workflow** selects a series of phase-owned stages. Its definition sets their
 
 A **Unit of Work** replaces the previous **change** concept. Standard has one Unit of Work per mission. A Unit of Work can contain several implementation tasks. The shared [Unit of Work contract](unit-of-work.md), approved under SH123, sets its acceptance boundary, decomposition procedure, and walking skeleton kind.
 
-A **stage** sets a phase-owned responsibility that workflows can use. Its phase contract sets its execution scope. A skill gives a procedure that can help with that responsibility. Stage boundaries do not depend on skill names or packaging.
+A **stage** is a phase-owned responsibility that a workflow can select. Its owning phase sets its scope and detailed contract. The shared [Stage contract](stage.md) defines its Inputs, Lead agent, Outputs, and Gates. A workflow sets order and routing without replacing that contract. A skill gives a procedure that can help with the responsibility. Stage boundaries do not depend on skill names or packaging.
 
 An [Activity](activity.md) is a bounded execution responsibility within a stage. Its owning phase or stage sets its scope, outcomes, procedure, checks, evidence, completion, correction paths, and handoffs. Activities are not stages, agents, skills, planned tasks, or independent lifecycle milestones.
 

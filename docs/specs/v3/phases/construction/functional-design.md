@@ -4,6 +4,15 @@
 
 **Status:** Accepted by the requester under [FD13](../../authoring_progress.md#functional-design-decisions).
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The request, Unit of Work identity and intended outcome, available Project references, and existing source or tests when available. Inception outputs are optional; the request and available context are the bootstrap inputs. See [Inputs](#inputs) and [entry conditions](#entry-conditions). |
+| Lead agent | `kepler-architect` owns investigation, requester discussion, design consistency, and self-review. This accountability does not replace requester approval. See [Agent roles](#agent-roles) and [Review and approval](#review-and-approval). |
+| Outputs | Required `unit-of-work.md` and `design.md`; optional linked files under `details/functional-design/`; self-review and required requester-approval records; any external-review result when the requester asks for it; handoff to Quality Requirements. See [Artifacts](#artifacts), [Review and approval](#review-and-approval), and [Handoff](#handoff). |
+| Gates | **Entry:** a clear outcome, enough context to investigate, and requester access for consequential questions; completed documents, a full domain model, and an Inception handoff are not required. **Advance:** required documents and sections, consistent behavior and contracts, self-review, resolved material choices and recorded requester approval; any external review requested by the requester is complete. See [entry conditions](#entry-conditions) and [completion conditions](#completion-conditions). |
+
 ## Goal
 
 State the purpose, scope, required functional behavior, contracts, and functional model of one Unit of Work. Record the decisions that explain the design.

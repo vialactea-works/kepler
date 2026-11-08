@@ -335,7 +335,7 @@ if (platformTarget) {
       expect(parseCliResult(standaloneSetup.stdout)).toMatchObject({ status: "success" });
       expect(
         parseInstallationRecord(await Fs.readFile(recordPath, "utf8")).bundle_release.release,
-      ).toBe("kepler-bundle-3.0.2");
+      ).toBe("kepler-bundle-3.0.3");
 
       const settings = "extensions:\n  - name: rtk\n    enabled: false\n";
       await Fs.writeFile(settingsPath, settings);

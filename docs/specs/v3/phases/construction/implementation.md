@@ -10,6 +10,15 @@ The [phase contract](README.md#implementation) and this specification state the 
 
 These approvals concern specifications. They do not start an executing Unit of Work, make the assigned roles or skills active, or authorize delivery.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | Current `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, and `tasks-dag.json` with relevant support; applicable upstream records and approvals; current integrated checkpoints and retained work when available; project checks and environments; task prerequisites and resume evidence. See [Inputs](#inputs) and [entry conditions](#entry-conditions). |
+| Lead agent | `kepler-orchestrator` owns task admission, worker coordination, findings, progress records, completion, and the Review handoff. It does not replace requester authority or grant operation permission. See [Agent roles](#agent-roles) and [Requester intervention](#requester-intervention). |
+| Outputs | Task code, tests, configuration, and required documentation; accepted integrated material and repository-qualified checkpoints; CLI-owned Activity and stage evidence and a unit completion assessment; optional linked implementation detail and any additional-review result requested by the requester; handoff to Unit of Work Review. No separate execution Markdown document is required. See [Artifacts and records](#artifacts-and-records), [Evidence coverage](#evidence-coverage), and [Handoff](#handoff). |
+| Gates | **Entry:** Planning and earlier stages are complete for current material; the task graph and obligations are available; execution is authorized; and the original Review baseline is identified before the first task admission. Apply each prerequisite only to its affected work. **Advance:** each required task has valid completed Activity results, including applicable retained scopes under their original bindings; rerun only the affected Activities under the authorized return rules. Required results cover Code Generation (typechecking, modification-related tests, and self-review), Code Validation (typechecking, project build, full application test suite, and independent non-author feedback), and Code Integration (those three checks against the combined candidate under the unit lock, followed by authorized acceptance). The unit self-review and any additional review requested by the requester must be complete; evidence must apply to the final result, and no blocker can remain. Routine task approval and separate whole-Implementation approval are not required. See [entry conditions](#entry-conditions), [Activity contracts](#implementation-procedure), [Requester intervention](#requester-intervention), and [completion conditions](#completion-conditions). |
+
 ## Goal
 
 Do the work in the current task graph and make an integrated unit result that passed the required checks. Keep the functional design, quality requirements, selected technical solution, and requester authority.

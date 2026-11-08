@@ -9,6 +9,15 @@ description: Independently assess whether the complete integrated Unit of Work s
 
 Use for the Standard Unit of Work Review stage after Implementation has completed its own assessment for the current unit. Review the integrated outcome independently; task-level feedback is not a substitute.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | Current unit artifacts and relevant support; the completed Implementation handoff; the original Review baseline and final integrated checkpoint for whole-unit comparison; required Activity results, independent feedback, integration provenance, and completion evidence; applicable constraints, decisions, approvals, and earlier findings. Do not require delivery to begin Review. |
+| Lead agent | The `kepler-reviewer` role owns the independent whole-unit assessment and must not be the primary implementation author. The orchestrator retains revision authority; the requester retains authority over outcomes and any required acceptance. Lead role names describe responsibility; they do not authenticate a worker, select a model or topology, or add permission. |
+| Outputs | **CLI-owned evidence and records:** whole-unit assessment, findings, and evidence. **Optional authored detail:** linked analysis under `details/unit-of-work-review/`. Include requested external-review results and requester acceptance only when required. **Handoff:** reviewed result and delivery constraints for Deliver. No mandatory `review.md` is required. |
+| Gates | **Entry:** Implementation is complete for current material, the result and required evidence are available, and review scope and acceptance conditions are explicit. **Advance:** independent assessment and self-review cover the full outcome, required evidence applies and is retained, blockers are resolved through authorized paths, and any requested review or required requester acceptance is complete. Compare the original Review baseline with the final integrated result. A new full-suite run is not unconditional. File presence, a positive verdict, commit, or process exit alone does not complete Review or authorize Deliver. |
+
 ## Inputs and authority
 
 Work from explicit unit/project selectors and current CLI state. Inspect:

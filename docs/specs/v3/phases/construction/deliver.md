@@ -8,6 +8,15 @@ Deliver is the final agreed Construction stage. The requester accepted this comp
 
 This approval concerns the specification. It does not authorize a release, publication, deployment, or other delivery operation.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The completed Review handoff and reviewed checkpoint; current unit artifacts and relevant support; review evidence, limitations, requester decisions, and applicable acceptance; the requested outcome, recipient or destination, operation authority, prerequisites, target conditions, and recovery constraints; prior operation records when resuming. See [Inputs](#inputs) and [entry conditions](#entry-conditions). |
+| Lead agent | `kepler-orchestrator` owns readiness assessment, coordination, result verification, evidence, and recipient handoff. This role does not itself grant operation permission. See [Agent roles](#agent-roles) and [Operation authority and requester approval](#operation-authority-and-requester-approval). |
+| Outputs | Required unit-root `delivery.md`; CLI-owned records for applicable authorization, any requested additional review, actual operations, outcome verification, and final approval only when required; optional linked detail; recipient handoff with actual results, limitations, and recovery information. No universal release or deployment artifact is required. See [Artifacts](#artifacts), [Evidence coverage](#evidence-coverage), and [Handoff](#handoff). |
+| Gates | **Entry:** Unit of Work Review is complete for current material, its result and evidence are available, and the requested outcome is known or the requester can resolve it before operations. **Operation:** obtain required authority and prerequisites before each affected operation. **Advance:** every required operation achieves its required effect, the agreed outcome passes its required verification, no blocking effect remains unresolved, self-review and any requested additional review are complete, and evidence and handoff are complete. No automatic final-approval gate or deployment applies to every unit. See [entry conditions](#entry-conditions), [Delivery procedure](#delivery-procedure), and [completion conditions](#completion-conditions). |
+
 ## Goal
 
 Complete the requested delivery outcome for the reviewed unit, using identified material and authorized operations. Do a check that the actual outcome occurred. Keep sufficient information for the recipient or operator.

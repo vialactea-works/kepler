@@ -9,6 +9,15 @@ description: Run Functional Design for a Construction Unit of Work under its acc
 
 Use when Functional Design is the current Standard stage for a selected Unit of Work. Begin from the request and available context; completed Inception, application code, a complete domain model, and pre-authored unit documents are not entry requirements.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The request, Unit of Work identity and intended outcome, requester instructions, available Project information, and existing source or tests when available. Inception outputs are optional; do not require Functional Design's own outputs before entry. |
+| Lead agent | The `kepler-architect` role owns investigation, requester discussion, design consistency, and self-review. Lead role names describe responsibility; they do not authenticate a worker, select a model or topology, or add permission. |
+| Outputs | **Authored artifacts:** required `unit-of-work.md` and `design.md`, with useful supporting detail when needed. **CLI-owned evidence and records:** self-review, required requester approval, and any requested external-review result. **Handoff:** current documents and relevant questions for Quality Requirements. |
+| Gates | **Entry:** the request states an outcome that fits one Unit of Work, enough context exists to investigate, and the requester can resolve consequential questions. **Advance:** required documents and sections are complete and consistent, self-review is done, material choices are resolved, and requester approval is recorded; external review is required only when requested. File presence, a commit, process exit, or positive review alone does not complete the stage or authorize progression. |
+
 ## Procedure
 
 1. Resolve the selected project and unit explicitly. Use `kepler workflow construction stage show --unit <unit-id> --stage functional-design [--project <path>]` to inspect derived state, current attempt, effective effort, and relevant evidence. Do not infer an active unit or stage from a branch, directory name, or previous conversation. If the stage is not ready to start, report its blockers and stop; do not bypass Standard order.

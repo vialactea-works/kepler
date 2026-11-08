@@ -9,6 +9,15 @@ description: Coordinate the unit-scoped Implementation stage and the separate ta
 
 Use for the Standard Implementation stage of one Unit of Work. This skill coordinates workers and CLI-owned transitions; it does not write implementation, task graphs, journals, projections, or worker evidence. It owns the unit Implementation attempt and coordinates separate per-task Activity attempts, including Code Integration.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | Current unit artifacts and upstream records or approvals; the task graph and its obligations; current integrated checkpoints and retained work when available; project checks and environments; task prerequisites and resume evidence. Before first task admission, identify the unit's original Review baseline. |
+| Lead agent | The `kepler-orchestrator` role owns task admission, worker coordination, findings, progress records, completion, and the Review handoff. Lead role names describe responsibility; they do not authenticate a worker, select a model or topology, or add permission. |
+| Outputs | **Executable material:** task code, tests, configuration, and required documentation. **Integrated material:** accepted outputs and repository-qualified checkpoints. **Optional authored detail:** useful linked findings under `details/implementation/`. **CLI-owned evidence and records:** Activity and stage evidence, task records, the unit completion assessment, and additional-review results when requested by the requester. **Handoff:** the integrated result and evidence for Unit of Work Review. No separate execution Markdown document is required. |
+| Gates | **Entry:** upstream stages are complete for current material, the task graph and obligations are available, execution is authorized, and the original Review baseline is identified. **Advance:** required tasks have applicable Activity results; Generation includes typechecking, related tests, and self-review; Validation includes typechecking, build, full suite, and independent non-author feedback; Integration runs typechecking, build, and full suite on the combined candidate under the unit lock. Keep valid retained Activities under their original bindings; rerun only affected Activities under authorized return rules. Complete the unit assessment and requested reviews, resolve blockers, and bind evidence to the final result. Routine task approval and separate whole-Implementation approval are not required. A commit, positive review, or process exit alone does not complete Implementation or authorize Deliver. |
+
 ## Procedure
 
 1. **Read current unit and graph.** Use explicit selectors and inspect derived state:

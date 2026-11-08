@@ -9,6 +9,15 @@ description: Select and document the technical solution and task graph for a Con
 
 Use when Implementation Planning is the current Standard stage and current Functional Design and Quality Requirements outputs and their required evidence are available. Existing code, tests, completed Initialization or Inception, and a preselected technical solution are not entry requirements. Plan the foundation needed for greenfield work or a walking skeleton.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The current unit definition, `design.md`, `quality.md`, relevant supporting files and completion records; passed constraints and requester instructions; available Project references, source, tests, and operational information; and retained plans or work when revising. Do not require Planning's own outputs before entry. |
+| Lead agent | The `kepler-architect` role owns context investigation, technical-solution selection, task-graph authoring, and plan review. Lead role names describe responsibility; they do not authenticate a worker, select a model or topology, or add permission. |
+| Outputs | **Authored artifacts:** required `plan.md` and `tasks-dag.json`, plus useful linked detail when needed. **CLI-owned evidence and records:** artifact and graph validation, self-review, requested external-review evidence, and requester decisions or whole-plan approval only when required. **Handoff:** the plan, graph, evidence, and coordination constraints for Implementation. |
+| Gates | **Entry:** Functional Design and Quality Requirements are complete for current material, their outputs are available, and consequential choices have a requester decision path. **Advance:** both planning outputs are valid and consistent, task coverage and verification are feasible, blockers are resolved, self-review is complete, any requested external review is complete, and any required requester decisions or approval are recorded. Implementation and passing application checks are not required. File presence, a commit, process exit, or positive review alone does not complete the stage or authorize progression. |
+
 ## Inputs and boundaries
 
 Use the explicit unit's `unit-of-work.md`, `design.md`, `quality.md`, linked supporting files, applicable stage records, requester instructions, Project references, project standards, source, tests, build configuration, and operational information when available. Distinguish observed facts, proposed mechanisms, and assumptions. Investigate uncertain capabilities and integration contracts before relying on them.
