@@ -13,7 +13,7 @@ import {
   parseReleaseTarget,
   type ReleaseTarget,
 } from "../packages/cli/src/cli/release-archive.js";
-import { sha256Digest } from "../packages/cli/src/cli/installation-record.js";
+import { parseMetadataJsonObject, sha256Digest } from "../packages/cli/src/cli/installation-record.js";
 import { validateResourcePackage } from "../packages/cli/src/cli/release-resources.js";
 import { checkReleaseConsistency } from "./release-preparation.js";
 import { listRegularFiles } from "./resource-generation.js";
@@ -74,9 +74,10 @@ export function packageTargetArchive(input: PackageArguments): {
   if (!sameJson(identity, identityRecord.identity)) {
     throw new Error("Release build identity record does not match embedded executable metadata");
   }
-  const rootPackage = JSON.parse(Fs.readFileSync(Path.join(repositoryRoot, "package.json"), "utf8")) as {
-    readonly version?: unknown;
-  };
+  const rootPackage = parseMetadataJsonObject(
+    Fs.readFileSync(Path.join(repositoryRoot, "package.json"), "utf8"),
+    "root package manifest",
+  );
   if (typeof rootPackage.version !== "string") {
     throw new Error("Root package.json must declare the Kepler release version");
   }

@@ -109,6 +109,17 @@ describe("target archive packaging source identity", () => {
     expect(Fs.existsSync(input.output)).toBe(false);
   });
 
+  it.each([
+    { contents: "{", error: "Invalid root package manifest JSON" },
+    { contents: "null", error: "root package manifest must be an object" },
+  ])("rejects invalid root package metadata: $contents", ({ contents, error }) => {
+    const input = fixture();
+    binaryFor(input, input.source);
+    write(input.repository, "package.json", contents);
+    expect(() => packageFixture(input)).toThrow(error);
+    expect(Fs.existsSync(input.output)).toBe(false);
+  });
+
   it("rejects a production binary when only the checkout's clean status changes", () => {
     const input = fixture();
     binaryFor(input, input.source);
