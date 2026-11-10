@@ -14,6 +14,8 @@ type WorkflowStep = {
 };
 
 type WorkflowJob = {
+  readonly "runs-on"?: string;
+  readonly env?: Readonly<Record<string, string>>;
   readonly needs?: string | readonly string[];
   readonly strategy?: {
     readonly matrix?: {
@@ -84,11 +86,20 @@ describe("unified release native archive workflow", () => {
     );
   });
 
-  it("builds and tests the exact production archive on every native target", () => {
+  it("uses one Linux x64 PR build and preserves the release target matrix", () => {
+    const pullRequest = job(readWorkflow(".github/workflows/test.yml"), "native-distribution");
+    expect(pullRequest.strategy).toBeUndefined();
+    expect(pullRequest["runs-on"]).toBe("ubuntu-24.04");
+    expect(pullRequest.env?.KEPLER_EXPECTED_TARGET).toBe("linux-x64");
+
+    const release = job(readWorkflow(".github/workflows/release.yml"), "native-distribution");
+    expect(release.strategy?.matrix?.include?.map(({ target }) => target)).toEqual(supportedTargets);
+  });
+
+  it("builds and tests the exact production archive in each native job", () => {
     for (const path of [".github/workflows/test.yml", ".github/workflows/release.yml"]) {
       const workflow = readWorkflow(path);
       const native = job(workflow, "native-distribution");
-      expect(native.strategy?.matrix?.include?.map(({ target }) => target)).toEqual(supportedTargets);
       for (const jobName of ["verify", "native-distribution"]) {
         const hostJob = job(workflow, jobName);
         expect(step(hostJob, "Setup Node for the pinned Pi E2E host").with)
