@@ -28,7 +28,7 @@ bun run build
 bun run check:version
 ```
 
-`build` builds Core, then CLI. Dependency installation can write dependency directories. `bun run build` writes package output directories. Use an isolated checkout when the task permits only documentation changes.
+`build` builds Core, then CLI. Dependency installation can write dependency directories. `bun run build` writes package output directories. `bun run typecheck` first builds Core and can write `packages/core/dist/`. Use an isolated checkout when the task permits only documentation changes.
 
 ## Test levels
 

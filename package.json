@@ -12,7 +12,7 @@
     "build": "bun run build:core && bun run build:cli",
     "build:core": "bun run --filter @vialactea-works/kepler-core build",
     "build:cli": "bun run --filter @vialactea-works/kepler-cli build",
-    "typecheck": "bun run tsc --project tsconfig.tests.json",
+    "typecheck": "bun run build:core && bun run tsc --project tsconfig.tests.json",
     "test:unit": "bun --bun vitest run --project unit",
     "test:integration": "bun --bun vitest run --project integration --no-file-parallelism",
     "test:package": "bun --bun vitest run --project integration packages/core/tests/integration/packed-package.test.ts",
