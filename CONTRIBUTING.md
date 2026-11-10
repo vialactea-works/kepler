@@ -1,16 +1,26 @@
-# Contributing to Kepler
+# Contribute to Kepler
 
-Read [AGENTS.md](AGENTS.md) before changing code. It records architecture, data boundaries, tests, bundle ownership, and release rules. Kepler's user-facing guide starts at [README.md](README.md).
+Use this guide to start repository work. Read [AGENTS.md](AGENTS.md) for repository rules. Read [Development](docs/development.md) for architecture, build commands, test levels, resources, and release checks.
 
-## Verify changes
+## Prepare the workspace
 
-Install the pinned workspace dependencies and run the gates that cover your change. Use Bun 1.4.0, declared by the root `packageManager` field and selected by CI/release workflows; check `bun --version` before running the gates:
+Use Bun 1.4.0. The root `packageManager` field supplies the shared toolchain pin.
 
 ```bash
+bun --version
 bun install --frozen-lockfile
 bun run check:typescript-sources
 bun run typecheck
 bun run build
+```
+
+Keep dependency versions exact. Use TypeScript and ESM imports with `.js` extensions. Keep application rules independent of Nest, Git, filesystem, and process APIs. Reuse the existing ports and adapters.
+
+## Verify the change
+
+Run the gates that cover the changed behavior:
+
+```bash
 bun run test:unit
 bun run test:integration
 bun run test:e2e
@@ -18,20 +28,28 @@ bun run test:package
 bun run check:version
 ```
 
-Use `bun --bun vitest run <path>` for a focused test. Do not use `bun test`. Unit tests cover isolated public contracts; integration tests use the real collaborating component under test; execa E2E tests exercise complete CLI workflows and distribution behavior. Do not add smoke tests or infer host/agent certification from executable tests.
+Use Vitest on Bun. Do not use `bun test`. Integration tests run serially. The packed-Core test uses a disposable consumer. The general E2E command builds packages and requires its configured test environment. Exact-archive and development-package tests have separate native prerequisites. See [Development](docs/development.md#test-levels).
 
-## Keep documentation aligned
+Do not add smoke or performance tests without explicit approval. Do not infer agent certification from CLI or resource tests.
 
-Update the root README and the relevant user guide whenever behavior, command syntax, installation, recovery, or version boundaries change. Update the release note for user-visible release behavior. Keep the v3 specification separate from implementation evidence: accepted design is not proof that a feature shipped.
+## Maintain documentation
 
-When a change affects skills, native agent definitions, templates, or guidelines, run `bun run prepare:bundle`, inspect the full manifest and digest, and test the sidecar behavior. Skill managers own skill installation; Claude Code owns native role installation. Do not claim that `kepler setup` installs either.
+Start at the [documentation index](docs/README.md). Update the relevant user guide when implemented behavior changes. Keep commands, examples, defaults, and failure descriptions consistent with source and tests.
 
-## Version and release boundaries
+Keep documentation and specifications separate. Treat specification changes as a separate task with explicit authority. A documentation-only change must not run generators or formatters that rewrite contracts, templates, skills, or application files. Use the copyedit skill on each changed document. Keep technical identifiers unchanged.
 
-Keep `package.json`, `packages/cli/package.json`, `packages/core/package.json`, `src/index.ts`'s `VERSION`, bundle compatibility, and release checks synchronized. Pin dependency versions without `^` or `~`.
+## Change packaged resources
 
-CI tests native standalone behavior on Linux and macOS for x86_64 and arm64. The release cross-compilation matrix produces artifacts but does not prove execution on those targets. Record only target results from completed native jobs. Do not publish a release or deploy a host as part of testing; release and deployment require separate authorization.
+For a resource change, run `bun run prepare:bundle`. Review the full inventory and digest. Then run `bun run release:check`. Do this only when the task permits resource and manifest changes.
 
-## License and attribution
+The current distribution uses complete target archives, not a split bundle sidecar. Pi setup registers the package containing the portable skills and Pi roles. Other hosts own their installation procedures. See [Installation](docs/installation.md).
 
-Kepler is licensed under Apache-2.0. When adapting a skill, keep the upstream license notice in that skill's `NOTICE` file and preserve the notice in the release bundle. See [NOTICE](NOTICE) and the adjacent skill notices for examples.
+## Prepare a release
+
+Use `bun run release:prepare <patch|minor|major|version>` for an authorized version change. The command synchronizes package versions, source constants, release notes, and the resource manifest.
+
+All four target-native jobs must test their exact archives before publication. A job declaration is not a passing result. Testing does not authorize a release, deployment, push, or tag.
+
+## Preserve attribution
+
+Kepler uses Apache-2.0. Preserve each adapted skill's `NOTICE` file and its packaged notice. See [NOTICE](NOTICE).

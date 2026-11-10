@@ -1,57 +1,47 @@
-# Project-Owned Guidelines
+# Use project guidelines
 
-Keep custom guidelines in the project and point to them explicitly from its `AGENTS.md` or a
-request prompt. Kepler does not discover a global XDG guideline directory, and an explicit
-reference does not guarantee that every agent will follow the instructions. See the current
-[installation contract](../installation.md#setup-and-installed-resources) for the bundled
-resource paths and setup behavior.
+Use this guide to give a team or coding agent explicit project instructions. These instructions are project-owned documentation. Kepler does not manage or automatically discover them.
 
-## Create a project-owned file
+## Create a guideline file
 
-Choose a tracked path that fits the repository, such as `docs/guidelines/team.md`:
+Choose a tracked path such as `docs/guidelines/team.md`. Write the instructions that apply to that project:
 
 ```markdown
-## Team conventions
+# Team conventions
 
-- Keep changes within the owning package.
-- Add focused tests for behavior changes.
-- Preserve unrelated user data and existing project conventions.
+Keep each change in its owning package.
+Add focused tests for changed behavior.
+Preserve unrelated files and user data.
 ```
 
-Use Markdown that is clear to the people and tools working in the project. Kepler does not
-require a guideline-specific frontmatter format or directory structure.
+Kepler does not require guideline-specific frontmatter or a fixed directory name.
 
-## Reference it explicitly
+## Reference the file
 
-Add a short reference in the project's `AGENTS.md`:
+Add an explicit reference in the project's `AGENTS.md`:
 
 ```markdown
-## Project standards
+## Project instructions
 
-Follow [team conventions](docs/guidelines/team.md) when changing this repository.
+Read [Team conventions](docs/guidelines/team.md) before changing this project.
 ```
 
-You can also name the file directly in a prompt. Keep project instructions consistent with the
-requester's directions and higher-priority policies. The reference is an instruction for the
-agent, not an automatic discovery or compliance guarantee.
+You can name the file directly in a request instead. Follow higher-priority instructions when they conflict with a project guideline. An explicit reference does not prove that an agent read or followed it.
 
-## Maintain the guidelines
+## Maintain the file
 
-Review the referenced project file when its conventions change. Keep it focused, and remove or
-revise guidance that no longer applies. The file is project-owned content; Kepler setup does not
-copy, refresh, or manage it.
+Review the guideline when project conventions change. Keep each instruction specific. Remove instructions that no longer apply. Kepler setup does not copy, update, or adopt this file.
 
-## Bundled guidelines
+## Keep built-in resources separate
 
-The complete Kepler package includes built-in guidance under
-`~/.kepler-dist/current/bundle/guidelines/`, inside the selected immutable generation. Setup does
-not copy these resources into the XDG Kepler home. Do not edit the selected generation in place.
-A change to bundled guidelines must be included in a newly built and selected complete package
-generation. Existing custom files under an XDG guideline path are preserved, but Kepler does not
-automatically adopt or discover them.
+Built-in guidelines stay in the selected generation at `~/.kepler-dist/current/bundle/guidelines/`.
 
-| Bundled resource | Covers |
-|-----------|--------|
-| `general` | Cross-language coding style |
-| `golang` | Go style, setup, testing, patterns, e2e |
-| `typescript` | TypeScript setup, style, patterns, unit + e2e testing |
+| Resource | Subject |
+| --- | --- |
+| `general` | Cross-language conventions. |
+| `golang` | Go structure, testing, and implementation guidance. |
+| `typescript` | TypeScript structure, testing, and implementation guidance. |
+
+Do not edit an installed generation. Build and select a new complete package to change built-in guidance. Setup preserves custom XDG files, but it does not automatically load them as guidelines.
+
+See [Installation](../installation.md#setup-and-installed-resources), [Configuration](../configuration.md), and [Skills and roles](../skills.md).

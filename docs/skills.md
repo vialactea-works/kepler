@@ -1,62 +1,63 @@
-# Kepler skills
+# Skills and roles
 
-The Kepler 3.0.0 source candidate packages eleven versioned portable skills. Eight are entry skills in the Standard Construction workflow; three support work when their procedures call for them. Pi setup registers the package that exposes these skills. Pi owns discovery, loading, and execution. A skill file describes a procedure, not proof that a host or agent followed it. The candidate is not a published release.
+Use this reference to select a packaged procedure or assign work in an agent host. A skill is a set of instructions. It is not proof that an agent performed the work correctly.
 
-For Pi, install the matching skills with `kepler setup`; do not register a second copy through a separate skill manager. Other hosts retain their own installation owner. See [installation](installation.md#install-skills-and-claude-code-role-definitions). Keep each complete skill directory, including reference files. Read the full `SKILL.md` for required inputs, CLI operations, checks, evidence, and handoffs.
+## Installation owner
 
-The stage skills contain their reopening questionnaires without links to an uninstalled source checkout. `kepler-plan/references/task-graph.md` supplies the closed graph field contract, identity rules, example, and Draft 2020-12 schema. The schema covers structural constraints; use Construction lint for supported structural and semantic checks. Lint does not prove requirement coverage or technical correctness.
+Pi setup registers one complete local resource package. Pi discovers its skills. pi-subagents loads its role profiles. Do not register a second copy of the same skills through another manager.
 
-## Standard workflow
+Other hosts own their skill and role installation. Keep each complete skill directory, including reference files and notices. Use the resource generation that matches the CLI. See [Installation](installation.md#install-skills-and-claude-code-role-definitions).
 
-```text
-Functional Design
-  -> Quality Requirements
-  -> Implementation Planning
-  -> Implementation
-  -> Unit of Work Review
-  -> Deliver
-```
+The source `skills/` directory contains more procedures than the release package. The package exposes the following eleven skills. A source directory does not prove that a skill is installed.
 
-Each stage owns its own authority and completion conditions. A clear request can enter Construction without existing application code, tests, or completed Initialization/Inception phases. Mission and workspace preparation still apply. See the [workflow guide](sdd-framework.md) and [CLI guide](cli.md).
+## Standard procedures
 
-| Skill | Stage or Activity | Responsibility |
+| Skill | Scope | Main responsibility |
 | --- | --- | --- |
-| [`kepler-design`](../skills/kepler-design/SKILL.md) | Functional Design | Clarify observable behavior and scope; maintain the unit definition and design; obtain required requester approval. |
-| [`kepler-quality`](../skills/kepler-quality/SKILL.md) | Quality Requirements | Identify applicable quality obligations, targets, constraints, and evidence; obtain required requester approval. |
-| [`kepler-plan`](../skills/kepler-plan/SKILL.md) | Implementation Planning | Select a technical approach and author the task graph, dependencies, prerequisites, and exact verification commands. |
-| [`kepler-orchestrate`](../skills/kepler-orchestrate/SKILL.md) | Implementation and Code Integration | Admit ready tasks, dispatch scoped workers, coordinate the three task Activities, resolve authorized returns, and assess the integrated unit result. |
-| [`kepler-code`](../skills/kepler-code/SKILL.md) | Code Generation | Implement one admitted task, test behavior at the lowest suitable level, self-review, and hand off output and evidence. |
-| [`kepler-code-feedback`](../skills/kepler-code-feedback/SKILL.md) | Code Validation | Independently review task output as a non-author, run required full checks, record findings, and hand off validated material. |
-| [`kepler-review`](../skills/kepler-review/SKILL.md) | Unit of Work Review | Review the complete integrated outcome, interactions, failure behavior, obligations, and evidence. |
-| [`kepler-finish-work`](../skills/kepler-finish-work/SKILL.md) | Deliver | Verify the requested delivery outcome and perform only operations covered by explicit authority. |
+| [`kepler-design`](../bundle/skills/kepler-design/SKILL.md) | Functional Design | Define observable behavior, maintain the unit and design artifacts, and obtain requester approval. |
+| [`kepler-quality`](../bundle/skills/kepler-quality/SKILL.md) | Quality Requirements | Assess applicable targets and constraints. Obtain requester approval. |
+| [`kepler-plan`](../bundle/skills/kepler-plan/SKILL.md) | Implementation Planning | Write the technical plan and task graph. Check dependencies, prerequisites, and verification. |
+| [`kepler-orchestrate`](../bundle/skills/kepler-orchestrate/SKILL.md) | Implementation and Code Integration | Admit tasks, assign workers, integrate checked output, and assess the combined result. |
+| [`kepler-code`](../bundle/skills/kepler-code/SKILL.md) | Code Generation | Implement one admitted task, run checks, and prepare its handoff. |
+| [`kepler-code-feedback`](../bundle/skills/kepler-code-feedback/SKILL.md) | Code Validation | Review as a non-author and run the required checks. |
+| [`kepler-review`](../bundle/skills/kepler-review/SKILL.md) | Unit of Work Review | Assess the full integrated result and its evidence. |
+| [`kepler-finish-work`](../bundle/skills/kepler-finish-work/SKILL.md) | Deliver | Verify the agreed outcome and perform only authorized operations. |
 
-For each Implementation task, the orchestrator coordinates Code Generation, non-author Code Validation, then checked Code Integration. Activities are task-scoped parts of Implementation, not additional stages. The CLI records attempts, checks, evidence, and transitions; it does not dispatch agents or promise parallel execution by itself. Compatible hosts can run independent ready tasks concurrently under the orchestrator's procedure.
+Read the complete skill before using it. The host decides how to invoke a skill. Kepler does not provide a CLI command named after each skill.
 
-## Supporting skills
+Standard uses six stages. Code Generation, Code Validation, and Code Integration are Activities inside Implementation. They are not three additional stages. See [Standard workflow](sdd-framework.md) and the [mission tutorial](missions/tutorial.md).
+
+## Supporting procedures
 
 | Skill | Use |
 | --- | --- |
-| [`kepler-grilling`](../skills/kepler-grilling/SKILL.md) | Ask focused questions that test a plan, decision, or idea. |
-| [`kepler-domain-modelling`](../skills/kepler-domain-modelling/SKILL.md) | Establish domain language, model boundaries, and ownership from project sources. |
-| [`kepler-research`](../skills/kepler-research/SKILL.md) | Investigate uncertain external facts against primary sources and record sourced findings. |
+| [`kepler-grilling`](../bundle/skills/kepler-grilling/SKILL.md) | Examine a plan or decision through focused questions. |
+| [`kepler-domain-modelling`](../bundle/skills/kepler-domain-modelling/SKILL.md) | Establish domain terms, model boundaries, and ownership. |
+| [`kepler-research`](../bundle/skills/kepler-research/SKILL.md) | Check uncertain facts against primary sources and record findings. |
 
-Supporting skills do not add agent roles or workflow stages. The package keeps separate Claude Code role definitions, but Pi setup does not install or translate them. Other hosts retain their native installation owner. Resource files do not certify agent behavior. See [installation](installation.md) for ownership and manual setup.
+These procedures do not add stages or grant authority. The planning skill's [task graph reference](../bundle/skills/kepler-plan/references/task-graph.md) describes the packaged format. Construction lint checks supported structural and semantic rules. It does not prove that the graph covers every requirement.
 
-## Pi role profiles
+## Pi profiles
 
-The resource package declares four profiles through `pi.subagents.agents`:
+The package descriptor exposes four profiles through `pi.subagents.agents`.
 
-| Profile | Responsibility | Permission boundary |
+| Profile | Responsibility | Declared boundary |
 | --- | --- | --- |
-| `kepler-architect` | Functional Design, Quality Requirements, and Implementation Planning. | Writer tools for assigned authored documents; no production implementation or dispatch. |
-| `kepler-orchestrator` | Implementation coordination, Code Integration, and authorized Deliver operations. | The only Kepler profile with the `subagent` tool. |
-| `kepler-coder` | One specifically assigned Code Generation task. | Writer tools only within the assigned task and material. |
-| `kepler-reviewer` | Independent non-author Code Validation and whole-unit Review. | No dedicated write, edit, or dispatch tool. Bash remains available for inspection and assigned checks; read-only is an assignment rule, not a filesystem sandbox. |
+| `kepler-architect` | Functional Design, Quality Requirements, and Implementation Planning. | Authored documents only. No production implementation or dispatch. |
+| `kepler-orchestrator` | Implementation coordination, Code Integration, and authorized delivery work. | The only Kepler profile with the `subagent` tool. |
+| `kepler-coder` | One assigned Code Generation task. | Writes only within its assigned scope. |
+| `kepler-reviewer` | Independent Code Validation and whole-unit Review. | No dedicated write, edit, or dispatch tool. Bash supports inspection and assigned checks. |
 
-These are profile instructions and declared tools. They do not enforce operating-system permissions or certify model behavior. Pi and pi-subagents control discovery, session loading, and execution.
+A declared tool list is not an operating-system sandbox. A role name does not establish independent execution or requester approval. The host must provide the required worker separation and permissions.
 
-## Workflow boundaries
+## Claude Code and other hosts
 
-The current phase command tree implements Construction. It does not implement future Initialization or Inception phases, convert legacy artifacts, or move v2 history into the v3 record model. The older `kepler workbench` commands remain separate. Keep work with its original generation and use [recovery guidance](recovery.md) for interruption or upgrade issues.
+Separate Claude Code definitions remain under `bundle/agents/claude-code/v1/`. Pi setup does not install or translate them. Follow the receiving host's procedure and preserve existing definitions.
 
-The Standard sequence does not authorize push, merge, release, deployment, rollback, or cleanup by itself. The requester or applicable operator authority controls those actions. See the detailed [version 3 contracts](specs/v3/README.md) for the record model, stage/Activity contracts, evidence rules, and deferred work.
+Kepler does not certify that another host loaded its files or that an agent followed them. Test CLI behavior and host loading separately from agent behavior.
+
+## Operation boundaries
+
+The CLI records and checks explicit operations. The host dispatches workers. A successful command does not imply that the next worker started.
+
+Use [Recovery](recovery.md) after an interruption. Keep earlier workbench artifacts separate from v3 mission records. No skill or stage sequence grants permission to push, merge, publish, deploy, roll back, or delete data.

@@ -1,66 +1,141 @@
-# Install Kepler
+# Install and upgrade Kepler
 
-Kepler installation has separate owners. A published release provides one versioned archive per target, with the standalone CLI and complete resource package. The bootstrap installer stages one archive and invokes its `kepler setup`; setup alone activates the selected generation and registers Kepler's Pi package. Pi owns discovery, loading, and execution.
+Use this guide to install the CLI and its resources. Installation changes your home directory. Read the paths and prerequisites before you run setup.
 
-**Release status:** Kepler 3.0.0 has not been published. This checkout contains an uncommitted development candidate; these instructions describe its interface for use only after publication. Verification and review evidence applies only to the exact source and archive recorded for that candidate. Any source change requires new candidate-bound checks. This document does not authorize installation, migration, deployment, or publication.
+The source describes the 3.0 interface. Confirm that a compatible release has been published before you use the release installer. Before publication, follow [the repository procedure](#run-from-a-repository-checkout).
 
-## Install the CLI and resource archive
+## Prerequisites
 
-On Linux or macOS with x86_64 or arm64, use this command only when a compatible release is published:
+The release targets Linux and macOS on x86_64 and arm64. The bootstrap script requires Bash, `curl`, `tar`, `gzip`, and standard system utilities. It uses `sha256sum` when available, then `shasum -a 256` as the fallback. It fails if neither checksum tool exists. Git is required for mission and repository operations.
+
+The standalone CLI does not require Bun or Node for ordinary workflow commands. Your application checks can require their own runtimes and tools.
+
+Managed Pi setup requires all of these prerequisites:
+
+- Pi 1.2.0.
+- pi-subagents 0.76.1.
+- An existing Pi agent directory.
+- An initialized Pi `settings.json` file.
+- A visible loader installation that preflight can resolve.
+
+Install and configure host prerequisites through their installation owner. Kepler setup does not install Pi, pi-subagents, models, credentials, or permissions. It does not start an agent session.
+
+## Install a published archive
+
+Replace the placeholder with an existing compatible release tag. Download that tag's matching installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vialactea-works/kepler/main/install.sh | bash
+KEPLER_VERSION='<compatible-published-tag>'
+curl -fsSL "https://raw.githubusercontent.com/vialactea-works/kepler/$KEPLER_VERSION/install.sh" -o install-kepler.sh
 ```
 
-The installer selects the latest stable release by default. Set `KEPLER_VERSION` (for example, `v3.0.0`) to select a specific published version or `KEPLER_REPO_SLUG` to select a different repository. It downloads the target archive and `SHA256SUMS`, validates the selected archive and target identity, checks archive paths and limits, stages it, and invokes the staged candidate's `kepler setup`. The installer does not promote the selector or stable command; setup owns that activation. Failed setup leaves its candidate staging evidence in place and reports the path.
-
-The installer and setup write under the user's home directory. Review their target paths and preserve any existing installation before running them. The installer does not install Pi or its extensions.
-
-## Install skills and Claude Code role definitions
-
-Pi users do not need a separate skill manager for Kepler resources: `kepler setup` registers one package at `~/.kepler-dist/current`. Its descriptor exposes eleven skills under `bundle/skills/` and four Pi-native roles under `bundle/agents/pi/v1/`. Pi and pi-subagents own loading and execution.
-
-For other hosts, the selected generation keeps the portable skill trees under `~/.kepler-dist/current/bundle/skills/`. Install the skills that match the CLI generation with that host's skill manager. For the Vercel Skills CLI, select the exact names:
+Inspect the downloaded script. Execute it only after you accept its effects:
 
 ```bash
-npx skills add ~/.kepler-dist/current/bundle/skills \
-  --skill kepler-design \
-  --skill kepler-quality \
-  --skill kepler-plan \
-  --skill kepler-orchestrate \
-  --skill kepler-code \
-  --skill kepler-code-feedback \
-  --skill kepler-review \
-  --skill kepler-finish-work \
-  --skill kepler-grilling \
-  --skill kepler-domain-modelling \
-  --skill kepler-research
+KEPLER_VERSION="$KEPLER_VERSION" bash install-kepler.sh
 ```
 
-Keep each complete skill directory, including `references/` files. The host or skill manager owns installation and overwrite behavior outside Pi. Review its preview before approving writes.
+`KEPLER_REPO_SLUG` selects another GitHub `owner/repository` for archive downloads. Use an installer that matches the selected repository and release.
 
-The package also retains four separate Claude Code definitions under `~/.kepler-dist/current/bundle/agents/claude-code/v1/`. Pi setup does not install or translate them. Claude Code loads project definitions from `.claude/agents/` and user definitions from `~/.claude/agents/`; review definitions and existing names before copying. Installation does not prove that the host loaded a role or that an agent follows its prompt. See the [Claude Code subagent documentation](https://code.claude.com/docs/en/sub-agents).
+The installer selects one `kepler-<version>-<os>-<arch>.tar.gz` archive. It downloads the archive and `SHA256SUMS`. It checks the target, archive checksum, member paths, archive limits, and embedded executable identity. It stages the candidate and calls its `kepler setup`.
+
+The installer does not activate the selector or stable launcher independently. Failed setup preserves its reported staging path. Inspect the error before retrying. Do not supply transfer consent through an unreviewed wrapper.
 
 ## Setup and installed resources
 
-Run `kepler setup` to validate and activate a complete generation. Built-in templates and guidelines remain in the selected immutable generation at `~/.kepler-dist/current/bundle/templates/` and `~/.kepler-dist/current/bundle/guidelines/`; setup does not copy them into the XDG Kepler home. That home stores the format-two installation receipt and preserves existing settings and custom assets. Setup does not create missing Kepler defaults/settings or Pi settings. First registration, explicit transfer, or repair updates only the exact managed Pi package entry in the existing Pi settings file under native coordination; a separately approved transfer may also change only the resources named in its plan. Coherent upgrades and no-ops leave Pi settings unchanged. Unknown files and user-modified resources are preserved. Setup does not write project artifacts, migrate history, install host prerequisites, or certify a host.
+`kepler setup` validates and activates a complete generation. It checks the executable identity, source identity, target, resource manifest, complete file inventory, digests, and file modes.
 
-Pi setup requires Pi 1.2.0, pi-subagents 0.76.1, an existing Pi agent directory, and an initialized `settings.json`. Kepler resolves the agent directory from `KEPLER_PI_AGENT_DIR`, then `PI_CODING_AGENT_DIR`, then `~/.pi/agent`. Setup checks visible user/project conflicts before activation. It does not create Pi settings or install Pi, pi-subagents, models, credentials, or permissions.
+The package contains these six Construction templates:
 
-The selected generation is under `~/.kepler-dist/generations/<generation-id>/`. `~/.kepler-dist/current` is its one selector and the stable Pi package source; `~/.local/bin/kepler` points through that selector. On first registration, setup creates a valid empty bootstrap package at the selected source before registering it, then selects the complete candidate. Upgrades keep the registered package path unchanged and replace only the selector after checks. The bootstrap installer does not promote either path.
+- `unit-of-work.md`
+- `design.md`
+- `quality.md`
+- `plan.md`
+- `delivery.md`
+- `supporting-document.md`
 
-Before activation, setup validates the archive's release/source/target identity, manifest, complete inventory, payload digests, and the six required v3 Construction templates: `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, `delivery.md`, and `supporting-document.md` under `templates/v3/construction/`. Missing required resources or unsupported host prerequisites fail closed. If setup reports a conflict, keep the selected generation and inspect the named path; do not force an overwrite.
+They are under `bundle/templates/v3/construction/`. A valid digest does not excuse missing required files.
 
-## Native ownership transfer
+Setup stages the complete generation at `~/.kepler-dist/generations/<generation-id>/`. It selects that generation through `~/.kepler-dist/current`. The stable command at `~/.local/bin/kepler` points through this selector.
 
-When preflight finds an external owner of a conflicting Pi resource, ordinary setup reports the exact safe transfer plan and its digest without transferring or activating the dependent candidate. Review that plan, then pass `--accept-native-transfer <digest>` only if the exact plan remains acceptable. The digest is invalid if candidate, configuration, source, or resource facts change. Unknown, custom, modified, or mixed resources remain blocked; bootstrap never supplies consent. Keep existing custom settings and resources.
+Built-in templates and guidelines remain inside the selected generation. Setup does not copy them into the XDG Kepler home. That home stores `installation.json` and preserves existing settings and custom assets. Setup does not create missing Kepler defaults or Pi settings.
+
+On first registration, setup registers the stable package source at `~/.kepler-dist/current`. The package descriptor exposes eleven skill trees and four Pi profiles. Upgrades keep that registration path. A coherent upgrade or no-op does not rewrite Pi settings.
+
+First registration, an approved transfer, or repair can change the exact managed package entry. Setup preserves unrelated settings. It checks the expected settings bytes, mode, and file identity before replacement. This check is not compare-and-swap protection against arbitrary concurrent editors. Keep non-cooperating editors idle during setup.
+
+## Agent resource ownership
+
+### Native ownership and transfer
+
+A visible external copy can conflict with a managed skill or role. Ordinary setup can return an exact safe transfer plan and digest without activating the dependent candidate.
+
+1. Read the returned plan.
+2. Verify every named resource and owner.
+3. Keep the candidate and configuration unchanged.
+4. Pass the exact accepted digest:
+
+```bash
+ACCEPTED_DIGEST='<digest-from-reviewed-plan>'
+kepler setup --accept-native-transfer "$ACCEPTED_DIGEST"
+```
+
+Replace the placeholder with the digest from that reviewed plan. A changed candidate, configuration, or resource invalidates the consent. Unknown, modified, custom, or mixed resources remain blocked. Do not delete a conflicting resource merely because its name matches a packaged file.
+
+### Install skills and Claude Code role definitions
+
+Pi users use the package registration from setup. Do not install a second copy of the same skills with another manager.
+
+Other hosts own their skill installation. Use the complete trees under `~/.kepler-dist/current/bundle/skills/`, including their `references/` files. Install only skills that match the CLI generation.
+
+Separate Claude Code role definitions remain under `bundle/agents/claude-code/v1/`. Pi setup does not install or translate them. Follow the receiving host's procedure. Review existing names before copying a definition.
+
+Resource discovery does not prove that a session loaded a role or that an agent followed it. See [Skills and roles](skills.md).
+
+## Verify the installation
+
+```bash
+command -v kepler
+kepler --version
+kepler --print-build-identity
+kepler --help
+kepler setup
+```
+
+The identity command describes the actual compiled executable. It requires no other arguments. A source runner or unidentifiable generic build fails that command.
+
+A coherent repeated setup reports a no-op for the same generation. Check its JSON result and receipt. Setup still checks prerequisites and relevant state; a repeated command is not an unconditional success.
+
+Start a new host session after first registration or a major transition. An existing session can retain older loaded resources. Do not use setup as proof of model or session readiness.
 
 ## Upgrade between changes
 
-Treat the CLI and resource package as one compatible generation. Finish active work with the generation that started it. The release installer stages a selected target archive and calls its setup; setup changes the single selector only after validation. A normal upgrade does not rewrite the stable Pi package registration. Start a new host session after first installation and later major transitions; an existing session can retain the prior prompts and skills.
+Finish active work with the generation that started it. Install a compatible complete target archive for new work. Setup selects the new generation only after validation. It preserves earlier generations and unknown files.
 
-Setup does not remove unknown files, convert old artifacts, translate history, adopt v2 work as v3 authority, or restore runtime locks and worker ownership. Keep project data unchanged and use the workflow generation that created it. If an update is interrupted or setup reports incompatible resources, stop before starting new work and follow [recovery guidance](recovery.md).
+A genuine format-one installation receipt can enter a guarded `legacy-transition`. Setup checks known ownership and material before changing activation state. It preserves the original receipt bytes and unknown files. Do not construct or edit a receipt to force that path.
+
+This installation transition does not convert old change artifacts or history. Setup does not resume workers, restore lock ownership, or purge project data. Keep legacy work with its original workflow model. See [Workflow versions](modes.md).
+
+If setup stops after an external effect, preserve the selector, receipt, settings, journal, and candidate evidence. A failed result does not prove rollback. See [Recovery](recovery.md#interrupted-installation-or-setup).
+
+## Run from a repository checkout
+
+Use Bun 1.4.0 and the pinned workspace dependencies. The contributor setup can install dependencies and produce build outputs, so run it only in an authorized workspace:
+
+```bash
+bun install --frozen-lockfile
+bun run build
+bun packages/cli/dist/cli/main.js --help
+```
+
+For ordinary CLI operations, replace `kepler` with `bun /absolute/path/to/kepler/packages/cli/dist/cli/main.js`. This uses the built package entrypoint from your target project's directory. It preserves that directory as the command's working directory.
+
+Direct TypeScript execution from another project can fail because Bun selects compiler options from its current directory. Use the built entrypoint for the mission tutorial. This checkout runner lacks an embedded standalone build identity and cannot perform complete-generation setup.
+
+`bun run dev:package` validates an isolated development package with existing Pi prerequisites. It removes its owned temporary package after validation. It does not install a persistent development CLI or replace your stable launcher. See [Development](development.md).
 
 ## Release targets and verification limits
 
-Release artifacts target Linux and macOS on x86_64 and arm64. The workflows configure native jobs for `linux-x64`, `linux-arm64`, `darwin-x64`, and `darwin-arm64`; each job must build and run its exact target archive. A configured job is not a passed result, and release cross-compilation on Linux x64 is build evidence only. Check the actual source-bound run before relying on a platform result; evidence from one target does not establish execution on another. Kepler does not certify agent behavior on any host.
+The native jobs target `linux-x64`, `linux-arm64`, `darwin-x64`, and `darwin-arm64`. Each job must build and execute its exact archive. A configured matrix is not a passing result. Execution on one target does not prove execution on another target.
+
+Publication and deployment require separate authorization. Installation does not certify a host or agent. Continue with [Configuration](configuration.md), [the mission tutorial](missions/tutorial.md), or the [setup reference](cli/utilities.md#kepler-setup).

@@ -1,58 +1,135 @@
-# Recovery guidance
+# Recover interrupted work
 
-Kepler records workflow history and repository checkpoints separately from agent sessions. A command timeout, missing response, or stopped chat does not show that a worker stopped or that a write failed. Preserve the project, history, partial changes, and any lock until you verify their state.
+Use this guide when mission preparation, a worker, Integration, or setup stops before you can confirm the result. Kepler records workflow history separately from agent sessions. A timeout does not prove that a worker stopped or a write failed.
+
+Preserve history, partial changes, checkpoints, settings, and locks until you establish their state. Recovery instructions do not grant deletion, rollback, or overwrite permission.
 
 ## Continue mission preparation
 
-Confirm that the original startup command has ended; a timeout alone does not prove this. Keep its mission ID, original record home, partial Git resources, journals, and local recovery material. Continue with:
+1. Confirm that the original startup operation ended.
+2. Keep the returned mission ID and original record home.
+3. Inspect the reported resources and partial effects.
+4. Continue the same mission:
 
 ```bash
-kepler mission prepare --mission <mission-id> --project <original-record-home>
+kepler mission prepare --mission "$MISSION" --project "$PROJECT"
 ```
 
-Use the exact full lowercase UUIDv4 from the original result. Repeating `mission create` creates another mission. `mission prepare` checks actual canonical resources under scoped coordination and performs only missing work from the saved instructions. It preserves the starting commits or explicit no-commit conditions and retries exact pending event envelopes. It does not reset, roll back, remove locks, or start a stage.
+Use the full lowercase UUIDv4. Repeating `mission create` allocates a new mission. Preparation verifies saved selections and fixed starting checkpoints. It performs only missing authorized work. It does not reset Git, remove locks, infer new choices, or start a stage.
 
-The local instructions are at `<record-home Git common directory>/kepler/missions/<mission-id>/workspaces/startup/intent.json`. They are not workflow authority. Do not edit them, attachments, or journals to force recovery. If an older incomplete mission lacks required facts, or material or history conflicts, preserve it and resolve the reported condition explicitly. Kepler does not reconstruct the original choices from current refs or paths. Only a complete matching saved startup event missing its final newline can use the existing exact-event append recovery; other damaged tails remain unchanged and blocked.
+Local startup instructions are at `<git-common-directory>/kepler/missions/<mission-id>/workspaces/startup/intent.json`. They are not workflow authority. Do not edit instructions, attachments, or journals to force recovery. Missing older recovery facts, changed checkpoints, conflicting resources, or uncertain history require explicit reconciliation.
 
-A success with `data.historical: true` reports recorded preparation only. It needs no local intent or attachments and omits local workspace IDs and paths. It does not check current execution readiness or repair missing bindings. Inspect stage and workspace prerequisites separately before execution. If an operation and lock release both fail, retain both reported failures and partial-effect facts; failure guidance grants no lock-removal or repair authority.
+The append-recovery path is narrow. It can complete the missing final newline of the exact matching saved startup event. It does not repair another damaged tail.
+
+A response with `historical: true` reports recorded preparation. It omits local workspace IDs and paths. It does not establish current readiness or recreate attachments. Fresh results omit the historical field. See [Mission commands](cli/mission.md).
 
 ## Resume Construction work
 
-1. **Stop duplicate work.** Confirm through the coding-agent host that the exact worker run ended. Do not treat a timeout or lost session as proof.
-2. **Read the exact scope.** Use `kepler workflow construction unit show`, `stage show`, `task show`, and `activity show` with the same project, unit, task, stage, and attempt selectors from the interrupted work. Use `kepler audit list` or `show` to inspect the relevant recorded events. Read each command's `--help` for required selectors.
-3. **Compare records with material.** Check recorded inputs and checkpoint commits against the repositories, artifacts, and outputs that still exist. Preserve partial writes and uncommitted work. A commit or process exit alone does not prove check success, approval, or workflow completion.
-4. **Check Integration ownership.** Before resuming Integration, verify that the exact Integration attempt still owns the unit lock, its prepared candidate matches the recorded inputs, and required checks cover that candidate in every repository. Never accept an unchecked or changed candidate. If ownership or effects remain uncertain, stop and retain the lock and material for an authorized recovery decision.
-5. **Resume only a safe, paused attempt.** Use the owning `stage resume` or `activity resume` operation for the exact attempt after confirming its inputs and ownership remain valid. A retry of a failed command does not require a new attempt. Start a new attempt only when an authorized transition requires one.
-6. **Reopen only through revision authority.** If an upstream artifact invalidates later work, report the material facts and use the authorized `kepler workflow construction revise` operation. Do not change journal records or projections to force a transition.
+### Inspect before changing state
+
+Confirm the exact worker run through the host. A lost chat or command response does not prove termination.
+
+Read the owning scope:
+
+```bash
+kepler workflow construction unit show --unit "$UNIT" --project "$PROJECT"
+kepler workflow construction stage show --unit "$UNIT" --stage implementation --project "$PROJECT"
+kepler workflow construction task show --unit "$UNIT" --task "$TASK" --project "$PROJECT"
+kepler workflow construction activity show --unit "$UNIT" --task "$TASK" --activity code-generation \
+  --implementation-attempt "$IMPL" --project "$PROJECT"
+kepler audit list --unit "$UNIT" --fields type,data --limit 100 --project "$PROJECT"
+```
+
+Use the actual unit, task, parent, and Activity from the interrupted work. There is no global `status` command.
+
+Compare records with current artifacts, commits, output files, and worker effects. Keep uncommitted work. A process exit or Git commit does not prove check success, approval, or completion.
+
+### Pause and resume
+
+A pause has a request and a separate acknowledgement. The request records `pausing`; it does not stop the worker. Acknowledge only after exact-run termination and effect reconciliation. The acknowledgement records `paused` when its guards pass.
+
+Use the complete [pause attestation](cli/construction.md#stage-pause). For Activity pause, retain the exact task, Activity, Implementation attempt, and Activity attempt selectors.
+
+Resume the same acknowledged paused attempt only when its inputs and ownership remain valid. Supply the exact `reference` and `purpose` pairs retained at its start. Do not add, omit, or replace inputs.
+
+With `jq`, extract those inputs from the original stage-start response saved as `stage-start.json`:
+
+```bash
+jq '{inputs:.data.inputs}' stage-start.json > stage-resume.json
+kepler workflow construction stage resume --unit "$UNIT" --stage implementation --attempt "$IMPL" \
+  --request "$(cat stage-resume.json)" --project "$PROJECT"
+```
+
+That saved response must belong to this exact Implementation attempt. If it is unavailable, inspect the original start event with `audit show`. Do not start another attempt to obtain replacement inputs. An empty array cannot resume a stage that started with non-empty inputs.
+
+Activity resume also requires its exact original inputs and unchanged current task inputs. See the [Activity example](cli/construction.md#activity-pause-and-activity-resume). A resumed command does not dispatch the worker. The host performs that action separately.
+
+A failed command does not automatically require a new attempt. Do not create a new attempt merely to hide an earlier failure.
+
+### Revise invalidated scope
+
+An upstream change can invalidate downstream work. Stop affected workers, confirm their effects, and reconcile locks first. Then use the authorized [revision operation](cli/construction.md#revise) for the correct boundary.
+
+Revision records authority and the affected scope. It does not stop workers, grant new work scope, or remove uncertain effects. Do not edit journals or projections to simulate a reopen.
+
+Code Integration is not an Activity revision boundary. Its eligible check retry uses the same attempt.
 
 ### Prerequisite proof after interruption or revision
 
-Inspect `task ready` and the cited evidence under the exact unit and task. Valid facts remain visible when the same current Implementation parent pauses or completes. After a new Implementation attempt starts, old-attempt proof does not satisfy its prerequisites. Record fresh proof through `kepler audit record evidence` under the current running parent and task, then select its IDs explicitly for admission. An earlier attempt's admission does not prevent recording this new proof.
+Inspect `task ready` and its evidence. Valid proof remains known when the same current Implementation parent pauses or completes. A new current Implementation attempt needs its own proof.
 
-If replay reports `invalid-task-prerequisite-evidence`, preserve the evidence and its parent start, resume, and revision facts. Unbound proof or proof recorded after a causally prior pause or closure blocks the unit. Do not delete a record, invent a cause, or edit a journal to force readiness. Resolve uncertain history through an authorized recovery decision. A readiness result grants no repair or work authority.
+Record `task-prerequisite` evidence under the exact task and current running parent, without Activity scope. Bind the exact condition or description through the input reference. Select the evidence IDs explicitly during admission. Readiness does not probe services or grant repair permission.
 
-### Integration acceptance and release
+If replay reports `invalid-task-prerequisite-evidence`, preserve the evidence and its parent start, pause, resume, and revision facts. Do not delete a record or invent a causal relationship. Resolve the reported history condition through authorized recovery.
 
-If acceptance reports `integration_evidence_changed`, inspect the current prepared candidate and latest check records. Keep the same lock token and attempt. Retry acceptance explicitly only when the current required checks succeeded and their bindings remain valid; do not re-record old results as new proof. Failed or inconclusive current evidence prevents acceptance.
+## Integration acceptance and release
 
-A failed response can follow a recorded acceptance when target verification or lock release fails. Preserve that acceptance, the lock, and all partial effects. Reconcile history, target, proof, and ownership, then use the same prepared event with `integration accept` for eligible release recovery without a duplicate acceptance. Do not use `integration release` to abort an accepted attempt. Normal incomplete-work release is safe only for the current token owner when the target still matches the lock-captured input. Unit-control contention can require a later retry; it is not proof that release or abort occurred. Missing or replaced ownership does not permit takeover or removal of another holder's claim.
+Inspect the exact token, task, Activity attempt, parent attempt, captured target, prepared candidate, and current evidence. Keep the lock while ownership or effects remain uncertain.
 
-The CLI does not provide a global status command. Use the owning stage, task, Activity, audit, or integration operation for the scope you are recovering. Workers do not authorize their own scope changes. An unrelated unit can continue only when its inputs, contracts, and resources remain independent.
+The caller runs the planned checks while holding the lock. `integration evidence` records the result; it does not run the command. A failed or inconclusive current result prevents acceptance.
+
+If acceptance reports `integration_evidence_changed`, inspect the latest evidence and bindings. Retry acceptance explicitly only when the current required checks passed for the unchanged candidate. Keep the same token and prepared event. Do not relabel old results as new proof.
+
+A response can fail after acceptance was recorded if later target verification or lock release fails. Preserve the acceptance and partial-effect facts. Reconcile history, target, proof, and ownership. Eligible recovery uses the same `integration accept` operation and prepared event without another acceptance fact.
+
+Do not use `integration release` to abort accepted work. Incomplete-work release is allowed only for the current token owner while the protected target still matches the captured input. There is no force release or age-based takeover command.
+
+See the [Integration reference](cli/construction.md#integration) for all selectors. Unit-control contention can require a retry; it does not prove that release or abort occurred.
 
 ## Interrupted installation or setup
 
-The bootstrap installer stages one complete target archive and invokes its candidate's `kepler setup`. Setup alone selects the active generation and updates the stable command path. If the installer reports failed setup, retain the reported staging path and any candidate evidence. Do not rerun another candidate or remove that directory until you have inspected the process, current selector, receipt, and Pi registration.
+The installer stages one complete archive and invokes candidate setup. Setup alone activates the generation. If the installer reports failure, retain its reported staging path. Do not remove it until you inspect the operation and evidence.
 
-Before activation, a setup failure should leave the previous selector selected. After any external effect, a failure can report partial effects; it does not prove rollback. Preserve the installation journal, format-one receipt bytes, existing files, Pi settings, and current generation. Inspect the exact selector target, receipt generation, stable command link, and Kepler package entry in Pi settings. Do not hand-edit the receipt, delete unknown files, remove another owner's lock, or force an overwrite. If state disagrees or ownership is uncertain, stop and reconcile before retrying.
+Check the actual state:
 
-If setup rejects an incomplete archive or missing required v3 template, obtain the complete archive for the intended version and target. Do not use a sidecar from another release, a self-consistent but incomplete manifest, or an arbitrary checkout as fallback. Missing/unsupported Pi 1.2.0 or pi-subagents 0.76.1, an absent Pi agent directory or initialized settings file, and visible resource conflicts block activation. Setup does not create Pi settings or install Pi prerequisites.
+- The current selector target.
+- The stable launcher target.
+- The installation receipt and generation.
+- The Pi settings package entry.
+- The installation journal and reported residual paths.
 
-When ordinary setup reports a native ownership-transfer plan and digest, the candidate remains unactivated. Review the exact plan before a retry with `kepler setup --accept-native-transfer <digest>`. A stale digest or changed plan is not authorization; unknown, custom, modified, or mixed resources stay blocked. If the current generation cannot be verified, do not start new work with it; keep active work with the generation that created it and obtain an authorized repair decision.
+A pre-activation failure should preserve the prior selection. A later failure can report partial effects. Neither result establishes rollback by itself.
 
-Pi owns discovery and loading of registered resources. A successful setup result records selected package/resource checks; it does not show that a session loaded a skill or that an agent followed its instructions. Other hosts retain their own skill and role installation procedures.
+Do not edit the receipt, delete unknown files, remove another owner's lock, or force an overwrite. Preserve format-one receipt bytes and prior generations. A residual settings temporary file can exist even when final settings were not changed. Read `temporary_file_evidence` and its ownership/cleanup facts when reported.
+
+If validation reports an incomplete archive, obtain the complete package for the intended version and target. Do not substitute a different release's resources or an arbitrary checkout. Setup requires Pi 1.2.0, pi-subagents 0.76.1, an existing agent directory, and initialized settings. It does not install these prerequisites.
+
+When setup returns a safe native-transfer plan, inspect its exact resources and digest. Use `--accept-native-transfer <digest>` only for that unchanged acceptable plan. A stale digest does not authorize a changed transfer. Unknown, custom, or modified resources remain blocked.
+
+Keep non-cooperating settings editors idle during setup. The expected-preimage check rejects observed drift, but it is not an atomic compare-and-swap guarantee against arbitrary writers.
+
+Pi owns resource loading. Setup success does not prove that a session loaded a skill or that an agent followed it. Keep active work with its original generation if a new generation cannot be verified. See [Installation](installation.md).
 
 ## Earlier change-based work
 
-`kepler workbench` belongs to the earlier change-based workflow. Use its matching generation and artifacts for that work. Kepler does not convert legacy change artifacts or history into mission-owned version 3 records. Keep the old records intact; do not resume them through v3 Construction commands.
+Use the matching `workbench` commands and artifact generation for earlier changes. They have different context, task-state, review, and finish records. They do not resume v3 mission state.
 
-For command syntax, see the [CLI guide](cli.md). The detailed record and recovery contracts live in the [v3 specifications](specs/v3/README.md).
+Guarded legacy publication can leave integrated work in progress after verification fails. Preserve the original worker history, merge, ledger, admission, and feedback. Do not reset or create a duplicate admission to hide that failure.
+
+See the [workbench reference](cli/workbench.md). Keep safe legacy path-copy behavior separate from v2-to-v3 conversion; no such workflow conversion is provided.
+
+## Sources
+
+Implementation: [mission startup](../packages/cli/src/construction/mission-startup.ts), [pause/resume](../packages/cli/src/construction/pause-resume.ts), [revision](../packages/cli/src/construction/revision.ts), [Integration](../packages/cli/src/construction/integration-execution.ts), and [setup](../packages/cli/src/cli/setup.service.ts).
+
+The [v3 specifications](specs/v3/README.md) provide supporting contracts. Recovery in this guide describes implemented operations and does not modify those specifications.
