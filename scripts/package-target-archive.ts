@@ -121,7 +121,7 @@ export function packageTargetArchive(input: PackageArguments): {
     identity,
     expectedVersion: rootPackage.version,
     expectedTarget: input.target,
-    expectedSource: source,
+    expectedSource: identity.source,
   });
   const requestedOutputPath = Path.resolve(input.output);
   const expectedName = targetArchiveName(rootPackage.version, input.target);

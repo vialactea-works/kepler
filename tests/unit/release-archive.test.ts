@@ -159,11 +159,19 @@ describe("complete target release archives", () => {
     };
     const executable = new TextEncoder().encode(encodeBuildIdentityMarker(embedded));
 
+    expect(() => createTargetArchive({
+      executable,
+      resources,
+      expectedSource: { ...embedded.source, kind: "production" },
+    })).toThrow(/source identity does not match the expected source/i);
     expect(() => createTargetArchive({ executable, resources, identity: declared }))
       .toThrow(/identity assertion.*embedded executable metadata/i);
     const archive = createTargetArchive({ executable, resources }).archive;
     expect(() => validateTargetArchive(archive, { expectedIdentity: declared }))
       .toThrow(/expected identity/i);
+    expect(() => validateTargetArchive(archive, {
+      expectedSource: { ...embedded.source, kind: "production" },
+    })).toThrow(/source identity does not match the expected source/i);
 
     const validated = validateTargetArchive(archive);
     const arbitraryExecutable = new TextEncoder().encode("arbitrary markerless executable bytes");
