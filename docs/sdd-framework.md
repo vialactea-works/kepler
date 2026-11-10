@@ -1,6 +1,6 @@
 # Standard Construction workflow
 
-Kepler's version 3 workflow gives a Unit of Work durable artifacts, scoped execution history, and explicit stage handoffs. The command-line interface records and guards workflow operations. Portable skills describe stage procedures. A coding-agent host controls dispatch and provides any required concurrency or independent context.
+Kepler's version 3 workflow gives a Unit of Work durable artifacts, scoped execution history, and explicit stage handoffs. The command-line interface records and guards workflow operations. Portable skills describe stage procedures. A coding-agent host controls dispatch and provides any required concurrency or independent context. For Pi, setup registers the packaged skills and four role profiles; Pi owns discovery, loading, and execution. The profiles do not certify agent behavior or grant workflow authority.
 
 ## Standard sequence
 
@@ -33,7 +33,7 @@ Each task proceeds through three Activities:
 2. **Code Validation:** a separate non-author reviewer checks the task output and records independent feedback.
 3. **Code Integration:** the orchestrator locks the unit, prepares the combined candidate, runs planned checks in each required repository, and accepts only the checked candidate.
 
-The orchestrator may dispatch independent ready tasks concurrently when the host supports the required separation and control. Kepler's CLI does not schedule workers or provide distributed locking. Integration serializes acceptance within a unit; independent units may proceed when their inputs and resources remain separate.
+The orchestrator may dispatch independent ready tasks concurrently when the host supports the required separation and control. Only the packaged Pi orchestrator profile declares the `subagent` tool; the reviewer remains a non-author assignment and its Bash permission is not an operating-system sandbox. Kepler's CLI does not schedule workers or provide distributed locking. Integration serializes acceptance within a unit; independent units may proceed when their inputs and resources remain separate.
 
 ## Revision and recovery
 

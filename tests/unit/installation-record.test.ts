@@ -4,11 +4,14 @@ import {
   evaluateBundleCompatibility,
   parseBundleManifest,
   parseInstallationRecord,
+  parseInstallationReceipt,
   serializeInstallationRecord,
+  serializeInstallationRecordV2,
   type BundleCompatibility,
   type BundleManifest,
   type ContentDigest,
   type InstallationRecord,
+  type InstallationRecordV2,
 } from "../../packages/cli/src/cli/installation-record.js";
 
 const digest: ContentDigest = `sha256:${"a".repeat(64)}`;
@@ -107,6 +110,52 @@ function installationRecord(): InstallationRecord {
       roles: bundleCompatibility.host_bindings.map((binding) => ({
         ...binding,
         check: "not_checked",
+      })),
+    },
+    compatibility: { check: "compatible" },
+  };
+}
+
+function installationRecordV2(): InstallationRecordV2 {
+  const generationId = "550e8400-e29b-41d4-a716-446655440001";
+  return {
+    format_version: 2,
+    generation_id: generationId,
+    release: {
+      version: "3.0.0",
+      source: {
+        commit: "0123456789abcdef0123456789abcdef01234567",
+        content_digest: digest,
+        kind: "development",
+      },
+      target: { os: "linux", arch: "x64" },
+    },
+    resources: {
+      manifest_digest: digest,
+      files: {
+        "pi-package.json": digest,
+        ...Object.fromEntries(skillIds.map((id) => [`skills/${id}/SKILL.md`, digest])),
+        ...Object.fromEntries(roles.map(([, agent_id]) => [`agents/pi/v1/${agent_id}.md`, digest])),
+      },
+    },
+    selector: {
+      path: "/home/kepler/.kepler-dist/current",
+      generation_id: generationId,
+    },
+    pi_binding: {
+      host: { id: "pi", release: "1.2.0", check: "matches" },
+      loader: { id: "pi-subagents", release: "0.76.1", check: "matches" },
+      scope: "user",
+      agent_directory: "/home/kepler/.pi/agent",
+      settings_path: "/home/kepler/.pi/agent/settings.json",
+      package_source: "/home/kepler/.kepler-dist/current",
+      registration: { entry_digest: digest, check: "matches" },
+      skills: skillIds.map((id) => ({ id, digest, check: "matches" })),
+      roles: roles.map(([role, agent_id]) => ({
+        role,
+        agent_id,
+        digest,
+        check: "matches",
       })),
     },
     compatibility: { check: "compatible" },
@@ -432,6 +481,86 @@ describe("installation generation metadata", () => {
     expect(() => parseBundleManifest(duplicateManifestMember)).toThrow(
       "Duplicate JSON object member",
     );
+  });
+
+  it("reads v1 receipts as tagged legacy data and round-trips closed v2 receipts", () => {
+    const legacy = installationRecord();
+    const legacyEncoded = serializeInstallationRecord(legacy);
+    const legacyRead = parseInstallationReceipt(legacyEncoded);
+    expect(legacyRead).toEqual({
+      kind: "legacy-v1",
+      record: parseInstallationRecord(legacyEncoded),
+    });
+    expect(legacyRead.kind === "legacy-v1" && legacyRead.record.host_binding.host).toEqual({
+      id: "claude-code",
+      release: null,
+      check: "not_checked",
+    });
+
+    const current = installationRecordV2();
+    const encoded = serializeInstallationRecordV2(current);
+    const currentRead = parseInstallationReceipt(encoded);
+    expect(encoded.endsWith("\n")).toBe(true);
+    expect(currentRead.kind).toBe("current-v2");
+    if (currentRead.kind !== "current-v2") throw new Error("v2 receipt was not recognized");
+    expect(serializeInstallationRecordV2(currentRead.record)).toBe(encoded);
+    const unknownHost = {
+      ...current,
+      pi_binding: {
+        ...current.pi_binding,
+        host: { ...current.pi_binding.host, check: "unknown" as const },
+      },
+      compatibility: { check: "unknown" as const },
+    };
+    expect(parseInstallationReceipt(JSON.stringify(unknownHost))).toMatchObject({
+      kind: "current-v2",
+      record: { compatibility: { check: "unknown" } },
+    });
+    expect(() => serializeInstallationRecordV2(unknownHost)).toThrow(
+      "before required resources are verified",
+    );
+    expect(() => parseInstallationRecord(encoded)).toThrow(
+      "Unsupported installation record version",
+    );
+  });
+
+  it("rejects malformed v2 receipt ownership paths and unknown fields", () => {
+    const record = installationRecordV2();
+    expect(() =>
+      parseInstallationReceipt(
+        JSON.stringify({
+          ...record,
+          resources: { ...record.resources, files: { "other.txt": digest } },
+        }),
+      ),
+    ).toThrow("must include pi-package.json");
+    expect(() =>
+      parseInstallationReceipt(
+        JSON.stringify({
+          ...record,
+          resources: { ...record.resources, files: { "../outside": digest } },
+        }),
+      ),
+    ).toThrow("normalized relative paths");
+    expect(() =>
+      parseInstallationReceipt(
+        JSON.stringify({
+          ...record,
+          resources: { ...record.resources, files: { "C:/outside": digest } },
+        }),
+      ),
+    ).toThrow("normalized relative paths");
+    expect(() =>
+      parseInstallationReceipt(JSON.stringify({ ...record, unexpected: true })),
+    ).toThrow("must NOT have additional properties");
+    expect(() =>
+      parseInstallationReceipt(
+        JSON.stringify({
+          ...record,
+          selector: { ...record.selector, generation_id: "550e8400-e29b-41d4-a716-446655440002" },
+        }),
+      ),
+    ).toThrow("selector generation_id");
   });
 
   it("rejects unsupported record versions and unsafe ownership receipts", () => {

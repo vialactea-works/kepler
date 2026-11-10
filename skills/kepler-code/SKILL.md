@@ -21,6 +21,8 @@ kepler workflow construction activity start --unit <unit-id> --task <task-id> --
 
 Keep the returned distinct Activity attempt ID. If already active, resume only that same unended attempt after verifying prior workers stopped and current bindings/material remain valid. Waits, new sessions, failed commands, local corrections, pauses and resumes do not mint another attempt. A task is not itself an attempt.
 
+When this skill is loaded from the distributed complete Kepler package, consult `../../guidelines/general/01-code-style.md` and relevant language guidance under `../../guidelines/<language>/` relative to this installed `SKILL.md` when available. Project standards and requester instructions take priority. These are same-generation package assets, never paths to infer from project cwd or legacy global copies.
+
 ## Procedure
 
 1. Verify the current unit/task/attempt binding, admitted repository checkpoint set and exact task definition. Read approved `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, graph task fields, source and standards relevant to this task. Use the fixed admission baseline and integrated predecessor outputs; do not change the baseline when other work integrates. Do not inspect sibling task evidence. Follow task `guidance`, verification `method`, and prerequisite conditions. If a required input is missing, stale, ambiguous, or outside authority, preserve work and report it to the orchestrator.

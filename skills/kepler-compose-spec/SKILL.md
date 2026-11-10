@@ -16,7 +16,7 @@ Both modes write **canonical** specs: human-readable documentation at altitude, 
 
 ## What it produces
 
-- `.kepler/specs/<capability>.md`, one per capability, in the skeleton of `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/requirements-spec.md`: `## Overview` / `## Contract` / `## Behavior` (+ **Examples**) / `## Invariants` / `## Decisions`.
+- `.kepler/specs/<capability>.md`, one per capability, in the skeleton of the selected generation's `~/.kepler-dist/current/bundle/templates/requirements-spec.md`: `## Overview` / `## Contract` / `## Behavior` (+ **Examples**) / `## Invariants` / `## Decisions`.
 
 ## Inputs
 

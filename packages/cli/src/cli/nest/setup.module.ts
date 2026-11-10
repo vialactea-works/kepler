@@ -2,11 +2,13 @@ import { Module } from "@nestjs/common";
 import { CLI_RELEASE } from "../version.js";
 import {
   createSetupRuntime,
+  SETUP_RUNTIME,
   SETUP_BUNDLE_LOCATOR,
   SETUP_CLI_RELEASE,
   SETUP_FILES,
   SETUP_OPERATION,
   SETUP_PLATFORM,
+  type SetupRuntime,
 } from "../setup-runtime.js";
 import {
   SetupService,
@@ -21,6 +23,10 @@ import { SetupCommand } from "./setup.command.js";
   providers: [
     SetupCommand,
     {
+      provide: SETUP_RUNTIME,
+      useFactory: () => createSetupRuntime(),
+    },
+    {
       provide: SETUP_OPERATION,
       useFactory: (
         files: SetupFiles,
@@ -32,11 +38,13 @@ import { SetupCommand } from "./setup.command.js";
     },
     {
       provide: SETUP_FILES,
-      useFactory: () => createSetupRuntime().files,
+      useFactory: (runtime: SetupRuntime) => runtime.files,
+      inject: [SETUP_RUNTIME],
     },
     {
       provide: SETUP_BUNDLE_LOCATOR,
-      useFactory: () => createSetupRuntime().bundleLocator,
+      useFactory: (runtime: SetupRuntime) => runtime.bundleLocator,
+      inject: [SETUP_RUNTIME],
     },
     {
       provide: SETUP_CLI_RELEASE,

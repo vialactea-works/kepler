@@ -1,10 +1,10 @@
 # Kepler v3 implementation map
 
-This document records the M01 source-package mapping. The approved specifications define behavior and remain authoritative. Package ownership below is an implementation choice; it does not add workflow behavior or claim that v3 is implemented.
+This document records the original M01 source-package mapping. The approved specifications define behavior and remain authoritative. The mapping does not add workflow behavior. The current uncommitted source candidate implements the v3 CLI and unified-release setup. Candidate verification and review apply only to exact source and archive identities; this map does not establish release approval.
 
 ## Existing interfaces
 
-The current workspace has two packages. Core exposes settings and path behavior. The CLI exposes setup and legacy workbench operations. The source interfaces below are observed in the current implementation; they do not establish v3 behavior.
+The current workspace has two packages. Core exposes reusable settings, artifact, event, and path contracts. The CLI exposes v3 Construction operations, setup, and the earlier workbench surface. The historical M01 source-interface selections below remain architectural guidance; consult current source and distribution evidence for implemented behavior.
 
 | Existing interface | Current responsibility | M01 selection |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ The current workspace has two packages. Core exposes settings and path behavior.
 | `ArtifactFileSystem` in `packages/cli/src/workbench/artifact-reader.ts` | Supplies a narrow file-read operation to the current workbench reader. | Reuse only as a pattern for a narrow file adapter. The current parser and `ArtifactReadResult` encode legacy artifact rules; M02 owns the v3 artifact reader. |
 | `ProcessResult` and `ProcessPort` in `packages/cli/src/workbench/runtime.ts` | Describe command results and an injectable subprocess operation. | Reuse only where a use case needs a specifically typed process capability. Prefer operation-specific interfaces such as `CheckRunner` over a universal runtime. |
 | `IsolationFileSystemPort` and `IsolationGitPort` in `packages/cli/src/workbench/runtime.ts` | Expose filesystem and Git operations for legacy workbench isolation. | Use only individual low-level operations whose contract fits. `IsolationRuntime` and its branch/worktree policy are not v3 workflow contracts. |
-| `Setup` and `SetupFiles` in `packages/cli/src/cli/setup.service.ts`, with `createSetupRuntime` in `setup-runtime.ts` | `Setup` is the setup operation's inbound contract. `SetupFiles` and `SetupBundleLocator` are its outbound contracts; the runtime adapter owns Node filesystem and path APIs. | Keep setup-specific. `SetupService` contains no Nest, CLI, filesystem, or process dependency. Do not use setup to create missions, alter project artifacts, or install native host resources. |
+| `Setup` and `SetupFiles` in `packages/cli/src/cli/setup.service.ts`, with `createSetupRuntime` in `setup-runtime.ts` | `Setup` is the setup operation's inbound contract. `SetupFiles`, `SetupBundleLocator`, and the native Pi adapter are outbound contracts; runtime adapters own filesystem, process, and host APIs. | Keep setup-specific. The current candidate uses setup for release validation, generation activation, receipt handling, and one Pi package registration. Do not use setup to create missions or alter project artifacts; Pi still owns discovery and execution. |
 | `ResultOutputSink` and `ResultExitSink` in `packages/cli/src/cli/nest/result-reporter.ts` | Separate current CLI output and exit effects. | Reuse the narrow sink pattern. Define the v3 result contract in its owning CLI boundary; the existing result shape does not set it. |
 | `ContextRuntime` and `PreconditionRuntime` in `packages/cli/src/workbench/` | Combine filesystem, Git, process, and legacy workbench state inspection. | Do not reuse these broad composites as v3 truth or as application contracts. |
 
@@ -33,8 +33,8 @@ The Core/CLI split is a source-code choice, not a change to bounded-context owne
 
 ## Installation boundary
 
-Kepler supplies versioned bundle resources, skills, and native agent definitions. The host or its skill manager owns native skill and agent installation. Setup owns only its declared bundle and default-setting targets. Installation does not create or migrate project artifacts, translate workflow history, or restore locks and worker ownership. An installation result does not grant workflow authority or certify agent behavior.
+The original published baseline used a sidecar bundle and left native skill and agent installation to each host or skill manager. The current uncommitted source candidate implements the approved Pi-only amendment: setup registers Kepler's packaged skills and four Pi-native roles through one selected generation. Pi owns discovery, loading, and execution. Other hosts retain their native installation owner. This candidate is unreleased. Acceptance requires verification and independent review bound to the exact frozen source and archive. Installation does not create or migrate project artifacts, translate workflow history, or restore locks and worker ownership. An installation result does not grant workflow authority or certify agent behavior.
 
-See [Installation: agent resource ownership](installation.md#agent-resource-ownership), [setup contract](installation.md#setup-contract), and [upgrade and legacy behavior](installation.md#upgrade-and-legacy-behavior).
+See [Installation: agent resource ownership](installation.md#agent-resource-ownership), [setup contract](installation.md#setup-contract), and [upgrade and legacy behavior](installation.md#upgrade-and-legacy-behavior), plus the [unified-release implementation plan](../../unified-release-implementation-plan.md).
 
 The [M01.8 distribution test coverage](distribution-test-coverage.md) records the substantive replacements for the original distribution checks.

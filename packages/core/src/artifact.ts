@@ -10,10 +10,12 @@ export const artifactTypes = [
 
 export type ArtifactType = (typeof artifactTypes)[number];
 
+export const CONSTRUCTION_SCHEMA_VERSION = 3 as const;
+
 export interface ArtifactMetadata {
   readonly id: string;
   readonly type: ArtifactType;
-  readonly schema_version: 3;
+  readonly schema_version: typeof CONSTRUCTION_SCHEMA_VERSION;
   readonly unit_id?: string;
   readonly author: string;
   readonly labels?: readonly string[];
@@ -276,10 +278,10 @@ export const validateArtifactMetadata = (
           artifact,
           "invalid-schema-version",
           "schema_version",
-          "schema_version must be the integer 3",
+          `schema_version must be the integer ${CONSTRUCTION_SCHEMA_VERSION}`,
         ),
       );
-    else if (metadata.schema_version !== 3)
+    else if (metadata.schema_version !== CONSTRUCTION_SCHEMA_VERSION)
       diagnostics.push(
         diagnostic(
           artifact,
@@ -410,7 +412,7 @@ const isArtifactMetadata = (value: unknown): value is ArtifactMetadata =>
   isRecord(value) &&
   typeof value.id === "string" &&
   isArtifactType(value.type) &&
-  value.schema_version === 3 &&
+  value.schema_version === CONSTRUCTION_SCHEMA_VERSION &&
   typeof value.author === "string" &&
   (value.unit_id === undefined || typeof value.unit_id === "string") &&
   (value.labels === undefined ||

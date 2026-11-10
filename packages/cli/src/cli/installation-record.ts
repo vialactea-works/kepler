@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
+import * as Path from "node:path";
 import { Ajv } from "ajv";
 import type { AnySchemaObject } from "ajv";
 
 export const INSTALLATION_RECORD_FORMAT_VERSION = 1 as const;
+export const INSTALLATION_RECEIPT_FORMAT_VERSION = 2 as const;
 export const BUNDLE_MANIFEST_FORMAT_VERSION = 1 as const;
 
 export type ContentDigest = `sha256:${string}`;
 export type ResourceCheck = "matches" | "missing" | "mismatch" | "not_checked";
+export type HostCompatibilityCheck = "matches" | "unsupported" | "unknown";
 export type CompatibilityCheck = "compatible" | "unsupported" | "unknown";
 
 export interface BundleSkillResource {
@@ -87,6 +90,54 @@ export interface InstallationRecord {
   };
 }
 
+export interface InstallationRecordV2 {
+  readonly format_version: typeof INSTALLATION_RECEIPT_FORMAT_VERSION;
+  readonly generation_id: string;
+  readonly release: {
+    readonly version: string;
+    readonly source: {
+      readonly commit: string;
+      readonly content_digest: ContentDigest;
+      readonly kind: "production" | "development";
+    };
+    readonly target: { readonly os: "linux" | "darwin"; readonly arch: "x64" | "arm64" };
+  };
+  readonly resources: {
+    readonly manifest_digest: ContentDigest;
+    readonly files: Readonly<Record<string, ContentDigest>>;
+  };
+  readonly selector: { readonly path: string; readonly generation_id: string };
+  readonly pi_binding: {
+    readonly host: { readonly id: "pi"; readonly release: string; readonly check: HostCompatibilityCheck };
+    readonly loader: {
+      readonly id: "pi-subagents";
+      readonly release: string;
+      readonly check: HostCompatibilityCheck;
+    };
+    readonly scope: "user";
+    readonly agent_directory: string;
+    readonly settings_path: string;
+    readonly package_source: string;
+    readonly registration: { readonly entry_digest: ContentDigest; readonly check: ResourceCheck };
+    readonly skills: readonly {
+      readonly id: string;
+      readonly digest: ContentDigest;
+      readonly check: ResourceCheck;
+    }[];
+    readonly roles: readonly {
+      readonly role: string;
+      readonly agent_id: string;
+      readonly digest: ContentDigest;
+      readonly check: ResourceCheck;
+    }[];
+  };
+  readonly compatibility: { readonly check: CompatibilityCheck };
+}
+
+export type ParsedInstallationReceipt =
+  | { readonly kind: "legacy-v1"; readonly record: InstallationRecord }
+  | { readonly kind: "current-v2"; readonly record: InstallationRecordV2 };
+
 export function sha256Digest(content: string | Uint8Array): ContentDigest {
   return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
@@ -121,6 +172,14 @@ const digestMap: AnySchemaObject = {
   type: "object",
   propertyNames: text,
   additionalProperties: digest,
+};
+const stableVersion: AnySchemaObject = {
+  type: "string",
+  pattern: "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+};
+const generationId: AnySchemaObject = {
+  type: "string",
+  pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 };
 
 const bundleManifestSchema = closedObject({
@@ -209,10 +268,58 @@ const installationRecordSchema = closedObject({
   compatibility: closedObject({ check: compatibilityCheck }),
 });
 
+const installationRecordV2Schema = closedObject({
+  format_version: { const: INSTALLATION_RECEIPT_FORMAT_VERSION },
+  generation_id: generationId,
+  release: closedObject({
+    version: stableVersion,
+    source: closedObject({
+      commit: { type: "string", pattern: "^[a-f0-9]{40}(?:[a-f0-9]{24})?$" },
+      content_digest: digest,
+      kind: { enum: ["production", "development"] },
+    }),
+    target: closedObject({
+      os: { enum: ["linux", "darwin"] },
+      arch: { enum: ["x64", "arm64"] },
+    }),
+  }),
+  resources: closedObject({ manifest_digest: digest, files: { ...digestMap, minProperties: 1 } }),
+  selector: closedObject({ path: text, generation_id: generationId }),
+  pi_binding: closedObject({
+    host: closedObject({ id: { const: "pi" }, release: text, check: { enum: ["matches", "unsupported", "unknown"] } }),
+    loader: closedObject({
+      id: { const: "pi-subagents" },
+      release: text,
+      check: { enum: ["matches", "unsupported", "unknown"] },
+    }),
+    scope: { const: "user" },
+    agent_directory: text,
+    settings_path: text,
+    package_source: text,
+    registration: closedObject({ entry_digest: digest, check: resourceCheck }),
+    skills: {
+      type: "array",
+      minItems: 11,
+      maxItems: 11,
+      items: closedObject({ id: text, digest, check: resourceCheck }),
+    },
+    roles: {
+      type: "array",
+      minItems: 4,
+      maxItems: 4,
+      items: closedObject({ role: text, agent_id: text, digest, check: resourceCheck }),
+    },
+  }),
+  compatibility: closedObject({ check: compatibilityCheck }),
+});
+
 const ajv = new Ajv({ allErrors: false, strict: true });
 const validateBundleManifest = ajv.compile<BundleManifest>(bundleManifestSchema);
 const validateInstallationRecord = ajv.compile<InstallationRecord>(
   installationRecordSchema,
+);
+const validateInstallationRecordV2 = ajv.compile<InstallationRecordV2>(
+  installationRecordV2Schema,
 );
 
 const standardSkillIds = [
@@ -240,7 +347,7 @@ const hostBindingRoles = [
 ] as const;
 
 export function parseBundleManifest(content: string): BundleManifest {
-  const value = parseJsonObject(content, "bundle manifest");
+  const value = parseMetadataJsonObject(content, "bundle manifest");
   if (value.manifest_format_version !== BUNDLE_MANIFEST_FORMAT_VERSION) {
     throw new InstallationMetadataError(
       `Unsupported bundle manifest version: ${String(value.manifest_format_version)}`,
@@ -320,7 +427,7 @@ export function evaluateBundleCompatibility(
 }
 
 export function parseInstallationRecord(content: string): InstallationRecord {
-  const value = parseJsonObject(content, "installation record");
+  const value = parseMetadataJsonObject(content, "installation record");
   if (value.format_version !== INSTALLATION_RECORD_FORMAT_VERSION) {
     throw new InstallationMetadataError(
       `Unsupported installation record version: ${String(value.format_version)}`,
@@ -368,6 +475,196 @@ export function serializeInstallationRecord(
   const validated = parseInstallationRecord(JSON.stringify(record));
   const normalized = normalizeInstallationRecord(validated);
   return `${JSON.stringify(normalized, null, 2)}\n`;
+}
+
+export function parseInstallationReceipt(
+  content: string,
+): ParsedInstallationReceipt {
+  const value = parseMetadataJsonObject(content, "installation receipt");
+  if (value.format_version === INSTALLATION_RECORD_FORMAT_VERSION) {
+    return { kind: "legacy-v1", record: parseInstallationRecord(content) };
+  }
+  if (value.format_version === INSTALLATION_RECEIPT_FORMAT_VERSION) {
+    return { kind: "current-v2", record: parseInstallationRecordV2Value(value) };
+  }
+  throw new InstallationMetadataError(
+    `Unsupported installation receipt version: ${String(value.format_version)}`,
+  );
+}
+
+export function serializeInstallationRecordV2(
+  record: InstallationRecordV2,
+): string {
+  const validated = parseInstallationRecordV2Value(record);
+  if (validated.compatibility.check !== "compatible") {
+    throw new InstallationMetadataError(
+      "cannot write a v2 installation receipt before required resources are verified",
+    );
+  }
+  const normalized = normalizeInstallationRecordV2(validated);
+  return `${JSON.stringify(normalized, null, 2)}\n`;
+}
+
+function parseInstallationRecordV2Value(value: unknown): InstallationRecordV2 {
+  if (!isInstallationRecordV2(value)) {
+    throw schemaError("installation receipt v2", validateInstallationRecordV2.errors);
+  }
+  const current = value;
+  validateStableVersion(current.release.version);
+  validateRelativeDigestMap(current.resources.files, "resources.files");
+  const absolutePaths = [
+    current.selector.path,
+    current.pi_binding.agent_directory,
+    current.pi_binding.settings_path,
+    current.pi_binding.package_source,
+  ];
+  if (absolutePaths.some((path) => !isAbsolutePath(path))) {
+    throw new InstallationMetadataError("installation receipt paths must be absolute");
+  }
+  if (current.generation_id !== current.selector.generation_id) {
+    throw new InstallationMetadataError(
+      "selector generation_id must match the receipt generation_id",
+    );
+  }
+  if (current.selector.path !== current.pi_binding.package_source) {
+    throw new InstallationMetadataError(
+      "Pi package_source must match the selected package path",
+    );
+  }
+  validateV2ResourceSet(current);
+  validateV2Compatibility(current);
+  return current;
+}
+
+function isInstallationRecordV2(value: unknown): value is InstallationRecordV2 {
+  return validateInstallationRecordV2(value) === true;
+}
+
+function validateV2ResourceSet(record: InstallationRecordV2): void {
+  if (record.resources.files["pi-package.json"] === undefined) {
+    throw new InstallationMetadataError(
+      "installation receipt resource inventory must include pi-package.json",
+    );
+  }
+  const expectedSkills = new Set<string>([...standardSkillIds, ...conditionalSkillIds]);
+  if (
+    record.pi_binding.skills.length !== expectedSkills.size ||
+    new Set(record.pi_binding.skills.map(({ id }) => id)).size !== record.pi_binding.skills.length ||
+    record.pi_binding.skills.some(({ id }) => !expectedSkills.has(id))
+  ) {
+    throw new InstallationMetadataError(
+      "installation receipt must declare all eleven accepted Pi skills",
+    );
+  }
+  const expectedRoles = new Map<string, string>(hostBindingRoles);
+  if (
+    record.pi_binding.roles.length !== expectedRoles.size ||
+    new Set(record.pi_binding.roles.map(({ role }) => role)).size !== record.pi_binding.roles.length ||
+    new Set(record.pi_binding.roles.map(({ agent_id }) => agent_id)).size !== record.pi_binding.roles.length ||
+    record.pi_binding.roles.some(({ role, agent_id }) => expectedRoles.get(role) !== agent_id)
+  ) {
+    throw new InstallationMetadataError(
+      "installation receipt must declare the four accepted Pi roles",
+    );
+  }
+  for (const skill of record.pi_binding.skills) {
+    if (record.resources.files[`skills/${skill.id}/SKILL.md`] !== skill.digest) {
+      throw new InstallationMetadataError(
+        `installation receipt skill digest does not match its resource: ${skill.id}`,
+      );
+    }
+  }
+  for (const role of record.pi_binding.roles) {
+    if (record.resources.files[`agents/pi/v1/${role.agent_id}.md`] !== role.digest) {
+      throw new InstallationMetadataError(
+        `installation receipt role digest does not match its resource: ${role.role}`,
+      );
+    }
+  }
+}
+
+function validateV2Compatibility(record: InstallationRecordV2): void {
+  if (
+    record.pi_binding.host.check === "matches" &&
+    record.pi_binding.host.release !== "1.2.0"
+  ) {
+    throw new InstallationMetadataError(
+      "a matching Pi host check requires the supported Pi 1.2.0 release",
+    );
+  }
+  if (
+    record.pi_binding.loader.check === "matches" &&
+    record.pi_binding.loader.release !== "0.76.1"
+  ) {
+    throw new InstallationMetadataError(
+      "a matching pi-subagents check requires the supported 0.76.1 release",
+    );
+  }
+  const checks = [
+    record.pi_binding.host.check,
+    record.pi_binding.loader.check,
+    record.pi_binding.registration.check,
+    ...record.pi_binding.skills.map(({ check }) => check),
+    ...record.pi_binding.roles.map(({ check }) => check),
+  ];
+  const unsupported = checks.some(
+    (check) => check === "unsupported" || check === "missing" || check === "mismatch",
+  );
+  const unknown = checks.some((check) => check === "unknown" || check === "not_checked");
+  const expected = unsupported ? "unsupported" : unknown ? "unknown" : "compatible";
+  if (record.compatibility.check !== expected) {
+    throw new InstallationMetadataError(
+      `compatibility check contradicts Pi/resource checks; expected ${expected}`,
+    );
+  }
+}
+
+function normalizeInstallationRecordV2(
+  record: InstallationRecordV2,
+): InstallationRecordV2 {
+  return {
+    format_version: INSTALLATION_RECEIPT_FORMAT_VERSION,
+    generation_id: record.generation_id,
+    release: {
+      version: record.release.version,
+      source: { ...record.release.source },
+      target: { ...record.release.target },
+    },
+    resources: {
+      manifest_digest: record.resources.manifest_digest,
+      files: sortedRecord(record.resources.files),
+    },
+    selector: { ...record.selector },
+    pi_binding: {
+      host: { ...record.pi_binding.host },
+      loader: { ...record.pi_binding.loader },
+      scope: record.pi_binding.scope,
+      agent_directory: record.pi_binding.agent_directory,
+      settings_path: record.pi_binding.settings_path,
+      package_source: record.pi_binding.package_source,
+      registration: { ...record.pi_binding.registration },
+      skills: record.pi_binding.skills
+        .map((skill) => ({ ...skill }))
+        .sort((left, right) => compareStrings(left.id, right.id)),
+      roles: record.pi_binding.roles
+        .map((role) => ({ ...role }))
+        .sort((left, right) => compareStrings(left.role, right.role)),
+    },
+    compatibility: { ...record.compatibility },
+  };
+}
+
+function validateStableVersion(version: string): void {
+  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+    throw new InstallationMetadataError(`Invalid stable release version: ${version}`);
+  }
+  if (version.split(".").some((component) => !Number.isSafeInteger(Number(component)))) {
+    throw new InstallationMetadataError(`Release version exceeds safe integer range: ${version}`);
+  }
+}
+
+function isAbsolutePath(path: string): boolean {
+  return Path.isAbsolute(path) || Path.win32.isAbsolute(path);
 }
 
 function isBundleManifest(value: unknown): value is BundleManifest {
@@ -594,8 +891,10 @@ function validateRelativeDigestMap(
     const segments = path.split("/");
     return (
       path.length === 0 ||
-      path.startsWith("/") ||
+      Path.isAbsolute(path) ||
+      Path.win32.isAbsolute(path) ||
       path.includes("\\") ||
+      path.includes("\0") ||
       segments.some((segment) => segment === "" || segment === "." || segment === "..")
     );
   });
@@ -734,7 +1033,7 @@ function rejectDuplicateJsonMembers(content: string, label: string): void {
   }
 }
 
-function parseJsonObject(
+export function parseMetadataJsonObject(
   content: string,
   label: string,
 ): Record<string, unknown> {

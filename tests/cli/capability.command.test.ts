@@ -16,6 +16,7 @@ import {
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
 import { AppModule } from "../../packages/cli/src/cli/app.module.js";
 import { createEventJournal } from "../../packages/cli/src/history/journal.js";
+import { VERSION } from "../../src/index.js";
 import { taskGraphExample } from "../fixtures/task-graph.js";
 
 interface CapturedCli {
@@ -273,8 +274,8 @@ describe("v3 root command tree", () => {
       "construction.mission-workspaces-prepared",
     ]);
     expect(events.map((event) => event.producer)).toEqual([
-      { name: "kepler", version: "0.11.0" },
-      { name: "kepler", version: "0.11.0" },
+      { name: "kepler", version: VERSION },
+      { name: "kepler", version: VERSION },
     ]);
   });
 

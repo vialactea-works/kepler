@@ -1,8 +1,8 @@
 # Kepler skills
 
-Kepler ships eleven versioned portable skills. Eight are entry skills in the Standard Construction workflow; three support work when their procedures call for them. The host loads the skill files and controls agent dispatch. A skill file describes a procedure, not proof that a host or agent followed it.
+The Kepler 3.0.0 source candidate packages eleven versioned portable skills. Eight are entry skills in the Standard Construction workflow; three support work when their procedures call for them. Pi setup registers the package that exposes these skills. Pi owns discovery, loading, and execution. A skill file describes a procedure, not proof that a host or agent followed it. The candidate is not a published release.
 
-Install skills from the same sidecar generation as the CLI. See [installation](installation.md#install-skills-and-claude-code-role-definitions). Keep each complete skill directory, including its reference files. Read the full `SKILL.md` for required inputs, CLI operations, checks, evidence, and handoffs.
+For Pi, install the matching skills with `kepler setup`; do not register a second copy through a separate skill manager. Other hosts retain their own installation owner. See [installation](installation.md#install-skills-and-claude-code-role-definitions). Keep each complete skill directory, including reference files. Read the full `SKILL.md` for required inputs, CLI operations, checks, evidence, and handoffs.
 
 The stage skills contain their reopening questionnaires without links to an uninstalled source checkout. `kepler-plan/references/task-graph.md` supplies the closed graph field contract, identity rules, example, and Draft 2020-12 schema. The schema covers structural constraints; use Construction lint for supported structural and semantic checks. Lint does not prove requirement coverage or technical correctness.
 
@@ -40,7 +40,20 @@ For each Implementation task, the orchestrator coordinates Code Generation, non-
 | [`kepler-domain-modelling`](../skills/kepler-domain-modelling/SKILL.md) | Establish domain language, model boundaries, and ownership from project sources. |
 | [`kepler-research`](../skills/kepler-research/SKILL.md) | Investigate uncertain external facts against primary sources and record sourced findings. |
 
-Supporting skills do not add agent roles or workflow stages. The installed Claude Code bindings are optional host resources; they do not certify agent behavior. See [installation](installation.md) for ownership and manual setup.
+Supporting skills do not add agent roles or workflow stages. The package keeps separate Claude Code role definitions, but Pi setup does not install or translate them. Other hosts retain their native installation owner. Resource files do not certify agent behavior. See [installation](installation.md) for ownership and manual setup.
+
+## Pi role profiles
+
+The resource package declares four profiles through `pi.subagents.agents`:
+
+| Profile | Responsibility | Permission boundary |
+| --- | --- | --- |
+| `kepler-architect` | Functional Design, Quality Requirements, and Implementation Planning. | Writer tools for assigned authored documents; no production implementation or dispatch. |
+| `kepler-orchestrator` | Implementation coordination, Code Integration, and authorized Deliver operations. | The only Kepler profile with the `subagent` tool. |
+| `kepler-coder` | One specifically assigned Code Generation task. | Writer tools only within the assigned task and material. |
+| `kepler-reviewer` | Independent non-author Code Validation and whole-unit Review. | No dedicated write, edit, or dispatch tool. Bash remains available for inspection and assigned checks; read-only is an assignment rule, not a filesystem sandbox. |
+
+These are profile instructions and declared tools. They do not enforce operating-system permissions or certify model behavior. Pi and pi-subagents control discovery, session loading, and execution.
 
 ## Workflow boundaries
 

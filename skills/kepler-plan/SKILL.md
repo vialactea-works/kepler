@@ -24,6 +24,8 @@ Use the explicit unit's `unit-of-work.md`, `design.md`, `quality.md`, linked sup
 
 Planning selects the technical solution against current functional and quality obligations, records rationale for every planning decision, and creates the task graph. It does not change upstream obligations without authorized revision, implement production code, run planned application checks, dispatch workers, admit tasks, select admission baselines, accept Integration candidates, or perform delivery operations.
 
+When this skill is loaded from the distributed complete Kepler package, use `../../templates/v3/construction/plan.md` relative to this installed `SKILL.md`; use `../../templates/v3/construction/supporting-document.md` only when linked supporting detail is needed. These paths identify same-generation package assets, not project-cwd or legacy global templates. If unavailable, report the package-resource blocker; preserve this stage's procedure, approval, and authoring boundaries.
+
 ## Procedure
 
 1. Inspect state and start the current attempt:

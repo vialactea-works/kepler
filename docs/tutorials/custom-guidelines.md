@@ -1,76 +1,56 @@
-# Creating Custom Guidelines
+# Project-Owned Guidelines
 
-Guidelines are coding rules and conventions shipped with Kepler and installed to
-`${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/` by `kepler setup`. Agents and the Assisted skills read these
-files directly when working in a project, so they always have your team's standards at hand.
+Keep custom guidelines in the project and point to them explicitly from its `AGENTS.md` or a
+request prompt. Kepler does not discover a global XDG guideline directory, and an explicit
+reference does not guarantee that every agent will follow the instructions. See the current
+[installation contract](../installation.md#setup-and-installed-resources) for the bundled
+resource paths and setup behavior.
 
-## What Guidelines Are
+## Create a project-owned file
 
-Guidelines are markdown files that describe coding conventions for specific
-languages or frameworks. They live under `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/<name>/`:
-
-```
-${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/<name>/
-  guideline.yml       # Metadata (name, optional glob patterns) — kept for reference
-  convention-1.md     # Guideline content
-  convention-2.md
-```
-
-`kepler setup` copies the bundled guidelines (`general`, `golang`, `typescript`) from
-`bundle/guidelines/`. The markdown files are plain text your agent can be pointed at — the
-skills and agents read them directly.
-
-## Step 1: Add a Guideline
-
-Add a directory of markdown files under `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/` (or extend the bundled
-ones in `bundle/guidelines/` in this repo):
-
-```bash
-mkdir -p ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/react-ts
-```
-
-Create `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/react-ts/component_patterns.md`:
+Choose a tracked path that fits the repository, such as `docs/guidelines/team.md`:
 
 ```markdown
-## Component Conventions
+## Team conventions
 
-- Use functional components with TypeScript interfaces
-- Props interfaces must be named `<ComponentName>Props`
-- Export as default unless the component is from a barrel export
-- Use React.FC only when children are needed
-- Keep components under 200 lines; extract sub-components for longer files
-
-## File Organization
-
-- One component per file
-- Co-locate styles in <ComponentName>.module.css
-- Co-locate tests in <ComponentName>.test.tsx
+- Keep changes within the owning package.
+- Add focused tests for behavior changes.
+- Preserve unrelated user data and existing project conventions.
 ```
 
-## Step 2: Point Your Agent at It
+Use Markdown that is clear to the people and tools working in the project. Kepler does not
+require a guideline-specific frontmatter format or directory structure.
 
-Mention the guideline file in the project's `AGENTS.md` or in your prompt so the agent loads
-it before coding:
+## Reference it explicitly
+
+Add a short reference in the project's `AGENTS.md`:
 
 ```markdown
-## Standards
+## Project standards
 
-Follow the conventions in ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/react-ts/component_patterns.md
+Follow [team conventions](docs/guidelines/team.md) when changing this repository.
 ```
 
-## Step 3: Iterate
+You can also name the file directly in a prompt. Keep project instructions consistent with the
+requester's directions and higher-priority policies. The reference is an instruction for the
+agent, not an automatic discovery or compliance guarantee.
 
-Guideline files are read on demand. Edit them and re-run — no restart or reinstall needed.
+## Maintain the guidelines
 
-Common iteration paths:
+Review the referenced project file when its conventions change. Keep it focused, and remove or
+revise guidance that no longer applies. The file is project-owned content; Kepler setup does not
+copy, refresh, or manage it.
 
-1. **Agent ignores a convention** — be more prescriptive: "You MUST..." instead of "Prefer..."
-2. **Guidelines are too long** — agents have limited context. Keep each file focused and under 50 lines
-3. **Multiple guideline sets** — create separate guideline directories and point at each as needed
+## Bundled guidelines
 
-## Bundled Guidelines
+The complete Kepler package includes built-in guidance under
+`~/.kepler-dist/current/bundle/guidelines/`, inside the selected immutable generation. Setup does
+not copy these resources into the XDG Kepler home. Do not edit the selected generation in place.
+A change to bundled guidelines must be included in a newly built and selected complete package
+generation. Existing custom files under an XDG guideline path are preserved, but Kepler does not
+automatically adopt or discover them.
 
-| Guideline | Covers |
+| Bundled resource | Covers |
 |-----------|--------|
 | `general` | Cross-language coding style |
 | `golang` | Go style, setup, testing, patterns, e2e |

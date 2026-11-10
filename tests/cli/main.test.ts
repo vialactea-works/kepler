@@ -138,22 +138,26 @@ describe("main CLI", () => {
     );
   });
 
-  it("reports setup filesystem failures once with exit code 1", () => {
+  it("rejects setup without a package build identity before filesystem effects", () => {
     const invalidHome = Path.join(harness.resources.rootDirectory, "home-file");
-    Fs.writeFileSync(invalidHome, "not a directory");
+    const invalidHomeContents = "not a directory\n";
+    Fs.writeFileSync(invalidHome, invalidHomeContents);
 
     const result = runCli(["setup"], { HOME: invalidHome });
 
     expect(result.exitCode).toBe(1);
-    expect(parseCliEnvelope(result.stdout)).toMatchObject({
+    expect(parseCliEnvelope(result.stdout)).toEqual({
       status: "failed",
       data: {
-        code: "setup_write_failed",
-        message: expect.stringContaining("Failed to create Kepler home directories:"),
+        code: "build_identity_missing",
+        message: "The executing Kepler binary does not declare a package build identity.",
         details: {},
-        recovery: expect.stringContaining("Resolve the filesystem failure"),
+        recovery: "Use an identifiable Kepler package candidate; setup does not fall back to the source checkout or current directory.",
       },
     });
     expect(result.stderr).toBe("");
+    expect(Fs.readFileSync(invalidHome, "utf8")).toBe(invalidHomeContents);
+    expect(Fs.existsSync(Path.join(invalidHome, ".config"))).toBe(false);
+    expect(Fs.existsSync(Path.join(invalidHome, ".kepler-dist"))).toBe(false);
   });
 });

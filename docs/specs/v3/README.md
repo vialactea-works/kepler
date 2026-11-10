@@ -18,7 +18,7 @@ This reference contains approved Construction MVP contracts and deferred design 
 
 The [Construction runtime contract](phases/construction/runtime.md) defines approved Construction state, event, and operation requirements under CN23. The accepted [Mission contract](mission.md) owns mission and storage policy. Neither document adds a stage.
 
-The [installation contract](installation.md) is approved under SH124, including its installation-generation record. Earlier setup, intended-target, and resource-ownership decisions under SH114, SH116, and SH117 keep their scope. Specification approval does not show implemented or released v3 behavior.
+SH124 approves the original [installation contract](installation.md), including its format-one installation-generation record. The approved [unified-release design](../../unified-release-design.md) amends setup and Pi resource ownership; SH114, SH116, and SH117 remain historical records with their original scope. The [implementation plan](../../unified-release-implementation-plan.md) fixes the resulting receipt, version, selector, transfer, and verification contracts. Design and plan approval define contracts, not release evidence. The current uncommitted source candidate implements this amendment; see the [installation status](installation.md#implementation-and-release-status). No 3.0.0 release is published.
 
 The version 2 reference stays in a separate document set. Its contracts do not automatically apply to version 3.
 
@@ -132,6 +132,6 @@ Stages apply this shared definition to their work. Activities inherit their owni
 
 Use ASD-STE100 Simplified Technical English for text added or changed in this reference. Keep commands, paths, schema fields, and stored values in their exact spelling.
 
-Keep links in this specification within `v3/`. Use the local skill reference instead of links to current skill implementations.
+Keep normative capability and state links within `v3/`. A narrow exception permits links to the approved governing `docs/unified-release-design.md` and its `docs/unified-release-implementation-plan.md` ledger outside `v3/` for provenance and implementation boundaries. These references do not replace canonical contracts or prove shipped behavior. Use the local skill reference instead of links to current skill implementations.
 
 The ASD-STE100 standard is at `https://www.asd-ste100.org/`. This reference does not claim certified language validation.

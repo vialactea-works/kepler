@@ -41,11 +41,15 @@ The CLI does not provide a global status command. Use the owning stage, task, Ac
 
 ## Interrupted installation or setup
 
-The installer and `kepler setup` manage different parts of installation. Setup preserves user-modified resources and reports necessary-path conflicts. If setup reports a conflict or interrupted update, keep the existing files and installation receipt. Inspect the paths named in the failure and compare them with the selected compatible sidecar. Do not delete unknown files, hand-edit the receipt, or force an overwrite. If the current generation cannot be verified, do not start new work with it; keep active work with the generation that created it and obtain an authorized repair decision.
+The bootstrap installer stages one complete target archive and invokes its candidate's `kepler setup`. Setup alone selects the active generation and updates the stable command path. If the installer reports failed setup, retain the reported staging path and any candidate evidence. Do not rerun another candidate or remove that directory until you have inspected the process, current selector, receipt, and Pi registration.
 
-If setup reports `invalid_bundle` with a missing required v3 template, obtain the complete compatible sidecar. Extra templates, placeholders, or a recalculated digest do not supply the missing resource. Rejected setup does not change the existing Kepler resources, settings, or receipt.
+Before activation, a setup failure should leave the previous selector selected. After any external effect, a failure can report partial effects; it does not prove rollback. Preserve the installation journal, format-one receipt bytes, existing files, Pi settings, and current generation. Inspect the exact selector target, receipt generation, stable command link, and Kepler package entry in Pi settings. Do not hand-edit the receipt, delete unknown files, remove another owner's lock, or force an overwrite. If state disagrees or ownership is uncertain, stop and reconcile before retrying.
 
-Host skill managers own skill installation, and Claude Code owns native role loading. Check their own installation results separately. A successful `kepler setup` result does not show that the host loaded a skill or agent definition.
+If setup rejects an incomplete archive or missing required v3 template, obtain the complete archive for the intended version and target. Do not use a sidecar from another release, a self-consistent but incomplete manifest, or an arbitrary checkout as fallback. Missing/unsupported Pi 1.2.0 or pi-subagents 0.76.1, an absent Pi agent directory or initialized settings file, and visible resource conflicts block activation. Setup does not create Pi settings or install Pi prerequisites.
+
+When ordinary setup reports a native ownership-transfer plan and digest, the candidate remains unactivated. Review the exact plan before a retry with `kepler setup --accept-native-transfer <digest>`. A stale digest or changed plan is not authorization; unknown, custom, modified, or mixed resources stay blocked. If the current generation cannot be verified, do not start new work with it; keep active work with the generation that created it and obtain an authorized repair decision.
+
+Pi owns discovery and loading of registered resources. A successful setup result records selected package/resource checks; it does not show that a session loaded a skill or that an agent followed its instructions. Other hosts retain their own skill and role installation procedures.
 
 ## Earlier change-based work
 

@@ -1,10 +1,4 @@
-import {
-  bundleManifestContentDigest,
-  sha256Digest,
-  type BundleCompatibility,
-  type BundleManifest,
-} from "../../packages/cli/src/cli/installation-record.js";
-import type { SetupBundleSnapshot } from "../../packages/cli/src/cli/setup-bundle.js";
+import { createResourceManifest, type ResourcePackageSnapshot } from "../../packages/cli/src/cli/release-resources.js";
 
 const skillIds = [
   "kepler-design",
@@ -19,7 +13,6 @@ const skillIds = [
   "kepler-domain-modelling",
   "kepler-research",
 ];
-const requiredSkills = new Set(skillIds.slice(0, 8));
 const constructionTemplatePaths = [
   "templates/v3/construction/unit-of-work.md",
   "templates/v3/construction/design.md",
@@ -28,7 +21,7 @@ const constructionTemplatePaths = [
   "templates/v3/construction/delivery.md",
   "templates/v3/construction/supporting-document.md",
 ];
-const hostRoles = [
+const agentRoles = [
   ["architect", "kepler-architect"],
   ["orchestrator", "kepler-orchestrator"],
   ["coder", "kepler-coder"],
@@ -37,15 +30,25 @@ const hostRoles = [
 const encoder = new TextEncoder();
 
 export interface SetupBundleFixtureOptions {
-  readonly cliReleases?: readonly string[];
-  readonly bundleRelease?: string;
+  readonly release?: string;
   readonly templateContent?: string;
   readonly guidelineContent?: string;
 }
 
 export function createSetupBundleFixture(
   options: SetupBundleFixtureOptions = {},
-): SetupBundleSnapshot {
+): ResourcePackageSnapshot {
+  const release = options.release ?? "3.0.0";
+  const descriptor = {
+    name: "kepler-resources",
+    version: release,
+    private: true,
+    type: "module",
+    pi: {
+      skills: ["./bundle/skills"],
+      subagents: { agents: ["./bundle/agents/pi/v1"] },
+    },
+  };
   const files = [
     ...constructionTemplatePaths.map((path) => ({
       path,
@@ -61,40 +64,20 @@ export function createSetupBundleFixture(
     },
     ...skillIds.map((id) => ({
       path: `skills/${id}/SKILL.md`,
-      contents: encoder.encode(`${id}\n`),
+      contents: encoder.encode(`---\nname: ${id}\ndescription: ${id} skill\n---\n\n${id}\n`),
     })),
-    ...hostRoles.map(([, agent_id]) => ({
-      path: `agents/claude-code/v1/${agent_id}.md`,
-      contents: encoder.encode(`${agent_id}\n`),
-    })),
+    ...agentRoles.flatMap(([, agentId]) => [
+      {
+        path: `agents/pi/v1/${agentId}.md`,
+        contents: encoder.encode(`---\nname: ${agentId}\ndescription: ${agentId} role\n---\n\n${agentId} Pi profile\n`),
+      },
+      {
+        path: `agents/claude-code/v1/${agentId}.md`,
+        contents: encoder.encode(`---\nname: ${agentId}\ndescription: ${agentId} role\n---\n\n${agentId} Claude Code profile\n`),
+      },
+    ]),
+    { path: "pi-package.json", contents: encoder.encode(`${JSON.stringify(descriptor, null, 2)}\n`) },
   ];
-  const compatibility: BundleCompatibility = {
-    cli_releases: [...(options.cliReleases ?? ["0.10.3"])],
-    skills: skillIds.map((id) => ({
-      id,
-      release: "kepler-skills-3.0.0",
-      digest: sha256Digest(encoder.encode(`${id}\n`)),
-      required: requiredSkills.has(id),
-    })),
-    host_bindings: hostRoles.map(([role, agent_id]) => ({
-      role,
-      agent_id,
-      release: "claude-code-bindings-1.0.0",
-      digest: sha256Digest(encoder.encode(`${agent_id}\n`)),
-    })),
-  };
-  const manifestBase: BundleManifest = {
-    manifest_format_version: 1,
-    bundle_release: options.bundleRelease ?? "kepler-bundle-3.0.0",
-    files: Object.fromEntries(
-      files.map((file) => [file.path, sha256Digest(file.contents)]),
-    ),
-    content_digest: sha256Digest(new Uint8Array()),
-    compatibility,
-  };
-  const manifest: BundleManifest = {
-    ...manifestBase,
-    content_digest: bundleManifestContentDigest(manifestBase),
-  };
-  return { manifest: JSON.stringify(manifest), files };
+  const manifest = createResourceManifest(release, files);
+  return { manifest: `${JSON.stringify(manifest, null, 2)}\n`, files };
 }

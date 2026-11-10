@@ -64,7 +64,7 @@ Read the co-located `references/` files with the Read tool from this skill's dir
 
 ## Report format
 
-Write the report to `.kepler/changes/<change>/critique.md`, following the `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/critique.md` format, and print the same content to chat. Findings are **one continuous numbered list, ordered most-severe first**, each tagged `[Critical]` (blocks the gate — a defect that would cause implementation confusion or a runtime failure), `[Significant]` (a factual error or YAGNI violation to correct before the gate), or `[Minor]` (a documentation or naming gap):
+Write the report to `.kepler/changes/<change>/critique.md`, following the selected generation's `~/.kepler-dist/current/bundle/templates/critique.md` format, and print the same content to chat. Findings are **one continuous numbered list, ordered most-severe first**, each tagged `[Critical]` (blocks the gate — a defect that would cause implementation confusion or a runtime failure), `[Significant]` (a factual error or YAGNI violation to correct before the gate), or `[Minor]` (a documentation or naming gap):
 
 ```
 # Critique: <change> — <YYYY-MM-DD>

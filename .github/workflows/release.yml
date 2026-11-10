@@ -34,6 +34,8 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
 
       - name: Read package.json version
         id: read-version
@@ -104,9 +106,45 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node for the pinned Pi E2E host
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.19.0
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Install actual pinned Pi E2E collaborators
+        run: |
+          host="$RUNNER_TEMP/kepler-pi-host"
+          npm install --prefix "$host" --cache "$RUNNER_TEMP/kepler-pi-cache" \
+            --userconfig "$RUNNER_TEMP/kepler-empty.npmrc" --ignore-scripts \
+            --no-audit --no-fund --package-lock=false \
+            '@earendil-works/pi-coding-agent@1.2.0' 'pi-subagents@0.76.1'
+          pi_bin="$host/node_modules/.bin/pi"
+          loader_root="$host/node_modules/pi-subagents"
+          node_binary="$(command -v node)"
+          node_version="$("$node_binary" --version)"
+          if [ "$node_version" != "v22.19.0" ]; then
+            printf 'Expected Node v22.19.0; found %s.\n' "$node_version" >&2
+            exit 1
+          fi
+          sdk_entry="$host/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
+          if [ ! -f "$sdk_entry" ]; then
+            printf 'Pinned Pi SDK entry was not installed:\n%s\n' \
+              "$sdk_entry" >&2
+            exit 1
+          fi
+          env_file="$GITHUB_ENV"
+          {
+            printf '%s=%s\n' KEPLER_PI_BINARY "$pi_bin"
+            printf '%s=%s\n' KEPLER_PI_SUBAGENTS_ROOT "$loader_root"
+            printf '%s=%s\n' KEPLER_PI_NODE_BINARY "$node_binary"
+            printf '%s=%s\n' KEPLER_PI_SDK_ENTRY_PATH "$sdk_entry"
+          } >> "$env_file"
 
       - name: Compile version checker
         run: |
@@ -148,11 +186,15 @@ jobs:
         run: shellcheck install.sh
 
   native-distribution:
-    name: Native standalone distribution E2E (${{ matrix.target }})
+    name: Native target archive E2E (${{ matrix.target }})
     needs:
       - check-version
       - verify
-    if: needs.check-version.outputs.should_release == 'true'
+    if: >-
+      ${{
+        needs.check-version.outputs.should_release == 'true' ||
+        needs.check-version.outputs.should_publish_core == 'true'
+      }}
     strategy:
       fail-fast: false
       matrix:
@@ -178,15 +220,93 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node for the pinned Pi E2E host
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.19.0
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install actual pinned Pi E2E collaborators
+        run: |
+          host="$RUNNER_TEMP/kepler-pi-host"
+          npm install --prefix "$host" --cache "$RUNNER_TEMP/kepler-pi-cache" \
+            --userconfig "$RUNNER_TEMP/kepler-empty.npmrc" --ignore-scripts \
+            --no-audit --no-fund --package-lock=false \
+            '@earendil-works/pi-coding-agent@1.2.0' 'pi-subagents@0.76.1'
+          pi_bin="$host/node_modules/.bin/pi"
+          loader_root="$host/node_modules/pi-subagents"
+          node_binary="$(command -v node)"
+          node_version="$("$node_binary" --version)"
+          if [ "$node_version" != "v22.19.0" ]; then
+            printf 'Expected Node v22.19.0; found %s.\n' "$node_version" >&2
+            exit 1
+          fi
+          sdk_entry="$host/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
+          if [ ! -f "$sdk_entry" ]; then
+            printf 'Pinned Pi SDK entry was not installed:\n%s\n' \
+              "$sdk_entry" >&2
+            exit 1
+          fi
+          env_file="$GITHUB_ENV"
+          {
+            printf '%s=%s\n' KEPLER_PI_BINARY "$pi_bin"
+            printf '%s=%s\n' KEPLER_PI_SUBAGENTS_ROOT "$loader_root"
+            printf '%s=%s\n' KEPLER_PI_NODE_BINARY "$node_binary"
+            printf '%s=%s\n' KEPLER_PI_SDK_ENTRY_PATH "$sdk_entry"
+          } >> "$env_file"
+
       - name: Build packages
         run: bun run build
 
-      - name: Run native standalone distribution E2E
-        run: bun --bun vitest run --project e2e tests/e2e/installation.test.ts
+      - name: Build exact native archive for public CLI tests
+        run: |
+          source_commit="$(git rev-parse HEAD)"
+          if [ "$source_commit" != "$GITHUB_SHA" ]; then
+            printf 'Checkout %s does not match workflow source %s.\n' \
+              "$source_commit" "$GITHUB_SHA" >&2
+            exit 1
+          fi
+          version="$(bun scripts/package-version.ts package.json)"
+          build_root="$RUNNER_TEMP/kepler-native-archive"
+          binary="$build_root/kepler-$version-$KEPLER_EXPECTED_TARGET"
+          archive="$build_root/kepler-$version-$KEPLER_EXPECTED_TARGET.tar.gz"
+          mkdir -p "$build_root"
+          bun scripts/build-release-binary.ts \
+            --target "$KEPLER_EXPECTED_TARGET" \
+            --output "$binary" \
+            --require-clean
+          bun scripts/package-target-archive.ts \
+            --binary "$binary" \
+            --target "$KEPLER_EXPECTED_TARGET" \
+            --output "$archive"
+          digest="$(bun scripts/archive-digest.ts "$archive")"
+          printf '%s\n' "$digest  ${archive##*/}" > "$archive.sha256"
+          {
+            printf '%s=%s\n' KEPLER_VERIFIED_ARCHIVE_PATH "$archive"
+            printf '%s=%s\n' KEPLER_VERIFIED_ARCHIVE_SHA256 "$digest"
+            printf '%s=%s\n' KEPLER_EXPECTED_SOURCE_COMMIT "$source_commit"
+          } >> "$GITHUB_ENV"
+
+      - name: Run native target archive E2E
+        run: >-
+          bun --bun vitest run --project e2e --no-file-parallelism
+          tests/e2e/installation.test.ts tests/e2e/release-archive.test.ts
+          tests/e2e/bootstrap-safety.test.ts tests/e2e/dev-package.test.ts
+
+      - name: Upload tested native target archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: kepler-target-archive-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/kepler-native-archive/kepler-*.tar.gz
+            ${{ runner.temp }}/kepler-native-archive/kepler-*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 1
 
   tag:
     name: Create version tag
@@ -195,6 +315,7 @@ jobs:
       - verify
       - native-distribution
       - verify-release-assets
+      - publish-core
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -227,64 +348,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.check-version.outputs.version }}
 
-  build:
-    name: Cross-compile CLI binaries (no execution)
+  package:
+    name: Package verified native archives
     needs:
       - check-version
-      - verify
       - native-distribution
-    if: needs.check-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    strategy:
-      matrix:
-        include:
-          - os: darwin
-            arch: x64
-          - os: darwin
-            arch: arm64
-          - os: linux
-            arch: x64
-          - os: linux
-            arch: arm64
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          persist-credentials: false
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build packages
-        run: bun run build
-
-      - name: Cross-compile binary artifact
-        run: |
-          bun build --compile \
-            --target=bun-${{ matrix.os }}-${{ matrix.arch }} \
-            --external class-transformer \
-            --external class-validator \
-            --external @nestjs/platform-express \
-            --external @nestjs/microservices \
-            --external @nestjs/websockets \
-            packages/cli/src/cli/main.ts \
-            --outfile kepler-${{ matrix.os }}-${{ matrix.arch }}
-
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: kepler-${{ matrix.os }}-${{ matrix.arch }}
-          path: kepler-${{ matrix.os }}-${{ matrix.arch }}
-          retention-days: 1
-
-  package:
-    name: Package artifacts
-    needs: build
+    if: >-
+      ${{
+        needs.check-version.outputs.should_release == 'true' ||
+        needs.check-version.outputs.should_publish_core == 'true'
+      }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -299,29 +372,39 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Download all binary artifacts
+      - name: Download tested native target archives
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
+          pattern: kepler-target-archive-*
           path: artifacts
+          merge-multiple: true
 
-      - name: Flatten artifacts
+      - name: Verify tested native archive digests and stage release assets
         run: |
-          for dir in artifacts/*/; do
-            mv "$dir"/* .
-            rmdir "$dir"
+          checksum_count="$(
+            find artifacts -maxdepth 1 -type f \
+              -name 'kepler-*.tar.gz.sha256' | wc -l
+          )"
+          if [ "$checksum_count" -ne 4 ]; then
+            printf 'Expected four native archive test digests; found %s.\n' \
+              "$checksum_count" >&2
+            exit 1
+          fi
+          for checksum in artifacts/kepler-*.tar.gz.sha256; do
+            (cd artifacts && sha256sum --check "${checksum##*/}")
           done
-          rmdir artifacts
-          ls -la
-
-      - name: Create bundle archive
-        run: tar czf kepler-bundle.tar.gz bundle/
+          mkdir -p release-assets
+          mv artifacts/kepler-*.tar.gz release-assets/
 
       - name: Pack the core package
         run: |
+          bun run build:core
           PACKAGE_VERSION="$(
             bun scripts/package-version.ts \
               packages/core/package.json
@@ -333,10 +416,8 @@ jobs:
           )
           printf 'Created %s\n' "$PACKAGE_ARCHIVE"
 
-      - name: Stage release assets
-        run: |
-          mkdir release-assets
-          mv kepler-* release-assets/
+      - name: Stage the Core tarball
+        run: mv kepler-core-*.tgz release-assets/
 
       - name: Create release provenance and checksums
         run: |
@@ -355,27 +436,12 @@ jobs:
         with:
           subject-path: release-assets/*
 
-      - name: Upload release metadata
+      - name: Upload complete verified release assets
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: release-metadata
-          path: |
-            release-assets/RELEASE-MANIFEST.json
-            release-assets/SHA256SUMS
-          retention-days: 1
-
-      - name: Upload bundle archive
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: bundle
-          path: release-assets/kepler-bundle.tar.gz
-          retention-days: 1
-
-      - name: Upload core package tarball
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: core-package
-          path: release-assets/kepler-core-*.tgz
+          name: release-assets
+          path: release-assets/*
+          if-no-files-found: error
           retention-days: 1
 
   verify-release-assets:
@@ -383,7 +449,11 @@ jobs:
     needs:
       - check-version
       - package
-    if: needs.check-version.outputs.should_release == 'true'
+    if: >-
+      ${{
+        needs.check-version.outputs.should_release == 'true' ||
+        needs.check-version.outputs.should_publish_core == 'true'
+      }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -397,12 +467,14 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
 
       - name: Download release assets
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
+          name: release-assets
           path: release-assets
-          merge-multiple: true
 
       - name: Verify release provenance and checksums
         run: |
@@ -432,18 +504,22 @@ jobs:
       - verify
       - package
       - verify-release-assets
-      - tag
     if: >-
       ${{
         always() &&
         needs.check-version.outputs.should_publish_core == 'true' &&
         needs.verify.result == 'success' &&
         (
-          (github.event_name == 'workflow_dispatch' && inputs.publish_core) ||
           (
+            github.event_name == 'workflow_dispatch' &&
+            inputs.publish_core &&
             needs.package.result == 'success' &&
-            needs.verify-release-assets.result == 'success' &&
-            needs.tag.result == 'success'
+            needs.verify-release-assets.result == 'success'
+          ) ||
+          (
+            needs.check-version.outputs.should_release == 'true' &&
+            needs.package.result == 'success' &&
+            needs.verify-release-assets.result == 'success'
           )
         )
       }}
@@ -459,6 +535,8 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -470,22 +548,24 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build core package
-        run: bun run build:core
+      - name: Download verified release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-assets
+          path: release-assets
 
-      - name: Publish core package if missing
+      - name: Publish or reconcile exact Core tarball
         run: |
-          VERSION="$(node -p "require('./packages/core/package.json').version")"
-          PACKAGE_NAME="@vialactea-works/kepler-core"
-
-          if npm view "$PACKAGE_NAME@$VERSION" version --json \
-            >/dev/null 2>&1; then
-            printf '%s@%s is already published.\n' "$PACKAGE_NAME" "$VERSION"
-          else
-            npm publish ./packages/core --registry=https://npm.pkg.github.com
-          fi
+          bun scripts/reconcile-core-package.ts \
+            --assets release-assets \
+            --tarball "release-assets/kepler-core-$RELEASE_VERSION.tgz" \
+            --package-name "@vialactea-works/kepler-core" \
+            --version "$RELEASE_VERSION" \
+            --source-commit "$GITHUB_SHA" \
+            --registry https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.check-version.outputs.version }}
 
   publish:
     name: Publish release
@@ -493,6 +573,7 @@ jobs:
       - check-version
       - package
       - verify-release-assets
+      - publish-core
       - tag
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
@@ -506,18 +587,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download all artifacts
+      - name: Download verified release assets
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
+          name: release-assets
           path: release-assets
-          # Flatten every artifact into release-assets/ instead of one
-          # subdirectory per artifact. Without this, each binary lands in a
-          # directory sharing its own name, which broke the old manual
-          # flatten.
-          merge-multiple: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
 
       - name: Verify release provenance and checksums
         run: |

@@ -94,3 +94,13 @@ that every ticket is resolved and `route.md` is written. `shipping` marks that t
 flowing through the SDD loop. `shipped` marks that all units are complete and the map has reached its
 destination.
 ([route.md shape and the SDD join](../maps/hamilton-wayfinder/tickets/06-route-shape-and-sdd-join.md))
+
+## Unified release vocabulary
+
+**Kepler release** — The single SemVer identity shared by a Kepler CLI and its packaged resource generation. The artifact metadata schema uses the release major; receipt and resource-manifest formats keep independent counters. ([Version and resource identity](../../docs/unified-release-implementation-plan.md#2-release-and-resource-identity))
+
+**generation** — One immutable, compatible Kepler executable and complete resource set. The selector identifies which generation is active; it is not workflow history or a migration of project data. ([Installation record and transition](../../docs/unified-release-implementation-plan.md#3-installation-record-and-transition))
+
+**active selector** — The one Kepler-owned pointer that binds the stable command path and Pi local-package source to the selected immutable generation. Setup alone changes it. ([Setup roots and activation protocol](../../docs/unified-release-implementation-plan.md#4-setup-roots-and-activation-protocol))
+
+**native ownership transfer** — An explicit authorization for a single safe, inspectable transfer plan. The authorization is bound to the unchanged plan's digest; it does not adopt unknown resources or grant general cleanup authority. ([Pi prerequisites and native ownership transfer](../../docs/unified-release-implementation-plan.md#5-pi-prerequisites-and-native-ownership-transfer))

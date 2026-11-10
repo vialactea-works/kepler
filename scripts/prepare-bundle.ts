@@ -1,142 +1,91 @@
 import * as Fs from "node:fs";
 import * as Path from "node:path";
-import {
-  bundleManifestContentDigest,
-  parseBundleManifest,
-  sha256Digest,
-  type BundleCompatibility,
-  type BundleManifest,
-  type ContentDigest,
-} from "../packages/cli/src/cli/installation-record.js";
-import { validateSetupBundle } from "../packages/cli/src/cli/setup-bundle.js";
+import { randomUUID } from "node:crypto";
+import { sha256Digest } from "../packages/cli/src/cli/installation-record.js";
+import { planResourceGeneration } from "./resource-generation.js";
 
-const projectRoot = Path.resolve(import.meta.dirname, "..");
-const bundleRoot = Path.join(projectRoot, "bundle");
-const skillIds = [
-  "kepler-design",
-  "kepler-quality",
-  "kepler-plan",
-  "kepler-orchestrate",
-  "kepler-code",
-  "kepler-code-feedback",
-  "kepler-review",
-  "kepler-finish-work",
-  "kepler-grilling",
-  "kepler-domain-modelling",
-  "kepler-research",
-] as const;
-const standardSkills = new Set(skillIds.slice(0, 8));
-const hostRoles = [
-  ["architect", "kepler-architect"],
-  ["orchestrator", "kepler-orchestrator"],
-  ["coder", "kepler-coder"],
-  ["reviewer", "kepler-reviewer"],
-] as const;
-
-function listBundleFiles(directory: string): string[] {
-  return Fs.readdirSync(directory, { withFileTypes: true })
-    .sort((left, right) => {
-      if (left.name < right.name) return -1;
-      if (left.name > right.name) return 1;
-      return 0;
-    })
-    .flatMap((entry) => {
-      const absolutePath = Path.join(directory, entry.name);
-      if (entry.isSymbolicLink()) {
-        throw new Error(`Bundle resources must not be symlinks: ${absolutePath}`);
-      }
-      if (entry.isDirectory()) return listBundleFiles(absolutePath);
-      if (!entry.isFile()) {
-        throw new Error(`Bundle resources must be regular files: ${absolutePath}`);
-      }
-      const relativePath = Path.relative(bundleRoot, absolutePath).split(Path.sep).join("/");
-      return relativePath === "manifest.json" ? [] : [relativePath];
-    });
+const repositoryRoot = Path.resolve(import.meta.dirname, "..");
+const rootPackage = readJsonFile(Path.join(repositoryRoot, "package.json"));
+if (typeof rootPackage.version !== "string") {
+  throw new Error("Root package.json must declare the Kepler release version.");
 }
+const releaseVersion = rootPackage.version;
 
-function syncSkillResources(): void {
-  for (const id of skillIds) {
-    const source = Path.join(projectRoot, "skills", id);
-    const target = Path.join(bundleRoot, "skills", id);
-    if (!Fs.existsSync(source) || !Fs.statSync(source).isDirectory()) {
-      throw new Error(`Required skill source is missing: ${source}`);
-    }
-    Fs.rmSync(target, { recursive: true, force: true });
-    Fs.mkdirSync(Path.dirname(target), { recursive: true });
-    Fs.cpSync(source, target, { recursive: true, dereference: false });
+const plan = planResourceGeneration(repositoryRoot, releaseVersion);
+for (const change of plan.changes) {
+  const target = Path.join(repositoryRoot, change.path);
+  const current = readRegularFile(target);
+  const currentDigest = current ? sha256Digest(current) : null;
+  if (currentDigest !== change.expectedDigest) {
+    throw new Error(`Resource changed after preparation: ${change.path}`);
+  }
+}
+for (const deletion of plan.deletions) {
+  const current = readRegularFile(Path.join(repositoryRoot, deletion.path));
+  if (!current || sha256Digest(current) !== deletion.expectedDigest) {
+    throw new Error(`Resource changed before cleanup: ${deletion.path}`);
   }
 }
 
-function requiredResourceDigest(path: string): ContentDigest {
-  const absolutePath = Path.join(bundleRoot, ...path.split("/"));
-  if (!Fs.existsSync(absolutePath) || !Fs.statSync(absolutePath).isFile()) {
-    throw new Error(`Required bundle resource is missing: ${path}`);
-  }
-  return sha256Digest(Fs.readFileSync(absolutePath));
-}
-
-let rootPackage: { version?: unknown };
+const changed: string[] = [];
 try {
-  rootPackage = JSON.parse(
-    Fs.readFileSync(Path.join(projectRoot, "package.json"), "utf8"),
-  ) as { version?: unknown };
+  for (const change of plan.changes) {
+    const target = Path.join(repositoryRoot, change.path);
+    Fs.mkdirSync(Path.dirname(target), { recursive: true });
+    const temporary = `${target}.prepare-${process.pid}-${randomUUID()}`;
+    let created = false;
+    try {
+      Fs.writeFileSync(temporary, change.contents, { flag: "wx", mode: 0o644 });
+      created = true;
+      Fs.renameSync(temporary, target);
+    } catch (error) {
+      if (created) Fs.unlinkSync(temporary);
+      throw error;
+    }
+    changed.push(change.path);
+  }
+  for (const deletion of plan.deletions) {
+    const target = Path.join(repositoryRoot, deletion.path);
+    const current = readRegularFile(target);
+    if (!current || sha256Digest(current) !== deletion.expectedDigest) {
+      throw new Error(`Resource changed before cleanup: ${deletion.path}`);
+    }
+    Fs.unlinkSync(target);
+    changed.push(deletion.path);
+  }
 } catch (error) {
-  throw new Error("Root package.json must be valid JSON.", { cause: error });
-}
-if (typeof rootPackage.version !== "string" || rootPackage.version.trim().length === 0) {
-  throw new Error("Root package.json must declare the current CLI release.");
+  throw new Error(
+    `Resource package preparation failed after changing ${changed.join(", ") || "no files"}: ${String(error)}`,
+  );
 }
 
-syncSkillResources();
+process.stdout.write(
+  `Prepared Kepler ${releaseVersion} resource package ${plan.resourceDigest}; changed ${changed.length} files\n`,
+);
 
-const bundleFiles = listBundleFiles(bundleRoot);
-const files = Object.fromEntries(
-  bundleFiles.map((path) => [
-    path,
-    sha256Digest(Fs.readFileSync(Path.join(bundleRoot, ...path.split("/")))),
-  ]),
-);
-const skillsRelease =
-  process.env.KEPLER_SKILLS_RELEASE ?? "kepler-skills-3.0.2";
-const hostBindingsRelease =
-  process.env.KEPLER_CLAUDE_CODE_BINDINGS_RELEASE ??
-  "claude-code-bindings-1.0.1";
-const compatibility: BundleCompatibility = {
-  cli_releases: [rootPackage.version],
-  skills: skillIds.map((id) => ({
-    id,
-    release: skillsRelease,
-    digest: requiredResourceDigest(`skills/${id}/SKILL.md`),
-    required: standardSkills.has(id),
-  })),
-  host_bindings: hostRoles.map(([role, agentId]) => ({
-    role,
-    agent_id: agentId,
-    release: hostBindingsRelease,
-    digest: requiredResourceDigest(`agents/claude-code/v1/${agentId}.md`),
-  })),
-};
-const base: BundleManifest = {
-  manifest_format_version: 1,
-  bundle_release: process.env.KEPLER_BUNDLE_RELEASE ?? "kepler-bundle-3.0.3",
-  files,
-  content_digest: sha256Digest(new Uint8Array()),
-  compatibility,
-};
-const manifest: BundleManifest = {
-  ...base,
-  content_digest: bundleManifestContentDigest(base),
-};
-const manifestContents = `${JSON.stringify(manifest, null, 2)}\n`;
-parseBundleManifest(manifestContents);
-validateSetupBundle(
-  {
-    manifest: manifestContents,
-    files: bundleFiles.map((path) => ({
-      path,
-      contents: Fs.readFileSync(Path.join(bundleRoot, ...path.split("/"))),
-    })),
-  },
-  rootPackage.version,
-);
-Fs.writeFileSync(Path.join(bundleRoot, "manifest.json"), manifestContents);
+function readJsonFile(path: string): Record<string, unknown> {
+  const contents = Fs.readFileSync(path, "utf8");
+  let value: unknown;
+  try {
+    value = JSON.parse(contents);
+  } catch (error) {
+    throw new Error(`Could not parse JSON from ${path}: ${String(error)}`);
+  }
+  if (!isRecord(value)) throw new Error(`${path} must contain a JSON object`);
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readRegularFile(path: string): Uint8Array | undefined {
+  try {
+    const stat = Fs.lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`Resource target is not a regular file: ${path}`);
+    return Fs.readFileSync(path);
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return undefined;
+    throw error;
+  }
+}

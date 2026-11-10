@@ -2,19 +2,20 @@ import { describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
 import * as Path from "node:path";
 import {
-  bundleManifestContentDigest,
-  sha256Digest,
-  type BundleCompatibility,
-  type BundleManifest,
-} from "../../packages/cli/src/cli/installation-record.js";
+  createResourceManifest,
+  parseResourceManifest,
+  type ResourceManifest,
+} from "../../packages/cli/src/cli/release-resources.js";
+import { sha256Digest } from "../../packages/cli/src/cli/installation-record.js";
 import {
   SetupBundleError,
   validateSetupBundle,
   type SetupBundleSnapshot,
 } from "../../packages/cli/src/cli/setup-bundle.js";
 import { createSetupRuntime } from "../../packages/cli/src/cli/setup-runtime.js";
+import { createSetupBundleFixture } from "../helpers/setup-bundle-fixture.js";
 
-const cliRelease = "0.11.0";
+const cliRelease = "3.0.0";
 const encoder = new TextEncoder();
 const skills = [
   "kepler-design",
@@ -29,7 +30,6 @@ const skills = [
   "kepler-domain-modelling",
   "kepler-research",
 ];
-const standardSkills = new Set(skills.slice(0, 8));
 const requiredTemplatePaths = [
   "templates/v3/construction/unit-of-work.md",
   "templates/v3/construction/design.md",
@@ -38,7 +38,7 @@ const requiredTemplatePaths = [
   "templates/v3/construction/delivery.md",
   "templates/v3/construction/supporting-document.md",
 ];
-const bindings = [
+const roles = [
   ["architect", "kepler-architect"],
   ["orchestrator", "kepler-orchestrator"],
   ["coder", "kepler-coder"],
@@ -49,28 +49,14 @@ function withFiles(
   bundle: SetupBundleSnapshot,
   files: SetupBundleSnapshot["files"],
 ): SetupBundleSnapshot {
-  const manifest = JSON.parse(bundle.manifest) as BundleManifest;
-  const base: BundleManifest = {
-    ...manifest,
-    files: Object.fromEntries(
-      files.map((file) => [file.path, sha256Digest(file.contents)]),
-    ),
-    content_digest: sha256Digest(new Uint8Array()),
-  };
-  return {
-    manifest: JSON.stringify({
-      ...base,
-      content_digest: bundleManifestContentDigest(base),
-    }),
-    files,
-  };
+  const manifest = parseResourceManifest(bundle.manifest);
+  const next: ResourceManifest = createResourceManifest(manifest.kepler_release, files);
+  return { manifest: `${JSON.stringify(next, null, 2)}\n`, files };
 }
 
 function listFiles(root: string, directory = root): string[] {
   return Fs.readdirSync(directory, { withFileTypes: true })
-    .sort((left, right) =>
-      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
-    )
+    .sort((left, right) => left.name.localeCompare(right.name))
     .flatMap((entry) => {
       const path = Path.join(directory, entry.name);
       return entry.isDirectory()
@@ -79,67 +65,8 @@ function listFiles(root: string, directory = root): string[] {
     });
 }
 
-function fixtureBundle(): SetupBundleSnapshot {
-  const skillFiles = skills.map((id) => ({
-    path: `skills/${id}/SKILL.md`,
-    contents: encoder.encode(`${id}\n`),
-  }));
-  const roleFiles = bindings.map(([, agent_id]) => ({
-    path: `agents/claude-code/v1/${agent_id}.md`,
-    contents: encoder.encode(`${agent_id}\n`),
-  }));
-  const files = [
-    ...requiredTemplatePaths.map((path) => ({
-      path,
-      contents: encoder.encode(`# ${path.split("/").at(-1)}\n`),
-    })),
-    {
-      path: "guidelines/general/01-code-style.md",
-      contents: encoder.encode("# Code style\n"),
-    },
-    ...skillFiles,
-    ...roleFiles,
-  ];
-  const compatibility: BundleCompatibility = {
-    cli_releases: [cliRelease],
-    skills: skillFiles.map((file) => {
-      const id = file.path.split("/")[1];
-      if (!id) throw new Error("missing skill id");
-      return {
-        id,
-        release: "kepler-skills-3.0.0",
-        digest: sha256Digest(file.contents),
-        required: standardSkills.has(id),
-      };
-    }),
-    host_bindings: bindings.map(([role, agent_id]) => ({
-      role,
-      agent_id,
-      release: "claude-code-bindings-1.0.0",
-      digest: sha256Digest(
-        roleFiles.find((file) => file.path.endsWith(`${agent_id}.md`))?.contents ??
-          new Uint8Array(),
-      ),
-    })),
-  };
-  const manifestBase: BundleManifest = {
-    manifest_format_version: 1,
-    bundle_release: "kepler-bundle-3.0.0",
-    files: Object.fromEntries(
-      files.map((file) => [file.path, sha256Digest(file.contents)]),
-    ),
-    content_digest: sha256Digest(new Uint8Array()),
-    compatibility,
-  };
-  const manifest: BundleManifest = {
-    ...manifestBase,
-    content_digest: bundleManifestContentDigest(manifestBase),
-  };
-  return { manifest: JSON.stringify(manifest), files };
-}
-
 describe("validateSetupBundle", () => {
-  it("validates the repository bundle and packages each source skill byte-for-byte", () => {
+  it("validates the repository format-2 package and all source skill bytes", () => {
     const projectRoot = Path.resolve(import.meta.dirname, "../..");
     const bundleRoot = Path.join(projectRoot, "bundle");
     const runtime = createSetupRuntime({
@@ -151,9 +78,18 @@ describe("validateSetupBundle", () => {
     const snapshot = runtime.files.readBundle(bundleRoot);
     const bundle = validateSetupBundle(snapshot, cliRelease);
 
-    expect(bundle.manifest.compatibility.skills).toHaveLength(11);
-    expect(bundle.manifest.compatibility.host_bindings).toHaveLength(4);
-    for (const skill of bundle.manifest.compatibility.skills) {
+    expect(bundle.manifest.kepler_release).toBe(cliRelease);
+    expect(bundle.compatibility).toEqual({
+      check: "compatible",
+      cli_release: cliRelease,
+      resource_release: cliRelease,
+    });
+    expect(bundle.manifest.skills).toHaveLength(11);
+    expect(bundle.manifest.pi_agents).toHaveLength(4);
+    expect(Object.keys(bundle.manifest.files)).toEqual(
+      Object.keys(bundle.manifest.files).slice().sort(),
+    );
+    for (const skill of bundle.manifest.skills) {
       const source = Path.join(projectRoot, "skills", skill.id);
       const packaged = Path.join(bundleRoot, "skills", skill.id);
       const sourceFiles = listFiles(source);
@@ -168,142 +104,102 @@ describe("validateSetupBundle", () => {
         );
       }
     }
+    for (const [, agentId] of roles) {
+      expect(bundle.manifest.files[`agents/pi/v1/${agentId}.md`]).toBeDefined();
+      expect(bundle.manifest.files[`agents/claude-code/v1/${agentId}.md`]).toBeDefined();
+    }
+    expect(bundle.manifest.files["pi-package.json"]).toBeDefined();
   });
 
-  it("accepts a complete digest-verified compatible bundle", () => {
-    const result = validateSetupBundle(fixtureBundle(), cliRelease);
+  it("accepts a complete digest-verified compatible format-2 package", () => {
+    const fixture = createSetupBundleFixture();
+    const result = validateSetupBundle(fixture, cliRelease);
 
     expect(result.compatibility).toEqual({
       check: "compatible",
       cli_release: cliRelease,
-      bundle_release: "kepler-bundle-3.0.0",
+      resource_release: cliRelease,
     });
     expect(result.files.map((file) => file.path)).toEqual(
-      fixtureBundle().files.map((file) => file.path),
+      fixture.files.map((file) => file.path),
     );
-    expect(result.manifest.compatibility.skills).toHaveLength(11);
-    expect(result.manifest.compatibility.host_bindings).toHaveLength(4);
+    expect(result.manifest.skills).toHaveLength(11);
+    expect(result.manifest.pi_agents).toHaveLength(4);
   });
 
-  it("rejects unsupported CLI releases before yielding installable files", () => {
-    expect(() => validateSetupBundle(fixtureBundle(), "0.10.4")).toThrow(
-      "unsupported",
-    );
+  it("rejects a different CLI release before yielding installable files", () => {
+    expect(() => validateSetupBundle(createSetupBundleFixture(), "3.0.1"))
+      .toThrow("does not match expected Kepler release 3.0.1");
   });
 
-  it("rejects missing, extra, and modified payload files", () => {
-    const bundle = fixtureBundle();
+  it("rejects missing, extra, and modified inventory files", () => {
+    const fixture = createSetupBundleFixture();
 
-    expect(() =>
-      validateSetupBundle({ ...bundle, files: bundle.files.slice(1) }, cliRelease),
-    ).toThrow("Missing bundle file");
-    expect(() =>
-      validateSetupBundle(
-        {
-          ...bundle,
-          files: [
-            ...bundle.files,
-            { path: "templates/extra.md", contents: encoder.encode("extra") },
-          ],
-        },
-        cliRelease,
+    expect(() => validateSetupBundle({ ...fixture, files: fixture.files.slice(1) }, cliRelease))
+      .toThrow("Missing resource file");
+    expect(() => validateSetupBundle({
+      ...fixture,
+      files: [...fixture.files, { path: "templates/extra.md", contents: encoder.encode("extra") }],
+    }, cliRelease)).toThrow("Unexpected resource file");
+    expect(() => validateSetupBundle({
+      ...fixture,
+      files: fixture.files.map((file, index) =>
+        index === 0 ? { ...file, contents: encoder.encode("modified") } : file,
       ),
-    ).toThrow("Unexpected bundle file");
-    expect(() =>
-      validateSetupBundle(
-        {
-          ...bundle,
-          files: bundle.files.map((file, index) =>
-            index === 0
-              ? { ...file, contents: encoder.encode("modified") }
-              : file,
-          ),
-        },
-        cliRelease,
-      ),
-    ).toThrow("digest mismatch");
+    }, cliRelease)).toThrow("digest mismatch");
   });
 
   it("rejects unsafe and duplicate payload paths", () => {
-    const bundle = fixtureBundle();
+    const fixture = createSetupBundleFixture();
 
-    expect(() =>
-      validateSetupBundle(
-        {
-          ...bundle,
-          files: [
-            ...bundle.files,
-            { path: "../outside", contents: encoder.encode("bad") },
-          ],
-        },
-        cliRelease,
-      ),
-    ).toThrow("normalized relative path");
-    expect(() =>
-      validateSetupBundle(
-        {
-          ...bundle,
-          files: [...bundle.files, bundle.files[0]],
-        },
-        cliRelease,
-      ),
-    ).toThrow("Duplicate bundle file");
+    expect(() => validateSetupBundle({
+      ...fixture,
+      files: [...fixture.files, { path: "../outside", contents: encoder.encode("bad") }],
+    }, cliRelease)).toThrow("normalized relative path");
+    expect(() => validateSetupBundle({
+      ...fixture,
+      files: [...fixture.files, fixture.files[0]!],
+    }, cliRelease)).toThrow("Duplicate resource file");
   });
 
-  it.each(requiredTemplatePaths)(
-    "rejects a self-consistent bundle missing required template %s",
-    (missingPath) => {
-      const bundle = fixtureBundle();
-      const incomplete = withFiles(bundle, [
-        ...bundle.files.filter((file) => file.path !== missingPath),
-        { path: "templates/extra.md", contents: encoder.encode("# Extra\n") },
-        {
-          path: "templates/v3/construction/.gitkeep",
-          contents: encoder.encode(""),
-        },
-      ]);
-      let caught: unknown;
-      try {
-        validateSetupBundle(incomplete, cliRelease);
-      } catch (error) {
-        caught = error;
-      }
+  it.each(requiredTemplatePaths)("rejects a self-consistent package missing template %s", (missingPath) => {
+    const fixture = createSetupBundleFixture();
+    const incomplete = withFiles(fixture, [
+      ...fixture.files.filter((file) => file.path !== missingPath),
+      { path: "templates/extra.md", contents: encoder.encode("# Extra\n") },
+    ]);
+    let caught: unknown;
+    try {
+      validateSetupBundle(incomplete, cliRelease);
+    } catch (error) {
+      caught = error;
+    }
 
-      expect(caught).toBeInstanceOf(SetupBundleError);
-      expect(caught).toMatchObject({
-        code: "invalid_bundle",
-        message: `Missing required v3 Construction template: ${missingPath}`,
-      });
-    },
-  );
+    expect(caught).toBeInstanceOf(SetupBundleError);
+    expect(caught).toMatchObject({
+      code: "invalid_bundle",
+      message: `Missing required Construction template: ${missingPath}`,
+    });
+  });
 
-  it("rejects bundles that omit either installable resource group", () => {
-    const bundle = fixtureBundle();
-
-    expect(() =>
-      validateSetupBundle(
-        withFiles(bundle, bundle.files.filter((file) => !file.path.startsWith("guidelines/"))),
-        cliRelease,
-      ),
-    ).toThrow("must include template and guideline resources");
-    expect(() =>
-      validateSetupBundle(
-        withFiles(bundle, bundle.files.filter((file) => !file.path.startsWith("templates/"))),
-        cliRelease,
-      ),
-    ).toThrow(`Missing required v3 Construction template: ${requiredTemplatePaths[0]}`);
+  it("rejects packages that omit a guideline or Pi role definition", () => {
+    const fixture = createSetupBundleFixture();
+    expect(() => validateSetupBundle(
+      withFiles(fixture, fixture.files.filter((file) => !file.path.startsWith("guidelines/"))),
+      cliRelease,
+    )).toThrow("must include guidelines");
+    expect(() => validateSetupBundle(
+      withFiles(fixture, fixture.files.filter((file) => file.path !== "agents/pi/v1/kepler-coder.md")),
+      cliRelease,
+    )).toThrow("Missing required resource: agents/pi/v1/kepler-coder.md");
   });
 
   it("rejects a modified manifest aggregate digest", () => {
-    const bundle = fixtureBundle();
-    const manifest = JSON.parse(bundle.manifest) as BundleManifest;
-    const changed = JSON.stringify({
-      ...manifest,
-      bundle_release: "kepler-bundle-3.0.1",
-    });
+    const fixture = createSetupBundleFixture();
+    const manifest = JSON.parse(fixture.manifest) as ResourceManifest;
+    const changed = JSON.stringify({ ...manifest, kepler_release: "3.0.1" });
 
-    expect(() =>
-      validateSetupBundle({ ...bundle, manifest: changed }, cliRelease),
-    ).toThrow("content_digest does not match");
+    expect(() => validateSetupBundle({ ...fixture, manifest: changed }, cliRelease))
+      .toThrow("resource_digest does not match");
   });
 });

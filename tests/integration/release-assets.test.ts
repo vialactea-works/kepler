@@ -3,22 +3,32 @@ import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { sha256Digest } from "../../packages/cli/src/cli/installation-record.js";
+import {
+  expectedTargetArchiveNames,
+  RELEASE_TARGETS,
+} from "../../packages/cli/src/cli/release-archive.js";
+import {
+  archiveFixtureVersion as version,
+  createReleaseArchiveFixture,
+} from "../helpers/release-archive-fixture.js";
+import type { RuntimeBuildIdentity } from "../../packages/cli/src/cli/build-identity.js";
 
 const repositoryRoot = Path.resolve(import.meta.dirname, "../..");
 const script = Path.join(repositoryRoot, "scripts", "release-assets.ts");
-const version = "0.11.0";
 const commit = "0123456789abcdef0123456789abcdef01234567";
 const source = {
   repository: "vialactea-works/kepler",
   runId: "1234567",
   runAttempt: "1",
 };
+const releaseIdentitySource: RuntimeBuildIdentity["source"] = {
+  kind: "production",
+  commit,
+  content_digest: sha256Digest("production release source"),
+};
 const assets = [
-  "kepler-darwin-x64",
-  "kepler-darwin-arm64",
-  "kepler-linux-x64",
-  "kepler-linux-arm64",
-  "kepler-bundle.tar.gz",
+  ...expectedTargetArchiveNames(version),
   `kepler-core-${version}.tgz`,
 ];
 const temporaryRoots: string[] = [];
@@ -51,12 +61,16 @@ const run = async (
   );
 };
 
-const createAssetDirectory = async (): Promise<string> => {
+const createAssetDirectory = async (
+  archiveSource: RuntimeBuildIdentity["source"] = releaseIdentitySource,
+): Promise<string> => {
   const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-release-assets-"));
   temporaryRoots.push(root);
-  for (const [index, name] of assets.entries()) {
-    await Fs.writeFile(Path.join(root, name), `release asset ${index}\n`);
+  for (const target of RELEASE_TARGETS) {
+    const name = `kepler-${version}-${target.os}-${target.arch}.tar.gz`;
+    await Fs.writeFile(Path.join(root, name), createReleaseArchiveFixture({ version, target, source: archiveSource }));
   }
+  await Fs.writeFile(Path.join(root, `kepler-core-${version}.tgz`), "core package\n");
   return root;
 };
 
@@ -68,7 +82,7 @@ afterEach(async () => {
 });
 
 describe("release asset provenance", () => {
-  it("binds supported assets and checksums to the exact version and source commit", async () => {
+  it("binds exactly four target archives and the Core package to the version and source commit", async () => {
     const directory = await createAssetDirectory();
     await run("create", directory);
     await run("verify", directory);
@@ -89,6 +103,15 @@ describe("release asset provenance", () => {
 
     await Fs.writeFile(Path.join(directory, assets[0]!), "tampered\n");
     await expect(run("verify", directory)).rejects.toThrow();
+  });
+
+  it("rejects development target archives for a production release manifest", async () => {
+    const developmentSource: RuntimeBuildIdentity["source"] = {
+      ...releaseIdentitySource,
+      kind: "development",
+    };
+    const directory = await createAssetDirectory(developmentSource);
+    await expect(run("create", directory)).rejects.toThrow(/production source/i);
   });
 
   it("rejects provenance for a different source commit", async () => {

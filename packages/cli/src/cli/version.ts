@@ -1,1 +1,1 @@
-export const CLI_RELEASE = "0.11.0";
+export const CLI_RELEASE = "3.0.0";

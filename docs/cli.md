@@ -1,12 +1,12 @@
 # CLI guide
 
-The `kepler` CLI installs as a standalone executable with a sidecar bundle. Run `kepler --help` or any command's `--help` for the options supported by your installed release. The CLI returns structured JSON for operations and uses a nonzero exit status when an operation fails.
+The `kepler` CLI is delivered in one versioned target archive with its executable and complete resource package. Run `kepler --help` or any command's `--help` for the options supported by your installed release. The CLI returns structured JSON for operations and uses a nonzero exit status when an operation fails.
 
 ## Command map
 
 | Command | Use |
 | --- | --- |
-| `kepler setup` | Install a compatible bundle generation, templates, guidelines, and missing default settings. |
+| `kepler setup` | Validate and activate a compatible immutable generation, write its receipt, and register Kepler's managed Pi package when needed. |
 | `kepler mission create` | Create a mission and prepare only its selected workspaces. |
 | `kepler mission prepare` | Continue interrupted startup by exact mission ID, or read its recorded preparation result. |
 | `kepler workflow construction unit` | Create, list, or inspect a Unit of Work. |
@@ -24,9 +24,13 @@ The `kepler` CLI installs as a standalone executable with a sidecar bundle. Run 
 
 The root also exposes `kepler workbench` for the earlier change-based workflow. Its commands do not convert or resume v3 mission records. See [Limits](#version-boundaries).
 
-## Validate setup resources
+## Install and validate setup resources
 
-`kepler setup` checks the selected manifest, payload digests, compatibility, and all six required v3 Construction templates before installation writes. A self-consistent manifest does not make an incomplete bundle valid. Missing required templates produce `invalid_bundle`; existing resources, settings, and the installation receipt stay unchanged. See the [required template inventory](installation.md#setup-and-installed-resources).
+`kepler setup` validates the selected generation's embedded release/source/target identity, resource manifest, complete inventory, and payload digests before activation. It requires all six v3 Construction templates: `unit-of-work.md`, `design.md`, `quality.md`, `plan.md`, `delivery.md`, and `supporting-document.md` under `templates/v3/construction/`. A self-consistent manifest does not make an incomplete package valid. Missing required resources fail setup; the existing selection and recorded resources are preserved when failure occurs before activation. Built-in templates and guidelines are resolved from the selected generation through `~/.kepler-dist/current/bundle/`; setup does not copy them into the XDG Kepler home or create missing Kepler defaults. That global home stores the format-two installation receipt. Setup preserves existing settings and custom assets. First registration, explicit transfer, or repair updates only the managed Pi package entry in an existing initialized settings file; upgrades and coherent no-ops leave Pi settings unchanged. See [installation](installation.md#setup-and-installed-resources).
+
+For Pi, setup also requires supported Pi 1.2.0 and pi-subagents 0.76.1 installations, an existing Pi agent directory, and initialized settings. It preflights visible resource conflicts and registers the Kepler local package at the stable generation path. Pi owns discovery and execution. Setup does not create Pi settings or install host prerequisites.
+
+If setup reports an external native ownership conflict, ordinary setup returns a read-only transfer plan and digest without transferring or activating the candidate. Review the exact plan before using `kepler setup --accept-native-transfer <digest>`. The digest authorizes only the unchanged safe plan; unknown, custom, modified, or mixed resources remain blocked. See [native ownership and transfer](installation.md#agent-resource-ownership).
 
 ## Select a project and scope
 

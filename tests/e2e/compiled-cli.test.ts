@@ -67,7 +67,7 @@ afterEach(async () => {
 });
 
 describe("compiled CLI E2E", () => {
-  it("runs setup and returns structured output without inheriting host Docker or Git settings", async () => {
+  it("runs a Git-backed CLI operation without inheriting host Docker or Git settings", async () => {
     const originalEnvironment = {
       DOCKER_CONTEXT: process.env.DOCKER_CONTEXT,
       DOCKER_HOST: process.env.DOCKER_HOST,
@@ -81,40 +81,25 @@ describe("compiled CLI E2E", () => {
 
     try {
       const e2e = await createHarness();
+      await addProjectMarker(e2e.resources.repositoryDirectory);
       const head = e2e.resources.runGit(
         e2e.resources.repositoryDirectory,
         "rev-parse",
         "HEAD",
       );
       expect(head).toMatch(/^[0-9a-f]{40}$/);
-      const result = e2e.cli.run(["setup"]);
-      expect(result).toMatchObject({ exitCode: 0, stderr: "" });
-      expect(envelope(result.stdout)).toMatchObject({
+      const result = e2e.cli.run([
+        "git",
+        "author",
+        "--project",
+        e2e.resources.repositoryDirectory,
+      ]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(envelope(result.stdout)).toEqual({
         status: "success",
-        data: {
-          generation_id: expect.stringMatching(
-            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-          ),
-          compatibility: { check: "compatible" },
-          skills: expect.arrayContaining([
-            expect.objectContaining({ id: "kepler-design", check: "not_checked" }),
-          ]),
-          host_binding: {
-            host: { id: "claude-code", check: "not_checked" },
-          },
-        },
+        data: { name: "Kepler E2E Fixture", email: "e2e@example.invalid" },
       });
-      expect(
-        await exists(
-          Path.join(
-            e2e.resources.configDirectory,
-            "vialactea-works",
-            "kepler",
-            "templates",
-            "plan.md",
-          ),
-        ),
-      ).toBe(true);
     } finally {
       for (const [key, value] of Object.entries(originalEnvironment)) {
         if (value === undefined) delete process.env[key];
@@ -123,27 +108,32 @@ describe("compiled CLI E2E", () => {
     }
   }, 120_000);
 
-  it("reports setup failures in the shared result envelope", async () => {
+  it("rejects setup without a package build identity before filesystem effects", async () => {
     const e2e = await createHarness();
     const invalidHome = Path.join(e2e.resources.rootDirectory, "home-file");
-    await Fs.writeFile(invalidHome, "not a directory\n");
+    const invalidHomeContents = "not a directory\n";
+    await Fs.writeFile(invalidHome, invalidHomeContents);
+    const before = await snapshot(e2e.resources.rootDirectory);
     const result = e2e.cli.run(["setup"], {
       env: {
         HOME: invalidHome,
         XDG_CONFIG_HOME: Path.join(invalidHome, ".config"),
       },
     });
-    const parsed = envelope(result.stdout);
 
     expect(result.exitCode).toBe(1);
-    expect(parsed.status).toBe("failed");
-    expect(parsed.data).toMatchObject({
-      code: "setup_write_failed",
-      message: expect.stringContaining("Failed to create Kepler home directories:"),
-      details: {},
-      recovery: expect.any(String),
+    expect(envelope(result.stdout)).toEqual({
+      status: "failed",
+      data: {
+        code: "build_identity_missing",
+        message: "The executing Kepler binary does not declare a package build identity.",
+        details: {},
+        recovery: "Use an identifiable Kepler package candidate; setup does not fall back to the source checkout or current directory.",
+      },
     });
     expect(result.stderr).toBe("");
+    expect(await Fs.readFile(invalidHome, "utf8")).toBe(invalidHomeContents);
+    expect(await snapshot(e2e.resources.rootDirectory)).toBe(before);
   }, 120_000);
 
   it("keeps legacy workbench operation output inside the JSON result envelope", async () => {

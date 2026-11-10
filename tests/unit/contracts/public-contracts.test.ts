@@ -13,7 +13,6 @@ import {
   type KeplerServiceOptions,
   type KeplerSettings,
 } from "../../../packages/core/src/index.js";
-import { createSetupBundleFixture } from "../../helpers/setup-bundle-fixture.js";
 import type {
   ActivityAttemptId,
   ArtifactId,
@@ -24,13 +23,7 @@ import type {
   StageAttemptId,
   TaskId,
 } from "../../../packages/cli/src/construction/events.js";
-import {
-  SetupService,
-  type Setup,
-  type SetupBundleLocator,
-  type SetupFiles,
-  type SetupResult,
-} from "../../../packages/cli/src/cli/setup.service.js";
+import type { SetupResult } from "../../../packages/cli/src/cli/setup.service.js";
 
 type Assignable<Source, Target> = [Source] extends [Target] ? true : false;
 type AssertDistinct<Value extends false> = Value;
@@ -78,27 +71,28 @@ const globalPaths: KeplerGlobalPaths = {
 const settings: KeplerSettings = parseKeplerSettings("enabled: true");
 const artifactReader: ArtifactReader = markdownArtifactReader;
 const artifactWriter: ArtifactWriter = markdownArtifactWriter;
-const setupFiles: SetupFiles = {
-  readBundle: () => createSetupBundleFixture(),
-  globalPaths: () => globalPathsWithInstallationRecord,
-  ensureHome: () => {},
-  inspectPath: () => ({ kind: "missing" }),
-  pendingRecoveryPaths: () => [],
-  applyPlan: () => ({ createdFiles: [], updatedFiles: [], settingsCreated: true }),
+const setupResult: SetupResult = {
+  generation_id: "550e8400-e29b-41d4-a716-446655440000",
+  kepler_release: "3.0.0",
+  installation_mode: "first-install",
+  resource_root: "/temporary/home/.kepler-dist/generations/550e8400-e29b-41d4-a716-446655440000",
+  selector: "/temporary/home/.kepler-dist/current",
+  package_source: "/temporary/home/.kepler-dist/current",
+  compatibility: { check: "compatible" },
+  templates: [],
+  guidelines: [],
+  created_files: [],
+  updated_files: [],
+  pi_binding: {
+    host: { id: "pi", release: "1.2.0", check: "matches" },
+    loader: { id: "pi-subagents", release: "0.76.1", check: "matches" },
+    registration: {
+      entry_digest: `sha256:${"a".repeat(64)}`,
+      settings_digest: `sha256:${"b".repeat(64)}`,
+      check: "matches",
+    },
+  },
 };
-const globalPathsWithInstallationRecord = {
-  ...globalPaths,
-  installationRecord: "/temporary/home/.config/vialactea-works/kepler/installation.json",
-};
-const bundleLocator: SetupBundleLocator = () => "/bundle";
-const setup: Setup = new SetupService(
-  setupFiles,
-  bundleLocator,
-  "0.10.3",
-  { os: "linux", arch: "x64" },
-  () => "550e8400-e29b-41d4-a716-446655440000",
-);
-const setupResult: SetupResult = setup.setup();
 
 describe("public Core and setup contracts", () => {
   it("exposes typed Core settings and path contracts", () => {
@@ -117,6 +111,6 @@ describe("public Core and setup contracts", () => {
   it("runs a use case through its narrow in-memory adapter contract", () => {
     expect(setupResult.generation_id).toBe("550e8400-e29b-41d4-a716-446655440000");
     expect(setupResult.compatibility.check).toBe("compatible");
-    expect(setupResult.host_binding.host.check).toBe("not_checked");
+    expect(setupResult.pi_binding.host.check).toBe("matches");
   });
 });

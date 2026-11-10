@@ -91,9 +91,17 @@ scaffolded by `kepler-init`; the wayfinder skill creates it on first use.
 
 ## Where these templates live
 
-These templates are global, not per-project. They are bundled here in `bundle/templates/`
-and copied to `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/` by the `kepler setup` command. The pipeline steps
-read the installed copy at `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/<name>.md`.
+These templates are versioned resources in the complete package generation selected by
+`kepler setup`. The active selector `~/.kepler-dist/current` resolves to that immutable
+generation; its templates are under `~/.kepler-dist/current/bundle/templates/`. Setup does
+not copy them into `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/`, and
+that legacy global path is not an active template source. Do not edit a selected generation in
+place; changing bundled templates requires a new complete package generation. The XDG Kepler
+home stores the installation receipt and preserves existing custom files.
+
+The artifact paths below describe the legacy change-based and Wayfinder workflows above. They
+do not describe or scaffold v3 Construction artifacts, whose mission-owned unit paths are listed
+earlier.
 
 ## Where the artifacts they produce live
 
@@ -121,7 +129,7 @@ Per-project, under the project's `.kepler/` directory (created by `kepler-init`)
 ```
 
 `plan.md` is the declarative task contract authored up front. Kepler-plan initializes the root
-`progress.md` current-task ledger and each linked task progress file from the installed templates.
+`progress.md` current-task ledger and each linked task progress file from the selected generation's templates.
 In historical serial mode, Kepler-code updates only its assigned root row and appends implementation
 attempts to that task's progress file. In dependency-mode v2, workers write task-local evidence only;
 the coordinator publishes root status through guarded publication. Task feedback is kept alongside

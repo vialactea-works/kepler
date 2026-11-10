@@ -1,5 +1,5 @@
 import { Inject } from "@nestjs/common";
-import { Command, CommandRunner } from "nest-commander";
+import { Command, CommandRunner, Option } from "nest-commander";
 import { SETUP_OPERATION } from "../setup-runtime.js";
 import { SetupFailure } from "../setup.service.js";
 import type { Setup } from "../setup.service.js";
@@ -17,12 +17,23 @@ export class SetupCommand extends CommandRunner {
     super();
   }
 
+  @Option({
+    flags: "--accept-native-transfer <digest>",
+    description: "Accept the exact current native package transfer digest",
+  })
+  parseNativeTransferDigest(digest: string): string {
+    return digest;
+  }
+
   async run(
     _passedParams: string[],
-    _options?: Record<string, unknown>,
+    options?: Record<string, unknown>,
   ): Promise<void> {
     try {
-      const result = this.setup.setup();
+      const digest = options?.acceptNativeTransfer;
+      const result = this.setup.setup(
+        typeof digest === "string" ? { acceptNativeTransferDigest: digest } : {},
+      );
       this.reporter.report({ status: "success", data: { ...result } });
     } catch (error) {
       this.reporter.report({

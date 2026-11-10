@@ -1,37 +1,22 @@
 # Kepler
 
-Kepler combines a standalone workflow CLI, versioned templates and guidelines, portable skills, and optional Claude Code role definitions. Its Standard Construction workflow carries a Unit of Work from Functional Design through Quality Requirements, Implementation Planning, Implementation, Unit of Work Review, and Deliver.
+Kepler combines a standalone workflow CLI, versioned templates and guidelines, eleven portable skills, four Pi-native agent profiles, and separate Claude Code role definitions. Its Standard Construction workflow carries a Unit of Work from Functional Design through Quality Requirements, Implementation Planning, Implementation, Unit of Work Review, and Deliver.
 
-The CLI records scoped workflow state and evidence. Skills guide the work. The host or skill manager installs and loads skills and agent definitions; Kepler does not certify agent behavior.
+The CLI records scoped workflow state and evidence. Skills guide the work. On Pi, `kepler setup` registers Kepler's packaged skills and roles; Pi owns discovery, loading, and execution. Resource installation does not certify host readiness or agent behavior.
 
 ## Install
 
-Install the CLI and its compatible sidecar bundle:
+Kepler 3.0.0 is an unreleased implementation candidate. No public release is claimed here. When a compatible release is published, install its complete target archive with:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vialactea-works/kepler/main/install.sh | bash
 ```
 
-Install the eight Standard entry skills and three supporting skills into your coding-agent host with the [Skills CLI](https://github.com/vercel-labs/skills):
+The installer selects one archive for the current OS and architecture, verifies it, then invokes the staged candidate's `kepler setup`. Setup alone activates the generation. Set `KEPLER_VERSION=v3.0.0` to select a published version explicitly or `KEPLER_REPO_SLUG` to select another repository. See [installation](docs/installation.md) for prerequisites, ownership, and upgrade limits.
 
-```bash
-npx skills add ~/.kepler-dist/bundle/skills \
-  --skill kepler-design \
-  --skill kepler-quality \
-  --skill kepler-plan \
-  --skill kepler-orchestrate \
-  --skill kepler-code \
-  --skill kepler-code-feedback \
-  --skill kepler-review \
-  --skill kepler-finish-work \
-  --skill kepler-grilling \
-  --skill kepler-domain-modelling \
-  --skill kepler-research
-```
+Pi setup requires Pi 1.2.0, pi-subagents 0.76.1, an existing Pi agent directory, and an initialized `settings.json`. Install and configure those host prerequisites separately before installing Kepler. Kepler setup does not install Pi, pi-subagents, models, credentials, or permissions.
 
-Keep each skill directory and its bundled references together. The stage skills include their reopening questions; Planning includes the task-graph field contract, example, and schema.
-
-Run `kepler setup` to install compatible templates and guidelines and create missing default settings. Setup rejects bundles missing any of the six required v3 Construction templates before installation writes. It preserves settings and user-modified resources. It does not install skills or host-native agent definitions. See [installation](docs/installation.md) for Claude Code role definitions, upgrades, and target limits.
+For non-Pi hosts, use the host or skill manager to install the portable skills from the selected generation; the Pi package registration does not configure other hosts. Keep each complete skill directory and its references together. See [skills](docs/skills.md) for responsibilities and role boundaries.
 
 ## Start a workflow
 
@@ -52,7 +37,7 @@ Follow the Standard skills in order. For each task in Implementation, Kepler kee
 ## CLI and documentation
 
 - [CLI guide](docs/cli.md): installed commands, scope, output, and legacy workbench boundary.
-- [Installation](docs/installation.md): bundle setup, host-managed resources, upgrades, and release targets.
+- [Installation](docs/installation.md): complete archives, Pi setup, host-owned prerequisites, upgrades, and release targets.
 - [Recovery](docs/recovery.md): inspect and resume interrupted work without guessing or discarding effects.
 - [Skills](docs/skills.md): shipped skill roles and handoffs.
 - [Workflow](docs/sdd-framework.md): Standard stage order and authority boundaries.
@@ -63,9 +48,11 @@ Follow the Standard skills in order. For each task in Implementation, Kepler kee
 
 The current workflow CLI implements Construction. It does not implement the future Initialization or Inception phases. It does not convert version 2 artifacts or history into version 3. Existing `workbench` commands serve the earlier change-based workflow and are not a v3 migration path. Setup does not certify host readiness, skill loading, or agent behavior. Kepler does not publish, deploy, roll back, or delete data unless you separately authorize the operation.
 
-The release artifacts target Linux and macOS on x86_64 and arm64. CI configures native standalone checks for all four targets; a green run is evidence for that run only. Cross-compilation does not establish native execution.
+Release artifacts target Linux and macOS on x86_64 and arm64. The workflows configure native jobs for all four targets, but a configured job is not a passed result. Only a job that builds and executes its exact target archive establishes target-specific native evidence. Cross-compilation or a local run on one host does not establish execution on another target.
 
 ## Develop Kepler
+
+Use Bun 1.4.0, as pinned by the root `packageManager` field and the CI/release workflows.
 
 ```bash
 bun install --frozen-lockfile

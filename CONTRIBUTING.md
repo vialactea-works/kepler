@@ -4,7 +4,7 @@ Read [AGENTS.md](AGENTS.md) before changing code. It records architecture, data 
 
 ## Verify changes
 
-Install the pinned workspace dependencies and run the gates that cover your change:
+Install the pinned workspace dependencies and run the gates that cover your change. Use Bun 1.4.0, declared by the root `packageManager` field and selected by CI/release workflows; check `bun --version` before running the gates:
 
 ```bash
 bun install --frozen-lockfile

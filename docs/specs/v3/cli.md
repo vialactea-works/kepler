@@ -2,7 +2,7 @@
 
 [Version 3 reference](README.md) | [CLI infrastructure](runtime.md)
 
-**Status:** Approved by the requester under [SH122](authoring_progress.md#completed-shared-decisions), with the later mission preparation recovery amendment under SH125.
+**Status:** Approved by the requester under [SH122](authoring_progress.md#completed-shared-decisions), with the later mission preparation recovery amendment under SH125. The unified-release setup amendment is implemented in the current uncommitted source candidate, but 3.0.0 is not published. Verification and review outcomes apply only to the exact source and archive recorded in the candidate handoff.
 
 ## Purpose and status
 
@@ -21,7 +21,7 @@ The following decisions are part of this approved contract.
 - Use the requester-approved root `kepler mission create` operation for new mission identity and selected workspace preparation. Use `kepler mission prepare` to continue the original startup by its exact mission ID. Neither operation starts a stage.
 - Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted.
 - Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Use the accepted [Construction lint interface](#kepler-workflow-construction-lint) for task-graph checks.
-- Use the accepted [setup interface](#kepler-setup) for Kepler's bundled resources and default settings. Native hosts or skill managers own [agent resource installation](installation.md#agent-resource-ownership).
+- Use the accepted [setup interface](#kepler-setup) for Kepler's packaged resources while preserving existing settings; setup does not create missing Kepler defaults. Under the approved Pi amendment, setup owns Kepler's managed Pi package registration; Pi owns loading and execution. Other hosts retain their existing [agent resource installation](installation.md#agent-resource-ownership) owner.
 - Use the accepted [UUID interface](#kepler-uuid) to generate one UUIDv4 without creating an artifact or task.
 - Apply the accepted [Standard workflow binding](#workflow-binding) to each Construction unit and its mission.
 - Apply the accepted [Mission contract](mission.md) for mission identity, record-home selection, workspace facts, membership, and pre-mission boundaries. Do not infer mission membership or add command options from that policy.
@@ -183,7 +183,7 @@ Any later human result mode must be opt-in.
 
 | Command | Placement | Purpose |
 | --- | --- | --- |
-| `kepler setup` | Accepted root interface | Install compatible bundled resources and missing default settings. |
+| `kepler setup` | Accepted root interface with approved unified-release amendment | Validate and activate a compatible immutable generation, write the installation receipt, and register the managed Pi package when needed; require existing Pi settings and do not create missing Kepler defaults. |
 | `kepler uuid` | Accepted root interface | Return one UUIDv4 in `data.uuid`. |
 | `kepler mission create` | Accepted root interface | Record a new mission and prepare its explicitly selected workspaces without starting a stage. |
 | `kepler mission prepare` | Accepted root interface under SH125 | Continue the same startup by exact mission ID, or return its recorded preparation result. |
@@ -214,30 +214,25 @@ The entries name the requested operations. Apply the accepted [scope selectors](
 
 ### `kepler setup`
 
-**Accepted under [SH114](authoring_progress.md#completed-shared-decisions).** Use the following interface:
+**Accepted under [SH114](authoring_progress.md#completed-shared-decisions), with the approved unified-release amendment implemented in the current source candidate.** Use this interface:
 
 ```text
-kepler setup
+kepler setup [--accept-native-transfer <digest>]
 ```
 
-Use no command-specific options. Remove `--force` from the v3 interface. This global command does not use `--project`.
+Without an option, use normal first-install, upgrade, coherent no-op, or safe-repair behavior. The only option is the explicit digest-bound native-resource transfer approval. Remove `--force` from the v3 interface. This global command does not use `--project`.
 
-Select the bundle locally in this order:
+For a production executable, resolve the immutable resource package from the selected generation once per process. Verify that its embedded release, source, target, resource digest, complete manifest, and archive inventory agree before activation. Do not fall back to an arbitrary cwd or source checkout. A development package must be explicitly selected, complete, identity-matched, isolated, and fail closed when invalid. Setup does not download a release or select a latest resource package.
 
-- If `KEPLER_BUNDLE_DIR` is set, use that explicit override. Fail if it is missing or incompatible. Do not silently select another bundle.
-- Otherwise, check the sidecar `bundle/` next to the installation's `bin/` directory. Resolve executable symlinks before this lookup.
-- If no sidecar exists, check the source checkout's `bundle/` relative to the CLI module.
-- If no bundle exists, fail. Validate the selected bundle's declared compatibility and digest before copying its resources.
+The bootstrap installer selects and verifies one complete versioned target archive, stages it, then invokes that candidate's setup. It never promotes the active selector or stable command path. Setup alone activates the candidate. See the [installation generation and activation contract](installation.md#agent-resource-ownership).
 
-The release installer selects the CLI release and supplies its compatible bundle. Setup does not download or select a latest release. Keep development overrides subject to the same compatibility rules.
+Keep the existing XDG Kepler home, project data, unknown files, user settings, and custom resources. Built-in templates and guidelines remain in the selected immutable generation; setup does not copy them into the XDG home or create missing Kepler defaults/settings. The global home stores the format-two installation receipt. First Pi registration, explicit transfer, or repair updates only the exact managed package entry in an existing initialized settings file under native coordination; ordinary upgrades and coherent no-ops leave it unchanged. Missing or unsupported Pi prerequisites, visible same-name shadows, unknown ownership, or stale state block activation. Setup does not install Pi, pi-subagents, models, credentials, or permissions.
 
-Copy compatible templates and guideline manifests into Kepler's existing global home. Create default settings only when they do not exist. Keep existing settings and unknown or modified resources. Update only verified, unmodified installer-managed resources. Report necessary-path conflicts without overwriting or merging them. Apply the [installation preservation rules](installation.md#setup-contract).
+If a safe native ownership transfer is required, ordinary setup returns the exact read-only plan and its canonical digest in the existing failure `data.details` result. It does not transfer the resource or activate the dependent candidate. A staged candidate may remain and its path must be reported. `--accept-native-transfer <digest>` authorizes only the unchanged plan. Recomputed plan drift, a stale digest, unknown/custom/modified/mixed resources, or a conflict that cannot be preserved blocks the operation. Bootstrap never supplies this consent. The flag does not create a separate transfer command family or bypass preservation rules.
 
-On success, identify the installed generation and resource-check results inside `data`. Setup success does not show agent behavior or unchecked host readiness. Exact receipt fields and installation-record encoding are implementation details within these accepted rules.
+On success, identify the selected generation and actual resource/registration checks inside `data`; do not claim agent behavior or unchecked host readiness. On failure, report known partial effects and recovery facts in `data.details` under the shared [failure and recovery rules](#failure-and-recovery-rules). Keep the prior usable selector before activation. After an effect, preserve the journal and report actual state; failure does not prove rollback. Remove only operation-owned temporary material.
 
-On failure, keep the prior usable generation. Report available partial-write facts in `data.details` under the existing [failure and recovery rules](#failure-and-recovery-rules). Remove only temporary or partial resources that the operation can identify as its own. Keep uncertain or unrelated material.
-
-Setup does not create units, prepare project markers, run Initialization, dispatch agents, or change workflow state. It does not install native agent definitions or skills. Apply the accepted [resource ownership](installation.md#agent-resource-ownership).
+Setup does not create units, prepare project markers, run Initialization, dispatch workers, or change workflow state. Pi still owns loading and execution of its discovered agents and skills. Apply the [resource ownership amendment](installation.md#agent-resource-ownership). The current source candidate implements this contract but is not a published release. Candidate acceptance requires source-bound verification and independent review of the exact frozen source and archive; earlier evidence does not transfer across edits.
 
 ### `kepler uuid`
 

@@ -13,7 +13,7 @@ description: "Turn an idea into a change's proposal, requirements, and design th
 
 ## What it produces
 
-In `.kepler/changes/<YYYY-MM-DD-title>/`, using the templates at `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/templates/`:
+In `.kepler/changes/<YYYY-MM-DD-title>/`, using the templates from the selected generation at `~/.kepler-dist/current/bundle/templates/`:
 
 - `proposal.md` — the PRD: why, what changes, and the capabilities affected.
 - `requirements/<capability>.md` — the SRS (delta form) for each capability.

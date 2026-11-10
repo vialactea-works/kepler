@@ -6,6 +6,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import {
+  expectedTargetArchiveNames,
+  validateTargetArchiveSet,
+} from "../packages/cli/src/cli/release-archive.js";
+import { parseReleaseVersion } from "./release-version.js";
 
 interface ReleaseAsset {
   readonly name: string;
@@ -73,9 +78,7 @@ if (!directory || !version || !commit || !repository || !runId || !runAttempt) {
     "Expected --assets, --version, --commit, --repository, --run-id, and --run-attempt",
   );
 }
-if (!/^\d+\.\d+\.\d+$/.test(version)) {
-  throw new Error(`Invalid release version: ${version}`);
-}
+parseReleaseVersion(version);
 if (!/^[a-f0-9]{40}$/.test(commit)) {
   throw new Error(`Invalid source commit: ${commit}`);
 }
@@ -86,14 +89,8 @@ if (!/^\d+$/.test(runId) || !/^\d+$/.test(runAttempt)) {
   throw new Error("Workflow run ID and attempt must be numeric");
 }
 
-const assetNames = [
-  "kepler-darwin-x64",
-  "kepler-darwin-arm64",
-  "kepler-linux-x64",
-  "kepler-linux-arm64",
-  "kepler-bundle.tar.gz",
-  `kepler-core-${version}.tgz`,
-].sort();
+const targetArchiveNames = expectedTargetArchiveNames(version);
+const assetNames = [...targetArchiveNames, `kepler-core-${version}.tgz`].sort();
 const manifestName = "RELEASE-MANIFEST.json";
 const checksumName = "SHA256SUMS";
 
@@ -131,6 +128,14 @@ const readAssetText = (name: string): string => {
   }
 };
 
+const validateTargetArchives = (): void => {
+  const archives = Object.fromEntries(targetArchiveNames.map((name) => [name, readAsset(name)]));
+  const validated = validateTargetArchiveSet(archives, version);
+  if (validated.some(({ manifest }) => manifest.source.kind !== "production" || manifest.source.commit !== commit)) {
+    throw new Error("Release target archives must bind production source to the release commit");
+  }
+};
+
 const create = (): void => {
   const actualNames = readAssetNames();
   if (JSON.stringify(actualNames) !== JSON.stringify(assetNames)) {
@@ -138,6 +143,7 @@ const create = (): void => {
       `Release assets do not match the supported set: ${actualNames.join(", ")}`,
     );
   }
+  validateTargetArchives();
   const manifest: ReleaseManifest = {
     format_version: 1,
     version,
@@ -221,6 +227,7 @@ const verify = (): void => {
     );
   }
   const manifest = parseManifest(readAssetText(manifestName));
+  validateTargetArchives();
   for (const asset of manifest.assets) {
     if (sha256(readAsset(asset.name)) !== asset.sha256) {
       throw new Error(`Release manifest digest mismatch: ${asset.name}`);

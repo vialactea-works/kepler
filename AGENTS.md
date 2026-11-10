@@ -27,6 +27,7 @@ Version 3 mission records and earlier change-based artifacts have separate owner
 
 ## Code conventions
 
+- Use Bun 1.4.0 for workspace builds and tests. The root `packageManager` field is the shared pin read by CI and release workflows; the `@types/bun` version is independent.
 - Write authored source in TypeScript. `bun run check:typescript-sources` enforces this rule.
 - Use ESM imports with `.js` extensions, including imports of TypeScript modules.
 - Add no comments to code.
@@ -57,9 +58,9 @@ bun run check:version
 
 ## Release and bundle changes
 
-Release assets include standalone binaries, the `bundle/` sidecar archive, Core package tarball, and checksums. The release workflow gates versioned releases on workspace checks and native distribution E2E; its separate Linux x64 cross-compilation job does not execute foreign-target binaries. Do not publish a release or deploy as a test effect.
+Release assets are four complete target-specific archives (`linux-x64`, `linux-arm64`, `darwin-x64`, and `darwin-arm64`), the Core package tarball, and SHA-256 checksums with a release manifest. Each archive carries the standalone CLI and its versioned resource package; there is no split bundle sidecar. The release workflow gates versioned releases on workspace checks and native exact-archive E2E for all four targets; it has no Linux cross-compilation job. Do not publish a release or deploy as a test effect.
 
-Run `bun run prepare:bundle` after changing versioned skills, agent definitions, templates, or guidelines. Review the complete manifest and content digest. Update the relevant `KEPLER_BUNDLE_RELEASE`, `KEPLER_SKILLS_RELEASE`, or `KEPLER_CLAUDE_CODE_BINDINGS_RELEASE` values only when the corresponding resource generation changes.
+Use `bun run release:prepare <patch|minor|major|version>` for a release version change; it synchronizes the root and package versions, source release constants, release note, and generated resource manifest. Run `bun run prepare:bundle` after changing versioned skills, agent definitions, templates, or guidelines, then review the complete manifest and content digest and run `bun run release:check`. Resource generation is derived from the root release version and bundle contents; do not update obsolete per-resource release counters.
 
 ## Documentation
 

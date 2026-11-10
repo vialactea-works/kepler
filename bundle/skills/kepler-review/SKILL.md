@@ -37,6 +37,8 @@ Keep the returned exact Review attempt. Read current `unit-of-work.md`, `design.
 
 Review the complete unit outcome, including relevant unchanged behavior, interactions, failure paths, quality obligations, and necessary operational/deployment preparation. The reviewer must not be the primary implementation author. Do not edit implementation, tests, or upstream contracts. Report facts and proposed revision boundaries; only the orchestrator authorizes reopening. This skill does not run an unconditional full build or test suite, replace required Activity checks, create external review requests, or authorize delivery.
 
+When this skill is loaded from the distributed complete Kepler package, consult `../../guidelines/general/01-code-style.md` and relevant language guidance under `../../guidelines/<language>/` relative to this installed `SKILL.md` when available. Project standards and requester instructions take priority. These are same-generation package assets, never paths to infer from project cwd or legacy global copies.
+
 ## Procedure
 
 1. Confirm that Implementation is complete under its contract, the current integrated result is explicit, review scope and acceptance conditions are sufficient, and required evidence is accessible. If an upstream record is missing or invalid, preserve evidence and report the affected boundary rather than treating a Review opinion as substitute completion.
