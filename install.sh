@@ -35,6 +35,9 @@ install_work_dir_is_owned() {
 cleanup_install_work_dir() {
   local status=$?
   trap - EXIT
+  if [[ "$status" == "0" && "$INSTALL_COMPLETE" != "1" ]]; then
+    status=1
+  fi
   if [[ -z "$INSTALL_WORK_DIR" ]]; then
     exit "$status"
   fi
@@ -149,7 +152,7 @@ validate_checksums() {
     if [[ "$allowed" != "1" ]]; then
       fail "SHA256SUMS contains an unexpected asset: $name"
     fi
-    for seen in "${seen_names[@]}"; do
+    for seen in "${seen_names[@]-}"; do
       if [[ "$name" == "$seen" ]]; then
         fail "SHA256SUMS contains a duplicate asset: $name"
       fi
