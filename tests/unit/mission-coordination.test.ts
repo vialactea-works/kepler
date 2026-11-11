@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import * as Path from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -367,9 +367,12 @@ describe("mission local coordination", () => {
 
     const lockPath = acquired.lease.lockPath;
     const originalOwner = await readFile(Path.join(lockPath, "owner.json"), "utf8");
-    await rm(lockPath, { recursive: true });
+    const originalLockPath = `${lockPath}.original`;
+    await rename(lockPath, originalLockPath);
     await mkdir(lockPath);
     await writeFile(Path.join(lockPath, "owner.json"), originalOwner);
+    expect(await nodeMissionCoordinationFileSystem.pathIdentity(lockPath))
+      .not.toEqual(await nodeMissionCoordinationFileSystem.pathIdentity(originalLockPath));
 
     const released = await acquired.lease.release();
 
