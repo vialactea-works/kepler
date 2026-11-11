@@ -99,12 +99,18 @@ try {
       }
       if (mode === "replacement" && String(path) === temporaryPath && !replacementCreated) {
         replacementCreated = true;
-        originalUnlink(String(path));
+        const originalPath = `${String(path)}.original`;
+        Fs.renameSync(String(path), originalPath);
         const descriptor = originalOpen(String(path), "wx", 0o600);
         try {
           originalWriteFile(descriptor, "preserve replacement temporary\n", "utf8");
         } finally {
           Fs.closeSync(descriptor);
+        }
+        const originalIdentity = originalLstat(originalPath);
+        const replacementIdentity = originalLstat(path);
+        if (originalIdentity.dev === replacementIdentity.dev && originalIdentity.ino === replacementIdentity.ino) {
+          throw new Error("Replacement fixture must create a distinct live temporary file");
         }
       }
       return originalLstat(path, options as never);
