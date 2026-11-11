@@ -4,7 +4,7 @@ Use this guide to learn, operate, or extend Kepler. These documents describe imp
 
 ## Start here
 
-1. Read [Installation](installation.md). Check the host requirements and release availability.
+1. Read [Installation](installation.md). Choose the CLI and matching version-specific home through your software manager.
 2. Follow [Complete a mission](missions/tutorial.md). Use one project from mission creation through delivery.
 3. Keep the [CLI reference](cli.md) available while you work.
 4. Use [Recovery](recovery.md) when a command or worker stops before completion.
@@ -36,13 +36,13 @@ Kepler records workflow operations. Your coding-agent host or team performs the 
 
 ## Installation and operation
 
-- [Installation](installation.md): complete archives, Pi prerequisites, setup, and upgrades.
-- [Configuration](configuration.md): paths, settings, environment variables, and selection rules.
+- [Installation](installation.md): version-specific home initialization and resource ownership.
+- [Configuration](configuration.md): project paths, Kepler home, settings, and environment variables.
 - [Recovery](recovery.md): interrupted preparation, execution, Integration, and setup.
-- [Project guidelines](tutorials/custom-guidelines.md): reference your own instructions without changing the installed generation.
+- [Project guidelines](tutorials/custom-guidelines.md): keep project-specific instructions separate from packaged Kepler resources.
 
 ## Development
 
 Read [Development](development.md) for workspace commands, tests, resource packages, and release checks. Start at [Contributing](../CONTRIBUTING.md) before changing the repository.
 
-The [release notes](releases/) describe version changes. Historical release notes do not define the current interface. The [v3 specification index](specs/v3/README.md) provides supporting contract references. A specification or CI job declaration does not prove that a feature or target has passed execution checks.
+The [release notes](releases/) describe version changes. The published `v3.0.0` predates the current versioned-home contract; its note is historical. Historical release notes do not define the current interface. The [v3 specification index](specs/v3/README.md) provides supporting contract references. A specification or CI job declaration does not prove that a feature or target has passed execution checks.

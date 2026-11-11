@@ -52,8 +52,10 @@ function fixtureRepository(existingReleaseNote = false): string {
     "templates/v3/construction/supporting-document.md",
   ]) write(root, `bundle/${path}`, `# ${path}\n`);
   write(root, "bundle/guidelines/general/style.md", "# Style\n");
-  for (const [, agentId] of roles) {
-    write(root, `bundle/agents/pi/v1/${agentId}.md`, `---\nname: ${agentId}\ndescription: role\n---\n`);
+  for (const host of ["pi", "claude-code"]) {
+    for (const [, agentId] of roles) {
+      write(root, `bundle/agents/${host}/v1/${agentId}.md`, `---\nname: ${agentId}\ndescription: role\n---\n`);
+    }
   }
   for (const id of skillIds) {
     write(root, `skills/${id}/SKILL.md`, `---\nname: ${id}\ndescription: skill\n---\n`);
@@ -86,7 +88,6 @@ describe("release preparation", () => {
       "packages/cli/package.json",
       "src/index.ts",
       "packages/cli/src/cli/version.ts",
-      "bundle/pi-package.json",
       "bundle/manifest.json",
     ]) expect(prepared.changedFiles).toContain(path);
     expect(Fs.readFileSync(Path.join(root, "docs/releases/3.0.0.md"), "utf8")).toBe(originalNote);

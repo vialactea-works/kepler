@@ -6,7 +6,7 @@ import {
   createTargetArchive,
   type ReleaseTarget,
 } from "../../packages/cli/src/cli/release-archive.js";
-import { sha256Digest } from "../../packages/cli/src/cli/installation-record.js";
+import { sha256Digest } from "../../packages/cli/src/cli/content-digest.js";
 import type { ResourcePackageSnapshot } from "../../packages/cli/src/cli/release-resources.js";
 import { createSetupBundleFixture } from "./setup-bundle-fixture.js";
 

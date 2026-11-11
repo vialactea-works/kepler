@@ -34,7 +34,7 @@ Review the guideline when project conventions change. Keep each instruction spec
 
 ## Keep built-in resources separate
 
-Built-in guidelines stay in the selected generation at `~/.kepler-dist/current/bundle/guidelines/`.
+Built-in guidelines are seeded under `$KEPLER_HOME/guidelines/` for the selected CLI release.
 
 | Resource | Subject |
 | --- | --- |
@@ -42,6 +42,6 @@ Built-in guidelines stay in the selected generation at `~/.kepler-dist/current/b
 | `golang` | Go structure, testing, and implementation guidance. |
 | `typescript` | TypeScript structure, testing, and implementation guidance. |
 
-Do not edit an installed generation. Build and select a new complete package to change built-in guidance. Setup preserves custom XDG files, but it does not automatically load them as guidelines.
+Setup seeds the version-specific home once and preserves edits and deletions on repeat. Use a separate home for another release. Hosts choose whether and how to load guidelines; setup does not discover project-owned files.
 
-See [Installation](../installation.md#setup-and-installed-resources), [Configuration](../configuration.md), and [Skills and roles](../skills.md).
+See [Installation](../installation.md#what-setup-does), [Configuration](../configuration.md), and [Skills and roles](../skills.md).

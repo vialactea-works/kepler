@@ -23,7 +23,7 @@ The CLI entrypoint is `packages/cli/src/cli/main.ts`. CLI commands live in `pack
 
 The global home is `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/`. Project records live under `.kepler/`. The previous hidden global directory, `~/.hamilton/`, and project `.hamilton/` paths remain read-only sources for the existing safe path-copy behavior: Kepler copies legacy data only when the corresponding canonical path does not exist, preserves the source, and does not merge or delete data. If both legacy global paths exist and the canonical path does not, the previous hidden global path takes precedence.
 
-Version 3 mission records and earlier change-based artifacts have separate ownership. Do not add compatibility conversion, silently adopt old history, or clean up legacy material as part of another change. `KEPLER_BUNDLE_DIR` overrides bundle lookup for development and tests.
+Version 3 mission records and earlier change-based artifacts have separate ownership. Do not add compatibility conversion, silently adopt old history, or clean up legacy material as part of another change. `KEPLER_PACKAGE_ROOT` selects a complete package root for development and tests; setup validates it and rejects it for production-identity binaries.
 
 ## Code conventions
 

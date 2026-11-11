@@ -1,6 +1,6 @@
 # Unified Kepler release and setup design
 
-**Status: Approved.** The requester approved this design and separately authorized its implementation. Approval does not authorize installation into the user's home, publication, deployment, or data migration. Implementation and verification status must be reported separately from this approved contract.
+**Historical status:** The requester approved this design at an earlier point. A later requester decision superseded its Kepler-owned CLI installation, generation selector, and Pi-registration boundary. The current contract is [versioned home initialization](specs/v3/installation.md). This document remains as provenance for the earlier design; its approval is not current implementation or release evidence. It does not authorize live-home changes, publication, deployment, or data migration.
 
 ## Confirmed direction
 
@@ -13,11 +13,11 @@ The proposed first unified release is **3.0.0**, because the existing Constructi
 
 ## Current behavior and failure paths
 
-The checkout duplicates the executable release in three package manifests and two TypeScript constants. [The version check](../scripts/check-versions.ts) detects disagreement, but does not prepare a version change. [The bundle generator](../scripts/prepare-bundle.ts) separately maintains bundle, skill, and native-binding release identifiers.
+The checkout duplicates the executable release in three package manifests and two TypeScript constants. [The version check](https://github.com/vialactea-works/kepler/blob/df0cff3ee813582ade65b6afaf687e0796146d3f/scripts/check-versions.ts) detects disagreement, but does not prepare a version change. [The bundle generator](https://github.com/vialactea-works/kepler/blob/df0cff3ee813582ade65b6afaf687e0796146d3f/scripts/prepare-bundle.ts) separately maintains bundle, skill, and native-binding release identifiers.
 
-[The installer](../install.sh) already selects one GitHub release tag for its binary and sidecar downloads. It replaces the active binary and symlink before extracting the sidecar and running setup. Failed extraction or setup can therefore leave a partial installation. Extracting over the existing sidecar can retain stale files.
+[The installer shipped with `v3.0.0`](https://github.com/vialactea-works/kepler/blob/v3.0.0/install.sh) already selects one GitHub release tag for its binary and sidecar downloads. It replaces the active binary and symlink before extracting the sidecar and running setup. Failed extraction or setup can therefore leave a partial installation. Extracting over the existing sidecar can retain stale files.
 
-[Setup](../packages/cli/src/cli/setup.service.ts) validates the bundle and preserves settings and user-modified resources. Its [recovery transaction](../packages/cli/src/cli/setup-runtime.ts) covers sequential global-home writes, not binary activation or native host resources. Native skill and agent checks remain `not_checked` under the current [installation contract](specs/v3/installation.md). This draft proposes replacing SH117's external native-installation ownership for the Pi target; it does not claim that the accepted contract or current code already changed.
+[Setup at design approval](https://github.com/vialactea-works/kepler/blob/df0cff3ee813582ade65b6afaf687e0796146d3f/packages/cli/src/cli/setup.service.ts) validates the bundle and preserves settings and user-modified resources. Its [recovery transaction](https://github.com/vialactea-works/kepler/blob/df0cff3ee813582ade65b6afaf687e0796146d3f/packages/cli/src/cli/setup-runtime.ts) covers sequential global-home writes, not binary activation or native host resources. At that time, native skill and agent checks remained `not_checked` under the [installation contract then in effect](https://github.com/vialactea-works/kepler/blob/df0cff3ee813582ade65b6afaf687e0796146d3f/docs/specs/v3/installation.md). This draft proposes replacing SH117's external native-installation ownership for the Pi target; it does not claim that the accepted contract or current code already changed.
 
 The release workflow already provides source-commit manifests, hashes, attestations, and native verification jobs. Reuse these controls. Do not describe the current installer as resolving independent latest versions or discard the existing provenance work.
 

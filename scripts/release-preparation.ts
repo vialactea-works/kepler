@@ -12,10 +12,7 @@ import {
   type ResourceFileDeletion,
 } from "./resource-generation.js";
 import { validateResourcePackage } from "../packages/cli/src/cli/release-resources.js";
-import {
-  sha256Digest,
-  type ContentDigest,
-} from "../packages/cli/src/cli/installation-record.js";
+import { sha256Digest, type ContentDigest } from "../packages/cli/src/cli/content-digest.js";
 
 export interface ReleaseCheckResult {
   readonly version: string;

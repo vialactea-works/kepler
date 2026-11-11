@@ -1,5 +1,5 @@
 {
-  "manifest_format_version": 2,
+  "manifest_format_version": 3,
   "kepler_release": "3.0.0",
   "files": {
     "agents/claude-code/v1/kepler-architect.md": "sha256:cde6bd8f24fbfd88f933bc876b2d77eff1dca0756dba2ab0c9aa4037187d53a6",
@@ -25,7 +25,6 @@
     "guidelines/typescript/04-unit-testing.md": "sha256:27ece91d965e4d4158f513b7e02f2824777237b029b45615b8135f7e18bd69d2",
     "guidelines/typescript/05-e2e-testing.md": "sha256:af0485da419e0737284524ec85cf7c41d564676624272b2a5a4520a30ab2661a",
     "guidelines/typescript/guideline.yml": "sha256:eb836d02c6186b21587b186ffb5b4b0aff6c463f4f0bac774b8e2e7fa0ac422e",
-    "pi-package.json": "sha256:6594d2b9f91be4ace7c359eab26a5aa1c3b2fcb56a9a2980d64eb3b5b1c9f192",
     "skills/kepler-code-feedback/SKILL.md": "sha256:ae4f87d822d19533a4acfbe65b5bf4a21d777f657b59b0e931843c583a249662",
     "skills/kepler-code/SKILL.md": "sha256:ffdb6395eb0856f40a0ee21a84234c6dd4aca1dddc8f8a19f058862f968c8f7d",
     "skills/kepler-design/SKILL.md": "sha256:7e7e61f5ff279de9f359f0fb4a7e655793b9e9c393691834b219a00185de515b",
@@ -42,7 +41,7 @@
     "skills/kepler-research/NOTICE": "sha256:71168255d925d0deb29bacc2f5e6f456b121b31aa9dd493ef660bee4675880cb",
     "skills/kepler-research/SKILL.md": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
     "skills/kepler-review/SKILL.md": "sha256:37817ad76b89e3f9ff7e414d8ce6a96dfc5d93748dd0cc6f894590b1a49c74dd",
-    "templates/README.md": "sha256:1aef9f905444007102fa89d1f2a5bd683dfa1bd5af70e9453d348879529bd6de",
+    "templates/README.md": "sha256:215d992103682a02580fbe457d35243d5556ad4150216f15ff5353f831513173",
     "templates/critique.md": "sha256:1cd7886f18cb6879699e87dc8f3f855714091b9d42ac520e6ce670b86d3d36fe",
     "templates/design.md": "sha256:0c30fd7f9db0c2766368f0b34b45d75727d12fe019b0e17b49ef2dc98ea1e4e9",
     "templates/feedback.md": "sha256:53bcb710db8c0cb3b9ec573cd726d30c8847a08c4b3904758fb3b2cf2cfc342b",
@@ -65,7 +64,7 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "resource_digest": "sha256:e3e92246aa36da9ae0cb22791549c05616999766cedbde2a846802aef419251d",
+  "resource_digest": "sha256:190284bbf14e9f2b2e20c0b9117ec963a24330ff685169d36a6496d14a458326",
   "skills": [
     {
       "id": "kepler-design",
@@ -123,26 +122,38 @@
       "required": false
     }
   ],
-  "pi_agents": [
+  "agent_profiles": [
     {
-      "role": "architect",
-      "agent_id": "kepler-architect",
+      "id": "agents/pi/v1/kepler-architect.md",
       "digest": "sha256:f288cd7b0ecee274594d1213d1c31e5335fab4a72af783aa3f373b5c9f98a14f"
     },
     {
-      "role": "orchestrator",
-      "agent_id": "kepler-orchestrator",
+      "id": "agents/pi/v1/kepler-orchestrator.md",
       "digest": "sha256:edee21ccea02a5124d21890fd3b2b0f953b06e97ef584566e2508961fb75867b"
     },
     {
-      "role": "coder",
-      "agent_id": "kepler-coder",
+      "id": "agents/pi/v1/kepler-coder.md",
       "digest": "sha256:d26e304c93eb8313ab3b408d56efd0912386ad052f7911d7271c1fe0529b2eea"
     },
     {
-      "role": "reviewer",
-      "agent_id": "kepler-reviewer",
+      "id": "agents/pi/v1/kepler-reviewer.md",
       "digest": "sha256:155275348bc3fa56a29d2d04946af2a1996151e0a9365c4b93ef441c4db9d9b1"
+    },
+    {
+      "id": "agents/claude-code/v1/kepler-architect.md",
+      "digest": "sha256:cde6bd8f24fbfd88f933bc876b2d77eff1dca0756dba2ab0c9aa4037187d53a6"
+    },
+    {
+      "id": "agents/claude-code/v1/kepler-orchestrator.md",
+      "digest": "sha256:f086b1e15baa0cdf48ae9e7cddf95cd4c5aa8f3b237cc0603a0975e4c5d98534"
+    },
+    {
+      "id": "agents/claude-code/v1/kepler-coder.md",
+      "digest": "sha256:515506090d041ef09c792114ffeac8fb39563da4b23ab27ebc0fd0f126c1478b"
+    },
+    {
+      "id": "agents/claude-code/v1/kepler-reviewer.md",
+      "digest": "sha256:f9c48be02dbce74ed92c4b26f70ed4a1356bf3d1c2b183da31ee3bc67e0497bc"
     }
   ]
 }

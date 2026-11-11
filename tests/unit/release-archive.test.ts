@@ -15,7 +15,7 @@ import {
   encodeBuildIdentityMarker,
   type RuntimeBuildIdentity,
 } from "../../packages/cli/src/cli/build-identity.js";
-import { sha256Digest } from "../../packages/cli/src/cli/installation-record.js";
+import { sha256Digest } from "../../packages/cli/src/cli/content-digest.js";
 import { createSetupBundleFixture } from "../helpers/setup-bundle-fixture.js";
 import {
   archiveFixtureSource,

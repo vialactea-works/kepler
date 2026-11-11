@@ -1,12 +1,10 @@
 import { Ajv } from "ajv";
 import type { AnySchemaObject } from "ajv";
-import {
-  parseMetadataJsonObject,
-  sha256Digest,
-  type ContentDigest,
-} from "./installation-record.js";
+import { sha256Digest, type ContentDigest } from "./content-digest.js";
+import { parseMetadataJsonObject } from "./metadata-json.js";
 
-export const RESOURCE_MANIFEST_FORMAT_VERSION = 2 as const;
+export const RESOURCE_MANIFEST_FORMAT_VERSION = 3 as const;
+export const HOME_RESOURCE_PREFIXES = ["agents/", "guidelines/", "skills/", "templates/"] as const;
 
 export interface ResourceSkill {
   readonly id: string;
@@ -14,9 +12,8 @@ export interface ResourceSkill {
   readonly required: boolean;
 }
 
-export interface PiAgentResource {
-  readonly role: string;
-  readonly agent_id: string;
+interface AgentProfileResource {
+  readonly id: string;
   readonly digest: ContentDigest;
 }
 
@@ -26,7 +23,7 @@ export interface ResourceManifest {
   readonly files: Readonly<Record<string, ContentDigest>>;
   readonly resource_digest: ContentDigest;
   readonly skills: readonly ResourceSkill[];
-  readonly pi_agents: readonly PiAgentResource[];
+  readonly agent_profiles: readonly AgentProfileResource[];
 }
 
 export interface ResourcePackageSnapshot {
@@ -69,11 +66,15 @@ const skillIds = [
 
 const standardSkillIds = new Set(skillIds.slice(0, 8));
 
-const piAgents = [
-  ["architect", "kepler-architect"],
-  ["orchestrator", "kepler-orchestrator"],
-  ["coder", "kepler-coder"],
-  ["reviewer", "kepler-reviewer"],
+const agentProfilePaths = [
+  "agents/pi/v1/kepler-architect.md",
+  "agents/pi/v1/kepler-orchestrator.md",
+  "agents/pi/v1/kepler-coder.md",
+  "agents/pi/v1/kepler-reviewer.md",
+  "agents/claude-code/v1/kepler-architect.md",
+  "agents/claude-code/v1/kepler-orchestrator.md",
+  "agents/claude-code/v1/kepler-coder.md",
+  "agents/claude-code/v1/kepler-reviewer.md",
 ] as const;
 
 const constructionTemplates = [
@@ -118,33 +119,15 @@ const resourceManifestSchema = closedObject({
     maxItems: 11,
     items: closedObject({ id: text, digest, required: { type: "boolean" } }),
   },
-  pi_agents: {
+  agent_profiles: {
     type: "array",
-    minItems: 4,
-    maxItems: 4,
-    items: closedObject({ role: text, agent_id: text, digest }),
+    minItems: 8,
+    maxItems: 8,
+    items: closedObject({ id: text, digest }),
   },
-});
-const packageDescriptorSchema = closedObject({
-  name: { const: "kepler-resources" },
-  version: stableVersion,
-  private: { const: true },
-  type: { const: "module" },
-  pi: closedObject({
-    skills: { type: "array", minItems: 1, maxItems: 1, items: { const: "./bundle/skills" } },
-    subagents: closedObject({
-      agents: {
-        type: "array",
-        minItems: 1,
-        maxItems: 1,
-        items: { const: "./bundle/agents/pi/v1" },
-      },
-    }),
-  }),
 });
 const ajv = new Ajv({ allErrors: false, strict: true });
 const validateResourceManifest = ajv.compile<ResourceManifest>(resourceManifestSchema);
-const validatePackageDescriptor = ajv.compile(packageDescriptorSchema);
 
 export function parseResourceManifest(content: string): ResourceManifest {
   const value = parseMetadataJsonObject(content, "resource manifest");
@@ -163,7 +146,7 @@ export function parseResourceManifest(content: string): ResourceManifest {
   const manifest = value;
   validateStableVersion(manifest.kepler_release);
   validateSkillSet(manifest.skills);
-  validatePiAgentSet(manifest.pi_agents);
+  validateAgentProfileSet(manifest.agent_profiles);
   validateDigestMap(manifest.files);
   if (manifest.files["manifest.json"] !== undefined) {
     throw new ResourceManifestError(
@@ -193,13 +176,9 @@ export function resourceManifestContentDigest(
         required,
       }))
       .sort((left, right) => compareStrings(left.id, right.id)),
-    pi_agents: manifest.pi_agents
-      .map(({ role, agent_id, digest: fileDigest }) => ({
-        role,
-        agent_id,
-        digest: fileDigest,
-      }))
-      .sort((left, right) => compareStrings(left.role, right.role)),
+    agent_profiles: manifest.agent_profiles
+      .map(({ id, digest: fileDigest }) => ({ id, digest: fileDigest }))
+      .sort((left, right) => compareStrings(left.id, right.id)),
   };
   return sha256Digest(JSON.stringify(payload));
 }
@@ -231,10 +210,9 @@ export function createResourceManifest(
       digest: requiredDigest(fileDigests, `skills/${id}/SKILL.md`),
       required: standardSkillIds.has(id),
     })),
-    pi_agents: piAgents.map(([role, agent_id]) => ({
-      role,
-      agent_id,
-      digest: requiredDigest(fileDigests, `agents/pi/v1/${agent_id}.md`),
+    agent_profiles: agentProfilePaths.map((id) => ({
+      id,
+      digest: requiredDigest(fileDigests, id),
     })),
   };
   const manifest = { ...base, resource_digest: resourceManifestContentDigest(base) };
@@ -281,34 +259,22 @@ export function validateResourcePackage(
     }
   }
 
-  validatePackageFiles(manifest, files);
+  validatePackageFiles(files);
   return { manifest, files: [...files.values()] };
 }
 
 function validatePackageFiles(
-  manifest: ResourceManifest,
   files: ReadonlyMap<string, { readonly contents: Uint8Array }>,
 ): void {
-  const descriptorFile = files.get("pi-package.json");
-  if (!descriptorFile) {
-    throw new ResourceManifestError("Missing Pi package descriptor: pi-package.json");
+  if (files.has("pi-package.json")) {
+    throw new ResourceManifestError("Pi package descriptors are not Kepler home resources");
   }
-  const descriptor = parseMetadataJsonObject(
-    new TextDecoder().decode(descriptorFile.contents),
-    "Pi package descriptor",
+  const unsupportedPath = [...files.keys()].find((path) =>
+    !HOME_RESOURCE_PREFIXES.some((prefix) => path.startsWith(prefix)),
   );
-  if (!validatePackageDescriptor(descriptor)) {
-    const first = validatePackageDescriptor.errors?.[0];
-    throw new ResourceManifestError(
-      `Pi package descriptor is invalid at ${first?.instancePath || "/"}: ${first?.message ?? "schema mismatch"}`,
-    );
+  if (unsupportedPath) {
+    throw new ResourceManifestError(`Unexpected resource package path: ${unsupportedPath}`);
   }
-  if (descriptor.version !== manifest.kepler_release) {
-    throw new ResourceManifestError(
-      "Pi package descriptor version does not match the resource manifest release",
-    );
-  }
-
   for (const path of constructionTemplates) {
     if (!files.has(path)) {
       throw new ResourceManifestError(`Missing required Construction template: ${path}`);
@@ -328,10 +294,7 @@ function validatePackageFiles(
     throw new ResourceManifestError(`Unexpected skill resource: ${unknownSkill}`);
   }
 
-  const validAgentPaths = new Set([
-    ...piAgents.map(([, agentId]) => `agents/pi/v1/${agentId}.md`),
-    ...piAgents.map(([, agentId]) => `agents/claude-code/v1/${agentId}.md`),
-  ]);
+  const validAgentPaths = new Set<string>(agentProfilePaths);
   const unknownAgent = [...files.keys()].find(
     (path) => path.startsWith("agents/") && !validAgentPaths.has(path),
   );
@@ -353,15 +316,13 @@ function validateDeclaredResources(manifest: ResourceManifest): void {
       );
     }
   }
-  for (const agent of manifest.pi_agents) {
-    const path = `agents/pi/v1/${agent.agent_id}.md`;
-    if (manifest.files[path] !== agent.digest) {
+  for (const profile of manifest.agent_profiles) {
+    if (manifest.files[profile.id] !== profile.digest) {
       throw new ResourceManifestError(
-        `Resource manifest Pi agent digest does not match its file: ${agent.role}`,
+        `Resource manifest agent profile digest does not match its file: ${profile.id}`,
       );
     }
   }
-  requiredDigest(manifest.files, "pi-package.json");
 }
 
 function validateSkillSet(skills: readonly ResourceSkill[]): void {
@@ -378,16 +339,15 @@ function validateSkillSet(skills: readonly ResourceSkill[]): void {
   }
 }
 
-function validatePiAgentSet(agents: readonly PiAgentResource[]): void {
-  const expected = new Map<string, string>(piAgents);
+function validateAgentProfileSet(profiles: readonly AgentProfileResource[]): void {
+  const expected = new Set<string>(agentProfilePaths);
   if (
-    agents.length !== expected.size ||
-    new Set(agents.map(({ role }) => role)).size !== agents.length ||
-    new Set(agents.map(({ agent_id }) => agent_id)).size !== agents.length ||
-    agents.some(({ role, agent_id }) => expected.get(role) !== agent_id)
+    profiles.length !== expected.size ||
+    new Set(profiles.map(({ id }) => id)).size !== profiles.length ||
+    profiles.some(({ id }) => !expected.has(id))
   ) {
     throw new ResourceManifestError(
-      "Resource manifest must declare the four accepted Pi roles",
+      "Resource manifest must declare all eight accepted agent profiles",
     );
   }
 }

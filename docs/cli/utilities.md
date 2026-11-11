@@ -1,59 +1,40 @@
 # Setup and utility commands
 
-Use this reference for installation activation, UUID allocation, and shared Markdown metadata checks. Read [Installation](../installation.md) before setup changes your home directory.
+Use this reference for version-specific home initialization, UUID allocation, and shared Markdown metadata checks. Read [Installation](../installation.md) before setup writes to a home.
 
 ## `kepler setup`
 
 ```text
-kepler setup [--accept-native-transfer <digest>]
+kepler setup
 ```
 
-| Option | Meaning |
-| --- | --- |
-| `--accept-native-transfer <digest>` | Accept only the exact current safe native ownership-transfer plan. No consent by default. |
-| `-h, --help` | Print command help. |
-
-Setup accepts no positional arguments or `--project` option. The invocation directory still affects visible project-resource conflict checks.
+Setup accepts no positional arguments or command-specific options. It does not use `--project`; the invocation directory does not affect home initialization.
 
 ```bash
-kepler setup
-kepler setup --accept-native-transfer "$TRANSFER_DIGEST"
+KEPLER_HOME="/absolute/path/to/version-specific-home" kepler setup
 ```
-
-These are separate operations. Review the plan from ordinary setup before selecting the consent form.
 
 ### Inputs and prerequisites
 
-Setup consumes a complete compatible generation with embedded executable identity, manifest, required resources, correct inventory, digests, and modes. It also requires supported Pi 1.2.0, pi-subagents 0.76.1, an existing agent directory, and initialized settings. See [Configuration](../configuration.md) for directory and executable selection.
-
-A generic source runner without compiled identity cannot substitute for a valid generation. Missing or inconsistent resources fail. Production setup rejects a package-root runtime override.
+`KEPLER_HOME` must be an absolute path. There is no fallback. Select an empty, version-specific path that matches the CLI release. Setup validates the executing build identity and complete matching resource package before writing. A source runner without a valid package identity cannot initialize a release home.
 
 ### Result and effects
 
-Success uses the standard JSON envelope and exit 0. The result contains:
+Success uses the standard JSON envelope and exit 0. `data` contains:
 
 | Field | Meaning |
 | --- | --- |
-| `generation_id`, `kepler_release` | Selected immutable generation and release. |
-| `installation_mode` | `first-install`, `legacy-transition`, `upgrade`, `no-op`, or `repair`. |
-| `resource_root`, `selector`, `package_source` | Verified generation resource root and stable selection paths. |
-| `compatibility` | Compatible-resource check result. |
-| `templates`, `guidelines` | Selected resource paths. |
-| `created_files`, `updated_files` | Reported file effects. A coherent no-op has no updated files. |
-| `pi_binding` | Host/loader version checks and matching registration/settings digests. |
-| `native_transfer` | Optional accepted digest, prior source, and operation. |
+| `home` | Absolute path selected through `KEPLER_HOME`. |
+| `release` | Release identity of the executing CLI and resources. |
+| `status` | `initialized` for first initialization or `unchanged` for a ready home of the same release. |
 
-Setup can stage immutable generation files and change the selector and stable launcher. It can write its receipt and journal. It can also register or repair the exact managed Pi package entry. An accepted transfer can affect only the resources named in the unchanged plan. It preserves unrelated settings, custom files, earlier generations, and project artifacts.
+On first setup, Kepler seeds templates, guidelines, skills, agent profiles, `settings.yaml`, and `home-metadata.json`. A successful repeat does not reconcile resources, restore deletions, or overwrite edits. It does not copy settings between version homes or configure host discovery.
 
-It does not install host prerequisites, create missing Pi settings, start agents, copy built-ins into XDG directories, convert history, or purge old data.
+### Failures and recovery
 
-### Failures
+Failure exits 1 with `code`, `message`, `details`, and `recovery`. Missing or invalid `KEPLER_HOME` returns `kepler_home_required`. Other identity, resource, metadata, path, or filesystem failures return `home_initialization_failed`.
 
-Failure exits 1 with `code`, `message`, `details`, and `recovery`. Examples include `build_identity_missing`, unsupported host/loader, invalid package resources, visible resource conflict, changed settings preimage, uncertain transaction state, or ownership mismatch.
-
-A conflict can return a read-only transfer plan and digest. Ordinary setup does not accept that plan automatically. A stale digest fails.
-
-Failure after an external effect does not prove rollback. `temporary_file_evidence`, when present, distinguishes residual temporary files from changes to final settings. Unknown or replacement ownership is preserved and reported. Inspect the selector, receipt, settings, journal, and reported paths before retrying. See [setup recovery](../recovery.md#interrupted-installation-or-setup).
+A compatible pending initialization can resume with the same release and resource digest. An unknown non-empty home, malformed metadata, or incompatible home fails closed. First initialization can leave partial files after an error; failure does not prove rollback. Inspect `$KEPLER_HOME/home-metadata.json` and preserve existing content before retrying. See [setup recovery](../recovery.md#interrupted-installation-or-setup).
 
 ## `kepler uuid`
 
@@ -93,7 +74,7 @@ It does not edit the files or prove stage-specific content, technical correctnes
 
 ## `kepler --print-build-identity`
 
-This distribution diagnostic is outside the registered public command tree. The installer and package checks use it to inspect the actual compiled executable. It is not a general global option or a workflow command.
+This distribution diagnostic is outside the registered public command tree. Release packaging checks use it to inspect the actual compiled executable. It is not a general global option or a workflow command.
 
 ```text
 kepler --print-build-identity
@@ -101,7 +82,7 @@ kepler --print-build-identity
 
 Pass this flag alone. A complete compiled executable writes one raw identity JSON line and exits 0. The identity includes format/release, schema major, source, resources, and target. Extra arguments or an executable without compiled identity produce a text diagnostic and exit 1. This path does not use the normal result envelope or CLI help parser.
 
-Do not infer identity from an archive filename or sidecar alone. Do not relabel a development executable as production after a later commit. See [Development](../development.md#resources-and-releases).
+Do not infer identity from an archive filename alone. Do not relabel a development executable as production after a later commit. See [Development](../development.md#resources-and-releases).
 
 ## Sources
 

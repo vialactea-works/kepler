@@ -34,7 +34,7 @@ Create or resume the prototype branch from the current branch before writing any
 
 Either call's last line is the branch name; confirm the switch took effect with `kepler workbench prototype --verify <that branch>` before writing anything. If the command reports `mode: resumed`, an earlier session already started this prototype — pick up where it left off rather than starting over.
 
-If the Kepler CLI is not installed (`kepler setup` has not run), do the same by hand — the pattern kepler-propose already uses for isolate: `git switch -c prototype/<map-name>/<ticket-name>` (or `git switch prototype/<map-name>/<ticket-name>` if the branch already exists), same naming, same order.
+If no Kepler CLI is available, do the same by hand. External managers own CLI installation and version selection; `kepler setup` only initializes `KEPLER_HOME`. Follow the pattern kepler-propose already uses for isolate: `git switch -c prototype/<map-name>/<ticket-name>` (or `git switch prototype/<map-name>/<ticket-name>` if the branch already exists), same naming, same order.
 
 ## Rules that apply to every prototype
 

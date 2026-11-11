@@ -8,11 +8,8 @@ import {
   readEmbeddedBuildIdentity,
   type RuntimeBuildIdentity,
 } from "./build-identity.js";
-import {
-  parseMetadataJsonObject,
-  sha256Digest,
-  type ContentDigest,
-} from "./installation-record.js";
+import { sha256Digest, type ContentDigest } from "./content-digest.js";
+import { parseMetadataJsonObject } from "./metadata-json.js";
 import {
   validateResourcePackage,
   type ResourcePackageSnapshot,
@@ -147,9 +144,16 @@ export function createTargetPackage(
       contents: file.contents,
     })),
   ];
-  const packageDescriptor = validatedResources.files.find((file) => file.path === "pi-package.json");
-  if (!packageDescriptor) throw new ReleaseArchiveError("Resource package metadata is missing");
-  files.push({ path: "package.json", contents: packageDescriptor.contents });
+  files.push({
+    path: "package.json",
+    contents: new TextEncoder().encode(`${JSON.stringify({
+      name: "kepler",
+      version: identity.kepler_release,
+      private: true,
+      type: "module",
+      bin: { kepler: "./bin/kepler" },
+    }, null, 2)}\n`),
+  });
   const manifest = createTargetArchiveManifest(identity, files);
   const allFiles = [
     ...files,
@@ -504,10 +508,8 @@ export function validateTargetPackageFiles(
     throw new ReleaseArchiveError("Target package resource identity does not match the compiled binary");
   }
   const descriptor = files.get("package.json");
-  const resourceDescriptor = files.get("bundle/pi-package.json");
-  if (!descriptor || !resourceDescriptor || !bytesEqual(descriptor.contents, resourceDescriptor.contents)) {
-    throw new ReleaseArchiveError("Target package root descriptor differs from the resource inventory");
-  }
+  if (!descriptor) throw new ReleaseArchiveError("Target package root descriptor is missing");
+  validateDistributionDescriptor(descriptor.contents, identity.kepler_release);
   if (manifest.build_identity_digest !== buildIdentityDigest(identity)) {
     throw new ReleaseArchiveError("Target archive build identity digest does not match the compiled binary");
   }
@@ -960,6 +962,26 @@ function assertStableVersion(value: string): void {
   }
 }
 
+function validateDistributionDescriptor(contents: Uint8Array, release: string): void {
+  let value: Record<string, unknown>;
+  try {
+    value = parseMetadataJsonObject(
+      new TextDecoder("utf-8", { fatal: true }).decode(contents),
+      "target package descriptor",
+    );
+  } catch (error) {
+    throw new ReleaseArchiveError(errorMessage(error));
+  }
+  assertClosedKeys(value, ["name", "version", "private", "type", "bin"], "target package descriptor");
+  const bin = value.bin;
+  if (!isRecord(bin)) throw new ReleaseArchiveError("Target package executable mapping is invalid");
+  assertClosedKeys(bin, ["kepler"], "target package executable mapping");
+  if (value.name !== "kepler" || value.version !== release || value.private !== true ||
+      value.type !== "module" || bin.kepler !== "./bin/kepler") {
+    throw new ReleaseArchiveError("Target package descriptor does not match the Kepler release");
+  }
+}
+
 function assertClosedKeys(value: Record<string, unknown>, expected: readonly string[], description: string): void {
   const actual = Object.keys(value).sort(compareStrings);
   const allowed = [...expected].sort(compareStrings);
@@ -982,10 +1004,6 @@ function targetKey(target: ReleaseTarget): string {
 
 function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  return Buffer.compare(Buffer.from(left), Buffer.from(right)) === 0;
 }
 
 function compareStrings(left: string, right: string): number {

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as Fs from "node:fs";
 import * as Path from "node:path";
-import { parseMetadataJsonObject } from "../packages/cli/src/cli/installation-record.js";
+import { parseMetadataJsonObject } from "../packages/cli/src/cli/metadata-json.js";
 import { parseReleaseVersion } from "./release-version.js";
 
 export interface CorePackageRegistry {

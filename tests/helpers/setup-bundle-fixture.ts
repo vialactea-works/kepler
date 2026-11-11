@@ -21,12 +21,13 @@ const constructionTemplatePaths = [
   "templates/v3/construction/delivery.md",
   "templates/v3/construction/supporting-document.md",
 ];
-const agentRoles = [
-  ["architect", "kepler-architect"],
-  ["orchestrator", "kepler-orchestrator"],
-  ["coder", "kepler-coder"],
-  ["reviewer", "kepler-reviewer"],
-] as const;
+const agentProfilePaths = [
+  ...["pi", "claude-code"].flatMap((host) =>
+    ["architect", "orchestrator", "coder", "reviewer"].map(
+      (role) => `agents/${host}/v1/kepler-${role}.md`,
+    ),
+  ),
+];
 const encoder = new TextEncoder();
 
 export interface SetupBundleFixtureOptions {
@@ -39,16 +40,6 @@ export function createSetupBundleFixture(
   options: SetupBundleFixtureOptions = {},
 ): ResourcePackageSnapshot {
   const release = options.release ?? "3.0.0";
-  const descriptor = {
-    name: "kepler-resources",
-    version: release,
-    private: true,
-    type: "module",
-    pi: {
-      skills: ["./bundle/skills"],
-      subagents: { agents: ["./bundle/agents/pi/v1"] },
-    },
-  };
   const files = [
     ...constructionTemplatePaths.map((path) => ({
       path,
@@ -66,17 +57,10 @@ export function createSetupBundleFixture(
       path: `skills/${id}/SKILL.md`,
       contents: encoder.encode(`---\nname: ${id}\ndescription: ${id} skill\n---\n\n${id}\n`),
     })),
-    ...agentRoles.flatMap(([, agentId]) => [
-      {
-        path: `agents/pi/v1/${agentId}.md`,
-        contents: encoder.encode(`---\nname: ${agentId}\ndescription: ${agentId} role\n---\n\n${agentId} Pi profile\n`),
-      },
-      {
-        path: `agents/claude-code/v1/${agentId}.md`,
-        contents: encoder.encode(`---\nname: ${agentId}\ndescription: ${agentId} role\n---\n\n${agentId} Claude Code profile\n`),
-      },
-    ]),
-    { path: "pi-package.json", contents: encoder.encode(`${JSON.stringify(descriptor, null, 2)}\n`) },
+    ...agentProfilePaths.map((path) => ({
+      path,
+      contents: encoder.encode(`---\nname: ${path.split("/").at(-1)?.replace(".md", "")}\ndescription: Kepler agent profile\n---\n\n${path}\n`),
+    })),
   ];
   const manifest = createResourceManifest(release, files);
   return { manifest: `${JSON.stringify(manifest, null, 2)}\n`, files };

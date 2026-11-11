@@ -98,27 +98,15 @@ See the [Integration reference](cli/construction.md#integration) for all selecto
 
 ## Interrupted installation or setup
 
-The installer stages one complete archive and invokes candidate setup. Setup alone activates the generation. If the installer reports failure, retain its reported staging path. Do not remove it until you inspect the operation and evidence.
+Kepler setup initializes the absolute path selected by `KEPLER_HOME`. It does not install an executable, select a release, change `PATH`, register host resources, or activate a generation.
 
-Check the actual state:
+For a first-time initialization that stops, inspect `$KEPLER_HOME/home-metadata.json`. Setup can resume only when its pending metadata matches the same release and resource digest. Preserve existing user files; setup does not overwrite resources or settings. It replaces only the exact compatible pending metadata record with ready metadata after verifying that record has not changed. If metadata is malformed, incompatible, or absent from a non-empty home, do not edit it or remove unknown files. Preserve the home and choose a safe recovery path.
 
-- The current selector target.
-- The stable launcher target.
-- The installation receipt and generation.
-- The Pi settings package entry.
-- The installation journal and reported residual paths.
+A completed home records its release and seed resource digest. A repeated setup for that release returns `unchanged`; it does not restore deleted resources or replace edits. Use a new version-specific home for a different release. Do not copy settings between homes automatically.
 
-A pre-activation failure should preserve the prior selection. A later failure can report partial effects. Neither result establishes rollback by itself.
+Check the structured result's `home`, `release`, and `status`, then inspect the home without modifying unrelated data. A failed result can follow partial file writes during first initialization; it does not prove rollback. Setup owns no Pi settings entry, selector, stable launcher, or installation receipt to reconcile.
 
-Do not edit the receipt, delete unknown files, remove another owner's lock, or force an overwrite. Preserve format-one receipt bytes and prior generations. A residual settings temporary file can exist even when final settings were not changed. Read `temporary_file_evidence` and its ownership/cleanup facts when reported.
-
-If validation reports an incomplete archive, obtain the complete package for the intended version and target. Do not substitute a different release's resources or an arbitrary checkout. Setup requires Pi 1.2.0, pi-subagents 0.76.1, an existing agent directory, and initialized settings. It does not install these prerequisites.
-
-When setup returns a safe native-transfer plan, inspect its exact resources and digest. Use `--accept-native-transfer <digest>` only for that unchanged acceptable plan. A stale digest does not authorize a changed transfer. Unknown, custom, or modified resources remain blocked.
-
-Keep non-cooperating settings editors idle during setup. The expected-preimage check rejects observed drift, but it is not an atomic compare-and-swap guarantee against arbitrary writers.
-
-Pi owns resource loading. Setup success does not prove that a session loaded a skill or that an agent followed it. Keep active work with its original generation if a new generation cannot be verified. See [Installation](installation.md).
+The packaged files do not prove that a host loaded them. The host or skill manager owns discovery, loading, and session recovery. Keep active work with resources compatible with its starting CLI. See [Installation](installation.md) and [Configuration](configuration.md).
 
 ## Earlier change-based work
 

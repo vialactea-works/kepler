@@ -138,7 +138,7 @@ describe("main CLI", () => {
     );
   });
 
-  it("rejects setup without a package build identity before filesystem effects", () => {
+  it("requires KEPLER_HOME and does not derive one from HOME or XDG_CONFIG_HOME", () => {
     const invalidHome = Path.join(harness.resources.rootDirectory, "home-file");
     const invalidHomeContents = "not a directory\n";
     Fs.writeFileSync(invalidHome, invalidHomeContents);
@@ -146,18 +146,32 @@ describe("main CLI", () => {
     const result = runCli(["setup"], { HOME: invalidHome });
 
     expect(result.exitCode).toBe(1);
-    expect(parseCliEnvelope(result.stdout)).toEqual({
+    expect(parseCliEnvelope(result.stdout)).toMatchObject({
       status: "failed",
       data: {
-        code: "build_identity_missing",
-        message: "The executing Kepler binary does not declare a package build identity.",
-        details: {},
-        recovery: "Use an identifiable Kepler package candidate; setup does not fall back to the source checkout or current directory.",
+        code: "kepler_home_required",
+        message: "KEPLER_HOME must name an absolute version-specific Kepler home; no fallback home is selected.",
       },
     });
     expect(result.stderr).toBe("");
     expect(Fs.readFileSync(invalidHome, "utf8")).toBe(invalidHomeContents);
-    expect(Fs.existsSync(Path.join(invalidHome, ".config"))).toBe(false);
+    expect(Fs.readdirSync(harness.resources.rootDirectory)).not.toContain(".config");
     expect(Fs.existsSync(Path.join(invalidHome, ".kepler-dist"))).toBe(false);
+  });
+
+  it("rejects a source checkout without package identity before creating the selected home", () => {
+    const home = Path.join(harness.resources.rootDirectory, "versions", "3.0.0");
+    const result = runCli(["setup"], { KEPLER_HOME: home });
+
+    expect(result.exitCode).toBe(1);
+    expect(parseCliEnvelope(result.stdout)).toMatchObject({
+      status: "failed",
+      data: {
+        code: "home_initialization_failed",
+        message: "The executing Kepler binary does not declare a package build identity.",
+      },
+    });
+    expect(result.stderr).toBe("");
+    expect(Fs.existsSync(home)).toBe(false);
   });
 });

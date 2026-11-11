@@ -22,7 +22,7 @@ Have these tools available on `PATH`:
 
 Bun and TypeScript are application-check dependencies for this example. Ordinary standalone Kepler workflow commands do not require them. The source repository pins TypeScript 5.9.3. You can use that existing compiler for this exercise.
 
-For managed agent use, first complete [installation and Pi setup](../installation.md). Pi 1.2.0, pi-subagents 0.76.1, models, and credentials belong to the host setup. This manual CLI exercise needs no model, external service, or network access after its tools are available.
+For managed agent use, follow your host's resource-discovery and session procedures. Kepler setup does not configure Pi or another host. This manual CLI exercise needs no model, external service, or network access after its tools are available.
 
 Use actual decisions and observations. Functional Design and Quality Requirements need requester approval. Code Validation and Unit of Work Review need a non-author reviewer. A role label in JSON does not create independence. Stop before those records if the required person or separate agent has not done the work. Automated validation of this tutorial uses controlled role labels to test CLI mechanics, not to certify real approval or agent behavior.
 
@@ -53,15 +53,15 @@ AUTHOR_EMAIL=$(git config user.email)
 AUTHOR="$AUTHOR_NAME <$AUTHOR_EMAIL>"
 LAB=$(mktemp -d "${TMPDIR:-/tmp}/kepler-mission-lab.XXXXXXXX")
 PROJECT="$LAB/project"
+KEPLER_HOME="$LAB/config/vialactea-works/kepler/versions/tutorial"
 mkdir -p "$PROJECT/.kepler" "$LAB/home" "$LAB/config" "$LAB/tmp" "$LAB/requests"
 ```
 
-The lab keeps CLI home, XDG configuration, and temporary paths separate from your normal installation. Git commits still use your existing signing policy. The following function uses your selected runner. It does not install another copy.
+The lab keeps the Kepler home, XDG configuration, and temporary paths separate from your normal installation. This tutorial does not run `kepler setup`; the repository-checkout runner has no production build identity. Git commits still use your existing signing policy. The following function uses your selected runner and does not install another copy.
 
 ```bash
 kepler() {
-  env HOME="$LAB/home" XDG_CONFIG_HOME="$LAB/config" TMPDIR="$LAB/tmp" \
-    KEPLER_PI_AGENT_DIR="$LAB/home/.pi/agent" PI_CODING_AGENT_DIR="$LAB/home/.pi/agent" \
+  env HOME="$LAB/home" XDG_CONFIG_HOME="$LAB/config" KEPLER_HOME="$KEPLER_HOME" TMPDIR="$LAB/tmp" \
     "${KEPLER_COMMAND[@]}" "$@"
 }
 kepler --version
@@ -92,7 +92,7 @@ kepler git author --project "$PROJECT"
 
 The marker makes `.kepler/` an existing local project directory. It is not a mission initializer. Keep all later commands at `$PROJECT`, or supply its exact root through `--project`.
 
-Both runner choices use the same workflow commands below. The checkout runner uses built package output and lacks an embedded standalone build identity. It cannot perform complete-generation setup.
+Both runner choices use the same workflow commands below. The checkout runner uses built package output and lacks an embedded standalone build identity. It cannot initialize a release home with `kepler setup`.
 
 Use the built entrypoint from the exercise directory. Direct TypeScript execution depends on the checkout's compiler configuration and can fail from another project's directory.
 

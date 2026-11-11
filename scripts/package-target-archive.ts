@@ -13,7 +13,8 @@ import {
   parseReleaseTarget,
   type ReleaseTarget,
 } from "../packages/cli/src/cli/release-archive.js";
-import { parseMetadataJsonObject, sha256Digest } from "../packages/cli/src/cli/installation-record.js";
+import { sha256Digest } from "../packages/cli/src/cli/content-digest.js";
+import { parseMetadataJsonObject } from "../packages/cli/src/cli/metadata-json.js";
 import { validateResourcePackage } from "../packages/cli/src/cli/release-resources.js";
 import { checkReleaseConsistency } from "./release-preparation.js";
 import { listRegularFiles } from "./resource-generation.js";

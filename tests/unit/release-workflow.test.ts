@@ -81,9 +81,10 @@ describe("unified release native archive workflow", () => {
     expect(packageManifest.scripts?.["test:e2e"]).toContain(
       "--exclude tests/e2e/release-archive.test.ts",
     );
-    expect(packageManifest.scripts?.["test:e2e"]).toContain(
-      "--exclude tests/e2e/dev-package.test.ts",
+    expect(packageManifest.scripts?.["test:e2e"]).not.toContain(
+      "tests/e2e/dev-package.test.ts",
     );
+    expect(packageManifest.scripts?.["dev:package"]).toBeUndefined();
   });
 
   it("uses one Linux x64 PR build and preserves the release target matrix", () => {
@@ -102,14 +103,10 @@ describe("unified release native archive workflow", () => {
       const native = job(workflow, "native-distribution");
       for (const jobName of ["verify", "native-distribution"]) {
         const hostJob = job(workflow, jobName);
-        expect(step(hostJob, "Setup Node for the pinned Pi E2E host").with)
-          .toMatchObject({ "node-version": "22.19.0" });
-        const host = step(hostJob, "Install actual pinned Pi E2E collaborators").run ?? "";
-        expect(host).toContain("KEPLER_PI_NODE_BINARY");
-        expect(host).toContain("KEPLER_PI_SDK_ENTRY_PATH");
-        expect(host).toContain("/dist/index.js");
-        expect(host).toContain("v22.19.0");
-        expect(host).toContain("--version");
+        const serialized = JSON.stringify(hostJob);
+        expect(serialized).not.toContain("KEPLER_PI_");
+        expect(serialized).not.toContain("pi-subagents");
+        expect(serialized).not.toContain("pi-coding-agent");
       }
       const build = step(native, "Build exact native archive for public CLI tests").run ?? "";
       expect(build).toContain("scripts/build-release-binary.ts");
@@ -124,7 +121,9 @@ describe("unified release native archive workflow", () => {
         ? "Run native target archive E2E"
         : "Run native standalone distribution E2E").run ?? "";
       expect(e2e).toContain("tests/e2e/release-archive.test.ts");
-      expect(e2e).toContain("tests/e2e/dev-package.test.ts");
+      expect(e2e).not.toContain("tests/e2e/installation.test.ts");
+      expect(e2e).not.toContain("tests/e2e/bootstrap-safety.test.ts");
+      expect(e2e).not.toContain("tests/e2e/dev-package.test.ts");
       expect(e2e).toContain("--no-file-parallelism");
     }
   });

@@ -1,28 +1,28 @@
 # Distribution test coverage
 
-M01.8 recorded the behaviors previously checked by shell smoke scripts. The current unified-release source candidate replaces the split sidecar and installer path with versioned target archives and executable coverage. No smoke suite, publication, or host-certification claim is added.
+M01.8 recorded the behaviors previously checked by shell scripts. The current test contract verifies the matching CLI and resource archive and the version-specific home it initializes. It does not add a smoke suite, host-integration claim, or agent-certification claim.
 
-## Exact target archive
+## Exact native archive
 
-`tests/e2e/release-archive.test.ts` exercises the selected archive bytes, their embedded release/source/target/resource identity, safe unpacking, setup activation, upgrade, no-op, rejected-candidate preservation, and current-generation checks. In CI, the test requires the workflow-built archive path, independently calculated SHA-256, and expected source commit; missing identity inputs fail the run rather than selecting a substitute. `tests/e2e/installation.test.ts` checks the bootstrap installer against controlled release assets and verifies that setup, not the installer, owns activation.
+`tests/e2e/release-archive.test.ts` reads the exact archive selected by the workflow. It requires the archive path, expected target, independently calculated SHA-256, and frozen source commit. It checks the archive name, target, embedded release identity, package inventory, and production source binding before extraction. Missing identity inputs fail the test; it does not substitute a checkout build or another archive.
 
-`tests/e2e/bootstrap-safety.test.ts` covers installer identity, archive bounds, rejected candidates, and safe preservation of owned and replacement paths. `tests/e2e/dev-package.test.ts` exercises `dev:package` with isolated home, Pi settings, package source, and project data. The native distribution job runs these tests against a target-native archive.
+The E2E runs the extracted CLI outside the checkout with isolated temporary paths. It verifies that setup:
 
-## Pi host modes and package discovery
+- requires an absolute `KEPLER_HOME` and does not create a fallback home;
+- seeds the complete packaged templates, guidelines, skills, and agent profiles;
+- writes default settings and ready home metadata;
+- preserves user-edited settings and a deleted skill on successful reinitialization;
+- refuses an unknown non-empty home without modifying its files; and
+- does not create a stable launcher or `kepler-dist` selector.
 
-The focused setup tests preserve two host modes:
-
-- **Standalone Pi:** use the actual native Pi executable and pi-subagents 0.76.1. The Kepler CLI remains standalone; the test does not require the npm Pi SDK or Node override.
-- **Public npm Pi SDK:** use the actual `@earendil-works/pi-coding-agent@1.2.0` package, its public `dist/index.js`, pi-subagents 0.76.1, and an explicitly selected Node interpreter. The test does not substitute a bundled or internal SDK module.
-
-The tests exercise the native Pi settings writer and package loader offline. They verify discovery of the eleven packaged skills and four Pi profiles, and preserve unrelated settings. This proves package/resource discovery, not model execution, agent behavior, credentials, permissions, active-session reload, or workflow readiness. The public npm mode's Node and SDK paths are explicit inputs; standalone mode remains separately supported.
+The test proves the executable archive's home-initialization behavior. It does not exercise Pi or Claude Code discovery, host configuration, session loading, model execution, agent behavior, credentials, permissions, or workflow readiness.
 
 ## Workspace and packed Core checks
 
-The pull-request workflow configures source policy, full typecheck, build, unit, integration, Docker-backed E2E, and packed-Core consumer checks. The packed-Core test installs the produced tarball in a disposable consumer and checks its declarations and public behavior. Docker E2E requires Docker and its pinned Git-enabled image. Tests must fail when required collaborators are absent; they must not silently substitute fake host implementations or skip required native proof.
+The pull-request workflow runs source policy, typecheck, build, unit tests, integration tests, Docker-backed E2E, and the packed-Core consumer check. The packed-Core test installs the produced tarball into a disposable consumer and checks its declarations and public behavior. Docker E2E requires Docker and its pinned Git-enabled image. These gates do not publish a release.
 
-## Native workflows and current status
+## Native workflows and release evidence
 
-The existing native workflow matrix covers `linux-x64`, `linux-arm64`, `darwin-x64`, and `darwin-arm64`. Each job is configured to build its exact native archive from a clean source commit and pass that archive and digest to the E2E suite. Release cross-compilation on Linux x64 is build evidence only; it is not foreign-target execution. A configured target is not a passed target.
+The pull-request workflow executes the exact-archive E2E on Linux x64. The release workflow has native jobs for Linux x64, Linux arm64, macOS x64, and macOS arm64. Each job builds an archive from the checked-out source, calculates its digest, runs the archive E2E against those exact bytes, and uploads the tested archive for publication. A configured target is not a passed target. A Linux cross-build is not evidence of execution on another target.
 
-Historical D4/D5 approval covers only the earlier development source (`sha256:f627ccd1f94b3a82e7843a9cab366755fd1e810047e894ca59bdaf0fdbec735e`) and its exact native Linux x64 archive (`sha256:c70b95b9391b529510996c93710468c408896fdb3386558fe3de1b60cde689b4`). Later source and archive checks are separate candidate-bound evidence; whole-change review findings required further corrections. No result transfers across source edits. For each corrected candidate, verify the exact frozen source and archive with the applicable source-policy, type, version, build, unit, serial integration, packed-Core, Docker, native archive, and Pi SDK gates, then obtain fresh independent reviews. The private handoff records the exact run evidence. Production publication requires all four configured target-native jobs to execute their exact archives; a configured job, cross-build, or one-host local run is not foreign-target evidence. No release or publication is claimed here.
+Historical D4/D5 approval and older candidate reports apply only to the exact source and archive identities recorded in those reports. They do not certify the current versioned-home source or a corrected release. Published `v3.0.0` still contains the earlier installation behavior. A corrected release requires fresh source-bound checks, archive digests, provenance, and all required target-native executions. No release or publication is claimed here.

@@ -2,13 +2,13 @@
 
 Use this reference to select a packaged procedure or assign work in an agent host. A skill is a set of instructions. It is not proof that an agent performed the work correctly.
 
-## Installation owner
+## Resource ownership
 
-Pi setup registers one complete local resource package. Pi discovers its skills. pi-subagents loads its role profiles. Do not register a second copy of the same skills through another manager.
+Kepler setup seeds packaged resources into the selected `KEPLER_HOME`. It does not register or install them for Pi, Claude Code, or another host. Users and hosts choose which versioned files to expose and load. Avoid duplicate skill copies when a host has more than one discovery mechanism.
 
-Other hosts own their skill and role installation. Keep each complete skill directory, including reference files and notices. Use the resource generation that matches the CLI. See [Installation](installation.md#install-skills-and-claude-code-role-definitions).
+Keep each complete skill directory, including reference files and notices. Use resources from the home that matches the selected CLI. See [Installation](installation.md#resources-and-host-ownership).
 
-The source `skills/` directory contains more procedures than the release package. The package exposes the following eleven skills. A source directory does not prove that a skill is installed.
+The source `skills/` directory contains more procedures than the release package. The release package exposes the following eleven skills. A file in a home does not prove that a host loaded it.
 
 ## Standard procedures
 
@@ -39,7 +39,7 @@ These procedures do not add stages or grant authority. The planning skill's [tas
 
 ## Pi profiles
 
-The package descriptor exposes four profiles through `pi.subagents.agents`.
+The release package includes four Pi-format profile files under `$KEPLER_HOME/agents/pi/v1/`. Kepler setup does not register them with Pi; the user or host selects their discovery path.
 
 | Profile | Responsibility | Declared boundary |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ A declared tool list is not an operating-system sandbox. A role name does not es
 
 ## Claude Code and other hosts
 
-Separate Claude Code definitions remain under `bundle/agents/claude-code/v1/`. Pi setup does not install or translate them. Follow the receiving host's procedure and preserve existing definitions.
+Claude Code definitions are seeded under `$KEPLER_HOME/agents/claude-code/v1/`. Kepler does not install or translate them into host configuration. Follow the receiving host's procedure and preserve existing definitions.
 
 Kepler does not certify that another host loaded its files or that an agent followed them. Test CLI behavior and host loading separately from agent behavior.
 

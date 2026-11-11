@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 const unitTests = [
   "tests/unit/**/*.test.ts",
   "packages/core/tests/unit/**/*.test.ts",
-  "tests/cli/bundle-root.test.ts",
+  "tests/cli/package-root.test.ts",
   "tests/cli/effect-cleanup.test.ts",
   "tests/workbench/artifact-reader.test.ts",
   "tests/workbench/artifact-contracts.test.ts",

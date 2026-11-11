@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { packageTargetArchive } from "../../scripts/package-target-archive.js";
 import { createDevelopmentSourceIdentity, readSourceIdentity } from "../../scripts/release-identity.js";
 import { encodeBuildIdentityMarker, type RuntimeBuildIdentity } from "../../packages/cli/src/cli/build-identity.js";
-import { sha256Digest } from "../../packages/cli/src/cli/installation-record.js";
+import { sha256Digest } from "../../packages/cli/src/cli/content-digest.js";
 import { targetArchiveName, validateTargetArchive } from "../../packages/cli/src/cli/release-archive.js";
 import { createSetupBundleFixture } from "../helpers/setup-bundle-fixture.js";
 

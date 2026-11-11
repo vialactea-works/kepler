@@ -10,10 +10,7 @@ import {
   type BuildArtifactIdentityRecord,
   type RuntimeBuildIdentity,
 } from "../packages/cli/src/cli/build-identity.js";
-import {
-  sha256Digest,
-  type ContentDigest,
-} from "../packages/cli/src/cli/installation-record.js";
+import { sha256Digest, type ContentDigest } from "../packages/cli/src/cli/content-digest.js";
 import {
   parseReleaseTarget,
   type ReleaseTarget,
@@ -29,7 +26,7 @@ import {
   type SourceIdentity,
 } from "./release-identity.js";
 import { parseReleaseVersion } from "./release-version.js";
-import { parseMetadataJsonObject } from "../packages/cli/src/cli/installation-record.js";
+import { parseMetadataJsonObject } from "../packages/cli/src/cli/metadata-json.js";
 
 const externalModules = [
   "class-transformer",

@@ -5,7 +5,7 @@ import {
   createResourceManifest,
   validateResourcePackage,
 } from "../packages/cli/src/cli/release-resources.js";
-import type { ContentDigest } from "../packages/cli/src/cli/installation-record.js";
+import type { ContentDigest } from "../packages/cli/src/cli/content-digest.js";
 
 const skillIds = [
   "kepler-design",
@@ -68,18 +68,6 @@ export function planResourceGeneration(
   }
   for (const [path, contents] of sourceSkillFiles) resourceFiles.set(path, contents);
 
-  const descriptor = {
-    name: "kepler-resources",
-    version: releaseVersion,
-    private: true,
-    type: "module",
-    pi: {
-      skills: ["./bundle/skills"],
-      subagents: { agents: ["./bundle/agents/pi/v1"] },
-    },
-  };
-  const descriptorContents = new TextEncoder().encode(`${JSON.stringify(descriptor, null, 2)}\n`);
-  resourceFiles.set("pi-package.json", descriptorContents);
   const manifest = createResourceManifest(
     releaseVersion,
     [...resourceFiles].map(([path, contents]) => ({ path, contents })),
@@ -107,6 +95,10 @@ export function planResourceGeneration(
 
   const deletions: ResourceFileDeletion[] = [];
   for (const [path, contents] of existingBundleFiles) {
+    if (path === "pi-package.json") {
+      deletions.push({ path: Path.join("bundle", path), expectedDigest: digest(contents) });
+      continue;
+    }
     if (!path.startsWith("skills/")) continue;
     const [, skillId] = path.split("/");
     if (!skillId || !allowedSkillIds.has(skillId)) {
