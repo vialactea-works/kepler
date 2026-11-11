@@ -13,7 +13,7 @@ description: "Turn an idea into a change's proposal, requirements, and design th
 
 ## What it produces
 
-In `.kepler/changes/<YYYY-MM-DD-title>/`, using the templates from the selected generation at `~/.kepler-dist/current/bundle/templates/`:
+In `.kepler/changes/<YYYY-MM-DD-title>/`, using templates from `$KEPLER_HOME/templates/` in the version-specific home selected for the active CLI release:
 
 - `proposal.md` — the PRD: why, what changes, and the capabilities affected.
 - `requirements/<capability>.md` — the SRS (delta form) for each capability.
@@ -119,9 +119,7 @@ Use the Read tool to open references relative to this `SKILL.md`. They live in t
 
    If create mode reports that `.worktrees/<title>` or branch `<title>` already exists, inspect
    its owner and partial state. Resume only with that owner's authorization; do not select a
-   suffixed name to bypass a visible claim. If the Kepler CLI is not installed (`kepler setup`
-   has not run), create or verify a named source branch only after the same ownership and target
-   checks; you are isolated by workspace shape if
+   suffixed name to bypass a visible claim. If no Kepler CLI is available, create or verify a named source branch only after the same ownership and target checks. External managers own CLI installation and version selection; `kepler setup` initializes only `KEPLER_HOME`. You are isolated by workspace shape if
    `git rev-parse --git-dir` differs from `--git-common-dir` (a linked worktree, and you are not
    in a submodule) or `git rev-parse --abbrev-ref HEAD` is not the default branch; otherwise
    `git worktree add .worktrees/<title> -b <title>` under the git-ignored `.worktrees/`

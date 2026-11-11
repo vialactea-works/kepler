@@ -1,21 +1,13 @@
 import * as Fs from "node:fs";
-import * as Os from "node:os";
 import * as Path from "node:path";
 import { loadKeplerSettings, type KeplerSettings } from "./config.js";
-import {
-  legacyMigrationMarkerPath,
-  migrationMarkerPath,
-  resolveLegacyDataPath,
-} from "./migration.js";
+import { resolveLegacyDataPath } from "./migration.js";
 
 export interface KeplerEnvironment {
-  HOME?: string;
-  XDG_CONFIG_HOME?: string;
+  KEPLER_HOME?: string;
 }
 
 export interface KeplerServiceOptions {
-  homeDirectory?: string;
-  xdgConfigHome?: string;
   environment?: KeplerEnvironment;
 }
 
@@ -23,34 +15,24 @@ export interface KeplerGlobalPaths {
   home: string;
   templates: string;
   guidelines: string;
+  skills: string;
+  agents: string;
   settings: string;
+  metadata: string;
 }
 
-const pathExists = (path: string): boolean => {
-  try {
-    Fs.lstatSync(path);
-    return true;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") return false;
-    throw error;
+export class KeplerHomeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KeplerHomeError";
   }
-};
+}
 
 export class KeplerService {
-  private readonly homeDirectory: string;
-  private readonly configHome: string;
+  private readonly selectedHome: string | undefined;
 
   constructor(options: KeplerServiceOptions = {}) {
-    const environment = options.environment ?? process.env;
-    this.homeDirectory = Path.resolve(
-      options.homeDirectory || environment.HOME || Os.homedir(),
-    );
-
-    const configuredXdgHome = options.xdgConfigHome ?? environment.XDG_CONFIG_HOME;
-    this.configHome = configuredXdgHome && Path.isAbsolute(configuredXdgHome)
-      ? Path.resolve(configuredXdgHome)
-      : Path.join(this.homeDirectory, ".config");
+    this.selectedHome = (options.environment ?? process.env).KEPLER_HOME;
   }
 
   globalPaths(): KeplerGlobalPaths {
@@ -59,56 +41,34 @@ export class KeplerService {
       home,
       templates: Path.join(home, "templates"),
       guidelines: Path.join(home, "guidelines"),
+      skills: Path.join(home, "skills"),
+      agents: Path.join(home, "agents"),
       settings: Path.join(home, "settings.yaml"),
+      metadata: Path.join(home, "home-metadata.json"),
     };
   }
 
   globalHome(): string {
-    const canonicalPath = Path.join(
-      this.configHome,
-      "vialactea-works",
-      "kepler",
-    );
-    const previousCanonicalPath = Path.join(
-      this.configHome,
-      ".vialactea-works",
-      "kepler",
-    );
-    const previousMigrationInProgress =
-      pathExists(migrationMarkerPath(previousCanonicalPath)) ||
-      pathExists(legacyMigrationMarkerPath(previousCanonicalPath));
-    if (!pathExists(previousCanonicalPath) && !previousMigrationInProgress) {
-      return resolveLegacyDataPath(
-        Path.join(this.homeDirectory, ".hamilton"),
-        canonicalPath,
-      );
+    const home = this.selectedHome;
+    if (!home || !home.trim() || home.includes("\0") || !Path.isAbsolute(home)) {
+      throw new KeplerHomeError("KEPLER_HOME must name an absolute version-specific Kepler home; no fallback home is selected.");
     }
-    const migratedPreviousPath = resolveLegacyDataPath(
-      Path.join(this.homeDirectory, ".hamilton"),
-      previousCanonicalPath,
-    );
-    return resolveLegacyDataPath(migratedPreviousPath, canonicalPath);
+    return Path.resolve(home);
   }
 
   projectDataPath(projectRoot: string): string {
     const root = Path.resolve(projectRoot);
-    return resolveLegacyDataPath(
-      Path.join(root, ".hamilton"),
-      Path.join(root, ".kepler"),
-    );
-  }
-
-  ensureGlobalHome(): KeplerGlobalPaths {
-    const paths = this.globalPaths();
-    for (const directory of [paths.home, paths.templates, paths.guidelines]) {
-      Fs.mkdirSync(directory, { recursive: true });
-    }
-    return paths;
+    return resolveLegacyDataPath(Path.join(root, ".hamilton"), Path.join(root, ".kepler"));
   }
 
   loadConfig(): KeplerSettings | undefined {
     const settingsPath = this.globalPaths().settings;
-    if (!pathExists(settingsPath)) return undefined;
+    try {
+      Fs.lstatSync(settingsPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
     return loadKeplerSettings(settingsPath);
   }
 }

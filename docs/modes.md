@@ -18,6 +18,6 @@ Kepler does not convert old change artifacts or history into v3 mission authorit
 
 ## Shared distribution
 
-The CLI and built-in resources use one complete target archive and one selected generation. There is no separate bundle sidecar in the current distribution. See [Installation](installation.md).
+Each release package contains a CLI and matching resources. Setup initializes the version-specific home selected through `KEPLER_HOME`; it does not select an active CLI or configure a host. See [Installation](installation.md).
 
 Initialization and Inception remain outside the implemented phase CLI. Standard completion does not grant publication or deployment permission. See [Standard workflow](sdd-framework.md) for system boundaries.

@@ -2,7 +2,7 @@
 
 [Version 3 reference](README.md) | [CLI infrastructure](runtime.md)
 
-**Status:** Approved by the requester under [SH122](authoring_progress.md#completed-shared-decisions), with the later mission preparation recovery amendment under SH125. The unified-release setup amendment is implemented in the current uncommitted source candidate, but 3.0.0 is not published. Verification and review outcomes apply only to the exact source and archive recorded in the candidate handoff.
+**Status:** Approved by the requester under [SH122](authoring_progress.md#completed-shared-decisions), with the later mission preparation recovery amendment under SH125. The requester later amended `kepler setup` to initialize an externally selected, version-specific `KEPLER_HOME` only. Published `v3.0.0` retains the earlier setup behavior; the current source candidate implements the amended contract, and a corrected release has not been published.
 
 ## Purpose and status
 
@@ -10,7 +10,7 @@ This document defines the Kepler v3 command line contract. The requester approve
 
 The current source implements the v3 root capabilities alongside the earlier `workbench` surface. The [CLI guide](../../cli.md) describes user-facing behavior; this document retains the detailed command contract. The [runtime contract](runtime.md) sets shared event and execution rules. The [Mission contract](mission.md) sets mission policy. Details left unspecified remain implementation choices.
 
-The `setup` command installs Kepler resources. It is not the Initialization phase. The earlier `workbench` commands remain separate and do not convert or adopt v2 records.
+The `setup` command initializes Kepler's selected version-specific resource home. It is not the Initialization phase and does not install or activate the CLI or configure host discovery. The earlier `workbench` commands remain separate and do not convert or adopt v2 records.
 
 ## Accepted policy
 
@@ -21,7 +21,7 @@ The following decisions are part of this approved contract.
 - Use the requester-approved root `kepler mission create` operation for new mission identity and selected workspace preparation. Use `kepler mission prepare` to continue the original startup by its exact mission ID. Neither operation starts a stage.
 - Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted.
 - Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Use the accepted [Construction lint interface](#kepler-workflow-construction-lint) for task-graph checks.
-- Use the accepted [setup interface](#kepler-setup) for Kepler's packaged resources while preserving existing settings; setup does not create missing Kepler defaults. Under the approved Pi amendment, setup owns Kepler's managed Pi package registration; Pi owns loading and execution. Other hosts retain their existing [agent resource installation](installation.md#agent-resource-ownership) owner.
+- Use the amended [setup interface](#kepler-setup) to initialize the absolute version-specific `KEPLER_HOME`. Preserve user edits and deletions on successful reinitialization. The user or host selects the CLI version and resource discovery; setup does not configure host settings.
 - Use the accepted [UUID interface](#kepler-uuid) to generate one UUIDv4 without creating an artifact or task.
 - Apply the accepted [Standard workflow binding](#workflow-binding) to each Construction unit and its mission.
 - Apply the accepted [Mission contract](mission.md) for mission identity, record-home selection, workspace facts, membership, and pre-mission boundaries. Do not infer mission membership or add command options from that policy.
@@ -183,7 +183,7 @@ Any later human result mode must be opt-in.
 
 | Command | Placement | Purpose |
 | --- | --- | --- |
-| `kepler setup` | Accepted root interface with approved unified-release amendment | Validate and activate a compatible immutable generation, write the installation receipt, and register the managed Pi package when needed; require existing Pi settings and do not create missing Kepler defaults. |
+| `kepler setup` | Accepted root interface, amended by the requester | Initialize the absolute, version-specific home selected through `KEPLER_HOME`; preserve its existing files and do not configure host discovery. |
 | `kepler uuid` | Accepted root interface | Return one UUIDv4 in `data.uuid`. |
 | `kepler mission create` | Accepted root interface | Record a new mission and prepare its explicitly selected workspaces without starting a stage. |
 | `kepler mission prepare` | Accepted root interface under SH125 | Continue the same startup by exact mission ID, or return its recorded preparation result. |
@@ -214,25 +214,23 @@ The entries name the requested operations. Apply the accepted [scope selectors](
 
 ### `kepler setup`
 
-**Accepted under [SH114](authoring_progress.md#completed-shared-decisions), with the approved unified-release amendment implemented in the current source candidate.** Use this interface:
+**Accepted under [SH114](authoring_progress.md#completed-shared-decisions), as later amended by the requester.** Use this interface:
 
 ```text
-kepler setup [--accept-native-transfer <digest>]
+kepler setup
 ```
 
-Without an option, use normal first-install, upgrade, coherent no-op, or safe-repair behavior. The only option is the explicit digest-bound native-resource transfer approval. Remove `--force` from the v3 interface. This global command does not use `--project`.
+This global command accepts no setup options and does not use `--project`. It initializes the home selected by `KEPLER_HOME`.
 
-For a production executable, resolve the immutable resource package from the selected generation once per process. Verify that its embedded release, source, target, resource digest, complete manifest, and archive inventory agree before activation. Do not fall back to an arbitrary cwd or source checkout. A development package must be explicitly selected, complete, identity-matched, isolated, and fail closed when invalid. Setup does not download a release or select a latest resource package.
+`KEPLER_HOME` must be an absolute path. There is no default or fallback. The caller selects a CLI version and supplies a separate matching home for that release. Setup does not download or select a release, install or activate the CLI, change `PATH`, create a selector or stable launcher, or register resources with Pi or another host.
 
-The bootstrap installer selects and verifies one complete versioned target archive, stages it, then invokes that candidate's setup. It never promotes the active selector or stable command path. Setup alone activates the candidate. See the [installation generation and activation contract](installation.md#agent-resource-ownership).
+Before writing, setup validates the executing CLI identity, target, and complete packaged resource inventory. A source-checkout runner without a valid package identity cannot initialize a release home. Setup seeds a new home with packaged templates, guidelines, skills, agent profiles, `settings.yaml`, and `home-metadata.json`. It does not migrate project records or modify host settings.
 
-Keep the existing XDG Kepler home, project data, unknown files, user settings, and custom resources. Built-in templates and guidelines remain in the selected immutable generation; setup does not copy them into the XDG home or create missing Kepler defaults/settings. The global home stores the format-two installation receipt. First Pi registration, explicit transfer, or repair updates only the exact managed package entry in an existing initialized settings file under native coordination; ordinary upgrades and coherent no-ops leave it unchanged. Missing or unsupported Pi prerequisites, visible same-name shadows, unknown ownership, or stale state block activation. Setup does not install Pi, pi-subagents, models, credentials, or permissions.
+Setup preserves user-owned home files. When completing or resuming initialization, it replaces only the exact compatible pending metadata record after verifying that record has not changed. A ready home for the same release returns `unchanged`; user edits, deletions, and unknown files remain intact. The resource digest records the seed identity, not ongoing integrity. A compatible pending initialization can resume only for the same release and digest. A malformed home, incompatible metadata, or unknown non-empty home fails closed. Use a different version-specific home for another release; setup does not copy settings between versions.
 
-If a safe native ownership transfer is required, ordinary setup returns the exact read-only plan and its canonical digest in the existing failure `data.details` result. It does not transfer the resource or activate the dependent candidate. A staged candidate may remain and its path must be reported. `--accept-native-transfer <digest>` authorizes only the unchanged plan. Recomputed plan drift, a stale digest, unknown/custom/modified/mixed resources, or a conflict that cannot be preserved blocks the operation. Bootstrap never supplies this consent. The flag does not create a separate transfer command family or bypass preservation rules.
+On success, `data` identifies the absolute `home`, `release`, and `status` (`initialized` or `unchanged`). A missing or invalid `KEPLER_HOME` returns `kepler_home_required`; other setup errors return `home_initialization_failed`. Apply the shared [failure and recovery rules](#failure-and-recovery-rules). Setup success reports home initialization only. Hosts and skill managers own resource discovery, loading, permissions, and execution.
 
-On success, identify the selected generation and actual resource/registration checks inside `data`; do not claim agent behavior or unchecked host readiness. On failure, report known partial effects and recovery facts in `data.details` under the shared [failure and recovery rules](#failure-and-recovery-rules). Keep the prior usable selector before activation. After an effect, preserve the journal and report actual state; failure does not prove rollback. Remove only operation-owned temporary material.
-
-Setup does not create units, prepare project markers, run Initialization, dispatch workers, or change workflow state. Pi still owns loading and execution of its discovered agents and skills. Apply the [resource ownership amendment](installation.md#agent-resource-ownership). The current source candidate implements this contract but is not a published release. Candidate acceptance requires source-bound verification and independent review of the exact frozen source and archive; earlier evidence does not transfer across edits.
+This contract does not create units, prepare project markers, run Initialization, dispatch workers, or change workflow state. See the [installation and home contract](installation.md). The current source candidate implements this amendment. Published `v3.0.0` retains the earlier behavior; a corrected release has not been published.
 
 ### `kepler uuid`
 
@@ -746,7 +744,7 @@ Forced termination can produce other exit codes or prevent a JSON response. A mi
 
 Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [JSON-only result format](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence), [audit queries](#kepler-audit-list), and [shared lint interface](#kepler-lint) also stay in force. The accepted [Construction lint](#kepler-workflow-construction-lint), [UUID](#kepler-uuid), [setup](#kepler-setup), and [workflow binding](#workflow-binding) interfaces also stay in force.
 
-Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended targets](installation.md#intended-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
+Apply [resource ownership](installation.md#resource-ownership) and [intended targets](installation.md#host-capabilities-and-intended-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
 SH57-SH67 accept their named interfaces and policy boundaries. Request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values not specified by accepted contracts remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 accept policy guarantees without adding public CLI interfaces. Their exact mechanisms remain implementation work.
 

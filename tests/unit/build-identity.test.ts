@@ -9,7 +9,7 @@ import {
   validateBuildIdentityForRuntime,
   type RuntimeBuildIdentity,
 } from "../../packages/cli/src/cli/build-identity.js";
-import { sha256Digest } from "../../packages/cli/src/cli/installation-record.js";
+import { sha256Digest } from "../../packages/cli/src/cli/content-digest.js";
 
 const release = "3.0.0";
 const digest = sha256Digest("build identity fixture");

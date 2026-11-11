@@ -130,7 +130,6 @@ export class TemporaryE2EResourceConnector implements E2EResourceConnector {
         GIT_CONFIG_SYSTEM: "/dev/null",
         GIT_TERMINAL_PROMPT: "0",
         HOME: homeDirectory,
-        KEPLER_BUNDLE_DIR: Path.join(projectRoot, "bundle"),
         LC_ALL: "C.UTF-8",
         NO_COLOR: "1",
         PATH: executablePath,

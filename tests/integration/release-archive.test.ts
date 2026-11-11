@@ -45,7 +45,13 @@ describe("target archive filesystem integration", () => {
     expect(validateTargetPackageRoot(destination)).toEqual(validated);
     expect(Fs.statSync(Path.join(destination, "bin", "kepler")).mode & 0o777).toBe(0o755);
     expect(Fs.statSync(Path.join(destination, "release-manifest.json")).mode & 0o777).toBe(0o644);
-    expect(Fs.readFileSync(Path.join(destination, "package.json"), "utf8")).toContain('"name": "kepler-resources"');
+    expect(JSON.parse(Fs.readFileSync(Path.join(destination, "package.json"), "utf8"))).toEqual({
+      name: "kepler",
+      version: "3.0.0",
+      private: true,
+      type: "module",
+      bin: { kepler: "./bin/kepler" },
+    });
   });
 
   it("enforces canonical file and directory modes under a restrictive umask before publication", () => {

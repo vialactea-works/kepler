@@ -3,7 +3,7 @@ import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { sha256Digest } from "../../packages/cli/src/cli/installation-record.js";
+import { sha256Digest } from "../../packages/cli/src/cli/content-digest.js";
 import {
   expectedTargetArchiveNames,
   RELEASE_TARGETS,

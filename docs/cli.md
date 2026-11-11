@@ -107,7 +107,7 @@ Some operations append journals or create local ownership and recovery files. Th
 
 See [Configuration](configuration.md) for exact environment variables and path rules. The CLI has no general configuration-file precedence or project settings override that applies to every command.
 
-Queries are read-only within their documented scope. Mutations can write history, artifacts, local coordination files, Git refs, installation generations, or Pi settings. Each reference lists the relevant effects. A failed response can follow a partial effect. Use [Recovery](recovery.md) before retrying uncertain work.
+Queries are read-only within their documented scope. Mutations can write history, artifacts, local coordination files, Git refs, or the `KEPLER_HOME` resource files during setup. Host resource installation and settings remain external. Each reference lists the relevant effects. A failed response can follow a partial effect. Use [Recovery](recovery.md) before retrying uncertain work.
 
 ## Maintenance sources
 

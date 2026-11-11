@@ -1,7 +1,7 @@
 import * as Fs from "node:fs";
 import * as Path from "node:path";
 import { randomUUID } from "node:crypto";
-import { sha256Digest } from "../packages/cli/src/cli/installation-record.js";
+import { sha256Digest } from "../packages/cli/src/cli/content-digest.js";
 import { planResourceGeneration } from "./resource-generation.js";
 
 const repositoryRoot = Path.resolve(import.meta.dirname, "..");

@@ -37,7 +37,7 @@ bun run check:version
 | `bun run test:unit` | Public behavior in isolation. Vitest's `unit` project runs on Bun. |
 | `bun run test:integration` | Real component boundaries. The integration project runs without file parallelism. |
 | `bun run test:package` | Pack Core into a disposable consumer and check its declarations. Packaging can rebuild Core output. |
-| `bun run test:e2e` | Build packages, then run the general public CLI E2E project. It excludes exact-archive and development-package files. |
+| `bun run test:e2e` | Build packages, then run the general public CLI E2E project. It excludes the exact-native-archive E2E file. |
 | `bun run test` | Source policy, typecheck, unit, integration, and general E2E gates. It is not every native distribution gate. |
 
 Use a focused Vitest command when it proves the changed behavior:
@@ -50,20 +50,11 @@ Do not use `bun test`. Keep integration execution serial because packaging and o
 
 A passing unit or CLI test does not certify a host or agent. Smoke, load, stress, soak, performance, and chaos tests need separate approval and a defined question. Do not add them as routine documentation validation.
 
-## Native distribution tests
+## Native archive E2E
 
-Exact-archive tests and development-package tests are separate from the general E2E command. They need a native target archive and existing supported host collaborators. Read [`tests/helpers/native-pi-host.ts`](../tests/helpers/native-pi-host.ts) and the relevant test's admission conditions before running them.
+`tests/e2e/release-archive.test.ts` is separate from the general E2E command. It requires the exact native target archive, its independently calculated SHA-256, the expected target, and the frozen source commit through `KEPLER_VERIFIED_ARCHIVE_PATH`, `KEPLER_VERIFIED_ARCHIVE_SHA256`, `KEPLER_EXPECTED_TARGET`, and `KEPLER_EXPECTED_SOURCE_COMMIT`. The test runs the extracted archive outside the checkout. It initializes a version-specific home, checks all packaged resources, and verifies that repeated setup preserves a settings edit and deleted resource. It also checks that missing `KEPLER_HOME` and unknown non-empty homes fail without creating fallback state.
 
-| Variable | Harness input |
-| --- | --- |
-| `KEPLER_PI_BINARY` | Actual Pi CLI. |
-| `KEPLER_PI_SUBAGENTS_ROOT` | Existing pi-subagents package root. |
-| `KEPLER_PI_NODE_BINARY` | Explicit Node interpreter for npm Pi mode. |
-| `KEPLER_PI_SDK_ENTRY_PATH` | Public Pi SDK entry in npm mode. |
-
-Standalone Pi mode uses the first two variables. Npm mode also needs the last two. The supported versions are Pi 1.2.0 and pi-subagents 0.76.1. Reuse approved existing installations or obtain installation authority. Keep mutable home, cache, agent, and project roots isolated. Do not start models or sessions as an implicit test effect.
-
-Only native execution establishes behavior on a target. A build or matrix declaration does not establish foreign-target execution.
+The pull-request workflow executes this test on Linux x64. The release workflow runs the exact archive E2E on Linux x64, Linux arm64, macOS x64, and macOS arm64 before publishing. A configured matrix is not a passing result. A build or cross-compilation does not establish foreign-target execution.
 
 ## Resources and releases
 
@@ -85,11 +76,11 @@ bun run prepare:bundle
 bun run release:check
 ```
 
-The preparation command writes packaged resources and their manifest. It can also delete stale bundled skill files. Review the complete inventory and digest. Do not edit immutable installed generations.
+The preparation command writes packaged resources and their manifest. It can also delete stale bundled skill files. Review the complete inventory and digest. Make packaged-resource changes in `bundle/`, not in a user's initialized home.
 
 A complete target archive contains the compiled CLI and resource package. The archive builder verifies embedded identity, source, frozen dependencies, resources, and written bytes. Production builds require eligible clean source. Development identity does not become production identity because files are copied or a filename changes.
 
-`bun run dev:package` builds and validates a development archive in an owned temporary root. It checks isolated setup and repeatable no-op behavior. It requires existing Pi collaborators and removes its temporary root. It does not leave a persistent installation.
+The repository does not provide a persistent development installer or host-registration harness. Development packages and temporary homes must remain isolated from user homes and host settings.
 
 Release CI tests the exact archives that it uploads. Publication and Core package reconciliation check immutable identity and bytes. Publication, deployment, push, and tag operations require separate authority.
 

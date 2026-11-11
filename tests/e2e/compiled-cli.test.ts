@@ -108,7 +108,7 @@ describe("compiled CLI E2E", () => {
     }
   }, 120_000);
 
-  it("rejects setup without a package build identity before filesystem effects", async () => {
+  it("requires an explicit versioned home and leaves HOME and XDG paths untouched", async () => {
     const e2e = await createHarness();
     const invalidHome = Path.join(e2e.resources.rootDirectory, "home-file");
     const invalidHomeContents = "not a directory\n";
@@ -117,18 +117,16 @@ describe("compiled CLI E2E", () => {
     const result = e2e.cli.run(["setup"], {
       env: {
         HOME: invalidHome,
-        XDG_CONFIG_HOME: Path.join(invalidHome, ".config"),
+        XDG_CONFIG_HOME: Path.join(e2e.resources.rootDirectory, "config"),
       },
     });
 
     expect(result.exitCode).toBe(1);
-    expect(envelope(result.stdout)).toEqual({
+    expect(envelope(result.stdout)).toMatchObject({
       status: "failed",
       data: {
-        code: "build_identity_missing",
-        message: "The executing Kepler binary does not declare a package build identity.",
-        details: {},
-        recovery: "Use an identifiable Kepler package candidate; setup does not fall back to the source checkout or current directory.",
+        code: "kepler_home_required",
+        message: "KEPLER_HOME must name an absolute version-specific Kepler home; no fallback home is selected.",
       },
     });
     expect(result.stderr).toBe("");

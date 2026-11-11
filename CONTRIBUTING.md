@@ -42,7 +42,7 @@ Keep documentation and specifications separate. Treat specification changes as a
 
 For a resource change, run `bun run prepare:bundle`. Review the full inventory and digest. Then run `bun run release:check`. Do this only when the task permits resource and manifest changes.
 
-The current distribution uses complete target archives, not a split bundle sidecar. Pi setup registers the package containing the portable skills and Pi roles. Other hosts own their installation procedures. See [Installation](docs/installation.md).
+The current distribution uses complete target archives, not a split bundle sidecar. `kepler setup` initializes only the caller-selected versioned home; external software managers and hosts own CLI installation, version selection, `PATH`, resource discovery, and registration. See [Installation](docs/installation.md).
 
 ## Prepare a release
 

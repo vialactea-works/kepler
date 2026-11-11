@@ -458,7 +458,7 @@ CLI results use the accepted [result envelope](cli.md#machine-readable-output). 
 
 Use [kepler audit record evidence](cli.md#kepler-audit-record-evidence) for the accepted evidence interface. Use the accepted [audit queries](cli.md#kepler-audit-list) for read-only history inspection. Use the accepted [shared lint interface](cli.md#kepler-lint) for shared metadata checks. Use the accepted approval and interaction interfaces under [SH55](cli.md#kepler-audit-record-approval) and [SH56](cli.md#kepler-audit-record-interaction).
 
-Use the accepted [Construction lint interface](cli.md#kepler-workflow-construction-lint) for task graphs and [UUID interface](cli.md#kepler-uuid) for identifier generation. Root metadata lint of explicit files does not require mission adoption. Apply the accepted [setup interface](cli.md#kepler-setup) and [native resource ownership](installation.md#agent-resource-ownership) without adding agent certification.
+Use the accepted [Construction lint interface](cli.md#kepler-workflow-construction-lint) for task graphs and [UUID interface](cli.md#kepler-uuid) for identifier generation. Root metadata lint of explicit files does not require mission adoption. Apply the accepted [setup interface](cli.md#kepler-setup) and [resource ownership](installation.md#resource-ownership) without adding agent certification.
 
 ### Current author
 

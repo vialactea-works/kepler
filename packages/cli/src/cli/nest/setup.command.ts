@@ -1,5 +1,5 @@
 import { Inject } from "@nestjs/common";
-import { Command, CommandRunner, Option } from "nest-commander";
+import { Command, CommandRunner } from "nest-commander";
 import { SETUP_OPERATION } from "../setup-runtime.js";
 import { SetupFailure } from "../setup.service.js";
 import type { Setup } from "../setup.service.js";
@@ -7,7 +7,7 @@ import { ResultReporter } from "./result-reporter.js";
 
 @Command({
   name: "setup",
-  description: "Install a compatible Kepler generation without changing user resources",
+  description: "Initialize the selected Kepler home without overwriting user resources",
 })
 export class SetupCommand extends CommandRunner {
   constructor(
@@ -17,23 +17,9 @@ export class SetupCommand extends CommandRunner {
     super();
   }
 
-  @Option({
-    flags: "--accept-native-transfer <digest>",
-    description: "Accept the exact current native package transfer digest",
-  })
-  parseNativeTransferDigest(digest: string): string {
-    return digest;
-  }
-
-  async run(
-    _passedParams: string[],
-    options?: Record<string, unknown>,
-  ): Promise<void> {
+  async run(): Promise<void> {
     try {
-      const digest = options?.acceptNativeTransfer;
-      const result = this.setup.setup(
-        typeof digest === "string" ? { acceptNativeTransferDigest: digest } : {},
-      );
+      const result = this.setup.setup();
       this.reporter.report({ status: "success", data: { ...result } });
     } catch (error) {
       this.reporter.report({

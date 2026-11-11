@@ -1,8 +1,5 @@
-import {
-  parseMetadataJsonObject,
-  sha256Digest,
-  type ContentDigest,
-} from "./installation-record.js";
+import { sha256Digest, type ContentDigest } from "./content-digest.js";
+import { parseMetadataJsonObject } from "./metadata-json.js";
 
 export interface RuntimeBuildIdentity {
   readonly format_version: 1;

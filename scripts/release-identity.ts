@@ -1,10 +1,7 @@
 import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs";
 import * as Path from "node:path";
-import {
-  sha256Digest,
-  type ContentDigest,
-} from "../packages/cli/src/cli/installation-record.js";
+import { sha256Digest, type ContentDigest } from "../packages/cli/src/cli/content-digest.js";
 import { parseReleaseVersion } from "./release-version.js";
 
 export type SourceKind = "production" | "development";
@@ -188,10 +185,7 @@ function runGit(repositoryRoot: string, arguments_: readonly string[]): string {
   }
 }
 
-const generatedFiles = new Set([
-  "bundle/manifest.json",
-  "bundle/pi-package.json",
-]);
+const generatedFiles = new Set(["bundle/manifest.json"]);
 const generatedDirectories = [
   "node_modules/",
   "packages/cli/node_modules/",

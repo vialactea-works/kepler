@@ -23,7 +23,7 @@ import type {
   StageAttemptId,
   TaskId,
 } from "../../../packages/cli/src/construction/events.js";
-import type { SetupResult } from "../../../packages/cli/src/cli/setup.service.js";
+import type { HomeInitializationResult } from "../../../packages/cli/src/cli/home-initializer.js";
 
 type Assignable<Source, Target> = [Source] extends [Target] ? true : false;
 type AssertDistinct<Value extends false> = Value;
@@ -57,41 +57,24 @@ const identityContract: [
   RevisionAndEvidenceIdsDiffer,
 ] = [false, false, false, false, false, false, false, false, false, false, false, false];
 
-const environment: KeplerEnvironment = { HOME: "/temporary/home" };
-const serviceOptions: KeplerServiceOptions = {
-  homeDirectory: "/temporary/home",
-  environment,
-};
+const environment: KeplerEnvironment = { KEPLER_HOME: "/temporary/home/versions/3.0.0" };
+const serviceOptions: KeplerServiceOptions = { environment };
 const globalPaths: KeplerGlobalPaths = {
-  home: "/temporary/home/.config/vialactea-works/kepler",
-  templates: "/temporary/home/.config/vialactea-works/kepler/templates",
-  guidelines: "/temporary/home/.config/vialactea-works/kepler/guidelines",
-  settings: "/temporary/home/.config/vialactea-works/kepler/settings.yaml",
+  home: "/temporary/home/versions/3.0.0",
+  templates: "/temporary/home/versions/3.0.0/templates",
+  guidelines: "/temporary/home/versions/3.0.0/guidelines",
+  skills: "/temporary/home/versions/3.0.0/skills",
+  agents: "/temporary/home/versions/3.0.0/agents",
+  settings: "/temporary/home/versions/3.0.0/settings.yaml",
+  metadata: "/temporary/home/versions/3.0.0/home-metadata.json",
 };
 const settings: KeplerSettings = parseKeplerSettings("enabled: true");
 const artifactReader: ArtifactReader = markdownArtifactReader;
 const artifactWriter: ArtifactWriter = markdownArtifactWriter;
-const setupResult: SetupResult = {
-  generation_id: "550e8400-e29b-41d4-a716-446655440000",
-  kepler_release: "3.0.0",
-  installation_mode: "first-install",
-  resource_root: "/temporary/home/.kepler-dist/generations/550e8400-e29b-41d4-a716-446655440000",
-  selector: "/temporary/home/.kepler-dist/current",
-  package_source: "/temporary/home/.kepler-dist/current",
-  compatibility: { check: "compatible" },
-  templates: [],
-  guidelines: [],
-  created_files: [],
-  updated_files: [],
-  pi_binding: {
-    host: { id: "pi", release: "1.2.0", check: "matches" },
-    loader: { id: "pi-subagents", release: "0.76.1", check: "matches" },
-    registration: {
-      entry_digest: `sha256:${"a".repeat(64)}`,
-      settings_digest: `sha256:${"b".repeat(64)}`,
-      check: "matches",
-    },
-  },
+const homeResult: HomeInitializationResult = {
+  home: "/temporary/home/versions/3.0.0",
+  release: "3.0.0",
+  status: "initialized",
 };
 
 describe("public Core and setup contracts", () => {
@@ -109,8 +92,8 @@ describe("public Core and setup contracts", () => {
   });
 
   it("runs a use case through its narrow in-memory adapter contract", () => {
-    expect(setupResult.generation_id).toBe("550e8400-e29b-41d4-a716-446655440000");
-    expect(setupResult.compatibility.check).toBe("compatible");
-    expect(setupResult.pi_binding.host.check).toBe("matches");
+    expect(homeResult.home).toBe("/temporary/home/versions/3.0.0");
+    expect(homeResult.release).toBe("3.0.0");
+    expect(homeResult.status).toBe("initialized");
   });
 });

@@ -86,13 +86,13 @@ describe("packed Core package", () => {
     );
     await run("bun", ["add", `file:${archive}`], consumer, env);
 
-    const expectedHome = Path.join(config, "vialactea-works", "kepler");
+    const expectedHome = Path.join(config, "vialactea-works", "kepler", "versions", "3.0.0");
     await Fs.writeFile(
       Path.join(consumer, "index.ts"),
       [
         'import { EVENT_ENVELOPE_VERSION, KeplerConfigError, KeplerService, parseKeplerSettings, parseMarkdownArtifact, validateArtifact, validateEventEnvelope, type EventEnvelope, type KeplerServiceOptions, type KeplerSettings } from "@vialactea-works/kepler-core";',
         'import type { ArtifactOwnership } from "@vialactea-works/kepler-core";',
-        `const options: KeplerServiceOptions = { homeDirectory: ${JSON.stringify(home)}, xdgConfigHome: ${JSON.stringify(config)} };`,
+        `const options: KeplerServiceOptions = { environment: { KEPLER_HOME: ${JSON.stringify(expectedHome)} } };`,
         'const settings: KeplerSettings = parseKeplerSettings("enabled: true");',
         "const paths = new KeplerService(options).globalPaths();",
         'const ownership: ArtifactOwnership = { scope: "unit", unitId: "2026-10-20-packed-package" };',

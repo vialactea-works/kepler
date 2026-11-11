@@ -13,11 +13,9 @@ The CLI records state, evidence, approvals, and repository checkpoints. A checkp
 
 ## Install
 
-The source implements the 3.0 interface. Confirm that a compatible release has been published before you use its installer. Follow [Installation](docs/installation.md) to select a matching installer or run from an authorized repository checkout.
+Use your software manager to install and select a Kepler CLI version. Set `KEPLER_HOME` to an absolute, version-specific path before running `kepler setup`. Kepler setup initializes that home; it does not install the CLI, change `PATH`, or register resources with a coding-agent host. See [Installation](docs/installation.md) and [Configuration](docs/configuration.md).
 
-The installer downloads one complete target archive and verifies it. It then calls the candidate's `kepler setup`. Setup activates a generation and manages the Pi package registration. See [Installation](docs/installation.md) before you run commands that change your home directory.
-
-Pi setup requires Pi 1.2.0 and pi-subagents 0.76.1. The Pi agent directory and settings file must already exist. Setup does not install these prerequisites, models, or credentials. The package contains eleven portable skills, four Pi profiles, and separate Claude Code definitions. See [Skills and roles](docs/skills.md).
+The published `v3.0.0` release predates the versioned-home contract described here. The current source candidate is not a replacement release.
 
 ## Inspect the interface
 

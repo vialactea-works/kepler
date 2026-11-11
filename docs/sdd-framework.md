@@ -51,7 +51,7 @@ The workflow does not require an existing application or test suite. A Git proje
 
 The application core uses typed ports for external effects. Nest commands adapt the CLI to those operations. CLI interfaces are not a general workflow engine or a distributed scheduler.
 
-Pi discovers the registered resource package. pi-subagents loads the four role profiles. These profiles declare responsibilities and tools. They are not an operating-system sandbox or proof of correct agent behavior. See [Skills and roles](skills.md).
+Kepler setup places skill and role files in the selected version-specific home. Users and hosts choose their own discovery and loading configuration. Packaged profiles express responsibilities and tool declarations; they do not configure a host, create an operating-system sandbox, or prove agent behavior. See [Skills and roles](skills.md).
 
 ## Task execution and Integration
 

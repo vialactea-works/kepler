@@ -109,42 +109,8 @@ jobs:
         with:
           bun-version-file: package.json
 
-      - name: Setup Node for the pinned Pi E2E host
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22.19.0
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Install actual pinned Pi E2E collaborators
-        run: |
-          host="$RUNNER_TEMP/kepler-pi-host"
-          npm install --prefix "$host" --cache "$RUNNER_TEMP/kepler-pi-cache" \
-            --userconfig "$RUNNER_TEMP/kepler-empty.npmrc" --ignore-scripts \
-            --no-audit --no-fund --package-lock=false \
-            '@earendil-works/pi-coding-agent@1.2.0' 'pi-subagents@0.76.1'
-          pi_bin="$host/node_modules/.bin/pi"
-          loader_root="$host/node_modules/pi-subagents"
-          node_binary="$(command -v node)"
-          node_version="$("$node_binary" --version)"
-          if [ "$node_version" != "v22.19.0" ]; then
-            printf 'Expected Node v22.19.0; found %s.\n' "$node_version" >&2
-            exit 1
-          fi
-          sdk_entry="$host/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
-          if [ ! -f "$sdk_entry" ]; then
-            printf 'Pinned Pi SDK entry was not installed:\n%s\n' \
-              "$sdk_entry" >&2
-            exit 1
-          fi
-          env_file="$GITHUB_ENV"
-          {
-            printf '%s=%s\n' KEPLER_PI_BINARY "$pi_bin"
-            printf '%s=%s\n' KEPLER_PI_SUBAGENTS_ROOT "$loader_root"
-            printf '%s=%s\n' KEPLER_PI_NODE_BINARY "$node_binary"
-            printf '%s=%s\n' KEPLER_PI_SDK_ENTRY_PATH "$sdk_entry"
-          } >> "$env_file"
 
       - name: Compile version checker
         run: |
@@ -181,9 +147,6 @@ jobs:
 
       - name: Test packed core package
         run: bun run test:package
-
-      - name: Run ShellCheck
-        run: shellcheck install.sh
 
   native-distribution:
     name: Native target archive E2E (${{ matrix.target }})
@@ -223,42 +186,8 @@ jobs:
         with:
           bun-version-file: package.json
 
-      - name: Setup Node for the pinned Pi E2E host
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22.19.0
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Install actual pinned Pi E2E collaborators
-        run: |
-          host="$RUNNER_TEMP/kepler-pi-host"
-          npm install --prefix "$host" --cache "$RUNNER_TEMP/kepler-pi-cache" \
-            --userconfig "$RUNNER_TEMP/kepler-empty.npmrc" --ignore-scripts \
-            --no-audit --no-fund --package-lock=false \
-            '@earendil-works/pi-coding-agent@1.2.0' 'pi-subagents@0.76.1'
-          pi_bin="$host/node_modules/.bin/pi"
-          loader_root="$host/node_modules/pi-subagents"
-          node_binary="$(command -v node)"
-          node_version="$("$node_binary" --version)"
-          if [ "$node_version" != "v22.19.0" ]; then
-            printf 'Expected Node v22.19.0; found %s.\n' "$node_version" >&2
-            exit 1
-          fi
-          sdk_entry="$host/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
-          if [ ! -f "$sdk_entry" ]; then
-            printf 'Pinned Pi SDK entry was not installed:\n%s\n' \
-              "$sdk_entry" >&2
-            exit 1
-          fi
-          env_file="$GITHUB_ENV"
-          {
-            printf '%s=%s\n' KEPLER_PI_BINARY "$pi_bin"
-            printf '%s=%s\n' KEPLER_PI_SUBAGENTS_ROOT "$loader_root"
-            printf '%s=%s\n' KEPLER_PI_NODE_BINARY "$node_binary"
-            printf '%s=%s\n' KEPLER_PI_SDK_ENTRY_PATH "$sdk_entry"
-          } >> "$env_file"
 
       - name: Build packages
         run: bun run build
@@ -295,8 +224,7 @@ jobs:
       - name: Run native target archive E2E
         run: >-
           bun --bun vitest run --project e2e --no-file-parallelism
-          tests/e2e/installation.test.ts tests/e2e/release-archive.test.ts
-          tests/e2e/bootstrap-safety.test.ts tests/e2e/dev-package.test.ts
+          tests/e2e/release-archive.test.ts
 
       - name: Upload tested native target archive
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
