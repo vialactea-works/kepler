@@ -16,7 +16,7 @@ import { CLI_RELEASE } from "../../packages/cli/src/cli/version.js";
 const temporaryRoots: string[] = [];
 
 function createRoot(): string {
-  const root = Fs.mkdtempSync(Path.join(Os.tmpdir(), "kepler-versioned-home-e2e-"));
+  const root = Fs.mkdtempSync(Path.join(Fs.realpathSync(Os.tmpdir()), "kepler-versioned-home-e2e-"));
   temporaryRoots.push(root);
   return root;
 }
