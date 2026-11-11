@@ -22,7 +22,7 @@ import {
     {
       provide: RESULT_EXIT_SINK,
       useValue: {
-        setExitCode: (value: 0 | 1 | 2) => {
+        setExitCode: (value: 0 | 1) => {
           process.exitCode = value;
         },
       },

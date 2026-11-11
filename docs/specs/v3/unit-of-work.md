@@ -2,7 +2,7 @@
 
 [Workflow phase index](README.md)
 
-**Status:** Draft for discussion.
+**Status:** Approved by the requester under [SH123](authoring_progress.md#completed-shared-decisions). This approves the specification, not a particular Unit of Work or its implementation.
 
 ## Definition
 
@@ -98,7 +98,7 @@ Artifacts can use canonical labels or labels selected by the requester. They mus
 
 Apply the accepted cohesion, coverage, dependency, verification, and decomposition rules to Construction. Do not infer additional criteria or a questionnaire contract.
 
-The [authoring progress record](authoring_progress.md#deferred-decisions) lists these decisions. Artifact metadata details that stay open are shared decisions. The [CLI infrastructure contract](runtime.md) sets the separation between artifact metadata and execution state.
+The [authoring progress record](authoring_progress.md#deferred-decisions) lists these deferred decisions. Approval of this specification does not resolve SH75 or SH76. The [metadata contract](metadata.md) sets artifact metadata rules. The [CLI infrastructure contract](runtime.md) separates artifact metadata from execution state.
 
 ## Inspiration
 

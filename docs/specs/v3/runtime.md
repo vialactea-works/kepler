@@ -6,9 +6,9 @@
 
 Record decisions about the Kepler CLI, structured persistence, and audit system.
 
-The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. The [Mission contract](mission.md) sets accepted record and local-runtime paths. Phase-owned projections, commands, and write protocols stay under design. This document does not add CLI behavior or migrate existing data.
+The persistence responsibilities, event envelope, event-derived execution state, attempt boundaries, evidence bindings, and parallel checkpoint rules are agreed. The [Mission contract](mission.md) sets accepted record and local-runtime paths. Mechanisms not specified by accepted contracts remain implementation work. This document does not add CLI behavior or migrate existing data.
 
-The [Construction runtime draft](phases/construction/runtime.md) proposes Construction-specific state names, lifecycle guards, and event payloads. It is not a stage and does not replace this shared contract. The accepted [Mission contract](mission.md) owns mission storage policy.
+The [Construction runtime contract](phases/construction/runtime.md), approved under CN23, defines Construction-specific state names, lifecycle guards, and event payload requirements. It is not a stage and does not replace this shared contract. The accepted [Mission contract](mission.md) owns mission storage policy.
 
 ## Data responsibilities
 
@@ -38,6 +38,8 @@ Working journals can contain uncommitted events. The CLI uses current durable hi
 A new commit is not necessary solely for an event append, worker dispatch, or session resume. Existing checkpoint requirements still apply to the material being checked or handed off. Do not add global `HEAD` agreement or shared admission commits.
 
 A system may use separate worker or workspace journals. Keep event and journal identities, local event order, causal references, original attempts, and evidence bindings. Do not flatten or reorder history by timestamps. Git merge success alone does not validate workflow history.
+
+The M05 journal adapter serializes cooperating Kepler writers per journal for the current host user. Linux child-path operations are anchored to opened directory descriptors. macOS uses verified pathname checks, which are best-effort against a same-user process racing filesystem changes and are not a security boundary against that process.
 
 Git can transfer a committed history snapshot made available to the receiver. It does not synchronize ongoing events or show live worker or lock ownership.
 
@@ -170,6 +172,8 @@ Attempt binding and [evidence applicability](#evidence-applicability) are separa
 ### Interrupted-work recovery
 
 Resume from CLI-recorded progress after making sure that the actual work and evidence match the recorded progress. Keep unfinished work and continue the same attempt if it has not ended. Make sure that no previous worker changes the same work. Repeat work only where results are missing or no longer valid. Resolve conflicting records before resuming the affected work.
+
+For interrupted mission startup, use the [Mission preparation recovery contract](mission.md#continue-mission-preparation) and its exact-ID CLI operation. Local pending instructions do not establish workflow state. A recorded preparation result describes past preparation, not current execution readiness.
 
 Use the existing [revision procedure](revision.md#revision-procedure) when upstream contracts are invalid. Independent work can continue while its inputs and contracts stay valid.
 
@@ -399,6 +403,10 @@ Exact journal append, import, and projection mechanisms remain implementation wo
 
 Admission is the start boundary for selecting a task's baseline.
 
+**Implementation note:** standalone task-prerequisite evidence can precede admission. It remains evidence, not a task start, admission, or Activity attempt. Replay requires a valid running Implementation parent at the fact's causal boundary and a direct cause from that parent's current start or resume. Invalid standalone proof blocks the unit, including when another fact already projects the task. Valid proof recorded before a later pause or completion stays inspectable under the same current attempt; it does not authorize work under a different attempt.
+
+Readiness and admission share scope, result, identity, and exact opaque-reference matching rules. Query discovery does not select proof for admission. The caller supplies explicit evidence IDs, and admission checks them with its current running parent and other conditions. An admission under an earlier Implementation attempt does not prevent recording fresh prerequisite proof for a new current running attempt. A current-attempt admission still excludes the special pre-admission recording path.
+
 1. **Readiness.** Make sure that the plan lets execution start. Make sure that all necessary predecessor outputs are in the unit's integrated state.
 2. **Select the baseline.** Capture the current repository-qualified integration set for the unit at admission. It must include all necessary predecessor outputs. Record that set as the task's fixed baseline.
 3. **Keep the recorded baseline.** Once admitted, the task keeps that baseline. Later commits alone do not invalidate it or force it to restart. Compare the evidence with its covered material and relevant inputs, then report whether it still applies.
@@ -442,7 +450,7 @@ Expose operations to read progress, change execution state, and record evidence,
 
 Keep phase transition rules and event recording in their owning application operations. The CLI invokes those operations. JSON journals keep the resulting facts. Get current state and query views from the journals. Skills must not add separate event or state writers.
 
-The [CLI command reference](cli.md) records accepted command decisions and proposed operation contracts. It owns command organization and interface details. This infrastructure contract owns persistence and shared execution rules. Neither document sets CLI behavior.
+The [CLI command reference](cli.md), approved under SH122, defines command organization and interface contracts. This infrastructure contract owns persistence and shared execution rules. Neither document implements CLI behavior.
 
 For project-scoped operations, apply the accepted [project selection rules](cli.md#project-selection), including before unit creation. For mission operations, `--project` selects the record home. Apply the accepted [scope selectors](cli.md#scope-and-selectors) to unit, stage, task, Activity, and attempt selection. Use `--mission <mission-id>` only when a mission-scoped operation has no unit context. Unit-scoped operations resolve mission context only from unique recorded membership.
 

@@ -23,13 +23,15 @@ The requester accepted the common fields, validation rules, metadata change rule
 
 ### Schema version
 
-Set `schema_version` to the Kepler major version. Use the integer `3` for Kepler 3.x. This value identifies the metadata contract, not an artifact's content revision.
+Set `schema_version` to the Kepler major version. Use the integer `3` for Kepler 3.x. This value identifies the metadata contract, not an artifact's content revision. It is not the CLI envelope version, event version, installation receipt format, or resource-manifest format; those counters remain independent.
 
 - Do not change the schema version for minor or patch releases.
 - Artifacts that are valid must stay valid within the same major version.
 - A new Kepler major version is necessary when a change invalidates existing valid artifacts.
 - The CLI must report unsupported schema versions. It must leave those artifacts unchanged.
 - Do not migrate data automatically. The migration procedure stays deferred under [DF05](authoring_progress.md#deferred-decisions).
+
+The approved unified-release design uses one Kepler SemVer for CLI and packaged resources and derives `schema_version` from its major. The first proposed unified version, `3.0.0`, therefore continues to use integer schema `3`; it does not rewrite artifact identities or historical producer versions. A patch or minor release in `3.x` must preserve every supported schema-3 artifact and journal. Preparing a major version does not approve compatibility or migration: release remains blocked until reader/writer support, current-data behavior, and any explicit migration procedure are defined and tested. See the [implementation plan](../../unified-release-implementation-plan.md). The design and plan do not claim this release workflow is implemented.
 
 ### Identity and content versions
 

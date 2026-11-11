@@ -1,37 +1,88 @@
 #!/usr/bin/env bun
 import "reflect-metadata";
-import cliPackage from "../../package.json" with { type: "json" };
+import { CLI_RELEASE } from "./version.js";
+import { readBuildIdentity } from "./build-identity.js";
+import { reportCliResult } from "./nest/result-reporter.js";
 
-const VERSION = cliPackage.version;
+const buildIdentityArgumentIndex = process.argv[1] === "--print-build-identity"
+  ? 1
+  : process.argv[2] === "--print-build-identity" && (
+      process.argv[1]?.endsWith(".ts") || process.argv[1]?.startsWith("/$bunfs/")
+    )
+    ? 2
+    : -1;
 
-await import("@nestjs/common");
-const { CommandFactory } = await import("nest-commander");
-const { AppModule } = await import("./app.module.js");
+if (buildIdentityArgumentIndex >= 0) {
+  if (process.argv.length !== buildIdentityArgumentIndex + 1) {
+    process.stderr.write("--print-build-identity does not accept additional arguments\n");
+    process.exitCode = 1;
+  } else {
+    const identity = readBuildIdentity();
+    if (!identity) {
+      process.stderr.write("This Kepler executable has no compiled build identity\n");
+      process.exitCode = 1;
+    } else {
+      process.stdout.write(`${JSON.stringify(identity)}\n`);
+    }
+  }
+} else {
+  process.env.KEPLER_CLI_RELEASE = CLI_RELEASE;
 
-const isCommanderError = (
-  error: Error,
-): error is Error & { code: string; exitCode: number } =>
-  "code" in error &&
-  typeof error.code === "string" &&
-  error.code.startsWith("commander.") &&
-  "exitCode" in error &&
-  typeof error.exitCode === "number";
+  await import("@nestjs/common");
+  const { CommandFactory } = await import("nest-commander");
+  const { AppModule } = await import("./app.module.js");
 
-await CommandFactory.run(AppModule, {
-  cliName: "kepler",
-  version: VERSION,
-  errorHandler: (error) => {
-    throw error;
-  },
-  serviceErrorHandler: (error) => {
-    if (isCommanderError(error)) {
-      process.exitCode = error.exitCode === 0 ? 0 : 2;
+  const isCommanderError = (
+    error: unknown,
+  ): error is Error & { code: string; exitCode: number } =>
+    error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    error.code.startsWith("commander.") &&
+    "exitCode" in error &&
+    typeof error.exitCode === "number";
+
+  const reportFailure = (error: unknown): void => {
+    if (isCommanderError(error) && error.exitCode === 0) {
+      process.exitCode = 0;
       return;
     }
 
-    process.stderr.write(
-      `error: ${error instanceof Error ? error.message : String(error)}\n`,
+    const commanderError = isCommanderError(error);
+    const message = error instanceof Error ? error.message : String(error);
+    reportCliResult(
+      {
+        status: "failed",
+        data: {
+          code: commanderError ? "invalid_arguments" : "operation_failed",
+          message: message || "The command did not complete successfully.",
+          details: {},
+          recovery: commanderError
+            ? "Correct the command arguments and retry."
+            : "Review the failure and resolve it before retrying.",
+        },
+      },
+      {
+        stdout: (value) => process.stdout.write(value),
+        stderr: (value) => process.stderr.write(value),
+        setExitCode: (value) => {
+          process.exitCode = value;
+        },
+      },
+      commanderError ? "" : `error: ${message}\n`,
     );
-    process.exitCode = 2;
-  },
-});
+  };
+
+  try {
+    await CommandFactory.run(AppModule, {
+      cliName: "kepler",
+      version: CLI_RELEASE,
+      errorHandler: (error) => {
+        throw error;
+      },
+      serviceErrorHandler: reportFailure,
+    });
+  } catch (error) {
+    reportFailure(error);
+  }
+}

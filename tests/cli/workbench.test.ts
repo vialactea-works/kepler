@@ -1,49 +1,44 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
-import * as Os from "node:os";
 import * as Path from "node:path";
-import { spawnSync } from "node:child_process";
 import { VERSION } from "../../src/index.js";
 import {
   taskBreakdownDigestFromDefinitions,
   taskDefinitionDigest,
 } from "../../packages/cli/src/workbench/artifact-body.js";
+import { createE2EHarness, type E2EHarness } from "../e2e/harness.js";
+import { parseCliEnvelope, unwrapLegacyOutput } from "./result-envelope.js";
 
-const entrypoint = Path.resolve("packages/cli/src/cli/main.ts");
+let harness: E2EHarness;
 
 const runCli = (cwd: string, ...arguments_: string[]) => {
-  const result = spawnSync(process.execPath, ["run", entrypoint, ...arguments_], {
-    cwd,
-    encoding: "utf8",
-    killSignal: "SIGKILL",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 5000,
-  });
-  if (result.error !== undefined)
-    throw new Error(
-      `CLI subprocess failed (${arguments_.join(" ")}): ${result.error.message}`,
-    );
-  return result;
+  const result = harness.cli.run(arguments_, { cwd });
+  const informational = arguments_.includes("--help") || arguments_.includes("--version");
+  const envelope = informational ? undefined : parseCliEnvelope(result.stdout);
+  if (envelope) {
+    expect(envelope.status).toBe(result.exitCode === 0 ? "success" : "failed");
+  }
+  return {
+    status: result.exitCode,
+    stdout: unwrapLegacyOutput(result.stdout),
+    stderr: result.stderr,
+    envelope,
+  };
 };
 
 const git = (cwd: string, ...arguments_: string[]) => {
-  const result = spawnSync("git", arguments_, { cwd, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(result.stderr);
+  harness.resources.runGit(cwd, ...arguments_);
 };
 
-const gitOutput = (cwd: string, ...arguments_: string[]) => {
-  const result = spawnSync("git", arguments_, { cwd, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(result.stderr);
-  return result.stdout.trim();
-};
+const gitOutput = (cwd: string, ...arguments_: string[]) =>
+  harness.resources.runGit(cwd, ...arguments_);
 
 describe("workbench CLI", () => {
   let temporaryDirectory: string;
 
-  beforeEach(() => {
-    temporaryDirectory = Fs.mkdtempSync(
-      Path.join(Os.tmpdir(), "kepler-workbench-cli-"),
-    );
+  beforeEach(async () => {
+    harness = await createE2EHarness({ application: "native" });
+    temporaryDirectory = harness.resources.workspaceDirectory;
     Fs.writeFileSync(
       Path.join(temporaryDirectory, "tsconfig.json"),
       JSON.stringify({
@@ -58,8 +53,8 @@ describe("workbench CLI", () => {
     );
   });
 
-  afterEach(() => {
-    Fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+  afterEach(async () => {
+    await harness.cleanup();
   });
 
   it("reports the shared CLI version", () => {
@@ -84,10 +79,18 @@ describe("workbench CLI", () => {
   it("rejects an omitted workbench operation", () => {
     const result = runCli(temporaryDirectory, "workbench");
 
-    expect(result.status).toBe(2);
+    expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
+    expect(result.envelope).toMatchObject({
+      status: "failed",
+      data: {
+        code: "operation_failed",
+        message: expect.stringContaining("requires a subcommand"),
+        details: {},
+        recovery: expect.any(String),
+      },
+    });
     expect(result.stderr).toContain("requires a subcommand");
-    expect(result.stderr.match(/error:/g) ?? []).toHaveLength(1);
   });
 
   it("rejects malformed workbench parser input before running operations", () => {
@@ -108,13 +111,24 @@ describe("workbench CLI", () => {
     ];
 
     for (const result of results) {
-      expect(result.status).toBe(2);
+      expect(result.status).toBe(1);
       expect(result.stdout).toBe("");
+      expect(result.envelope).toMatchObject({
+        status: "failed",
+        data: {
+          code: "invalid_arguments",
+          message: expect.any(String),
+          details: {},
+          recovery: expect.any(String),
+        },
+      });
       expect(result.stderr.match(/error:/g) ?? []).toHaveLength(1);
     }
-    expect(results[0].stderr).toContain("too many arguments");
-    expect(results[1].stderr).toContain("unknown option '--unknown'");
-    expect(results[2].stderr).toContain("option '--file <file>' argument missing");
+    expect(results[0].envelope?.data.message).toContain("too many arguments");
+    expect(results[1].envelope?.data.message).toContain("unknown option '--unknown'");
+    expect(results[2].envelope?.data.message).toContain(
+      "option '--file <file>' argument missing",
+    );
   }, 15_000);
 
   it("rejects surplus positionals for every command before operations run", () => {
@@ -171,7 +185,6 @@ describe("workbench CLI", () => {
       ["workbench", "prototype", "--verify", "main", "one", "two", "extra"],
     ];
     const contextDefault = runCli(changeDirectory, "workbench", "context");
-    expect(contextDefault.status).not.toBe(2);
     expect(contextDefault.stderr).not.toContain("too many arguments");
 
     const branchesBefore = gitOutput(temporaryDirectory, "branch", "--list");
@@ -185,10 +198,15 @@ describe("workbench CLI", () => {
     for (const arguments_ of malformedCalls) {
       const result = runCli(temporaryDirectory, ...arguments_);
 
-      expect(result.status, arguments_.join(" ")).toBe(2);
+      expect(result.status, arguments_.join(" ")).toBe(1);
       expect(result.stdout, arguments_.join(" ")).toBe("");
+      expect(result.envelope?.data.code, arguments_.join(" ")).toBe(
+        "invalid_arguments",
+      );
+      expect(result.envelope?.data.message, arguments_.join(" ")).toContain(
+        "too many arguments",
+      );
       expect(result.stderr.match(/error:/g) ?? [], arguments_.join(" ")).toHaveLength(1);
-      expect(result.stderr, arguments_.join(" ")).toContain("too many arguments");
     }
 
     expect(Fs.existsSync(diffOutput)).toBe(false);
@@ -234,7 +252,7 @@ describe("workbench CLI", () => {
     expect(gitOutput(temporaryDirectory, "branch", "--list")).toContain(
       "standalone-slug",
     );
-  }, 30_000);
+  }, 60_000);
 
   it("lints an unrelated file successfully", () => {
     const file = Path.join(temporaryDirectory, "note.md");
@@ -249,6 +267,11 @@ describe("workbench CLI", () => {
     );
 
     expect(result.status).toBe(0);
+    expect(result.envelope).toMatchObject({
+      status: "success",
+      data: { output: expect.stringContaining("lint: success") },
+    });
+    expect(Object.keys(result.envelope?.data ?? {})).toEqual(["output"]);
     expect(result.stdout).toContain("SKIPPED");
     expect(result.stdout.trimEnd()).toMatch(/lint: success$/);
   });
@@ -292,9 +315,9 @@ describe("workbench CLI", () => {
       "--unknown",
     );
 
-    expect(missing.status).toBe(2);
-    expect(both.status).toBe(2);
-    expect(unknown.status).toBe(2);
+    expect(missing.status).toBe(1);
+    expect(both.status).toBe(1);
+    expect(unknown.status).toBe(1);
   }, 15_000);
 
   it("preserves isolate negative checks", () => {
@@ -325,7 +348,7 @@ describe("workbench CLI", () => {
       "--check",
     );
 
-    expect(result.status).toBe(2);
+    expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("error: not inside a git repository");
     expect(result.stderr.match(/error:/g)).toHaveLength(1);
@@ -420,7 +443,7 @@ describe("workbench CLI", () => {
       Path.join(temporaryDirectory, "missing"),
     );
 
-    expect(result.status).toBe(2);
+    expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("change dir does not exist");
   });
@@ -937,5 +960,5 @@ describe("workbench CLI", () => {
     expect(preconditionMalformed.stdout).toContain(
       "whole-branch review malformed",
     );
-  }, 30000);
+  }, 60_000);
 });

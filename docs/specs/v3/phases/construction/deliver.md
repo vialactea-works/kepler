@@ -8,6 +8,15 @@ Deliver is the final agreed Construction stage. The requester accepted this comp
 
 This approval concerns the specification. It does not authorize a release, publication, deployment, or other delivery operation.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The completed Review handoff and reviewed checkpoint; current unit artifacts and relevant support; review evidence, limitations, requester decisions, and applicable acceptance; the requested outcome, recipient or destination, operation authority, prerequisites, target conditions, and recovery constraints; prior operation records when resuming. See [Inputs](#inputs) and [entry conditions](#entry-conditions). |
+| Lead agent | `kepler-orchestrator` owns readiness assessment, coordination, result verification, evidence, and recipient handoff. This role does not itself grant operation permission. See [Agent roles](#agent-roles) and [Operation authority and requester approval](#operation-authority-and-requester-approval). |
+| Outputs | Required unit-root `delivery.md`; CLI-owned records for applicable authorization, any requested additional review, actual operations, outcome verification, and final approval only when required; optional linked detail; recipient handoff with actual results, limitations, and recovery information. No universal release or deployment artifact is required. See [Artifacts](#artifacts), [Evidence coverage](#evidence-coverage), and [Handoff](#handoff). |
+| Gates | **Entry:** Unit of Work Review is complete for current material, its result and evidence are available, and the requested outcome is known or the requester can resolve it before operations. **Operation:** obtain required authority and prerequisites before each affected operation. **Advance:** every required operation achieves its required effect, the agreed outcome passes its required verification, no blocking effect remains unresolved, self-review and any requested additional review are complete, and evidence and handoff are complete. No automatic final-approval gate or deployment applies to every unit. See [entry conditions](#entry-conditions), [Delivery procedure](#delivery-procedure), and [completion conditions](#completion-conditions). |
+
 ## Goal
 
 Complete the requested delivery outcome for the reviewed unit, using identified material and authorized operations. Do a check that the actual outcome occurred. Keep sufficient information for the recipient or operator.
@@ -110,11 +119,11 @@ These timing rules do not add completed Initialization or Inception as prerequis
 
 ## Delivery procedure
 
-1. **Identify the outcome.** Make sure that the request identifies the destination, recipient, acceptance conditions, reviewed material, and allowed operations.
+1. **Identify the outcome.** Make sure that the request identifies the destination, recipient, acceptance conditions, reviewed material, and allowed operations. Record the requester's typed outcome in a `construction.interaction-recorded` event scoped to the current Deliver attempt. Completion references that event and must match its outcome, destination, recipient, and requested-outcome text. This event records intent; it does not grant operation authority or final approval.
 2. **Prepare instructions.** Complete `delivery.md`, examine relevant target conditions, and identify material prerequisites and recovery constraints.
 3. **Do a check of readiness and authority.** Make sure that prerequisites and applicable permissions are in place before each affected operation. Stop only the affected work when a condition is missing.
 4. **Do authorized operations.** Execute the required actions against identified material and record actual effects through CLI-owned operations.
-5. **Do a check of the outcome.** Make sure that the resulting destination or recipient-facing material matches the requested outcome and retained source bindings.
+5. **Do a check of the outcome.** Make sure that the resulting destination or recipient-facing material matches the requested outcome and retained source bindings. Record verification as direct evidence after the typed outcome interaction and every operation it verifies.
 6. **Hand off and complete.** Supply actual result references, required instructions, limitations, evidence, and remaining recipient responsibilities.
 
 ### Material and verification

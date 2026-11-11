@@ -2,6 +2,7 @@ import "reflect-metadata";
 import type { DynamicModule, INestApplicationContext } from "@nestjs/common";
 import { CommandFactory } from "nest-commander";
 import { describe, expect, it } from "vitest";
+import { unwrapLegacyOutput } from "./result-envelope.js";
 import { ContextCommand } from "../../packages/cli/src/cli/nest/context.command.js";
 import { DiffCommand } from "../../packages/cli/src/cli/nest/diff.command.js";
 import { IsolateCommand } from "../../packages/cli/src/cli/nest/isolate.command.js";
@@ -142,7 +143,13 @@ async function runCli(
     await application?.close();
   }
 
-  return { calls, commandError, exitCode, stderr, stdout };
+  return {
+    calls,
+    commandError,
+    exitCode,
+    stderr,
+    stdout: unwrapLegacyOutput(stdout),
+  };
 }
 
 describe("PrototypeCommand", () => {
@@ -292,7 +299,7 @@ describe("PrototypeCommand", () => {
 
       expect(harness.commandError).toBeUndefined();
       expect(harness.calls).toEqual([]);
-      expect(harness.exitCode).toBe(2);
+      expect(harness.exitCode).toBe(1);
       expect(harness.stdout).toBe("");
       expect(harness.stderr).toBe(`error: ${invalid.message}\n`);
     }

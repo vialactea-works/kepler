@@ -1,0 +1,1306 @@
+import { Command, CommandRunner, Option, SubCommand } from "nest-commander";
+import { GitAuthorLookup } from "../git-author.js";
+import { GitDiffPackageCommand } from "./diff-package.commands.js";
+import { MetadataLinter } from "../metadata-lint.js";
+import { parseProjectSelector, ProjectResolver } from "../project-selection.js";
+import { appendSelectorValue, parseScopeSelectors, type ScopeSelectorFailure } from "../scope-selectors.js";
+import { generateUuid } from "../uuid.js";
+import { parseStrictJson } from "../../json/strict-json.js";
+import { MissionStartup, type MissionStartupPrepared } from "../../construction/mission-startup.js";
+import { UnitCreate } from "../../construction/unit-create.js";
+import { UnitQueries } from "../../construction/unit-queries.js";
+import { ConstructionQueries } from "../../construction/scoped-queries.js";
+import { TaskAdmission } from "../../construction/task-admission.js";
+import { ActivityExecution } from "../../construction/activity-execution.js";
+import { IntegrationExecution } from "../../construction/integration-execution.js";
+import { ConstructionLint } from "../../construction/construction-lint.js";
+import { FunctionalDesignStageCompletion } from "../../construction/stage-completion.js";
+import { QualityRequirementsStageCompletion } from "../../construction/quality-stage-completion.js";
+import { ImplementationPlanningStageCompletion } from "../../construction/planning-stage-completion.js";
+import { ImplementationStageCompletion } from "../../construction/implementation-stage-completion.js";
+import { ImplementationRetainedScopeAssessment } from "../../construction/implementation-retained-scope-assessment.js";
+import { UnitOfWorkReviewStageCompletion } from "../../construction/unit-of-work-review-completion.js";
+import { DeliverStageCompletion } from "../../construction/deliver-stage-completion.js";
+import { StageStart } from "../../construction/stage-start.js";
+import { ConstructionPauseResume } from "../../construction/pause-resume.js";
+import { Revision } from "../../construction/revision.js";
+import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
+import { AuditRequestInput } from "../../audit/request-input.js";
+import { AuditQueries } from "../../audit/queries.js";
+import { ResultReporter } from "./result-reporter.js";
+
+const missingOperation = (name: string) => ({
+  status: "failed" as const,
+  data: {
+    code: "invalid_arguments",
+    message: `${name} requires a subcommand.`,
+    details: {},
+    recovery: "Select a supported subcommand from --help.",
+  },
+});
+
+type FailurePayload = {
+  readonly code: string;
+  readonly message: string;
+  readonly details: Readonly<Record<string, unknown>>;
+  readonly recovery: string;
+};
+
+const reportFailure = (
+  reporter: ResultReporter,
+  failure: FailurePayload,
+): void => {
+  reporter.report({
+    status: "failed",
+    data: {
+      code: failure.code,
+      message: failure.message,
+      details: failure.details,
+      recovery: failure.recovery,
+    },
+  });
+};
+
+const projectSelector = (
+  options?: Readonly<Record<string, unknown>>,
+) => parseProjectSelector(options?.project);
+
+const reportSelectorFailure = (
+  reporter: ResultReporter,
+  failure: ScopeSelectorFailure,
+  recovery: string,
+): void => reportFailure(reporter, {
+  code: failure.code,
+  message: failure.message,
+  details: failure.details,
+  recovery,
+});
+
+const missionStartupSuccess = (result: MissionStartupPrepared) => ({
+  status: "success" as const,
+  data: {
+    mission_id: result.missionId,
+    workflow: "standard",
+    record_home: result.recordHome,
+    workspaces: result.repositories.map((repository) => ({
+      repository_id: repository.repositoryId,
+      context: repository.context,
+      ...(repository.localWorkspaceKey === undefined ? {} : { workspace_id: repository.localWorkspaceKey }),
+      ...(repository.workspacePath === undefined ? {} : { workspace_path: repository.workspacePath }),
+      branch: repository.branch,
+      integration_target: repository.integrationTarget,
+      starting_checkpoint: repository.startingCheckpoint,
+    })),
+    ...(result.historical ? { historical: true } : {}),
+    execution_started: false,
+  },
+});
+
+@SubCommand({ name: "author", description: "Read effective Git author identity" })
+export class GitAuthorCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly lookup: GitAuthorLookup,
+  ) {
+    super();
+  }
+
+  @Option({ flags: "--project <path>", description: "Select a project root" })
+  parseProject(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  async run(
+    _passedParams: string[],
+    options?: Readonly<Record<string, unknown>>,
+  ): Promise<void> {
+    const selected = projectSelector(options);
+    if (selected.kind === "failed") {
+      reportFailure(this.reporter, selected);
+      return;
+    }
+
+    const result = await this.lookup.execute(selected.project);
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    this.reporter.report({
+      status: "success",
+      data: { name: result.name, email: result.email },
+    });
+  }
+}
+
+@Command({
+  name: "git",
+  description: "Inspect and work with repository material",
+  subCommands: [GitAuthorCommand, GitDiffPackageCommand],
+})
+export class GitCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) {
+    super();
+  }
+
+  async run(): Promise<void> {
+    this.reporter.report(missingOperation("git"));
+  }
+}
+
+@Command({ name: "uuid", description: "Generate one UUIDv4" })
+export class UuidCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) {
+    super();
+  }
+
+  async run(): Promise<void> {
+    const result = generateUuid();
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    this.reporter.report({ status: "success", data: { uuid: result.uuid } });
+  }
+}
+
+@Command({
+  name: "lint",
+  arguments: "<path...>",
+  description: "Validate shared metadata in explicit Markdown files",
+})
+export class MetadataLintCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly projects: ProjectResolver,
+    private readonly linter: MetadataLinter,
+  ) {
+    super();
+  }
+
+  @Option({ flags: "--project <path>", description: "Select a project root" })
+  parseProject(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  async run(
+    paths: string[],
+    options?: Readonly<Record<string, unknown>>,
+  ): Promise<void> {
+    const selected = projectSelector(options);
+    if (selected.kind === "failed") {
+      reportFailure(this.reporter, selected);
+      return;
+    }
+
+    const project = await this.projects.resolve(selected.project);
+    if (project.kind === "failed") {
+      reportFailure(this.reporter, project);
+      return;
+    }
+
+    const result = await this.linter.execute(project.root, paths);
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    if (result.kind === "invalid") {
+      this.reporter.report({
+        status: "failed",
+        data: {
+          code: "metadata_validation_failed",
+          message: "One or more selected files have metadata validation findings.",
+          details: { findings: result.findings },
+          recovery: "Correct the reported metadata fields and rerun lint.",
+        },
+      });
+      return;
+    }
+    this.reporter.report({ status: "success", data: { findings: [] } });
+  }
+}
+
+abstract class AuditRecordCommand extends CommandRunner {
+  constructor(
+    protected readonly reporter: ResultReporter,
+    private readonly recording: AuditRecording,
+    private readonly input: AuditRequestInput,
+    private readonly kind: AuditRecordKind,
+  ) {
+    super();
+  }
+
+  @Option({ flags: "--unit <unit-id>", description: "Select a Unit of Work" })
+  parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--stage <stage>", description: "Select a Construction stage" })
+  parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--task <task-id>", description: "Select a task" })
+  parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--activity <activity>", description: "Select a Construction Activity" })
+  parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--attempt <attempt-id>", description: "Select the exact attempt" })
+  parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--implementation-attempt <attempt-id>", description: "Select the enclosing Implementation attempt" })
+  parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--project <path>", description: "Select the record-home project" })
+  parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const selected = parseScopeSelectors(options ?? {}, { required: ["unit"] });
+    if (selected.kind === "failed") {
+      reportFailure(this.reporter, {
+        code: selected.code,
+        message: selected.message,
+        details: selected.details,
+        recovery: "Correct the explicit audit scope selectors and retry.",
+      });
+      return;
+    }
+    const project = projectSelector(options);
+    if (project.kind === "failed") {
+      reportFailure(this.reporter, project);
+      return;
+    }
+    const body = await this.input.read();
+    if (body.kind === "failed") {
+      reportFailure(this.reporter, body);
+      return;
+    }
+    const parsed = parseStrictJson(body.value);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_audit_request_json",
+        message: "The audit request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Provide one complete JSON object on stdin and retry.",
+      });
+      return;
+    }
+    const result = await this.recording.execute(this.kind, selected.selectors, parsed.value, project.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
+@SubCommand({ name: "evidence", description: "Record a check or review result" })
+export class AuditRecordEvidenceCommand extends AuditRecordCommand {
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
+    super(reporter, recording, input, "evidence");
+  }
+}
+
+@SubCommand({ name: "approval", description: "Record an explicit requester decision" })
+export class AuditRecordApprovalCommand extends AuditRecordCommand {
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
+    super(reporter, recording, input, "approval");
+  }
+}
+
+@SubCommand({ name: "interaction", description: "Record an interaction or effort selection" })
+export class AuditRecordInteractionCommand extends AuditRecordCommand {
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
+    super(reporter, recording, input, "interaction");
+  }
+}
+
+@SubCommand({
+  name: "record",
+  description: "Record typed audit facts",
+  subCommands: [AuditRecordEvidenceCommand, AuditRecordApprovalCommand, AuditRecordInteractionCommand],
+})
+export class AuditRecordCommandGroup extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("audit record")); }
+}
+
+const optionValue = (options: Readonly<Record<string, unknown>>, key: string): string | undefined | FailurePayload => {
+  const raw = options[key];
+  if (raw === undefined) return undefined;
+  const values = Array.isArray(raw) ? raw : [raw];
+  if (values.length !== 1 || typeof values[0] !== "string" || values[0].length === 0) {
+    return {
+      code: values.length > 1 ? "duplicate_selector" : "invalid_selector",
+      message: `--${key} requires one non-empty exact value.`,
+      details: { selector: key },
+      recovery: `Provide one valid --${key} value and retry.`,
+    };
+  }
+  return values[0];
+};
+
+@SubCommand({ name: "list", description: "Query compact audit event projections" })
+export class AuditListCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: AuditQueries) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--type <event-type>" }) parseType(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--fields <field-list>" }) parseFields(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--limit <n>" }) parseLimit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--cursor <token>" }) parseCursor(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit"] });
+    if (selectors.kind === "failed") {
+      reportFailure(this.reporter, { code: selectors.code, message: selectors.message, details: selectors.details, recovery: "Correct the explicit audit list filters and retry." });
+      return;
+    }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    const type = optionValue(values, "type");
+    const fields = optionValue(values, "fields");
+    const limitValue = optionValue(values, "limit");
+    const cursor = optionValue(values, "cursor");
+    const invalid = [type, fields, limitValue, cursor].find((value) => typeof value === "object");
+    if (invalid) { reportFailure(this.reporter, invalid as FailurePayload); return; }
+    let limit: number | undefined;
+    if (typeof limitValue === "string") {
+      if (!/^[0-9]+$/.test(limitValue)) {
+        reportFailure(this.reporter, { code: "invalid_audit_limit", message: "--limit must be a positive integer.", details: { limit: limitValue }, recovery: "Provide an integer from 1 through 1000." });
+        return;
+      }
+      limit = Number(limitValue);
+    }
+    const result = await this.queries.list({
+      selectors: selectors.selectors,
+      ...(typeof type === "string" ? { type } : {}),
+      ...(typeof fields === "string" ? { fields } : {}),
+      ...(limit === undefined ? {} : { limit }),
+      ...(typeof cursor === "string" ? { cursor } : {}),
+    }, selectedProject.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
+@SubCommand({ name: "show", description: "Read one complete audit event" })
+export class AuditShowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: AuditQueries) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--journal <journal-id>" }) parseJournal(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--id <event-id>" }) parseId(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit"] });
+    if (selectors.kind === "failed") {
+      reportFailure(this.reporter, { code: selectors.code, message: selectors.message, details: selectors.details, recovery: "Correct the explicit audit show selectors and retry." });
+      return;
+    }
+    const project = projectSelector(values);
+    if (project.kind === "failed") { reportFailure(this.reporter, project); return; }
+    const journal = optionValue(values, "journal");
+    const id = optionValue(values, "id");
+    if (typeof journal === "object" || typeof id === "object") {
+      reportFailure(this.reporter, (typeof journal === "object" ? journal : id) as FailurePayload);
+      return;
+    }
+    if (!journal || !id) {
+      reportFailure(this.reporter, { code: "required_selector_missing", message: "Audit show requires --unit, --journal, and --id.", details: { required: ["unit", "journal", "id"] }, recovery: "Provide the full exact identities and retry." });
+      return;
+    }
+    const result = await this.queries.show(selectors.selectors.unit!, journal, id, project.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
+@Command({
+  name: "audit",
+  description: "Record and query workflow history",
+  subCommands: [AuditRecordCommandGroup, AuditListCommand, AuditShowCommand],
+})
+export class AuditCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("audit")); }
+}
+
+@SubCommand({ name: "create", description: "Create a mission and prepare its selected workspaces" })
+export class MissionCreateCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly startup: MissionStartup,
+  ) {
+    super();
+  }
+
+  @Option({ flags: "--project <path>", description: "Select the mission record home" })
+  parseProject(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  @Option({ flags: "--request <json>", description: "Provide the typed mission startup request as JSON" })
+  parseRequest(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const selected = projectSelector(options);
+    if (selected.kind === "failed") {
+      reportFailure(this.reporter, selected);
+      return;
+    }
+    const requestValues = options?.request;
+    if (!Array.isArray(requestValues) || requestValues.length !== 1 || typeof requestValues[0] !== "string") {
+      reportFailure(this.reporter, {
+        code: "invalid_arguments",
+        message: "Mission creation requires exactly one --request JSON value.",
+        details: {},
+        recovery: "Provide one complete typed mission startup request with --request.",
+      });
+      return;
+    }
+    const parsed = parseStrictJson(requestValues[0]);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_mission_request_json",
+        message: "The mission startup request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Correct the JSON request and retry before preparing workspaces.",
+      });
+      return;
+    }
+    const result = await this.startup.execute(selected.project, parsed.value);
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    this.reporter.report(missionStartupSuccess(result));
+  }
+}
+
+@SubCommand({ name: "prepare", description: "Continue preparing one recorded mission" })
+export class MissionPrepareCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly startup: MissionStartup,
+  ) {
+    super();
+  }
+
+  @Option({ flags: "--project <path>", description: "Select the original mission record home" })
+  parseProject(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  @Option({ flags: "--mission <mission-id>", description: "Continue the exact recorded mission UUIDv4" })
+  parseMission(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const selected = projectSelector(options);
+    if (selected.kind === "failed") {
+      reportFailure(this.reporter, selected);
+      return;
+    }
+    const mission = optionValue(options ?? {}, "mission");
+    if (typeof mission !== "string") {
+      reportFailure(this.reporter, typeof mission === "object" ? mission : {
+        code: "required_selector_missing",
+        message: "Mission preparation requires exactly one --mission UUIDv4 value.",
+        details: { required: ["mission"] },
+        recovery: "Provide the exact ID returned by the interrupted mission create operation.",
+      });
+      return;
+    }
+    const result = await this.startup.prepare(selected.project, mission);
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    this.reporter.report(missionStartupSuccess(result));
+  }
+}
+
+@Command({
+  name: "mission",
+  description: "Create or prepare a mission",
+  subCommands: [MissionCreateCommand, MissionPrepareCommand],
+})
+export class MissionCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) {
+    super();
+  }
+
+  async run(): Promise<void> {
+    this.reporter.report(missingOperation("mission"));
+  }
+}
+
+@SubCommand({ name: "complete", description: "Complete a guarded Construction stage attempt" })
+export class ConstructionStageCompleteCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly functionalDesignCompletion: FunctionalDesignStageCompletion,
+    private readonly qualityRequirementsCompletion: QualityRequirementsStageCompletion,
+    private readonly implementationPlanningCompletion: ImplementationPlanningStageCompletion,
+    private readonly implementationCompletion: ImplementationStageCompletion,
+    private readonly unitOfWorkReviewCompletion: UnitOfWorkReviewStageCompletion,
+    private readonly deliverCompletion: DeliverStageCompletion,
+  ) {
+    super();
+  }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--request <json>" }) parseRequest(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "stage", "attempt"] });
+    if (selectors.kind === "failed") {
+      reportFailure(this.reporter, {
+        code: selectors.code,
+        message: selectors.message,
+        details: selectors.details,
+        recovery: "Provide the exact Unit of Work, supported Construction stage, and attempt selectors.",
+      });
+      return;
+    }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    const request = optionValue(values, "request");
+    if (typeof request !== "string") {
+      reportFailure(this.reporter, typeof request === "object" ? request : {
+        code: "required_selector_missing",
+        message: "Stage completion requires one typed --request JSON value.",
+        details: { required: ["request"] },
+        recovery: "Provide the typed assessments and approval event ID with --request.",
+      });
+      return;
+    }
+    const parsed = parseStrictJson(request);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_stage_completion_request_json",
+        message: "The stage completion request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Correct the JSON request and retry without changing the selected scope.",
+      });
+      return;
+    }
+    const completion = selectors.selectors.stage === "functional-design"
+      ? this.functionalDesignCompletion
+      : selectors.selectors.stage === "quality-requirements"
+        ? this.qualityRequirementsCompletion
+        : selectors.selectors.stage === "implementation-planning"
+          ? this.implementationPlanningCompletion
+          : selectors.selectors.stage === "implementation"
+            ? this.implementationCompletion
+            : selectors.selectors.stage === "unit-of-work-review"
+              ? this.unitOfWorkReviewCompletion
+              : selectors.selectors.stage === "deliver"
+                ? this.deliverCompletion
+                : undefined;
+    if (!completion) {
+      reportFailure(this.reporter, {
+        code: "stage_completion_not_implemented",
+        message: "The selected Construction stage does not have a completion operation yet.",
+        details: { stage: selectors.selectors.stage },
+        recovery: "Select a stage with a typed completion operation.",
+      });
+      return;
+    }
+    const result = await completion.execute(selectors.selectors, parsed.value, selectedProject.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
+@SubCommand({ name: "assess-retained-scopes", description: "Assess completed Activities retained from an earlier Implementation attempt" })
+export class ConstructionStageAssessRetainedScopesCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly assessment: ImplementationRetainedScopeAssessment) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--request <json>" }) parseRequest(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "stage", "attempt"] });
+    if (selectors.kind === "failed") {
+      reportSelectorFailure(this.reporter, selectors, "Provide the exact Unit of Work, Implementation stage, and attempt selectors.");
+      return;
+    }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    const request = optionValue(values, "request");
+    if (typeof request !== "string") {
+      reportFailure(this.reporter, typeof request === "object" ? request : {
+        code: "required_selector_missing",
+        message: "Retained-scope assessment requires one typed --request JSON value.",
+        details: { required: ["request"] },
+        recovery: "Provide the completed Activities, original evidence, and checkpoints to assess with --request.",
+      });
+      return;
+    }
+    const parsed = parseStrictJson(request);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_retained_scope_assessment_request_json",
+        message: "The retained-scope assessment request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Correct the JSON request and retry without changing the selected scope.",
+      });
+      return;
+    }
+    const result = await this.assessment.execute(selectors.selectors, parsed.value, selectedProject.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
+@SubCommand({ name: "start", description: "Start a new Construction stage attempt" })
+export class ConstructionStageStartCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly start: StageStart) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--request <json>" }) parseRequest(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "stage"] });
+    if (selectors.kind === "failed") {
+      reportSelectorFailure(this.reporter, selectors, "Provide one exact --unit and supported --stage selector.");
+      return;
+    }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    const request = optionValue(values, "request");
+    if (typeof request !== "string") {
+      reportFailure(this.reporter, typeof request === "object" ? request : {
+        code: "required_selector_missing",
+        message: "Stage start requires one typed --request JSON value.",
+        details: { required: ["request"] },
+        recovery: "Provide the applicable stage input references with --request.",
+      });
+      return;
+    }
+    const parsed = parseStrictJson(request);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_stage_start_request_json",
+        message: "The stage-start request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Correct the JSON request and retry without changing the selected scope.",
+      });
+      return;
+    }
+    const result = await this.start.execute(selectors.selectors, parsed.value, selectedProject.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
+@SubCommand({ name: "revise", description: "Authorize a scoped Construction revision" })
+export class ConstructionReviseCommand extends CommandRunner {
+  constructor(
+    private readonly reporter: ResultReporter,
+    private readonly revision: Revision,
+    private readonly input: AuditRequestInput,
+  ) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "attempt"] });
+    if (selectors.kind === "failed") {
+      reportSelectorFailure(this.reporter, selectors, "Provide one exact stage or Activity boundary and its attempt selectors.");
+      return;
+    }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    const body = await this.input.read();
+    if (body.kind === "failed") {
+      reportFailure(this.reporter, {
+        code: body.code.replace("audit_", "revision_"),
+        message: body.message.replace("Audit", "Revision"),
+        details: body.details,
+        recovery: body.recovery,
+      });
+      return;
+    }
+    const parsed = parseStrictJson(body.value);
+    if (parsed.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "invalid_revision_request_json",
+        message: "The revision request is not valid strict JSON.",
+        details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+        recovery: "Provide one complete typed JSON object on stdin and retry.",
+      });
+      return;
+    }
+    const result = await this.revision.execute(selectors.selectors, parsed.value, selectedProject.project);
+    this.reporter.report({ status: result.kind, data: result.data });
+  }
+}
+
+@SubCommand({ name: "show", description: "Show a Construction stage projection" })
+export class ConstructionStageShowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "stage"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit and supported --stage selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    const stage = parsed.selectors.stage;
+    if (!unitId || !stage) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Stage show requires --unit and --stage.", details: { required: ["unit", "stage"] }, recovery: "Provide the exact unit and stage selectors." }); return; }
+    const result = await this.queries.stageShow(unitId, stage, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+abstract class ConstructionPauseResumeCommand extends CommandRunner {
+  constructor(
+    protected readonly reporter: ResultReporter,
+    private readonly control: ConstructionPauseResume,
+    private readonly operation: "pause" | "resume",
+    private readonly scope: "stage" | "activity",
+  ) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--request <json>" }) parseRequest(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const required = this.scope === "stage"
+      ? ["unit", "stage", "attempt"] as const
+      : ["unit", "task", "activity", "implementationAttempt", "attempt"] as const;
+    const parsed = parseScopeSelectors(values, { required });
+    if (parsed.kind === "failed") {
+      reportSelectorFailure(this.reporter, parsed, this.scope === "stage"
+        ? "Provide the exact --unit, --stage, and --attempt selectors."
+        : "Provide the exact --unit, --task, --activity, --implementation-attempt, and --attempt selectors.");
+      return;
+    }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const raw = optionValue(values, "request");
+    if (typeof raw !== "string") {
+      reportFailure(this.reporter, typeof raw === "object" ? raw : {
+        code: "required_selector_missing",
+        message: `Construction ${this.operation} requires one typed --request JSON value.`,
+        details: { required: ["request"] },
+        recovery: "Provide the complete phase-specific JSON request for this exact attempt.",
+      });
+      return;
+    }
+    const request = parseStrictJson(raw);
+    if (request.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: `invalid_construction_${this.operation}_request_json`,
+        message: `The Construction ${this.operation} request is not valid strict JSON.`,
+        details: { code: request.code, pointer: request.pointer, message: request.message },
+        recovery: "Correct the JSON request and retry without changing the selected attempt.",
+      });
+      return;
+    }
+    const result = this.operation === "pause"
+      ? await this.control.pause(parsed.selectors, request.value, selected.project)
+      : await this.control.resume(parsed.selectors, request.value, selected.project);
+    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
+      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+    } });
+  }
+}
+
+@SubCommand({ name: "pause", description: "Request pause or acknowledge after exact-run termination and effects reconciliation" })
+export class ConstructionStagePauseCommand extends ConstructionPauseResumeCommand {
+  constructor(reporter: ResultReporter, control: ConstructionPauseResume) { super(reporter, control, "pause", "stage"); }
+}
+
+@SubCommand({ name: "resume", description: "Resume one exact paused stage attempt" })
+export class ConstructionStageResumeCommand extends ConstructionPauseResumeCommand {
+  constructor(reporter: ResultReporter, control: ConstructionPauseResume) { super(reporter, control, "resume", "stage"); }
+}
+
+@SubCommand({ name: "pause", description: "Request pause or acknowledge after exact-run termination and effects reconciliation" })
+export class ConstructionActivityPauseCommand extends ConstructionPauseResumeCommand {
+  constructor(reporter: ResultReporter, control: ConstructionPauseResume) { super(reporter, control, "pause", "activity"); }
+}
+
+@SubCommand({ name: "resume", description: "Resume one exact paused Activity attempt" })
+export class ConstructionActivityResumeCommand extends ConstructionPauseResumeCommand {
+  constructor(reporter: ResultReporter, control: ConstructionPauseResume) { super(reporter, control, "resume", "activity"); }
+}
+
+@SubCommand({
+  name: "stage",
+  description: "Read or change one Construction stage attempt",
+  subCommands: [ConstructionStageShowCommand, ConstructionStageStartCommand, ConstructionStageAssessRetainedScopesCommand, ConstructionStageCompleteCommand, ConstructionStagePauseCommand, ConstructionStageResumeCommand],
+})
+export class ConstructionStageCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction stage")); }
+}
+
+@SubCommand({ name: "list", description: "List authored tasks and execution state" })
+export class ConstructionTaskListCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    if (!unitId) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Task list requires --unit.", details: { required: "unit" }, recovery: "Provide one exact --unit selector." }); return; }
+    const result = await this.queries.taskList(unitId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+@SubCommand({ name: "show", description: "Show one task definition and its attempts" })
+export class ConstructionTaskShowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "task"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit and --task selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    const taskId = parsed.selectors.task;
+    if (!unitId || !taskId) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Task show requires --unit and --task.", details: { required: ["unit", "task"] }, recovery: "Provide the exact unit and task selectors." }); return; }
+    const result = await this.queries.taskShow(unitId, taskId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+@SubCommand({ name: "ready", description: "Read task dependencies, integrated outputs, and prerequisites" })
+export class ConstructionTaskReadyCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "task"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit and --task selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    const taskId = parsed.selectors.task;
+    if (!unitId || !taskId) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Task readiness requires --unit and --task.", details: { required: ["unit", "task"] }, recovery: "Provide the exact unit and task selectors." }); return; }
+    const result = await this.queries.taskReady(unitId, taskId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+@SubCommand({ name: "admit", description: "Admit one ready task under the current Implementation attempt" })
+export class ConstructionTaskAdmitCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly admission: TaskAdmission) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--prerequisites <json>" }) parsePrerequisites(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const selectors = parseScopeSelectors(values, { required: ["unit", "task", "implementationAttempt"] });
+    if (selectors.kind === "failed") { reportSelectorFailure(this.reporter, selectors, "Provide exact --unit, --task, and --implementation-attempt selectors."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const raw = optionValue(values, "prerequisites");
+    if (typeof raw === "object") { reportFailure(this.reporter, raw); return; }
+    let request: unknown = { prerequisite_evidence_ids: [] };
+    if (typeof raw === "string") {
+      const parsed = parseStrictJson(raw);
+      if (parsed.kind === "invalid") {
+        reportFailure(this.reporter, {
+          code: "invalid_task_admission_request_json",
+          message: "The task admission prerequisites are not valid strict JSON.",
+          details: { code: parsed.code, pointer: parsed.pointer, message: parsed.message },
+          recovery: "Provide a unique prerequisite_evidence_ids array as strict JSON.",
+        });
+        return;
+      }
+      request = parsed.value;
+    }
+    const result = await this.admission.execute(selectors.selectors, request, selected.project);
+    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
+      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+    } });
+  }
+}
+
+@SubCommand({ name: "task", description: "Read authored task definitions and execution" , subCommands: [ConstructionTaskListCommand, ConstructionTaskShowCommand, ConstructionTaskReadyCommand, ConstructionTaskAdmitCommand] })
+export class ConstructionTaskCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction task")); }
+}
+
+@SubCommand({ name: "show", description: "Show one task-scoped Construction Activity" })
+export class ConstructionActivityShowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: ConstructionQueries) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "task", "activity", "implementationAttempt"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide the exact unit, task, Activity, and Implementation attempt selectors."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const { unit, task, activity, implementationAttempt } = parsed.selectors;
+    if (!unit || !task || !activity || !implementationAttempt) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Activity show requires all four scope selectors.", details: { required: ["unit", "task", "activity", "implementationAttempt"] }, recovery: "Provide the exact selectors for one Activity occurrence." }); return; }
+    const result = await this.queries.activityShow(unit, task, activity, implementationAttempt, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    const { kind: _kind, ...data } = result;
+    this.reporter.report({ status: "success", data });
+  }
+}
+
+abstract class ConstructionActivityExecutionCommand extends CommandRunner {
+  constructor(protected readonly reporter: ResultReporter, private readonly execution: ActivityExecution, private readonly operation: "start" | "complete") { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--evidence <json>" }) parseEvidence(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const required = this.operation === "start"
+      ? ["unit", "task", "activity", "implementationAttempt"] as const
+      : ["unit", "task", "activity", "implementationAttempt", "attempt"] as const;
+    const parsed = parseScopeSelectors(values, { required });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, `Provide the exact ${required.map((item) => `--${item}`).join(", ")} selectors.`); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const raw = optionValue(values, "evidence");
+    if (typeof raw === "object") { reportFailure(this.reporter, raw); return; }
+    let request: unknown = { evidence_ids: [] };
+    if (typeof raw === "string") {
+      const result = parseStrictJson(raw);
+      if (result.kind === "invalid") {
+        reportFailure(this.reporter, { code: "invalid_activity_evidence_json", message: "Activity evidence IDs are not valid strict JSON.",
+          details: { code: result.code, pointer: result.pointer, message: result.message }, recovery: "Provide evidence_ids as strict JSON." });
+        return;
+      }
+      request = result.value;
+    }
+    const result = this.operation === "start"
+      ? await this.execution.start(parsed.selectors, selected.project)
+      : await this.execution.complete(parsed.selectors, request, selected.project);
+    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
+      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+    } });
+  }
+}
+
+@SubCommand({ name: "start", description: "Start the next task-scoped Construction Activity" })
+export class ConstructionActivityStartCommand extends ConstructionActivityExecutionCommand {
+  constructor(reporter: ResultReporter, execution: ActivityExecution) { super(reporter, execution, "start"); }
+}
+
+@SubCommand({ name: "complete", description: "Complete a task-scoped Construction Activity with recorded evidence" })
+export class ConstructionActivityCompleteCommand extends ConstructionActivityExecutionCommand {
+  constructor(reporter: ResultReporter, execution: ActivityExecution) { super(reporter, execution, "complete"); }
+}
+
+@SubCommand({ name: "activity", description: "Read and execute task-scoped Construction Activities", subCommands: [ConstructionActivityShowCommand, ConstructionActivityStartCommand, ConstructionActivityCompleteCommand, ConstructionActivityPauseCommand, ConstructionActivityResumeCommand] })
+export class ConstructionActivityCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction activity")); }
+}
+
+abstract class ConstructionIntegrationExecutionCommand extends CommandRunner {
+  constructor(protected readonly reporter: ResultReporter, private readonly execution: IntegrationExecution, private readonly operation: "lock" | "prepare" | "evidence" | "accept" | "release") { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--attempt <attempt-id>" }) parseAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--lock-token <token>" }) parseLockToken(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--prepared-event-id <event-id>" }) parsePreparedEventId(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--request <json>" }) parseRequest(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit", "task", "activity", "implementationAttempt", "attempt"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide the exact unit, task, code-integration Activity, Implementation attempt, and Activity attempt selectors."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const token = optionValue(values, "lockToken");
+    if (typeof token === "object") { reportFailure(this.reporter, token); return; }
+    const requestValue = optionValue(values, "request");
+    if (typeof requestValue === "object") { reportFailure(this.reporter, requestValue); return; }
+    let request: unknown;
+    if (typeof requestValue === "string") {
+      const decoded = parseStrictJson(requestValue);
+      if (decoded.kind === "invalid") {
+        reportFailure(this.reporter, { code: "invalid_integration_request_json", message: "The Integration request is not valid strict JSON.",
+          details: { code: decoded.code, pointer: decoded.pointer, message: decoded.message }, recovery: "Correct the typed Integration JSON request and retry without changing the selected attempt." });
+        return;
+      }
+      request = decoded.value;
+    }
+    const preparedEventId = optionValue(values, "preparedEventId");
+    if (typeof preparedEventId === "object") { reportFailure(this.reporter, preparedEventId); return; }
+    const result = this.operation === "lock"
+      ? await this.execution.lock(parsed.selectors, selected.project)
+      : this.operation === "prepare"
+        ? await this.execution.prepare(parsed.selectors, typeof token === "string" ? token : undefined, request, selected.project)
+        : this.operation === "evidence"
+          ? await this.execution.recordEvidence(parsed.selectors, typeof token === "string" ? token : undefined, request, selected.project)
+          : this.operation === "accept"
+            ? await this.execution.accept(parsed.selectors, typeof token === "string" ? token : undefined, typeof preparedEventId === "string" ? preparedEventId : undefined, selected.project)
+            : await this.execution.release(parsed.selectors, typeof token === "string" ? token : undefined, selected.project);
+    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
+      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+    } });
+  }
+}
+
+@SubCommand({ name: "lock", description: "Acquire and capture the unit Integration lock" })
+export class ConstructionIntegrationLockCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "lock"); }
+}
+
+@SubCommand({ name: "prepare", description: "Record the immutable Integration candidate and actual input set" })
+export class ConstructionIntegrationPrepareCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "prepare"); }
+}
+
+@SubCommand({ name: "evidence", description: "Record repository-qualified Integration checks and self-review" })
+export class ConstructionIntegrationEvidenceCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "evidence"); }
+}
+
+@SubCommand({ name: "accept", description: "Accept the checked Integration candidate and release its lock" })
+export class ConstructionIntegrationAcceptCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "accept"); }
+}
+
+@SubCommand({ name: "release", description: "Abort incomplete Integration work and release only if the target is unchanged" })
+export class ConstructionIntegrationReleaseCommand extends ConstructionIntegrationExecutionCommand {
+  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "release"); }
+}
+
+@SubCommand({ name: "integration", description: "Execute the checked Construction Integration lifecycle", subCommands: [ConstructionIntegrationLockCommand, ConstructionIntegrationPrepareCommand, ConstructionIntegrationEvidenceCommand, ConstructionIntegrationAcceptCommand, ConstructionIntegrationReleaseCommand] })
+export class ConstructionIntegrationCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction integration")); }
+}
+
+@SubCommand({ name: "lint", description: "Validate the canonical Construction task graph" })
+export class ConstructionLintCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly lint: ConstructionLint) { super(); }
+  @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  @Option({ flags: "--project <path>" }) parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const parsed = parseScopeSelectors(values, { required: ["unit"] });
+    if (parsed.kind === "failed") { reportSelectorFailure(this.reporter, parsed, "Provide one exact --unit selector."); return; }
+    const selected = projectSelector(values);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = parsed.selectors.unit;
+    if (!unitId) { reportFailure(this.reporter, { code: "required_selector_missing", message: "Construction lint requires --unit.", details: { required: "unit" }, recovery: "Provide one exact --unit selector." }); return; }
+    const result = await this.lint.execute(unitId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    if (result.kind === "invalid") {
+      reportFailure(this.reporter, {
+        code: "construction_lint_failed",
+        message: "Construction graph validation found structural issues.",
+        details: { findings: result.findings },
+        recovery: "Correct the reported plan or graph findings without replacing the canonical mission-owned files.",
+      });
+      return;
+    }
+    this.reporter.report({ status: "success", data: { findings: result.findings } });
+  }
+}
+
+@SubCommand({ name: "create", arguments: "<slug>", description: "Create one Unit of Work" })
+export class ConstructionUnitCreateCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly unitCreate: UnitCreate) {
+    super();
+  }
+
+  @Option({ flags: "--mission <mission-id>" })
+  parseMission(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--effort <level>" })
+  parseEffort(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--stage-effort <stage=level>" })
+  parseStageEffort(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--project <path>" })
+  parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const values = options ?? {};
+    const result = await this.unitCreate.execute({
+      slug: passedParams[0],
+      mission: values.mission,
+      effort: values.effort,
+      stageEffort: values.stageEffort,
+      project: values.project,
+    });
+    if (result.kind === "failed") {
+      reportFailure(this.reporter, result);
+      return;
+    }
+    this.reporter.report({
+      status: "success",
+      data: {
+        unit_id: result.unitId,
+        mission_id: result.missionId,
+        record_home: result.recordHome,
+        directory: result.directory,
+        workflow: result.workflow,
+        effort: { default: result.effort.default, stage_overrides: result.effort.stageOverrides },
+        journal_id: result.journalId,
+        id: result.eventId,
+        execution_started: false,
+      },
+    });
+  }
+}
+
+@SubCommand({ name: "list", description: "List Units of Work" })
+export class ConstructionUnitListCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: UnitQueries) { super(); }
+
+  @Option({ flags: "--project <path>" })
+  parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const selected = projectSelector(options);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const result = await this.queries.list(selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    this.reporter.report({ status: "success", data: { record_home: result.recordHome, units: result.units } });
+  }
+}
+
+@SubCommand({ name: "show", description: "Show one Unit of Work" })
+export class ConstructionUnitShowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter, private readonly queries: UnitQueries) { super(); }
+
+  @Option({ flags: "--unit <unit-id>" })
+  parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--project <path>" })
+  parseProject(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
+    const selectors = parseScopeSelectors(options ?? {}, { required: ["unit"] });
+    if (selectors.kind === "failed") {
+      reportFailure(this.reporter, {
+        code: selectors.code,
+        message: selectors.message,
+        details: selectors.details,
+        recovery: "Provide one exact --unit selector and an optional --project path.",
+      });
+      return;
+    }
+    const selected = projectSelector(options);
+    if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
+    const unitId = selectors.selectors.unit;
+    if (!unitId) {
+      reportFailure(this.reporter, {
+        code: "required_selector_missing",
+        message: "Unit show requires one --unit selector.",
+        details: { required: "unit" },
+        recovery: "Provide one exact --unit selector.",
+      });
+      return;
+    }
+    const result = await this.queries.show(unitId, selected.project);
+    if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
+    this.reporter.report({ status: "success", data: { record_home: result.recordHome, unit: result.unit } });
+  }
+}
+
+@SubCommand({
+  name: "unit",
+  description: "Create or query Units of Work",
+  subCommands: [ConstructionUnitCreateCommand, ConstructionUnitListCommand, ConstructionUnitShowCommand],
+})
+export class ConstructionUnitCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) { super(); }
+  async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction unit")); }
+}
+
+@SubCommand({
+  name: "construction",
+  description: "Run Construction workflow operations",
+  subCommands: [ConstructionUnitCommand, ConstructionStageCommand, ConstructionTaskCommand, ConstructionActivityCommand, ConstructionIntegrationCommand, ConstructionReviseCommand, ConstructionLintCommand],
+})
+export class ConstructionCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) {
+    super();
+  }
+
+  async run(): Promise<void> {
+    this.reporter.report(missingOperation("workflow construction"));
+  }
+}
+
+@Command({
+  name: "workflow",
+  description: "Run phase-owned workflow operations",
+  subCommands: [ConstructionCommand],
+})
+export class WorkflowCommand extends CommandRunner {
+  constructor(private readonly reporter: ResultReporter) {
+    super();
+  }
+
+  async run(): Promise<void> {
+    this.reporter.report(missingOperation("workflow"));
+  }
+}

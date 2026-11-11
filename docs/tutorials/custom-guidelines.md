@@ -1,77 +1,47 @@
-# Creating Custom Guidelines
+# Use project guidelines
 
-Guidelines are coding rules and conventions shipped with Kepler and installed to
-`${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/` by `kepler setup`. Agents and the Assisted skills read these
-files directly when working in a project, so they always have your team's standards at hand.
+Use this guide to give a team or coding agent explicit project instructions. These instructions are project-owned documentation. Kepler does not manage or automatically discover them.
 
-## What Guidelines Are
+## Create a guideline file
 
-Guidelines are markdown files that describe coding conventions for specific
-languages or frameworks. They live under `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/<name>/`:
-
-```
-${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/<name>/
-  guideline.yml       # Metadata (name, optional glob patterns) — kept for reference
-  convention-1.md     # Guideline content
-  convention-2.md
-```
-
-`kepler setup` copies the bundled guidelines (`general`, `golang`, `typescript`) from
-`bundle/guidelines/`. The markdown files are plain text your agent can be pointed at — the
-skills and agents read them directly.
-
-## Step 1: Add a Guideline
-
-Add a directory of markdown files under `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/` (or extend the bundled
-ones in `bundle/guidelines/` in this repo):
-
-```bash
-mkdir -p ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/react-ts
-```
-
-Create `${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/react-ts/component_patterns.md`:
+Choose a tracked path such as `docs/guidelines/team.md`. Write the instructions that apply to that project:
 
 ```markdown
-## Component Conventions
+# Team conventions
 
-- Use functional components with TypeScript interfaces
-- Props interfaces must be named `<ComponentName>Props`
-- Export as default unless the component is from a barrel export
-- Use React.FC only when children are needed
-- Keep components under 200 lines; extract sub-components for longer files
-
-## File Organization
-
-- One component per file
-- Co-locate styles in <ComponentName>.module.css
-- Co-locate tests in <ComponentName>.test.tsx
+Keep each change in its owning package.
+Add focused tests for changed behavior.
+Preserve unrelated files and user data.
 ```
 
-## Step 2: Point Your Agent at It
+Kepler does not require guideline-specific frontmatter or a fixed directory name.
 
-Mention the guideline file in the project's `AGENTS.md` or in your prompt so the agent loads
-it before coding:
+## Reference the file
+
+Add an explicit reference in the project's `AGENTS.md`:
 
 ```markdown
-## Standards
+## Project instructions
 
-Follow the conventions in ${XDG_CONFIG_HOME:-$HOME/.config}/vialactea-works/kepler/guidelines/react-ts/component_patterns.md
+Read [Team conventions](docs/guidelines/team.md) before changing this project.
 ```
 
-## Step 3: Iterate
+You can name the file directly in a request instead. Follow higher-priority instructions when they conflict with a project guideline. An explicit reference does not prove that an agent read or followed it.
 
-Guideline files are read on demand. Edit them and re-run — no restart or reinstall needed.
+## Maintain the file
 
-Common iteration paths:
+Review the guideline when project conventions change. Keep each instruction specific. Remove instructions that no longer apply. Kepler setup does not copy, update, or adopt this file.
 
-1. **Agent ignores a convention** — be more prescriptive: "You MUST..." instead of "Prefer..."
-2. **Guidelines are too long** — agents have limited context. Keep each file focused and under 50 lines
-3. **Multiple guideline sets** — create separate guideline directories and point at each as needed
+## Keep built-in resources separate
 
-## Bundled Guidelines
+Built-in guidelines stay in the selected generation at `~/.kepler-dist/current/bundle/guidelines/`.
 
-| Guideline | Covers |
-|-----------|--------|
-| `general` | Cross-language coding style |
-| `golang` | Go style, setup, testing, patterns, e2e |
-| `typescript` | TypeScript setup, style, patterns, unit + e2e testing |
+| Resource | Subject |
+| --- | --- |
+| `general` | Cross-language conventions. |
+| `golang` | Go structure, testing, and implementation guidance. |
+| `typescript` | TypeScript structure, testing, and implementation guidance. |
+
+Do not edit an installed generation. Build and select a new complete package to change built-in guidance. Setup preserves custom XDG files, but it does not automatically load them as guidelines.
+
+See [Installation](../installation.md#setup-and-installed-resources), [Configuration](../configuration.md), and [Skills and roles](../skills.md).

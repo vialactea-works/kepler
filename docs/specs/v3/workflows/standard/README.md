@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Standard composes the Construction stages into a complete sequence. It has one Unit of Work per mission. Phases own stage contracts. This workflow owns their selected order and routing.
+Standard composes the Construction stages into a complete sequence. It has one Unit of Work per mission. Phases own stage contracts. This workflow owns their selected order and routing. Each selected stage declares the shared [Inputs, Lead agent, Outputs, and Gates](../../stage.md#characteristics); this workflow does not replace the detailed contracts.
 
 The stage sequence and shared execution rules are agreed. The requester accepted all selected Construction stage and Activity contracts under their recorded decision IDs. This workflow does not approve a Unit of Work or prove implemented behavior.
 

@@ -1,29 +1,34 @@
 import { describe, it, expect } from "vitest"
-import { resolveBundleRoot, BundleRootNotFoundError } from "../../packages/cli/src/cli/bundle-root.js"
+import {
+  resolveBundleRoot,
+  BundleOverrideNotFoundError,
+  BundleRootNotFoundError,
+  resolvePackageRoot,
+} from "../../packages/cli/src/cli/bundle-root.js"
 
 describe("resolveBundleRoot", () => {
-  it("resolves from source checkout when no env override and no binary-sibling bundle", () => {
+  it("does not fall back to a source checkout for an unselected package", () => {
     const sourceDir = "/repo/packages/cli/src/cli"
-    const mockEnv = {}
-    const mockExecPath = "/usr/local/bin/kepler"
     const existingPaths = new Set(["/repo/bundle"])
 
-    const result = resolveBundleRoot({
-      env: mockEnv,
-      execPath: mockExecPath,
+    expect(() => resolveBundleRoot({
+      env: {},
+      execPath: "/usr/local/bin/kepler",
       sourceDir,
       existsSync: (path: string) => existingPaths.has(path),
       realpathSync: (path: string) => path,
-    })
-
-    expect(result).toBe("/repo/bundle")
+    })).toThrow(BundleRootNotFoundError)
   })
 
   it("resolves from binary-sibling bundle when available", () => {
     const sourceDir = "/repo/packages/cli/src/cli"
     const mockEnv = {}
     const mockExecPath = "/opt/kepler/bin/kepler"
-    const existingPaths = new Set(["/opt/kepler/bundle"])
+    const existingPaths = new Set([
+      "/opt/kepler",
+      "/opt/kepler/package.json",
+      "/opt/kepler/bundle/manifest.json",
+    ])
 
     const result = resolveBundleRoot({
       env: mockEnv,
@@ -72,9 +77,9 @@ describe("resolveBundleRoot", () => {
       expect(e).toBeInstanceOf(BundleRootNotFoundError)
       const error = e as BundleRootNotFoundError
       const message = error.message
-      expect(message).toContain("Could not locate the Kepler bundle directory")
-      expect(message).toContain("/usr/local/bundle")
-      expect(message).toContain("/repo/bundle")
+      expect(message).toContain("Could not locate the Kepler package generation")
+      expect(message).toContain("/usr/local/package.json")
+      expect(message).toContain("/usr/local/bundle/manifest.json")
     }
   })
 
@@ -112,45 +117,77 @@ describe("resolveBundleRoot", () => {
     expect(result).toBe("/custom/bundle")
   })
 
-  it("falls through to next branch when KEPLER_BUNDLE_DIR points to non-existent directory", () => {
+  it("fails instead of falling back when an explicit bundle override is missing", () => {
     const sourceDir = "/repo/packages/cli/src/cli"
     const mockEnv = { KEPLER_BUNDLE_DIR: "/custom/nonexistent" }
-    const mockExecPath = "/usr/local/bin/kepler"
     const existingPaths = new Set(["/repo/bundle"])
+    const checked: string[] = []
 
-    const result = resolveBundleRoot({
-      env: mockEnv,
-      execPath: mockExecPath,
-      sourceDir,
-      existsSync: (path: string) => existingPaths.has(path),
-      realpathSync: (path: string) => path,
-    })
-
-    expect(result).toBe("/repo/bundle")
-  })
-
-  it("still lists non-existent KEPLER_BUNDLE_DIR in checked paths", () => {
-    const sourceDir = "/repo/packages/cli/src/cli"
-    const mockEnv = { KEPLER_BUNDLE_DIR: "/custom/nonexistent" }
-    const mockExecPath = "/usr/local/bin/kepler"
-    const existingPaths = new Set<string>()
-
-    try {
+    expect(() =>
       resolveBundleRoot({
         env: mockEnv,
-        execPath: mockExecPath,
+        execPath: "/usr/local/bin/kepler",
         sourceDir,
+        existsSync: (path: string) => {
+          checked.push(path)
+          return existingPaths.has(path)
+        },
+        realpathSync: (path: string) => path,
+      }),
+    ).toThrow(BundleOverrideNotFoundError)
+    expect(checked).toEqual(["/custom/nonexistent"])
+  })
+
+  it("rejects an explicitly empty bundle override", () => {
+    expect(() =>
+      resolveBundleRoot({
+        env: { KEPLER_BUNDLE_DIR: "" },
+        execPath: "/usr/local/bin/kepler",
+        sourceDir: "/repo/packages/cli/src/cli",
+        existsSync: () => false,
+        realpathSync: (path: string) => path,
+      }),
+    ).toThrow(BundleOverrideNotFoundError)
+  })
+
+  it("resolves executable symlinks before locating a sibling bundle", () => {
+    const realpaths = new Map([
+      ["/usr/local/bin/kepler", "/opt/kepler-dist/generations/current-id/bin/kepler"],
+    ])
+    const existingPaths = new Set([
+      "/opt/kepler-dist/generations/current-id",
+      "/opt/kepler-dist/generations/current-id/package.json",
+      "/opt/kepler-dist/generations/current-id/bundle/manifest.json",
+    ])
+
+    const result = resolveBundleRoot({
+      env: {},
+      execPath: "/usr/local/bin/kepler",
+      sourceDir: "/repo/packages/cli/src/cli",
+      existsSync: (path: string) => existingPaths.has(path),
+      realpathSync: (path: string) => realpaths.get(path) ?? path,
+    })
+
+    expect(result).toBe(
+      "/opt/kepler-dist/generations/current-id/bundle",
+    )
+  })
+
+  it("resolves an explicit complete package root before the executable path", () => {
+    const existingPaths = new Set([
+      "/dev/package",
+      "/dev/package/package.json",
+      "/dev/package/bundle/manifest.json",
+    ])
+
+    expect(
+      resolvePackageRoot({
+        env: { KEPLER_PACKAGE_ROOT: "/dev/package" },
+        execPath: "/usr/local/bin/kepler",
         existsSync: (path: string) => existingPaths.has(path),
         realpathSync: (path: string) => path,
-      })
-      expect.fail("Should have thrown")
-    } catch (e) {
-      expect(e).toBeInstanceOf(BundleRootNotFoundError)
-      const error = e as BundleRootNotFoundError
-      const message = error.message
-      expect(message).toContain("/custom/nonexistent")
-      expect(message).toContain("/usr/local/bundle")
-      expect(message).toContain("/repo/bundle")
-    }
+      }),
+    ).toBe("/dev/package")
   })
+
 })

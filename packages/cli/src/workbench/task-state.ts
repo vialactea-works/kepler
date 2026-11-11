@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import * as Path from "node:path";
+import { parseMarkdownFrontmatter } from "@vialactea-works/kepler-core";
 import { parseDocument } from "yaml";
 import { ContextService, contextEvidenceRuntime } from "./context.js";
 import { inspectInitialScaffold, inspectIntentApprovals } from "./precondition-artifacts.js";
@@ -42,6 +43,10 @@ const failure = (message: string, exitCode: 1 | 2 = 1, operation: TaskStateResul
 const fullCommit = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 const digest = (source: string): string => createHash("sha256").update(source).digest("hex");
 const within = (root: string, path: string): boolean => { const relative = Path.relative(root, path); return relative !== "" && !relative.startsWith("..") && !Path.isAbsolute(relative); };
+const bodyAfterFrontmatter = (source: string): string => {
+  const frontmatter = parseMarkdownFrontmatter(source);
+  return frontmatter.kind === "present" ? frontmatter.body : source;
+};
 
 export const taskStateCheckpointGit = (runtime: TaskStateRuntime): ScopeExpansionHistoryGit => {
   const port = runtime.context.git;
@@ -50,9 +55,9 @@ export const taskStateCheckpointGit = (runtime: TaskStateRuntime): ScopeExpansio
 };
 
 export const updateTaskLedger = (source: string, task: number, status: "in-progress" | "blocked" | "done", fields: Readonly<Record<string, unknown>>): string => {
-  const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
-  if (!front) throw new Error("Root ledger front matter is malformed");
-  const document = parseDocument(front[1] ?? "");
+  const frontmatter = parseMarkdownFrontmatter(source);
+  if (frontmatter.kind !== "present") throw new Error("Root ledger front matter is malformed");
+  const document = parseDocument(frontmatter.value);
   if (document.errors.length > 0) throw new Error("Root ledger metadata is malformed");
   const metadata = document.toJS() as Record<string, unknown>;
   if (!Array.isArray(metadata.tasks)) throw new Error("Root task metadata is missing");
@@ -61,7 +66,7 @@ export const updateTaskLedger = (source: string, task: number, status: "in-progr
   document.setIn(["tasks", index, "status"], status);
   for (const [key, value] of Object.entries(fields)) document.setIn(["tasks", index, key], value);
   if (metadata.status === "pending") document.set("status", "in-progress");
-  const body = source.slice(front[0].length);
+  const body = frontmatter.body;
   const row = new RegExp(`^(\\| Task ${task}: [^\\r\\n]+? \\| )(pending|in-progress|blocked|done)( \\| [^\\r\\n]+\\|)$`, "m");
   if (!row.test(body)) throw new Error("Root task row is missing");
   return `---\n${document.toString()}---\n${body.replace(row, `$1${status}$3`)}`;
@@ -226,11 +231,11 @@ export class TaskStateService {
           const working = await this.runtime.context.git.worktreeBlob(root.root, path);
           if ((atHead.status === 0) !== (working.status === 0) || (atHead.status === 0 && atHead.stdout.trim() !== working.stdout.trim())) return reject("Reserved production paths have uncommitted edits");
         }
-        const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
-        if (!front) return reject("Task front matter is malformed");
-        const document = parseDocument(front[1] ?? "");
+        const frontmatter = parseMarkdownFrontmatter(source);
+        if (frontmatter.kind !== "present") return reject("Task front matter is malformed");
+        const document = parseDocument(frontmatter.value);
         document.set("scope_expansions", expanded.entries);
-        const next = `---\n${document.toString()}---\n${source.slice(front[0].length)}`;
+        const next = `---\n${document.toString()}---\n${frontmatter.body}`;
         const nextRead = await createArtifactReader({ readFile: () => next })(taskPath);
         if (validateArtifact(nextRead)._tag !== "valid") return reject("Reservation would invalidate the task artifact");
         if ((await this.runtime.git.workspace(root.root)).head !== current.head) return reject("Task HEAD changed before reservation");
@@ -294,8 +299,8 @@ export class TaskStateService {
         const outcome = last?.fields.Outcome;
         if (terminal._tag !== "valid" || terminal.artifact !== "task-progress" || terminal.metadata.task !== args.task || terminal.metadata.change !== progress.contract.metadata.change || (outcome !== "done" && outcome !== "blocked") || terminal.metadata.status !== outcome) return reject("Worker terminal outcome is incomplete or contradictory");
         const admittedProgress = await this.runtime.git.blob(root.root, admission.sourceHead, repoTask);
-        const oldBody = admittedProgress.status === 0 ? admittedProgress.stdout.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "").trimEnd() : undefined;
-        const newBody = taskSource.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
+        const oldBody = admittedProgress.status === 0 ? bodyAfterFrontmatter(admittedProgress.stdout).trimEnd() : undefined;
+        const newBody = bodyAfterFrontmatter(taskSource);
         if (oldBody === undefined || !newBody.startsWith(oldBody)) return reject("Worker rewrote admitted task evidence instead of appending");
         if ((args.response === "done" || args.response === "blocked") && args.response !== outcome) return reject("Worker response contradicts committed outcome");
         const terminalCommit = await this.runtime.git.latest(lane.root, repoTask);

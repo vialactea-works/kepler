@@ -6,6 +6,15 @@
 
 The requester accepted this complete Implementation Planning contract. It states artifacts, task identity rules, procedures, roles, review rules, evidence, and completion conditions. The requester separately accepted the [task graph specification](task-graph.md) under IP26. These approvals concern specifications. They do not approve an executing Unit of Work or authorize implementation.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The current unit definition, `design.md`, `quality.md`, their relevant supporting files and completion records; passed constraints and requester instructions; available Project references, source, tests, and operational information; and retained plans or work when revising. See [Inputs](#inputs) and [entry conditions](#entry-conditions). |
+| Lead agent | `kepler-architect` owns context investigation, technical-solution selection, task-graph authoring, and plan review. The requester retains authority over scope, obligations, and consequential trade-offs. See [Agent roles](#agent-roles) and [Requester decisions and approval](#requester-decisions-and-approval). |
+| Outputs | Required `plan.md` and `tasks-dag.json`; optional linked planning detail; artifact and graph validation, self-review, and any requested external-review evidence; required requester decisions and a separate whole-plan approval only when an authority rule or requester instruction requires it; handoff to Implementation. See [Artifacts](#artifacts), [Evidence coverage](#evidence-coverage), and [Handoff](#handoff). |
+| Gates | **Entry:** Functional Design and Quality Requirements are complete for the current unit, their current outputs are available, and consequential choices have an identified requester decision path. **Advance:** both planning outputs are valid and consistent, task coverage and verification are feasible, blocking questions are resolved, self-review is complete, any requested external review is complete, and required requester decisions and any applicable approval are recorded. Implementation and passing application checks are not required. See [entry conditions](#entry-conditions) and [completion conditions](#completion-conditions). |
+
 ## Goal
 
 Select a technical solution that satisfies the unit's functional design and quality requirements. Divide the work into tasks with explicit outcomes, dependencies, and verification obligations.

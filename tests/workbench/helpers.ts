@@ -9,10 +9,18 @@ export interface CommandResult {
   readonly stderr: string;
 }
 
-const gitEnvironment = {
-  ...process.env,
+const gitEnvironment: NodeJS.ProcessEnv = {
   GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_TERMINAL_PROMPT: "0",
+  HOME: Os.tmpdir(),
+  LC_ALL: "C.UTF-8",
+  PATH: [Path.dirname(process.execPath), process.env.PATH ?? ""]
+    .filter(Boolean)
+    .join(Path.delimiter),
+  TMPDIR: Os.tmpdir(),
+  TZ: "UTC",
 };
 
 const selectedGit = process.platform === "darwin"

@@ -1,0 +1,977 @@
+import "reflect-metadata";
+import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import * as Fs from "node:fs/promises";
+import * as Os from "node:os";
+import * as Path from "node:path";
+import type { INestApplicationContext } from "@nestjs/common";
+import { CommandFactory } from "nest-commander";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  EVENT_ENVELOPE_VERSION,
+  type EventEnvelope,
+  type EventId,
+  type JournalId,
+} from "../../packages/core/src/event-envelope.js";
+import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
+import { AppModule } from "../../packages/cli/src/cli/app.module.js";
+import { createEventJournal } from "../../packages/cli/src/history/journal.js";
+import { VERSION } from "../../src/index.js";
+import { taskGraphExample } from "../fixtures/task-graph.js";
+
+interface CapturedCli {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number | undefined;
+}
+
+const temporaryDirectories: string[] = [];
+
+interface GitFixture {
+  readonly root: string;
+  readonly parent: string;
+  readonly globalConfig: string;
+}
+
+const isolatedGitEnvironment = (globalConfig: string): NodeJS.ProcessEnv => {
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: globalConfig,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_COUNT: "0",
+    GIT_OPTIONAL_LOCKS: "0",
+    GIT_TERMINAL_PROMPT: "0",
+  };
+  delete environment.GIT_DIR;
+  delete environment.GIT_WORK_TREE;
+  delete environment.GIT_INDEX_FILE;
+  delete environment.GIT_CONFIG_PARAMETERS;
+  return environment;
+};
+
+const runGit = (cwd: string, globalConfig: string, ...args: string[]): string =>
+  execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: isolatedGitEnvironment(globalConfig),
+  });
+
+const createProject = async (name: string): Promise<GitFixture> => {
+  const parent = await Fs.mkdtemp(Path.join(Os.tmpdir(), `kepler-cli-${name}-`));
+  temporaryDirectories.push(parent);
+  const globalConfig = Path.join(parent, "empty-global-config");
+  const root = Path.join(parent, "project");
+  await Fs.writeFile(globalConfig, "");
+  await Fs.mkdir(root);
+  runGit(root, globalConfig, "init", "-q", "-b", "main");
+  runGit(root, globalConfig, "config", "user.name", "Ada Lovelace");
+  runGit(root, globalConfig, "config", "user.email", "ada@example.com");
+  await Fs.mkdir(Path.join(root, ".kepler"));
+  await Fs.writeFile(Path.join(root, ".kepler", "marker"), "v3\n");
+  await Fs.writeFile(Path.join(root, "README.md"), "# Project\n");
+  runGit(root, globalConfig, "add", ".");
+  runGit(root, globalConfig, "commit", "-q", "-m", "Create CLI fixture");
+  return { root, parent, globalConfig };
+};
+
+const snapshot = async (root: string): Promise<string> => {
+  const entries: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    const children = await Fs.readdir(directory, { withFileTypes: true });
+    for (const child of children.sort((left, right) => left.name.localeCompare(right.name))) {
+      const path = Path.join(directory, child.name);
+      const relative = Path.relative(root, path);
+      const stat = await Fs.lstat(path);
+      if (child.isDirectory()) {
+        entries.push(`${relative}:directory:${stat.mtimeMs}`);
+        await visit(path);
+      } else if (child.isSymbolicLink()) {
+        entries.push(`${relative}:link:${await Fs.readlink(path)}`);
+      } else {
+        entries.push(
+          `${relative}:file:${stat.mtimeMs}:${(await Fs.readFile(path)).toString("base64")}`,
+        );
+      }
+    }
+  };
+  await visit(root);
+  return entries.join("\n");
+};
+
+const constructionEvent = (
+  id: string,
+  journalId: string,
+  type: string,
+  data: Record<string, unknown>,
+  causedBy: readonly string[] = [],
+): EventEnvelope<Record<string, unknown>> => ({
+  id: id as EventId,
+  phase: CONSTRUCTION_PHASE,
+  type,
+  envelope_version: EVENT_ENVELOPE_VERSION,
+  event_version: CONSTRUCTION_EVENT_VERSION,
+  journal_id: journalId as JournalId,
+  recorded_at: "2026-11-07T12:00:00.000Z",
+  producer: { name: "kepler", version: "0.11.0" },
+  caused_by: causedBy as EventId[],
+  data,
+});
+
+const withGitEnvironment = async <T>(
+  globalConfig: string,
+  run: () => Promise<T>,
+): Promise<T> => {
+  const environment = isolatedGitEnvironment(globalConfig);
+  const names = [
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_CONFIG_COUNT",
+    "GIT_OPTIONAL_LOCKS",
+    "GIT_TERMINAL_PROMPT",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_CONFIG_PARAMETERS",
+  ] as const;
+  const original = new Map(names.map((name) => [name, process.env[name]]));
+  for (const name of names) {
+    const value = environment[name];
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+  try {
+    return await run();
+  } finally {
+    for (const name of names) {
+      const value = original.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+};
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories.splice(0).map((directory) =>
+      Fs.rm(directory, { recursive: true, force: true }),
+    ),
+  );
+});
+
+const runCli = async (arguments_: readonly string[]): Promise<CapturedCli> => {
+  const originalArgv = process.argv;
+  const originalExitCode = process.exitCode;
+  const originalStdoutWrite = process.stdout.write;
+  const originalStderrWrite = process.stderr.write;
+  let stdout = "";
+  let stderr = "";
+  let application: INestApplicationContext | undefined;
+
+  try {
+    process.argv = [...originalArgv.slice(0, 2), ...arguments_];
+    process.exitCode = 0;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+      return true;
+    }) as typeof process.stdout.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+      return true;
+    }) as typeof process.stderr.write;
+
+    application = await CommandFactory.runWithoutClosing(AppModule, {
+      cliName: "kepler",
+      serviceErrorHandler: (error) => {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          typeof error.code === "string" &&
+          error.code.startsWith("commander.") &&
+          "exitCode" in error &&
+          error.exitCode === 0
+        ) {
+          process.exitCode = 0;
+          return;
+        }
+        throw error;
+      },
+    });
+
+    return { stdout, stderr, exitCode: process.exitCode };
+  } finally {
+    process.argv = originalArgv;
+    process.exitCode = originalExitCode;
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+    await application?.close();
+  }
+};
+
+describe("v3 root command tree", () => {
+  it("builds root help from the Nest command definitions", async () => {
+    const result = await runCli(["--help"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Usage: kepler");
+    expect(result.stdout).toContain("setup");
+    expect(result.stdout).toContain("workbench");
+    expect(result.stdout).toContain("git");
+    expect(result.stdout).toContain("uuid");
+    expect(result.stdout).toContain("mission");
+    expect(result.stdout).toContain("lint");
+    expect(result.stdout).toContain("audit");
+    expect(result.stdout).toContain("workflow");
+    expect(result.stderr).toBe("");
+  });
+
+  it("creates a mission and prepares its selected workspace through the root CLI", async () => {
+    const fixture = await createProject("mission-startup");
+    const request = JSON.stringify({
+      title: "Prepare the selected capability",
+      request: "Implement the requested change in the selected workspace.",
+      workflow: "standard",
+      recordHomeRepositoryId: "project",
+      contexts: [{ reference: "opaque:request", purpose: "Accepted request" }],
+      repositories: [{
+        repositoryId: "application",
+        workspace: { kind: "existing", path: fixture.root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      }],
+    });
+
+    const result = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["mission", "create", "--project", fixture.root, "--request", request]),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    const response = JSON.parse(result.stdout);
+    expect(response).toMatchObject({
+      status: "success",
+      data: {
+        workflow: "standard",
+        record_home: fixture.root,
+        execution_started: false,
+        workspaces: [{
+          repository_id: "application",
+          context: { kind: "existing" },
+          branch: "main",
+          integration_target: "refs/heads/main",
+          starting_checkpoint: { kind: "commit" },
+        }],
+      },
+    });
+    const missionId = response.data.mission_id as string;
+    const historyPath = Path.join(fixture.root, ".kepler", "missions", missionId, "history", "construction");
+    const files = await Fs.readdir(historyPath);
+    const events = (await Fs.readFile(Path.join(historyPath, files[0]!), "utf8"))
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type: string; producer: { name: string; version: string } });
+    expect(events.map((event) => event.type)).toEqual([
+      "construction.mission-created",
+      "construction.mission-workspaces-prepared",
+    ]);
+    expect(events.map((event) => event.producer)).toEqual([
+      { name: "kepler", version: VERSION },
+      { name: "kepler", version: VERSION },
+    ]);
+  });
+
+  it("starts a Construction stage through the root CLI without dispatching work", async () => {
+    const fixture = await createProject("stage-start");
+    const missionRequest = JSON.stringify({
+      title: "Prepare the selected capability",
+      request: "Implement the requested change in the selected workspace.",
+      workflow: "standard",
+      recordHomeRepositoryId: "project",
+      contexts: [{ reference: "request:scope", purpose: "Accepted request" }],
+      repositories: [{
+        repositoryId: "application",
+        workspace: { kind: "existing", path: fixture.root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      }],
+    });
+    const missionResult = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["mission", "create", "--project", fixture.root, "--request", missionRequest]),
+    );
+    expect(missionResult.exitCode).toBe(0);
+    const missionResponse = JSON.parse(missionResult.stdout);
+    expect(missionResponse.status).toBe("success");
+    const missionId = missionResponse.data.mission_id as string;
+    const unitResult = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["workflow", "construction", "unit", "create", "stage-start", "--mission", missionId, "--project", fixture.root]),
+    );
+    expect(unitResult.exitCode).toBe(0);
+    const unitResponse = JSON.parse(unitResult.stdout);
+    expect(unitResponse.status).toBe("success");
+    const unitId = unitResponse.data.unit_id as string;
+    const request = JSON.stringify({
+      inputs: [{ reference: "request:scope", purpose: "Requester scope for Functional Design" }],
+    });
+
+    const result = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design", "--request", request, "--project", fixture.root]),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "success",
+      data: { unit_id: unitId, stage: "functional-design", worker_dispatched: false },
+    });
+  });
+
+  it("requests, acknowledges, and resumes the same stage attempt while unrelated scope progresses", async () => {
+    const fixture = await createProject("stage-pause-resume");
+    const missionRequest = JSON.stringify({
+      title: "Prepare the selected capability",
+      request: "Implement the requested change in the selected workspace.",
+      workflow: "standard",
+      recordHomeRepositoryId: "project",
+      contexts: [{ reference: "request:scope", purpose: "Accepted request" }],
+      repositories: [{
+        repositoryId: "application",
+        workspace: { kind: "existing", path: fixture.root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      }],
+    });
+    const mission = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["mission", "create", "--project", fixture.root, "--request", missionRequest]),
+    );
+    expect(mission.exitCode).toBe(0);
+    const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const createUnit = async (name: string, selectedMission = missionId): Promise<string> => {
+      const result = await withGitEnvironment(fixture.globalConfig, () =>
+        runCli(["workflow", "construction", "unit", "create", name, "--mission", selectedMission, "--project", fixture.root]),
+      );
+      expect(result.exitCode, result.stdout).toBe(0);
+      return JSON.parse(result.stdout).data.unit_id as string;
+    };
+    const unitId = await createUnit("paused-scope");
+    const inputs = [{ reference: "request:scope", purpose: "Requester scope for Functional Design" }];
+    const start = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design",
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+    ]));
+    expect(start.exitCode).toBe(0);
+    const attemptId = JSON.parse(start.stdout).data.attempt_id as string;
+    const pause = async (request: Readonly<Record<string, unknown>>) => withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "pause", "--unit", unitId, "--stage", "functional-design",
+      "--attempt", attemptId, "--request", JSON.stringify(request), "--project", fixture.root,
+    ]));
+    const requested = await pause({ phase: "request", reason: "Pause before review" });
+    expect(requested.exitCode).toBe(0);
+    expect(JSON.parse(requested.stdout)).toMatchObject({ status: "success", data: { attempt_id: attemptId, pause_state: "pausing" } });
+    const pausing = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "show", "--unit", unitId, "--stage", "functional-design", "--project", fixture.root,
+    ]));
+    expect(JSON.parse(pausing.stdout)).toMatchObject({ status: "success", data: { state: "pausing", current_attempt_id: attemptId } });
+    const blockedStart = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design",
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+    ]));
+    expect(JSON.parse(blockedStart.stdout)).toMatchObject({ status: "failed", data: { code: "stage_attempt_unavailable" } });
+
+    const unrelatedMission = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "mission", "create", "--project", fixture.root,
+      "--request", JSON.stringify({ ...JSON.parse(missionRequest), title: "Unrelated pause-scope progress" }),
+    ]));
+    expect(unrelatedMission.exitCode).toBe(0);
+    const unrelatedMissionId = JSON.parse(unrelatedMission.stdout).data.mission_id as string;
+    const unrelatedUnitId = await createUnit("unrelated-scope", unrelatedMissionId);
+    const unrelated = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "start", "--unit", unrelatedUnitId, "--stage", "functional-design",
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+    ]));
+    expect(unrelated.exitCode).toBe(0);
+    expect(JSON.parse(unrelated.stdout)).toMatchObject({ status: "success", data: { unit_id: unrelatedUnitId, worker_dispatched: false } });
+
+    const acknowledged = await pause({
+      phase: "acknowledge",
+      reason: "Worker stopped and effects reconciled",
+      orchestrator_attestation: {
+        exact_run_terminal: true,
+        effects_reconciled: true,
+        run_reference: "orchestrator-run:stage-1",
+        reconciliation_references: ["reconciliation:stage-1"],
+      },
+    });
+    expect(acknowledged.exitCode).toBe(0);
+    expect(JSON.parse(acknowledged.stdout)).toMatchObject({ status: "success", data: { attempt_id: attemptId, pause_state: "paused" } });
+    const paused = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "show", "--unit", unitId, "--stage", "functional-design", "--project", fixture.root,
+    ]));
+    expect(JSON.parse(paused.stdout)).toMatchObject({ status: "success", data: { state: "paused", current_attempt_id: attemptId } });
+
+    const resumed = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "resume", "--unit", unitId, "--stage", "functional-design",
+      "--attempt", attemptId, "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+    ]));
+    expect(resumed.exitCode).toBe(0);
+    expect(JSON.parse(resumed.stdout)).toMatchObject({
+      status: "success",
+      data: { attempt_id: attemptId, worker_dispatched: false },
+    });
+    const running = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "stage", "show", "--unit", unitId, "--stage", "functional-design", "--project", fixture.root,
+    ]));
+    expect(JSON.parse(running.stdout)).toMatchObject({ status: "success", data: { state: "running", current_attempt_id: attemptId } });
+    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", missionId, "history", "construction");
+    const events = (await Promise.all((await Fs.readdir(historyDirectory)).map((file) => Fs.readFile(Path.join(historyDirectory, file), "utf8"))))
+      .join("").trimEnd().split("\n").map((line) => JSON.parse(line) as { type: string; data: Record<string, unknown> });
+    const pauseEvents = events.filter((event) => event.type.includes("stage-pause") || event.type === "construction.stage-paused" || event.type === "construction.stage-resumed");
+    expect(pauseEvents.map((event) => event.type).sort()).toEqual([
+      "construction.stage-pause-requested",
+      "construction.stage-paused",
+      "construction.stage-resumed",
+    ].sort());
+    expect(pauseEvents.every((event) => event.data.stage_attempt_id === attemptId)).toBe(true);
+    expect(pauseEvents.find((event) => event.type === "construction.stage-paused")?.data.reason).toContain("orchestrator-run:stage-1");
+  });
+
+  it("exposes exact Activity pause and resume selectors in generated CLI help", async () => {
+    for (const operation of ["pause", "resume"] as const) {
+      const result = await runCli(["workflow", "construction", "activity", operation, "--help"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`activity ${operation}`);
+      expect(result.stdout).toContain("--unit <unit-id>");
+      expect(result.stdout).toContain("--task <task-id>");
+      expect(result.stdout).toContain("--activity <activity>");
+      expect(result.stdout).toContain("--implementation-attempt <attempt-id>");
+      expect(result.stdout).toContain("--attempt <attempt-id>");
+      expect(result.stdout).toContain("--request <json>");
+      expect(result.stderr).toBe("");
+    }
+  });
+
+  it("routes Review and Deliver completion requests through their typed providers without appending on stale attempts", async () => {
+    const fixture = await createProject("later-stage-completion");
+    const missionRequest = JSON.stringify({
+      title: "Prepare the selected capability",
+      request: "Implement the requested change in the selected workspace.",
+      workflow: "standard",
+      recordHomeRepositoryId: "project",
+      contexts: [{ reference: "request:scope", purpose: "Accepted request" }],
+      repositories: [{
+        repositoryId: "application",
+        workspace: { kind: "existing", path: fixture.root },
+        branch: { kind: "current" },
+        integrationTarget: "main",
+      }],
+    });
+    const mission = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["mission", "create", "--project", fixture.root, "--request", missionRequest]),
+    );
+    expect(mission.exitCode).toBe(0);
+    const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const createdUnit = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["workflow", "construction", "unit", "create", "later-stage", "--mission", missionId, "--project", fixture.root]),
+    );
+    expect(createdUnit.exitCode).toBe(0);
+    const unitId = JSON.parse(createdUnit.stdout).data.unit_id as string;
+    const reviewRequest = {
+      implementation_completion_event_id: "10000000-0000-4000-8000-000000000001",
+      reviewed_material_bindings: [],
+      final_checkpoints: [],
+      reviewer: "agent:reviewer",
+      implementation_authors: ["agent:builder"],
+      implementation_evidence_assessment_id: "60000000-0000-4000-8000-000000000001",
+      review_evidence_id: "60000000-0000-4000-8000-000000000002",
+      self_review_evidence_id: "60000000-0000-4000-8000-000000000003",
+      findings: { blocking: [], limitations: [] },
+      additional_review: { requested: false },
+      acceptance_required: false,
+      handoff: { status: "ready", recipient: "deliver", summary: "Ready for delivery" },
+    };
+    const deliverRequest = {
+      review_completion_event_id: "10000000-0000-4000-8000-000000000002",
+      outcome_request_event_id: "10000000-0000-4000-8000-000000000003",
+      outcome: "repository-handoff",
+      requested_outcome: "Hand the reviewed repository to the recipient",
+      destination: "repository:main",
+      recipient: "requester",
+      artifact_bindings: [],
+      reviewed_checkpoints: [],
+      preparation_evidence_id: "60000000-0000-4000-8000-000000000004",
+      self_review_evidence_id: "60000000-0000-4000-8000-000000000005",
+      operation_results: [],
+      verification_evidence_ids: [],
+      handoff_evidence_id: "60000000-0000-4000-8000-000000000006",
+      additional_review: { requested: false },
+      approval_required: false,
+      handoff: { status: "ready", summary: "Repository handoff is ready" },
+    };
+    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", missionId, "history");
+    for (const [stage, request] of [["unit-of-work-review", reviewRequest], ["deliver", deliverRequest]] as const) {
+      const before = await snapshot(historyDirectory);
+      const result = await withGitEnvironment(fixture.globalConfig, () => runCli([
+        "workflow", "construction", "stage", "complete", "--unit", unitId, "--stage", stage,
+        "--attempt", "20000000-0000-4000-8000-000000000099", "--request", JSON.stringify(request), "--project", fixture.root,
+      ]));
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({ status: "failed", data: { code: "stage_attempt_not_current" } });
+      expect(await snapshot(historyDirectory)).toBe(before);
+    }
+  });
+
+  it("names the mission capability when its subcommand is missing", async () => {
+    const result = await runCli(["mission"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "failed",
+      data: {
+        code: "invalid_arguments",
+        message: "mission requires a subcommand.",
+      },
+    });
+  });
+
+  it("includes Construction in generated workflow help", async () => {
+    const result = await runCli(["workflow", "--help"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Usage: kepler workflow");
+    expect(result.stdout).toContain("construction");
+    expect(result.stderr).toBe("");
+  });
+
+  it("exposes revision as a direct Construction command with exact boundary selectors", async () => {
+    const result = await runCli(["workflow", "construction", "revise", "--help"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("revise");
+    expect(result.stdout).toContain("--unit <unit-id>");
+    expect(result.stdout).toContain("--stage <stage>");
+    expect(result.stdout).toContain("--task <task-id>");
+    expect(result.stdout).toContain("--activity <activity>");
+    expect(result.stdout).toContain("--implementation-attempt <attempt-id>");
+    expect(result.stdout).toContain("--attempt <attempt-id>");
+    expect(result.stderr).toBe("");
+  });
+
+  it("reports an empty capability group through the shared result reporter", async () => {
+    const result = await runCli(["audit"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(
+      '{"status":"failed","data":{"code":"invalid_arguments","message":"audit requires a subcommand.","details":{},"recovery":"Select a supported subcommand from --help."}}\n',
+    );
+  });
+
+  it("generates one UUIDv4 in the command result", async () => {
+    const result = await runCli(["uuid"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toMatch(
+      /^\{"status":"success","data":\{"uuid":"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"\}\}\n$/,
+    );
+  });
+
+  it("reads selected-project Git identity without changing repository files", async () => {
+    const fixture = await createProject("author");
+    const caller = Path.join(fixture.parent, "caller");
+    await Fs.mkdir(caller);
+    const previousDirectory = process.cwd();
+    const before = await snapshot(fixture.root);
+    let result: CapturedCli;
+    try {
+      process.chdir(caller);
+      result = await withGitEnvironment(fixture.globalConfig, () =>
+        runCli(["git", "author", "--project", "../project"]),
+      );
+    } finally {
+      process.chdir(previousDirectory);
+    }
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      status: "success",
+      data: { name: "Ada Lovelace", email: "ada@example.com" },
+    });
+    expect(await snapshot(fixture.root)).toBe(before);
+  });
+
+  it("reports blank and missing Git identity keys without changing the repository", async () => {
+    const fixture = await createProject("missing-author");
+    runGit(fixture.root, fixture.globalConfig, "config", "user.name", "");
+    runGit(fixture.root, fixture.globalConfig, "config", "--unset", "user.email");
+    const before = await snapshot(fixture.root);
+
+    const result = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["git", "author", "--project", fixture.root]),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "failed",
+      data: {
+        code: "git_identity_missing",
+        details: { missing: ["user.name", "user.email"] },
+      },
+    });
+    expect(await snapshot(fixture.root)).toBe(before);
+  });
+
+  it("validates only explicit Markdown paths and places findings in failure details", async () => {
+    const fixture = await createProject("lint");
+    await Fs.mkdir(Path.join(fixture.root, "docs"));
+    await Fs.writeFile(
+      Path.join(fixture.root, "docs", "valid.md"),
+      "---\nid: 11111111-1111-4111-8111-111111111111\ntype: project-reference\nschema_version: 3\nauthor: Ada Lovelace <ada@example.com>\n---\n# Reference\n",
+    );
+    const invalidPath = Path.join(fixture.root, "docs", "invalid.md");
+    const invalidSource = "---\nid: invalid\ntype: project-reference\nschema_version: 3\nauthor: Ada Lovelace <ada@example.com>\n---\n# Invalid\n";
+    await Fs.writeFile(invalidPath, invalidSource);
+    await Fs.writeFile(Path.join(fixture.root, "docs", "unselected.md"), "---\ninvalid: true\n---\n");
+    const before = await snapshot(fixture.root);
+
+    const valid = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["lint", "docs/valid.md", "--project", fixture.root]),
+    );
+    const invalid = await withGitEnvironment(fixture.globalConfig, () =>
+      runCli(["lint", "docs/invalid.md", "--project", fixture.root]),
+    );
+
+    expect(valid.exitCode).toBe(0);
+    expect(valid.stderr).toBe("");
+    expect(JSON.parse(valid.stdout)).toEqual({
+      status: "success",
+      data: { findings: [] },
+    });
+    expect(invalid.exitCode).toBe(1);
+    expect(invalid.stderr).toBe("");
+    expect(JSON.parse(invalid.stdout)).toMatchObject({
+      status: "failed",
+      data: {
+        code: "metadata_validation_failed",
+        details: {
+          findings: [
+            { path: "docs/invalid.md", field: "id", code: "invalid-id" },
+          ],
+        },
+      },
+    });
+    expect(await Fs.readFile(invalidPath, "utf8")).toBe(invalidSource);
+    expect(await snapshot(fixture.root)).toBe(before);
+  });
+
+  it("rejects repeated --project flags through the shared CLI result boundary", async () => {
+    const result = await runCli([
+      "git",
+      "author",
+      "--project",
+      "/one",
+      "--project",
+      "/two",
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "failed",
+      data: { code: "duplicate_selector", details: { selector: "project" } },
+    });
+  });
+});
+
+describe("Construction query CLI", () => {
+  const createQueryFixture = async () => {
+    const fixture = await createProject("construction-queries");
+    const mission = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "mission", "create", "--project", fixture.root,
+      "--request", JSON.stringify({
+        title: "Read the planned Construction tasks",
+        request: "Inspect task definitions and dependencies without changing execution state.",
+        workflow: "standard",
+        recordHomeRepositoryId: "project",
+        contexts: [],
+        repositories: [{
+          repositoryId: "project",
+          workspace: { kind: "existing", path: fixture.root },
+          branch: { kind: "current" },
+          integrationTarget: "refs/heads/main",
+        }],
+      }),
+    ]));
+    expect(mission.exitCode, mission.stdout).toBe(0);
+    const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const created = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", "unit", "create", "query-unit",
+      "--mission", missionId, "--project", fixture.root,
+    ]));
+    expect(created.exitCode, created.stdout).toBe(0);
+    const unitId = JSON.parse(created.stdout).data.unit_id as string;
+    const unitRoot = Path.join(fixture.root, ".kepler", "missions", missionId, "construction", "units-of-work", unitId);
+    const graph = { ...taskGraphExample(), unit_id: unitId };
+    const graphPath = Path.join(unitRoot, "tasks-dag.json");
+    await Fs.writeFile(graphPath, `${JSON.stringify(graph, null, 2)}\n`);
+    await Fs.writeFile(Path.join(unitRoot, "plan.md"), [
+      "---",
+      "id: 11111111-1111-4111-8111-111111111111",
+      "type: implementation-plan",
+      "schema_version: 3",
+      `unit_id: ${unitId}`,
+      "author: Ada Lovelace <ada@example.com>",
+      "---",
+      "# Implementation plan",
+      "",
+      "## Technical solution",
+      "",
+      "Implement the publishing boundary and its adapter.",
+      "",
+      "## Task graph context",
+      "",
+      "The task graph is [tasks-dag.json](tasks-dag.json).",
+      "",
+      "## Verification strategy",
+      "",
+      "Use the checks declared in the task graph.",
+      "",
+      "## Decisions and open questions",
+      "",
+      "No open decisions.",
+      "",
+    ].join("\n"));
+    return { ...fixture, missionId, unitId, graph, graphPath };
+  };
+
+  const query = async (
+    fixture: Awaited<ReturnType<typeof createQueryFixture>>,
+    arguments_: readonly string[],
+    exitCode: 0 | 1 = 0,
+  ): Promise<Record<string, unknown>> => {
+    const before = await snapshot(fixture.root);
+    const result = await withGitEnvironment(fixture.globalConfig, () => runCli([
+      "workflow", "construction", ...arguments_, "--unit", fixture.unitId, "--project", fixture.root,
+    ]));
+    expect(result.exitCode, result.stdout).toBe(exitCode);
+    expect(result.stderr).toBe("");
+    expect(result.stdout.endsWith("\n")).toBe(true);
+    const response = JSON.parse(result.stdout) as { status: string; data: Record<string, unknown> };
+    expect(Object.keys(response).sort()).toEqual(["data", "status"]);
+    expect(response.status).toBe(exitCode === 0 ? "success" : "failed");
+    if (exitCode === 1) {
+      expect(Object.keys(response.data).sort()).toEqual(["code", "details", "message", "recovery"]);
+      expect(response.data.message).toEqual(expect.any(String));
+      expect(response.data.recovery).toEqual(expect.any(String));
+    }
+    expect(await snapshot(fixture.root)).toBe(before);
+    return response.data;
+  };
+
+  it("lists authored tasks and dependencies without admitting work or changing files", async () => {
+    const fixture = await createQueryFixture();
+    const [first, second] = fixture.graph.tasks;
+
+    const data = await query(fixture, ["task", "list"]);
+
+    expect(data).toMatchObject({
+      record_home: fixture.root,
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      tasks: [
+        { task_id: first!.id, title: first!.title, state: "ready", dependencies: [], blockers: [], unknowns: [] },
+        {
+          task_id: second!.id,
+          title: second!.title,
+          state: "blocked",
+          dependencies: [first!.id],
+          blockers: [`predecessor-not-integrated:${first!.id}`],
+          unknowns: [],
+        },
+      ],
+    });
+  });
+
+  it("shows the selected task definition and empty execution records without changing files", async () => {
+    const fixture = await createQueryFixture();
+    const task = fixture.graph.tasks[0]!;
+
+    const data = await query(fixture, ["task", "show", "--task", task.id]);
+
+    expect(data).toMatchObject({
+      record_home: fixture.root,
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      definition: task,
+      state: "ready",
+      current_scope: { implementation_attempt_id: null },
+      admissions: [],
+      activities: [],
+      evidence: [],
+      approvals: [],
+      progress: { completed_activities: 0, total_activities: 3, complete: false },
+      blockers: [],
+      unknowns: [],
+    });
+  });
+
+  it("reports current passed prerequisite proof through the real Nest query command without writing", async () => {
+    const fixture = await createQueryFixture();
+    const task = fixture.graph.tasks[0]!;
+    const prerequisite = {
+      description: "Current task-scoped proof is recorded.",
+      needed_for: "implementation" as const,
+      needed_when: "Before admission",
+      blocking: true,
+      condition: "opaque:cli-prerequisite#exact",
+      reason: "Admission requires this fact.",
+    };
+    const graph = { ...fixture.graph, tasks: [{ ...task, prerequisites: [prerequisite] }, fixture.graph.tasks[1]!] };
+    await Fs.writeFile(fixture.graphPath, `${JSON.stringify(graph, null, 2)}\n`);
+    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", fixture.missionId, "history", "construction");
+    const journalFiles = (await Fs.readdir(historyDirectory)).filter((name) => name.endsWith(".jsonl"));
+    const records = (await Promise.all(journalFiles.map(async (name) =>
+      (await Fs.readFile(Path.join(historyDirectory, name), "utf8")).trimEnd().split("\n")
+        .map((line) => JSON.parse(line) as { id: string; journal_id: string; type: string }),
+    ))).flat();
+    const unitCreated = records.find((record) => record.type === "construction.unit-created");
+    if (!unitCreated) throw new Error("Expected the unit creation event.");
+    const implementationAttemptId = randomUUID();
+    const evidenceId = randomUUID();
+    const stageStartId = randomUUID();
+    const evidenceEventId = randomUUID();
+    const journal = createEventJournal({
+      recordHome: fixture.root,
+      missionId: fixture.missionId,
+      journalId: unitCreated.journal_id,
+      phase: CONSTRUCTION_PHASE,
+    });
+    await journal.append(constructionEvent(stageStartId, unitCreated.journal_id, "construction.stage-attempt-started", {
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      stage: "implementation",
+      stage_attempt_id: implementationAttemptId,
+      inputs: [],
+      checkpoints: [],
+      authority_event_ids: [],
+    }, [unitCreated.id]));
+    await journal.append(constructionEvent(evidenceEventId, unitCreated.journal_id, "construction.evidence-recorded", {
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      evidence_id: evidenceId,
+      stage: "implementation",
+      stage_attempt_id: implementationAttemptId,
+      task_id: task.id,
+      artifact_bindings: [],
+      checkpoints: [],
+      inputs: [{ reference: prerequisite.condition, purpose: "Exact prerequisite evidence." }],
+      check: "task-prerequisite",
+      executor: "requester",
+      result: { status: "passed", summary: "The task prerequisite is satisfied." },
+      output_refs: [],
+      conditions: [],
+    }, [stageStartId]));
+
+    const listed = await query(fixture, ["task", "list"]);
+    const shown = await query(fixture, ["task", "show", "--task", task.id]);
+    const ready = await query(fixture, ["task", "ready", "--task", task.id]);
+
+    expect(listed.tasks).toEqual(expect.arrayContaining([expect.objectContaining({ task_id: task.id, state: "ready", blockers: [] })]));
+    expect(shown).toMatchObject({ state: "ready", current_scope: { implementation_attempt_id: null }, blockers: [] });
+    expect(ready).toMatchObject({
+      task_id: task.id,
+      readiness: "ready",
+      known_prerequisite_facts: [{ evidence_id: evidenceId, event_id: evidenceEventId, type: "construction.evidence-recorded" }],
+      unknown_prerequisites: [],
+      blockers: [],
+    });
+  });
+
+  it("reports a ready task without recording admission or changing files", async () => {
+    const fixture = await createQueryFixture();
+    const task = fixture.graph.tasks[0]!;
+
+    const data = await query(fixture, ["task", "ready", "--task", task.id]);
+
+    expect(data).toEqual({
+      record_home: fixture.root,
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      task_id: task.id,
+      task_state: "ready",
+      readiness: "ready",
+      dependencies: [],
+      known_prerequisite_facts: [],
+      unknown_prerequisites: [],
+      blockers: [],
+      unknowns: [],
+    });
+  });
+
+  it("returns a successful readiness query with an unintegrated predecessor and unknown prerequisite", async () => {
+    const fixture = await createQueryFixture();
+    const [first, second] = fixture.graph.tasks;
+
+    const data = await query(fixture, ["task", "ready", "--task", second!.id]);
+
+    expect(data).toMatchObject({
+      record_home: fixture.root,
+      mission_id: fixture.missionId,
+      unit_id: fixture.unitId,
+      task_id: second!.id,
+      task_state: "blocked",
+      readiness: "blocked",
+      dependencies: [{
+        task_id: first!.id,
+        status: "not_integrated",
+        declared_outputs: first!.outputs,
+        integration_events: [],
+        integrated_output_refs: [],
+      }],
+      known_prerequisite_facts: [],
+      unknown_prerequisites: [{ description: second!.prerequisites[0]!.description, blocking: true, status: "unknown" }],
+      blockers: [`predecessor-not-integrated:${first!.id}`],
+      unknowns: [],
+    });
+  });
+
+  it("lints the canonical graph successfully without changing files or history", async () => {
+    const fixture = await createQueryFixture();
+
+    expect(await query(fixture, ["lint"])).toEqual({ findings: [] });
+  });
+
+  it.each(["show", "ready"])("rejects task %s for an unknown task without changing files or history", async (operation) => {
+    const fixture = await createQueryFixture();
+
+    const data = await query(fixture, ["task", operation, "--task", "90000000-0000-4000-8000-000000000099"], 1);
+
+    expect(data).toMatchObject({
+      code: "task_not_found",
+      details: { unit_id: fixture.unitId, task_id: "90000000-0000-4000-8000-000000000099" },
+    });
+  });
+
+  it("returns Construction lint findings in the failure envelope without repairing the graph", async () => {
+    const fixture = await createQueryFixture();
+    const source = `${JSON.stringify({ ...fixture.graph, unsupported: true }, null, 2)}\n`;
+    await Fs.writeFile(fixture.graphPath, source);
+
+    const data = await query(fixture, ["lint"], 1);
+
+    expect(data).toMatchObject({
+      code: "construction_lint_failed",
+      details: {
+        findings: [{
+          path: `.kepler/missions/${fixture.missionId}/construction/units-of-work/${fixture.unitId}/tasks-dag.json`,
+          field: "/unsupported",
+          code: "invalid-schema",
+          message: expect.any(String),
+        }],
+      },
+    });
+    expect(await Fs.readFile(fixture.graphPath, "utf8")).toBe(source);
+  });
+});

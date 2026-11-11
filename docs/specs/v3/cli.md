@@ -1,30 +1,31 @@
-# Kepler v3 CLI draft
+# Kepler v3 CLI contract
 
 [Version 3 reference](README.md) | [CLI infrastructure](runtime.md)
 
-**Status:** Draft for discussion.
+**Status:** Approved by the requester under [SH122](authoring_progress.md#completed-shared-decisions), with the later mission preparation recovery amendment under SH125. The unified-release setup amendment is implemented in the current uncommitted source candidate, but 3.0.0 is not published. Verification and review outcomes apply only to the exact source and archive recorded in the candidate handoff.
 
 ## Purpose and status
 
-This document gives a human-readable draft of the Kepler v3 command line interface. It separates accepted policy from proposed command details. Saving this draft does not approve its proposals or add CLI behavior.
+This document defines the Kepler v3 command line contract. The requester approved its command names, arguments, output fields, and operation rules. Approval alone does not approve an executing Unit of Work or prove that a release contains the behavior.
 
-The command placements marked **Accepted** follow the requester's decisions. The command names, arguments, output fields, and detailed operation rules marked **Proposed** are open for review. The [runtime contract](runtime.md) sets shared event and execution rules. The accepted [Mission contract](mission.md) sets mission policy, not command syntax. This document does not replace those rules.
+The current source implements the v3 root capabilities alongside the earlier `workbench` surface. The [CLI guide](../../cli.md) describes user-facing behavior; this document retains the detailed command contract. The [runtime contract](runtime.md) sets shared event and execution rules. The [Mission contract](mission.md) sets mission policy. Details left unspecified remain implementation choices.
 
-The current CLI does not have this v3 command tree. Its root has `setup` and `workbench` commands. The v3 `setup` contract keeps the installation role. It is not the Initialization phase. This reference does not remove or migrate existing commands.
+The `setup` command installs Kepler resources. It is not the Initialization phase. The earlier `workbench` commands remain separate and do not convert or adopt v2 records.
 
 ## Accepted policy
 
-The following decisions are accepted. They do not accept every command detail in this draft.
+The following decisions are part of this approved contract.
 
 - Use `kepler workflow <phase>` for phase-owned workflow operations. Construction commands belong under `kepler workflow construction`.
-- Use descriptive root capabilities, such as `git`, `lint`, and `audit`. Do not add generic `util` or `commons` groups.
-- Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted. It does not accept other proposals in this draft.
+- Use descriptive root capabilities, such as `git`, `lint`, `audit`, and `mission`. Do not add generic `util` or `commons` groups.
+- Use the requester-approved root `kepler mission create` operation for new mission identity and selected workspace preparation. Use `kepler mission prepare` to continue the original startup by its exact mission ID. Neither operation starts a stage.
+- Use `kepler git diff-package` for the three source-scoped inspection packages in [diff-package](diff-package.md). This capability and its placement under `git` are accepted.
 - Use the accepted [shared lint interface](#kepler-lint) under root `kepler lint`. Use the accepted [Construction lint interface](#kepler-workflow-construction-lint) for task-graph checks.
-- Use the accepted [setup interface](#kepler-setup) for Kepler's bundled resources and default settings. Native hosts or skill managers own [agent resource installation](installation.md#agent-resource-ownership).
+- Use the accepted [setup interface](#kepler-setup) for Kepler's packaged resources while preserving existing settings; setup does not create missing Kepler defaults. Under the approved Pi amendment, setup owns Kepler's managed Pi package registration; Pi owns loading and execution. Other hosts retain their existing [agent resource installation](installation.md#agent-resource-ownership) owner.
 - Use the accepted [UUID interface](#kepler-uuid) to generate one UUIDv4 without creating an artifact or task.
 - Apply the accepted [Standard workflow binding](#workflow-binding) to each Construction unit and its mission.
 - Apply the accepted [Mission contract](mission.md) for mission identity, record-home selection, workspace facts, membership, and pre-mission boundaries. Do not infer mission membership or add command options from that policy.
-- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence interface](#kepler-audit-record-evidence), [approval interface](#kepler-audit-record-approval), [interaction interface](#kepler-audit-record-interaction), and [audit queries](#kepler-audit-list) are accepted under SH109, SH55-SH56, SH63, and SH110. Do not add separate Construction evidence, approval, or interaction namespaces.
+- Record approvals, evidence, and interactions, and query history under `kepler audit`. The [evidence interface](#kepler-audit-record-evidence), [approval interface](#kepler-audit-record-approval), [interaction interface](#kepler-audit-record-interaction), and [audit queries](#kepler-audit-list) are accepted under SH109, SH55-SH56, SH63, and SH110. Do not add separate Construction audit namespaces. The [Integration lifecycle](#integration-operations) records its prepared-candidate checks and self-review through the selected `integration evidence` operation; do not duplicate those records through audit.
 - Treat audit as both a record operation and a history query. It is not a read-only feature.
 - Use `kepler workflow construction unit create`, `unit list`, and `unit show` for unit operations. Set initial effort at creation and read it through `unit show`. Record later changes through structured selections in existing interaction records. Do not add an effort setter command. Keep the requester's effort authority and agreed adjustment rules.
 - Use a direct `kepler workflow construction revise` operation. Do not add a revision namespace.
@@ -44,13 +45,13 @@ The following decisions are accepted. They do not accept every command detail in
 - Use the shared [output stream contract](#output-streams) for default machine-readable output.
 - Return [JSON-only operation results](#human-output).
 
-Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction stage sequence. Stage-specific policies stay proposals where their owning contracts say so.
+Construction owns its transition rules. A workflow selects stage order. The [Standard workflow](workflows/standard/README.md#stages) selects the Construction stage sequence. Each owning stage contract sets its policies.
 
-## Proposed interface rules
+## Interface rules
 
-The command inventory below lists proposed and accepted interfaces. Accepted interfaces include three diff-package commands, evidence and approval recording, interaction recording, audit queries, and shared lint. Setup, UUID generation, Construction lint, Standard workflow binding, SH53 queries, and SH54 transitions are also accepted. SH57-SH60 and SH62 accept their named interface details. SH63 accepts later effort changes through structured interaction records. Other details remain proposals unless their owners accepted them.
+The command inventory below defines accepted interfaces under SH122. Earlier decision IDs keep their original scope. Details not specified by this contract remain implementation choices.
 
-Do not add commands for future Initialization or Inception phases. Do not add a workflow engine, state registry, or utility registry. Exclude generic status changes, force operations, migrations, and public lock manipulation.
+Do not add commands for future Initialization or Inception phases. Do not add a workflow engine, state registry, or utility registry. Exclude generic status changes, force operations, migrations, and generic lock administration. The scoped [Construction Integration lifecycle](#integration-operations) is permitted; it does not authorize force-unlock or out-of-band lock manipulation.
 
 ### Scope and selectors
 
@@ -89,7 +90,7 @@ Unit-scoped operations resolve mission through unique recorded membership and mu
 
 A mission-aware query for unbound work reports missing binding; it does not adopt or hide the unit. Queries do not write history, change state, dispatch work, or select a persistent current unit or mission. They do not prove unknown external prerequisites.
 
-Keep effort defaults, stage overrides, and workflow binding in `unit show`. Do not return bulk artifact or repository contents by default or add a new cursor system. Exact state vocabularies and response fields remain implementation details.
+Keep effort defaults, stage overrides, and workflow binding in `unit show`. Do not return bulk artifact or repository contents by default or add a new cursor system. Use the accepted [Construction states](phases/construction/runtime.md#derived-states). Response fields not specified by the contract remain implementation details.
 
 Keep the accepted [diff-package source selectors and signatures](#kepler-git-diff-package) unchanged. Their `--generation-attempt` and `--integration-attempt` selectors identify source attempts, not consumer attempts.
 
@@ -137,7 +138,7 @@ Use `{}` when the command has no result fields. Put collection results inside `d
 
 Use the accepted [failure result fields](#failure-and-recovery-rules) inside `data` when `status` is `failed`. Apply the accepted [exit-code contract](#exit-codes). Apply the accepted [output stream contract](#output-streams). Apply the accepted [JSON-only result format](#human-output). A failed operation still returns a nonzero exit status.
 
-The following example shows proposed unit-creation fields inside `data`. These fields are not an accepted command-specific schema.
+The following example illustrates unit-creation fields inside `data`. It is not a complete command-specific schema. Fields not specified elsewhere remain implementation choices.
 
 ```json
 {
@@ -182,8 +183,10 @@ Any later human result mode must be opt-in.
 
 | Command | Placement | Purpose |
 | --- | --- | --- |
-| `kepler setup` | Accepted root interface | Install compatible bundled resources and missing default settings. |
+| `kepler setup` | Accepted root interface with approved unified-release amendment | Validate and activate a compatible immutable generation, write the installation receipt, and register the managed Pi package when needed; require existing Pi settings and do not create missing Kepler defaults. |
 | `kepler uuid` | Accepted root interface | Return one UUIDv4 in `data.uuid`. |
+| `kepler mission create` | Accepted root interface | Record a new mission and prepare its explicitly selected workspaces without starting a stage. |
+| `kepler mission prepare` | Accepted root interface under SH125 | Continue the same startup by exact mission ID, or return its recorded preparation result. |
 | `kepler git author` | Accepted under SH60 | Return effective repository Git values in `data.name` and `data.email`. |
 | `kepler git diff-package validation` | Accepted under `git` | Package a task's generated output for Code Validation. |
 | `kepler git diff-package integration` | Accepted under `git` | Package a prepared combined candidate for Code Integration inspection. |
@@ -198,42 +201,38 @@ Any later human result mode must be opt-in.
 | `kepler workflow construction unit show` | Accepted query under SH53 | Read one Unit of Work, its state, effort, and workflow binding. |
 | `kepler workflow construction lint` | Accepted phase interface | Validate the selected unit's canonical task graph without changing it. |
 | `kepler workflow construction stage <operation>` | Accepted `show`, `start`, `complete`, `pause`, and `resume` under SH53-SH54 and SH58 | Read or change one unit-scoped stage attempt under its contract. |
-| `kepler workflow construction task <operation>` | Accepted `list`, `show`, `ready`, `admit`, and `integrate` under SH53-SH54 | Read task state, admit a task, or integrate its result. |
+| `kepler workflow construction task <operation>` | Accepted `list`, `show`, `ready`, and `admit` under SH53-SH54 | Read task state or admit a task. |
 | `kepler workflow construction activity <operation>` | Accepted `show`, `start`, `complete`, `pause`, and `resume` under SH53-SH54 and SH58 | Read or change one task-scoped Activity attempt under its contract. |
+| `kepler workflow construction integration <operation>` | Separate `lock`, `prepare`, `evidence`, `accept`, and `release` under SH54 and the requester's 2026-10-31 decision | Coordinate checked candidate acceptance and safe incomplete-work release for one Code Integration attempt. |
 | `kepler workflow construction revise` | Accepted under SH57 | Apply an authorized revision within the selected stage or Activity scope. |
 
-Here, `<kind>` is `approval` or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, `admit`, and `integrate`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`.
+Here, `<kind>` is `approval` or `interaction`. Stage operations are `start`, `show`, `complete`, `pause`, and `resume`. Task operations are `list`, `show`, `ready`, and `admit`. Activity operations are `start`, `show`, `complete`, `pause`, and `resume`. Integration operations are `lock`, `prepare`, `evidence`, `accept`, and `release`.
 
-The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors), including SH54 mission selection where no unit supplies context. The accepted [evidence interface](#kepler-audit-record-evidence) fixes its stdin request and success identity fields. The [approval](#kepler-audit-record-approval) and [interaction](#kepler-audit-record-interaction) interfaces fix their typed requests. The [audit query interfaces](#kepler-audit-list) fix history selection and results. Other operation arguments and result fields stay open where their contracts say so.
+The entries name the requested operations. Apply the accepted [scope selectors](#scope-and-selectors), including SH54 mission selection where no unit supplies context. The accepted [evidence interface](#kepler-audit-record-evidence) fixes its stdin request and success identity fields. The [approval](#kepler-audit-record-approval) and [interaction](#kepler-audit-record-interaction) interfaces fix their typed requests. The [audit query interfaces](#kepler-audit-list) fix history selection and results. Operation arguments and result fields not specified by their contracts remain implementation choices.
 
 ## Root capabilities
 
 ### `kepler setup`
 
-**Accepted under [SH114](authoring_progress.md#completed-shared-decisions).** Use the following interface:
+**Accepted under [SH114](authoring_progress.md#completed-shared-decisions), with the approved unified-release amendment implemented in the current source candidate.** Use this interface:
 
 ```text
-kepler setup
+kepler setup [--accept-native-transfer <digest>]
 ```
 
-Use no command-specific options. Remove `--force` from the v3 interface. This global command does not use `--project`.
+Without an option, use normal first-install, upgrade, coherent no-op, or safe-repair behavior. The only option is the explicit digest-bound native-resource transfer approval. Remove `--force` from the v3 interface. This global command does not use `--project`.
 
-Select the bundle locally in this order:
+For a production executable, resolve the immutable resource package from the selected generation once per process. Verify that its embedded release, source, target, resource digest, complete manifest, and archive inventory agree before activation. Do not fall back to an arbitrary cwd or source checkout. A development package must be explicitly selected, complete, identity-matched, isolated, and fail closed when invalid. Setup does not download a release or select a latest resource package.
 
-- If `KEPLER_BUNDLE_DIR` is set, use that explicit override. Fail if it is missing or incompatible. Do not silently select another bundle.
-- Otherwise, check the sidecar `bundle/` next to the installation's `bin/` directory. Resolve executable symlinks before this lookup.
-- If no sidecar exists, check the source checkout's `bundle/` relative to the CLI module.
-- If no bundle exists, fail. Validate the selected bundle's declared compatibility and digest before copying its resources.
+The bootstrap installer selects and verifies one complete versioned target archive, stages it, then invokes that candidate's setup. It never promotes the active selector or stable command path. Setup alone activates the candidate. See the [installation generation and activation contract](installation.md#agent-resource-ownership).
 
-The release installer selects the CLI release and supplies its compatible bundle. Setup does not download or select a latest release. Keep development overrides subject to the same compatibility rules.
+Keep the existing XDG Kepler home, project data, unknown files, user settings, and custom resources. Built-in templates and guidelines remain in the selected immutable generation; setup does not copy them into the XDG home or create missing Kepler defaults/settings. The global home stores the format-two installation receipt. First Pi registration, explicit transfer, or repair updates only the exact managed package entry in an existing initialized settings file under native coordination; ordinary upgrades and coherent no-ops leave it unchanged. Missing or unsupported Pi prerequisites, visible same-name shadows, unknown ownership, or stale state block activation. Setup does not install Pi, pi-subagents, models, credentials, or permissions.
 
-Copy compatible templates and guideline manifests into Kepler's existing global home. Create default settings only when they do not exist. Keep existing settings and unknown or modified resources. Update only verified, unmodified installer-managed resources. Report necessary-path conflicts without overwriting or merging them. Apply the [installation preservation rules](installation.md#setup-contract).
+If a safe native ownership transfer is required, ordinary setup returns the exact read-only plan and its canonical digest in the existing failure `data.details` result. It does not transfer the resource or activate the dependent candidate. A staged candidate may remain and its path must be reported. `--accept-native-transfer <digest>` authorizes only the unchanged plan. Recomputed plan drift, a stale digest, unknown/custom/modified/mixed resources, or a conflict that cannot be preserved blocks the operation. Bootstrap never supplies this consent. The flag does not create a separate transfer command family or bypass preservation rules.
 
-On success, identify the installed generation and resource-check results inside `data`. Setup success does not show agent behavior or unchecked host readiness. Exact receipt fields and installation-record encoding are implementation details within these accepted rules.
+On success, identify the selected generation and actual resource/registration checks inside `data`; do not claim agent behavior or unchecked host readiness. On failure, report known partial effects and recovery facts in `data.details` under the shared [failure and recovery rules](#failure-and-recovery-rules). Keep the prior usable selector before activation. After an effect, preserve the journal and report actual state; failure does not prove rollback. Remove only operation-owned temporary material.
 
-On failure, keep the prior usable generation. Report available partial-write facts in `data.details` under the existing [failure and recovery rules](#failure-and-recovery-rules). Remove only temporary or partial resources that the operation can identify as its own. Keep uncertain or unrelated material.
-
-Setup does not create units, prepare project markers, run Initialization, dispatch agents, or change workflow state. It does not install native agent definitions or skills. Apply the accepted [resource ownership](installation.md#agent-resource-ownership).
+Setup does not create units, prepare project markers, run Initialization, dispatch workers, or change workflow state. Pi still owns loading and execution of its discovered agents and skills. Apply the [resource ownership amendment](installation.md#agent-resource-ownership). The current source candidate implements this contract but is not a published release. Candidate acceptance requires source-bound verification and independent review of the exact frozen source and archive; earlier evidence does not transfer across edits.
 
 ### `kepler uuid`
 
@@ -250,6 +249,44 @@ Use no generation or batch options. This global command does not use `--project`
 Use the value for artifact or task fields whose contracts specify UUIDv4. Follow the shared [artifact identity rules](metadata.md#identity-and-content-versions) and [task identity rules](phases/construction/task-graph.md#task-identity). Generation does not create an artifact, task, unit, or journal record.
 
 Do not use a UUID as the readable unit ID. Attempt and event IDs follow their own contracts.
+
+### `kepler mission create`
+
+Use this root capability to create a mission and prepare only the selected record home and workspace resources:
+
+```text
+kepler mission create --request <json> [--project <path>]
+```
+
+`--project` selects the record-home Git working-tree root under the shared [project selection rules](#project-selection). Prepare its `.kepler/` directory explicitly before resolution. Do not create the marker during project resolution. Participating secondary repositories do not need their own marker.
+
+Pass one strict JSON object through `--request`. It has `title`, `request`, `workflow`, `recordHomeRepositoryId`, `contexts`, and `repositories`. Set `workflow` to `standard`. Each context has an opaque `reference` and a `purpose`. Each repository has a caller-supplied `repositoryId`, an explicit `workspace`, an explicit `branch`, and an `integrationTarget`.
+
+Select an existing checkout with `{ "kind": "existing", "path": "<repository-root>" }`, a new worktree with `{ "kind": "new", "path": "<new-worktree-path>", "source": "<source-repository-root>" }`, or a saved previous binding with its `workspace_id`, `mission_id`, `record_home_repository_id`, and `record_home_path`. A new worktree requires an existing parent and an unused destination; the command does not reuse or overwrite a path.
+
+Select a branch as `{ "kind": "current" }`, `{ "kind": "default" }`, `{ "kind": "existing", "name": "<branch>" }`, or `{ "kind": "new", "name": "<branch>", "base": "<ref>" }`. A default selection requires a resolvable local `origin/HEAD` branch. Integration targets must identify local branch refs. Do not guess a default branch, move dirty work, or change an unselected resource.
+
+Record mission creation before workspace effects. Success returns `data.mission_id`, `data.record_home`, `data.workspaces`, and `data.execution_started: false`. Each workspace result identifies its repository, context, local workspace ID and path, branch, Integration target, and starting commit or explicit `no-commit` condition. The command creates no stage attempt and does not start Functional Design.
+
+Save the resolved startup instructions before creation append or Git changes under the [Mission recovery contract](mission.md#continue-mission-preparation). On failure, preserve recorded facts and report known partial effects, the allocated mission ID, and continuation guidance in the common failure result. Continue with `mission prepare`; repeating `mission create` allocates a new identity. Do not claim readiness, delete or roll back prepared resources, or repair/publish Git state automatically. Keep the mission unstarted until its required workspace binding is recorded. Do not add a mission registry, Initialization stage, workflow engine, raw journal operation, or generic execution-start command.
+
+### `kepler mission prepare`
+
+**Accepted under SH125.** Continue the original startup with its full lowercase UUIDv4:
+
+```text
+kepler mission prepare --mission <mission-id> [--project <path>]
+```
+
+Select the original record-home working-tree root under the shared project-selection rules. This command takes no replacement mission request and does not allocate a new mission identity or start a stage.
+
+Read and validate the complete mission history before using local recovery material. A valid recorded preparation returns `success`, `data.historical: true`, and the recorded repository bindings. Omit local `workspace_id` and `workspace_path` fields from this historical result. It needs no local startup intent or attachment and makes no workspace changes. It does not establish current execution readiness or recreate missing attachments.
+
+An incomplete startup requires valid saved instructions for its original identities, paths, branches, checkpoints, and exact pending events. Under mission and canonical resource coordination, reuse verified matching resources and perform only missing authorized work. Retry creation append if necessary; record preparation only after every selected resource is verified. Reject changed starting commits or no-commit conditions, conflicting attachments, aliases in saved coordinates, uncertain resources, and unsupported or conflicting history. Do not infer ownership from an occupied path.
+
+A newly completed preparation returns `data.historical: false` and its verified local workspace IDs and paths. Both success cases return `mission_id`, `workflow: "standard"`, `record_home`, `workspaces`, and `execution_started: false`. Workspace bindings retain repository, context, branch, Integration target, and starting checkpoint facts.
+
+Preserve the exact saved envelopes on append retry. Only a complete matching saved startup event whose final newline is missing can use the existing [same-write recovery](runtime.md#interrupted-event-write-recovery); uncertain tails remain blocked and unchanged. Older incomplete missions without required recovery material fail with missing-fact details instead of reconstructed selections. Failures retain known operation and release facts and do not grant repair or lock-removal authority.
 
 ### `kepler git author`
 
@@ -363,7 +400,7 @@ This fragment shows only the accepted `inputs` structure, not a complete evidenc
 }
 ```
 
-The operation records an existing check or review result. It does not run checks, grant approval, or complete workflow work. Keep the actual executor and supporting evidence under the existing binding rules.
+The operation records an existing check or review result. It does not run checks, grant approval, or complete workflow work. Keep the actual executor and supporting evidence under the existing binding rules. When evidence fulfills an explicit requester request, `related_request_event_id` may identify that exact requester interaction. The recorder validates its unit, stage, attempt, and requester attribution, then records it as a direct cause; the reference does not grant authority. When a check depends on earlier same-attempt evidence, `related_event_ids` may identify those evidence events. The recorder validates their current stage-attempt bindings and records them as direct causes of the new evidence event.
 
 On successful recording, return `success` and exit `0`. Include the following required fields inside `data`:
 
@@ -391,7 +428,9 @@ Commit repository output before recording approval. Recording approval does not 
 
 A request may carry an explicit structured effort selection. It can set the unit default, set a stage override, or remove a stage override. The owning phase validates scope, level, and requester authority under existing rules. It derives effort from the recorded selection. Do not infer selections from interaction prose, free-form references, or arbitrary participant messages. Ordinary interactions without a selection remain informational.
 
-Keep the selection in the same recorded interaction. The caller must faithfully record the requester's actual selection. Do not append a separate effort event or add a setter command, generic state-patching operation, or independent setting file. Keep field names, types, and event catalogs as implementation details. Do not require a new decision reference or consent-proof protocol.
+Record the requester's selected Deliver outcome in the same interaction under `delivery_outcome`, with `outcome`, `requested_outcome`, `destination`, and `recipient`. Require a requester participant and the current Deliver attempt. Deliver completion requires this event and must match its typed fields. This records the request, not operation authority or final approval.
+
+Keep structured selections in the same recorded interaction. The caller must faithfully record the requester's actual selection. Do not append a separate effort event or add a setter command, generic state-patching operation, or independent setting file. Keep field names, types, and event details not specified by accepted contracts as implementation choices. Do not require a new decision reference or consent-proof protocol.
 
 Record meaningful questions, answers, clarifications, and decision context. Do not require full conversations or transcripts. Keep secrets out of records.
 
@@ -454,7 +493,7 @@ Later operations and resume read that recorded binding. Expose it through `unit 
 
 The CLI uses the recorded workflow binding and exposes no per-command selector or switching operation. It defines no generic workflow registry. Binding Standard does not start a stage, grant execution authority, or approve a Unit of Work.
 
-Exact event payload and response-field encoding remain implementation details under the existing runtime and query decisions. SH115 accepts the workflow binding; SH59 separately accepts the full unit-creation signature.
+Event payload details and response-field encodings not specified by accepted runtime and query contracts remain implementation choices. SH115 accepts the workflow binding; SH59 separately accepts the full unit-creation signature.
 
 ### `kepler workflow construction unit create`
 
@@ -478,13 +517,13 @@ Apply the existing unit-identity, project-selection, workflow-binding, and failu
 
 Reject invalid input before writing. If creation stops after partial changes, reconcile actual directory and journal effects before retrying. Keep uncertain or unrelated material. Do not promise general exactly-once replay. Exact result fields and partial-write mechanisms remain implementation choices under the shared contracts.
 
-Expose the unit effort default, explicit overrides, and effective stage levels through `unit show`. The existing unit-creation example shows proposed result fields, not an accepted command-specific result schema. Initial effort records do not select the later effort-change interface or an event catalog.
+Expose the unit effort default, explicit overrides, and effective stage levels through `unit show`. The unit-creation example illustrates result fields, not a complete command-specific result schema. Initial effort records do not replace the accepted later effort-change interface or Construction event catalog.
 
 ### `kepler workflow construction unit list`
 
 **Accepted query under SH53.** List Units of Work in an explicit record-home scope. Read directory identity, derived execution state, and mission membership. Distinguish known unbound units. Do not create a unit, adopt or hide unbound work, select an active unit, or write history. Do not infer a single global order from event timestamps.
 
-Apply the accepted [project selection rules](#project-selection). Return compact JSON. Filters, ordering, state vocabulary, and response fields stay implementation details.
+Apply the accepted [project selection rules](#project-selection). Return compact JSON with the accepted [Construction states](phases/construction/runtime.md#derived-states). Filters, ordering, and response fields not specified by the contract remain implementation details.
 
 ### `kepler workflow construction unit show`
 
@@ -492,9 +531,9 @@ Apply the accepted [project selection rules](#project-selection). Return compact
 
 Activities inherit their stage's effort. They do not have their own override. Do not add an effort command. The requester decides stage overrides and later adjustments under the accepted [Effort policy](effort.md#selection-rules). Under SH63, later selections use the existing interaction record.
 
-Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Resolve mission context from unique recorded membership. For an unbound unit, report the missing binding. Do not adopt or hide it. Return compact JSON without bulk artifact contents. Exact state vocabulary and response fields remain implementation details.
+Use `--unit <unit-id>` under the accepted [scope selectors](#scope-and-selectors). Resolve mission context from unique recorded membership. For an unbound unit, report the missing binding. Do not adopt or hide it. Return compact JSON with the accepted [Construction states](phases/construction/runtime.md#derived-states), without bulk artifact contents.
 
-Expose the accepted [workflow binding](#workflow-binding). Exact response fields stay open under the existing query decisions. This query must not select a unit for later commands.
+Expose the accepted [workflow binding](#workflow-binding). Response fields not specified by the contract remain implementation choices. This query must not select a unit for later commands.
 
 ### `kepler workflow construction lint`
 
@@ -532,15 +571,16 @@ Use `--unit <unit-id>` and `--stage <stage>` under the accepted [scope selectors
 | --- | --- |
 | `stage start` | **Accepted under SH54.** Start the authorized stage in its unit scope. Create a distinct stage attempt only when execution starts. Enforce the one-active-attempt limit for that fixed scope. |
 | `stage show` | **Accepted under SH53.** Read the selected stage's derived state, attempt, effort, and relevant evidence. Do not write or advance state. |
+| `stage assess-retained-scopes` | **M09 implementation.** For a returned Implementation attempt, record applicability assessments for completed Activities from an ended earlier parent before downstream work uses them. Bind each assessment to its original attempt, evidence, and checkpoints. |
 | `stage complete` | **Accepted under SH54.** Record completion only when the owning phase's completion conditions hold for the current attempt and material. Completing one stage does not complete the workflow. |
 | `stage pause` | **Accepted under SH58.** Block new affected work. Keep the attempt identity, history, and active-scope reservation. Acknowledge a completed pause only after workers stop and locks reconcile. |
 | `stage resume` | **Accepted under SH58.** Verify inputs and ownership, then resume the same attempt. Keep its active-scope reservation. Unrelated work continues. |
 
-Each mutation records its own typed lifecycle event and uses accepted short scoped coordination. Do not ask callers to write a duplicate event. Mutations of an existing attempt name its exact ID. A start creates its UUIDv4 only when execution starts.
+Each mutation records its own typed lifecycle event and uses accepted short scoped coordination. Do not ask callers to write a duplicate event. Mutations of an existing attempt name its exact ID. Stage reopening names its exact ended attempt and directly depends on the matching revision-end event and authorization. A start creates its UUIDv4 only when execution starts. Retained-scope assessments name the current Implementation attempt and must be recorded before task admission or Integration relies on them; `stage complete` references those assessment event IDs. Deliver completion uses event version 3 and references the current requester outcome interaction. Version 2 Deliver completion history remains readable under its legacy payload contract. Only a completed Activity from an ended older parent can be retained. A reopened Activity under the same parent requires a new attempt and cannot be retained.
 
 Starting a stage does not launch an agent. A failed or partial transition returns a nonzero operation result. Do not mark a stage complete from a successful process exit alone.
 
-Apply each owning phase's accepted authority, attempt, evidence, and completion rules. SH58 accepts pause safety and same-attempt resume, not state names or event payloads. Exact payloads and recovery mechanisms for interrupted transitions remain implementation work. A timeout or absent session does not prove that workers stopped. See the [stage catalog](phases/construction/README.md#stage-catalog).
+Apply each owning phase's accepted authority, attempt, evidence, and completion rules. SH58 accepts pause safety and same-attempt resume. CN23 separately approves the [Construction states and event requirements](phases/construction/runtime.md). Payload details not specified there and recovery mechanisms remain implementation work. A timeout or absent session does not prove that workers stopped. See the [stage catalog](phases/construction/README.md#stage-catalog).
 
 ## Task operations
 
@@ -552,9 +592,12 @@ Task operations use `--unit <unit-id>`. An operation on one task also uses `--ta
 | `task show` | **Accepted under SH53.** Show one task definition, current scope, attempt links, evidence, and progress. Do not change state. |
 | `task ready` | **Accepted under SH53.** Report graph dependencies, predecessor outputs known in the unit's integrated state, blockers, and known prerequisite facts or unknowns. Do not admit or start the task. |
 | `task admit` | **Accepted under SH54.** Admit one ready task and capture the current repository-qualified unit integration set as its fixed baseline. Show predecessor-output inclusion from history or provenance, not timestamps alone. Do not create an admission commit, task attempt, or automatic dispatch. |
-| `task integrate` | **Accepted under SH54.** Acquire the unit integration lock. Read the current repository-qualified checkpoint set and prepare the combined candidate set. Run typechecking, the project build, and the full application test suite across the required repositories. Accept only the checked candidate set and record each necessary repository result. Release the lock when the operation ends. |
 
 `task ready` does not interpret free-form acceptance criteria or prove unknown external availability. It reports graph facts, known blockers, and unknown conditions. The orchestrator compares the criteria and prerequisites with available facts before it reports readiness under the task contract.
+
+**Implementation note:** task queries discover uniquely identified, passed `task-prerequisite` evidence before admission. The record must name the task and its current Implementation attempt, have no Activity scope, and contain an input reference exactly equal to the prerequisite condition or description. Replay validates its causal binding to the running parent at recording. `task ready` returns filtered prerequisite evidence/event IDs and remaining unknown prerequisites. List and show use the same coverage for state and blockers; `task show` keeps its separate general evidence view. Optional and verification facts can be known without becoming admission requirements; only uncovered blocking Implementation prerequisites add prerequisite blockers. Other blockers remain unchanged.
+
+A unique current attempt keeps its valid recorded facts while waiting, pausing, paused, or completed. A different current attempt cannot reuse old-attempt proof. New recording and admission still require a running parent; admission independently validates explicitly selected IDs. These query results do not grant execution authority or resolve opaque references. See [task admission and baselines](runtime.md#task-admission-and-baselines).
 
 Do not integrate a task until Code Validation succeeds and its independent non-author feedback is complete. Keep the lock across checkpoint-set capture, candidate preparation, required checks, and acceptance. Record the necessary repository results. A failed check or changed candidate prevents acceptance until the candidate passes again. The task's admitted baseline stays fixed. Record actual Integration inputs separately. Repository commits do not form an atomic cross-repository commit.
 
@@ -572,15 +615,39 @@ Use `--unit <unit-id>`, `--task <task-id>`, `--activity <activity>`, and `--impl
 | --- | --- |
 | `activity start` | **Accepted under SH54.** Start one Activity occurrence for an admitted task under the active Implementation attempt. Create its distinct attempt when execution starts. Enforce at most one active attempt for that occurrence. |
 | `activity show` | **Accepted under SH53.** Read one Activity occurrence and its attempts, evidence bindings, and current state. Do not write or advance state. |
-| `activity complete` | **Accepted under SH54.** Record completion only when that Activity's conditions and evidence hold for its current attempt. Code Integration can complete only with a matching accepted candidate from `task integrate`. |
+| `activity complete` | **Accepted under SH54.** Record completion only when that Activity's conditions and evidence hold for its current attempt. Code Integration can complete only with a matching accepted candidate from `kepler workflow construction integration accept`. |
 | `activity pause` | **Accepted under SH58.** Block new affected work. Keep the attempt identity, history, and active-scope reservation. Acknowledge a completed pause only after workers stop and locks reconcile. |
 | `activity resume` | **Accepted under SH58.** Verify inputs and ownership, then resume the same attempt. Keep its active-scope reservation. Unrelated work continues. |
 
-Code Generation owns implementation, typechecking, related tests, and self-review. Code Validation owns necessary typechecking, the project build, the full application test suite, and independent non-author feedback. Code Integration owns combined-candidate checks and acceptance. These check duties stay binding. The detailed Activity contracts mark other proposals separately.
+Code Generation owns implementation, typechecking, related tests, and self-review. Code Validation owns necessary typechecking, the project build, the full application test suite, and independent non-author feedback. Code Integration owns combined-candidate checks and acceptance. These duties and the accepted detailed Activity contracts stay binding.
 
 A local correction, failed command, pause, resume, or new session keeps the current unended attempt. An authorized return creates a new Activity attempt when that Activity executes again. An Integration-only retry stays within its current Code Integration attempt. Do not add task-coding or protocol-run attempt identities.
 
 Phase-owned event payload details, completion guards, and evidence payload types beyond the shared [record minimum](runtime.md#evidence-and-approval-bindings) remain implementation work. An Activity completion does not complete the enclosing Implementation stage or Unit of Work.
+
+## Integration operations
+
+### `kepler workflow construction integration`
+
+Under SH54 and the requester's 2026-10-31 interface decision, keep separate `lock`, `prepare`, `evidence`, `accept`, and `release` operations. Do not add `task integrate`. These are scoped Code Integration lifecycle operations, not generic lock administration.
+
+Use the exact `--unit <unit-id>`, `--task <task-id>`, `--activity code-integration`, `--implementation-attempt <attempt-id>`, and `--attempt <attempt-id>` selectors. `--project <path>` is optional and selects the record home. Do not infer an active scope. The current shared parser shows a superset of operation options in help; the following table identifies each operation's effective inputs.
+
+| Operation | Additional inputs | Behavior |
+| --- | --- | --- |
+| `integration lock` | None. | Acquire the unit's long Integration lock, then capture the current Integration inputs. Return `lock_token` and the captured repository binding. Retain the token for this exact scope. |
+| `integration prepare` | `--lock-token <token>` and `--request <json>`. | Validate and record the caller-supplied immutable candidate. The request supplies `captured_inputs` matching lock acquisition and repository-qualified `candidate_checkpoints`. Return `prepared_event_id`. |
+| `integration evidence` | `--lock-token <token>` and `--request <json>`. | Validate and record a check result or self-review for the exact preparation and current Activity. The JSON request supplies `prepared_event_id`, check, actual executor, result, output references, conditions, and the required repository-qualified command for a command check. |
+| `integration accept` | `--lock-token <token>` and `--prepared-event-id <event-id>`. | Accept only the current preparation covered by required successful proof, record its exact proof and candidate bindings, then perform replacement-safe release. Retain any accepted partial effect if release or post-append verification fails. |
+| `integration release` | `--lock-token <token>`. | Release incomplete work only when there is no acceptance for the attempt, the current owner still matches, and the live target equals the lock-captured input. This does not complete or end the Activity attempt. |
+
+The orchestrator's assigned caller combines task output with the lock-captured state and runs typechecking, the project build, and the full application test suite against the candidate while holding the lock. The CLI does not execute those commands. It validates each declared command against the exact repository-qualified command in both the accepted plan and the admitted task's verification contract, then records the supplied actual result. Do not autodetect commands, execute arbitrary prose, or treat a recorded result as independent proof of truthful execution. Keep the accepted check duties and caller responsibility for actual checks, retained output, and self-review.
+
+At acceptance, revalidate the current attempt, preparation, actual inputs, accepted Planning bindings, declared commands, successful evidence, and long-lock ownership under short unit-scoped control. Failed or inconclusive current checks prevent acceptance. If successful proof changes after acceptance starts, keep the lock and retry acceptance explicitly so its event cites current proof. Preserve causal order; timestamps do not select current evidence. A matching already-recorded acceptance can recover release without appending a duplicate only while its proof, candidate, and lock remain valid.
+
+Serialize incomplete-work release with acceptance under the same short unit-control boundary. A pending revision barrier prevents new acceptance; it does not alone forbid an otherwise safe incomplete-work release. Changed or unreadable targets, uncertain ownership, and unresolved partial effects keep the claim for reconciliation. Do not report an abort after acceptance or append acceptance after the claim was released. Ordinary token-scoped release does not permit force-unlock, removal of another owner's claim, automatic takeover, or rollback. Manual deadlock recovery remains under SH67 and separate operator authority.
+
+The current executable supports one repository per unit and rejects multi-repository Integration before lock acquisition. This is a shipping limit, not a change to the accepted repository-qualified Activity contract. A successful acceptance does not grant requester approval or complete the enclosing Activity, Implementation stage, Unit of Work, or delivery.
 
 ## Revision operation
 
@@ -648,7 +715,7 @@ This example shows the failure structure, not agreed error-code values or `detai
 }
 ```
 
-These rules add no storage path or lock command. Apply the accepted [runtime coordination contract](runtime.md#short-scoped-coordination) and [Mission storage policy](mission.md#local-storage-and-concurrency).
+These recovery rules add no storage path or generic lock-management command. Apply the accepted [runtime coordination contract](runtime.md#short-scoped-coordination) and [Mission storage policy](mission.md#local-storage-and-concurrency).
 
 - Validate inputs and authorization before changing state.
 - Return a nonzero status when the requested operation fails. Do not return a successful transition result for an incomplete write.
@@ -658,7 +725,7 @@ These rules add no storage path or lock command. Apply the accepted [runtime coo
 - Keep query and lint commands read-only. Projection rebuilds and history queries do not rerun checks or create approvals.
 - Keep local journal order. Use causal links for cross-journal causes. Do not use timestamps to invent a global ordering.
 
-Exact SH87 append and import mechanisms, projections, and physical storage remain implementation choices under [CLI infrastructure](runtime.md#execution-state-representation). SH64-SH66 accept lock directories, required owner-record facts, and cross-workspace coordination. The [Mission contract](mission.md#local-storage-and-concurrency) sets their local paths. Exact key encodings and record fields remain implementation choices. SH67 accepts manual lock-artifact removal under its recovery limits. This policy adds no lock-management command.
+Exact SH87 append and import mechanisms, projections, and physical storage remain implementation choices under [CLI infrastructure](runtime.md#execution-state-representation). SH64-SH66 accept lock directories, required owner-record facts, and cross-workspace coordination. The [Mission contract](mission.md#local-storage-and-concurrency) sets their local paths. Exact key encodings and record fields remain implementation choices. SH67 accepts manual lock-artifact removal under its recovery limits. This recovery policy adds no generic lock-management command; the scoped Integration lifecycle stays separate.
 
 ### Exit codes
 
@@ -675,16 +742,16 @@ These codes describe the command operation. A successful query can exit `0` whil
 
 Forced termination can produce other exit codes or prevent a JSON response. A missing response does not prove success. Apply existing recovery rules.
 
-## Open decisions
+## Implementation details and exclusions
 
 Accepted command placements, structured-output default, and typed lifecycle writes stay in force. The accepted [project selection](#project-selection), [scope selectors](#scope-and-selectors), [result envelope](#machine-readable-output), [failure result fields](#failure-and-recovery-rules), [exit-code contract](#exit-codes), [output stream contract](#output-streams), and [JSON-only result format](#human-output) also stay in force. The exact three [diff-package signatures](#kepler-git-diff-package) also stay in force. The [evidence recording interface](#kepler-audit-record-evidence), [audit queries](#kepler-audit-list), and [shared lint interface](#kepler-lint) also stay in force. The accepted [Construction lint](#kepler-workflow-construction-lint), [UUID](#kepler-uuid), [setup](#kepler-setup), and [workflow binding](#workflow-binding) interfaces also stay in force.
 
 Apply the accepted [resource ownership](installation.md#agent-resource-ownership) and [intended targets](installation.md#intended-targets). These targets do not claim tested or certified agent behavior. The remaining technical answers do not create requester approval gates.
 
-SH57-SH67 accept their named interfaces and policy boundaries. Exact request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 accept policy guarantees without adding public CLI interfaces. Their exact mechanisms remain implementation work.
+SH57-SH67 accept their named interfaces and policy boundaries. Request payloads, event names, projection fields, lock-key encoding, owner-record field names, and error-code values not specified by accepted contracts remain implementation details. SH69, SH70, SH72, SH84, and SH85 settle policy without adding public CLI interfaces. SH87 and DF14-DF17 accept policy guarantees without adding public CLI interfaces. Their exact mechanisms remain implementation work.
 
 SH51 and SH53-SH67 are settled. The [Mission contract](mission.md) sets the existing SH45 storage paths, SH68 workspace policy, SH86 retained-evidence locations, and SH64-SH66 coordination domains. The [runtime contract](runtime.md#short-scoped-coordination) sets the lock and owner-record requirements. Exact key and record details remain implementation choices.
 
-Other choices include exact journal append and import mechanisms under SH87, projections, workspace allocation, and unaccepted task and Activity details. Actor representation and phase payload fields under SH55-SH56 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
+Other choices include exact journal append and import mechanisms under SH87, projection encodings, workspace allocation, and task or Activity details not specified by accepted contracts. Actor representation and phase payload fields not specified under SH55-SH56 or CN23 remain implementation details, not open authority policy. Do not invent authentication or consent protocols.
 
-Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. This CLI draft does not accept other proposals in those contracts.
+Migration commands and future Initialization or Inception commands stay outside this inventory. The agreed [effort policy](effort.md#selection-rules), [revision authority](revision.md#authority-and-escalation), [Construction structure](phases/construction/README.md#implementation), and [Standard stage order](workflows/standard/README.md#stages) stay in force. Approval of this contract does not resolve deferred decisions in other contracts.

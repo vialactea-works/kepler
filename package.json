@@ -1,8 +1,9 @@
 {
   "name": "kepler",
-  "version": "0.10.3",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.4.0",
   "license": "Apache-2.0",
   "workspaces": [
     "packages/*"
@@ -11,12 +12,20 @@
     "build": "bun run build:core && bun run build:cli",
     "build:core": "bun run --filter @vialactea-works/kepler-core build",
     "build:cli": "bun run --filter @vialactea-works/kepler-cli build",
-    "test": "bun --bun vitest run",
-    "test:package": "bun run --filter @vialactea-works/kepler-core test:package && bun run --filter @vialactea-works/kepler-cli test",
-    "check:version": "bun scripts/check-versions.mjs",
+    "typecheck": "bun run build:core && bun run tsc --project tsconfig.tests.json",
+    "test:unit": "bun --bun vitest run --project unit",
+    "test:integration": "bun --bun vitest run --project integration --no-file-parallelism",
+    "test:package": "bun --bun vitest run --project integration packages/core/tests/integration/packed-package.test.ts",
+    "test:e2e": "bun run build && bun --bun vitest run --project e2e --exclude tests/e2e/dev-package.test.ts --exclude tests/e2e/release-archive.test.ts",
+    "test": "bun run check:typescript-sources && bun run typecheck && bun run test:unit && bun run test:integration && bun run test:e2e",
+    "check:version": "bun scripts/check-versions.ts",
+    "release:prepare": "bun scripts/release-prepare.ts",
+    "release:check": "bun scripts/check-release.ts",
+    "prepare:bundle": "bun scripts/prepare-bundle.ts",
+    "check:typescript-sources": "bun scripts/check-typescript-sources.ts",
+    "dev:package": "bun scripts/dev-package.ts",
     "test:file": "bun --bun vitest run --reporter=verbose",
     "test:agent": "bun --bun vitest run 2>&1 | tail -8",
-    "install-local": "bun run build && mkdir -p ~/.local/bin && ln -sf $(pwd)/packages/cli/dist/cli/main.js ~/.local/bin/kepler && chmod +x packages/cli/dist/cli/main.js",
     "purge": "rm -f ~/.local/bin/kepler; rm -rf ~/.kepler-dist/"
   },
   "devDependencies": {
@@ -27,6 +36,7 @@
     "@types/inquirer": "8.2.13",
     "@types/node": "22.16.0",
     "ajv": "8.17.1",
+    "execa": "9.6.1",
     "marked": "15.0.12",
     "nest-commander": "3.21.0",
     "reflect-metadata": "0.2.2",

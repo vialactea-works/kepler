@@ -1,380 +1,51 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
 import * as Path from "node:path";
-import * as Os from "node:os";
-import * as Yaml from "yaml";
-import { SetupService } from "../../packages/cli/src/cli/setup.service.js";
-import { createSetupRuntime } from "../../packages/cli/src/cli/setup-runtime.js";
-import { buildSettingsYaml } from "../../packages/cli/src/cli/setup-settings.js";
+import { parseInstallationReceipt } from "../../packages/cli/src/cli/installation-record.js";
+import { SetupFailure } from "../../packages/cli/src/cli/setup.service.js";
+import {
+  createSetupApplicationFixture,
+  defaultSetupRelease,
+} from "../helpers/setup-application-fixture.js";
 
-const TEMPLATE_FILES = [
-  "critique.md",
-  "design.md",
-  "feedback.md",
-  "finish.md",
-  "glossary.md",
-  "plan.md",
-  "progress.md",
-  "proposal.md",
-  "README.md",
-  "requirements-change.md",
-  "requirements-spec.md",
-  "review.md",
-  "task-progress.md",
-];
+const fixtures: ReturnType<typeof createSetupApplicationFixture>[] = [];
 
-const WAYFINDER_TEMPLATE_FILES = [
-  "wayfinder/map.md",
-  "wayfinder/ticket.md",
-  "wayfinder/route.md",
-];
+function fixture() {
+  const value = createSetupApplicationFixture();
+  fixtures.push(value);
+  return value;
+}
 
-const runSetup = () => {
-  const runtime = createSetupRuntime();
-  const service = new SetupService(
-    runtime.fileSystemHome,
-    runtime.bundleLocator,
-  );
-  return service.setup();
-};
-
-describe("SetupService", () => {
-  const bundleRoot = "/bundle";
-  const templates = "/home/.config/vialactea-works/kepler/templates";
-  const guidelines = "/home/.config/vialactea-works/kepler/guidelines";
-  const settings = "/home/.config/vialactea-works/kepler/settings.yaml";
-
-  function makePorts(existingSettings?: string) {
-    const files = new Map<string, string>();
-    if (existingSettings !== undefined) files.set(settings, existingSettings);
-    const copies: Array<[string, string]> = [];
-    const fileSystemHome = {
-      ensureKeplerHome: () => {},
-      existsSync: (path: string) =>
-        path === Path.join(bundleRoot, "templates") ||
-        path === Path.join(bundleRoot, "guidelines") ||
-        files.has(path),
-      copyDirectory: (source: string, destination: string) => {
-        copies.push([source, destination]);
-      },
-      readdirRecursive: (directory: string) =>
-        directory === templates ? ["plan.md"] : [],
-      isFile: (path: string) => path === Path.join(templates, "plan.md"),
-      writeFileSync: (path: string, content: string) => {
-        files.set(path, content);
-      },
-      guidelinesDir: () => guidelines,
-      settingsPath: () => settings,
-      templatesDir: () => templates,
-    };
-    return { fileSystemHome, files, copies };
-  }
-
-  it("installs into fresh and existing homes through supplied ports", () => {
-    const fresh = makePorts();
-    const freshService = new SetupService(
-      fresh.fileSystemHome,
-      () => bundleRoot,
-    );
-    expect(freshService.setup()).toEqual({ templates: ["plan.md"] });
-    expect(fresh.files.get(settings)).toContain("name: rtk");
-    expect(fresh.copies).toEqual([
-      [Path.join(bundleRoot, "templates"), templates],
-      [Path.join(bundleRoot, "guidelines"), guidelines],
-    ]);
-
-    const existing = makePorts("custom settings\n");
-    const existingService = new SetupService(
-      existing.fileSystemHome,
-      () => bundleRoot,
-    );
-    existingService.setup();
-    expect(existing.files.get(settings)).toBe("custom settings\n");
-  });
-
-  it("reports filesystem and bundle failures from supplied ports", () => {
-    const filesystemFailure = makePorts();
-    filesystemFailure.fileSystemHome.ensureKeplerHome = () => {
-      throw new Error("permission denied");
-    };
-    expect(
-      () =>
-        new SetupService(
-          filesystemFailure.fileSystemHome,
-          () => bundleRoot,
-        ).setup(),
-    ).toThrow("Failed to create Kepler home directories");
-
-    const bundleFailure = makePorts();
-    expect(
-      () =>
-        new SetupService(bundleFailure.fileSystemHome, () => {
-          throw new Error("bundle unavailable");
-        }).setup(),
-    ).toThrow("bundle unavailable");
-  });
+afterEach(() => {
+  for (const value of fixtures.splice(0)) value.cleanup();
 });
 
 describe("SetupService filesystem integration", () => {
-  let tmpHome: string;
-  const originalHome = process.env.HOME;
-  const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
+  it("selects a complete v2 generation and registers its stable package source", () => {
+    const value = fixture();
+    const result = value.createService().setup();
+    const distributionRoot = Path.join(value.root, ".kepler-dist");
+    const selector = Path.join(distributionRoot, "current");
+    const generationRoot = Path.join(distributionRoot, "generations", result.generation_id);
+    const receiptPath = Path.join(value.root, ".config", "vialactea-works", "kepler", "installation.json");
 
-  beforeEach(() => {
-    tmpHome = Fs.mkdtempSync(Path.join(Os.tmpdir(), "kepler-init-"));
-    process.env.HOME = tmpHome;
-    process.env.XDG_CONFIG_HOME = Path.join(tmpHome, ".config");
+    expect(result.installation_mode).toBe("first-install");
+    expect(Fs.readlinkSync(selector)).toBe(`generations/${result.generation_id}`);
+    expect(Fs.readFileSync(Path.join(generationRoot, "bin", "kepler"), "utf8"))
+      .toContain("KEPLER_BUILD_IDENTITY_BEGIN:");
+    expect(Fs.existsSync(Path.join(generationRoot, "release-manifest.json"))).toBe(true);
+    expect(parseInstallationReceipt(Fs.readFileSync(receiptPath, "utf8")).kind).toBe("current-v2");
+    expect(Fs.existsSync(Path.join(generationRoot, "bundle", "manifest.json"))).toBe(true);
   });
 
-  afterEach(() => {
-    if (originalHome === undefined) delete process.env.HOME;
-    else process.env.HOME = originalHome;
-    if (originalXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
-    Fs.rmSync(tmpHome, { recursive: true, force: true });
-  });
+  it("fails before installation effects when the Pi prerequisite is unavailable", () => {
+    const value = fixture();
+    const service = value.createService(defaultSetupRelease, {
+      detectPiVersion: () => { throw new Error("Pi unavailable"); },
+    });
 
-  it("creates required directories", () => {
-    runSetup();
-
-    const home = Path.join(tmpHome, ".config/vialactea-works/kepler");
-    expect(Fs.existsSync(home)).toBe(true);
-    expect(Fs.existsSync(Path.join(home, "templates"))).toBe(true);
-    expect(Fs.existsSync(Path.join(home, "guidelines"))).toBe(true);
-    expect(Fs.existsSync(Path.join(home, "scripts"))).toBe(false);
-  });
-
-  it("copies artifact templates", () => {
-    runSetup();
-
-    const templatesBase = Path.join(tmpHome, ".config/vialactea-works/kepler", "templates");
-    for (const file of TEMPLATE_FILES) {
-      expect(Fs.existsSync(Path.join(templatesBase, file))).toBe(true);
-    }
-  });
-
-  it("installs and refreshes the bundled design and canonical spec bytes", () => {
-    const templatesBase = Path.join(tmpHome, ".config/vialactea-works/kepler", "templates");
-    runSetup();
-    for (const file of ["design.md", "requirements-spec.md"]) {
-      const installedPath = Path.join(templatesBase, file);
-      const bundledPath = Path.join(process.cwd(), "bundle", "templates", file);
-      expect(Fs.readFileSync(installedPath)).toEqual(Fs.readFileSync(bundledPath));
-      Fs.writeFileSync(installedPath, "stale template\n");
-    }
-    runSetup();
-    for (const file of ["design.md", "requirements-spec.md"]) {
-      expect(Fs.readFileSync(Path.join(templatesBase, file))).toEqual(
-        Fs.readFileSync(Path.join(process.cwd(), "bundle", "templates", file)),
-      );
-    }
-  });
-
-  it("copies wayfinder artifact templates", () => {
-    runSetup();
-
-    const templatesBase = Path.join(tmpHome, ".config/vialactea-works/kepler", "templates");
-    for (const file of WAYFINDER_TEMPLATE_FILES) {
-      expect(Fs.existsSync(Path.join(templatesBase, file))).toBe(true);
-    }
-
-    const installedRoute = Fs.readFileSync(
-      Path.join(templatesBase, "wayfinder", "route.md"),
-      "utf-8",
-    );
-    const bundledRoute = Fs.readFileSync(
-      Path.join(process.cwd(), "bundle", "templates", "wayfinder", "route.md"),
-      "utf-8",
-    );
-    expect(installedRoute).toBe(bundledRoute);
-    for (const section of [
-      "Point of departure",
-      "Destination",
-      "Path chosen",
-      "Shipping rules",
-      "Units",
-    ]) {
-      expect(installedRoute).toContain(`## ${section}`);
-    }
-  });
-
-  it("copies guideline manifests", () => {
-    runSetup();
-
-    const guidelinesBase = Path.join(tmpHome, ".config/vialactea-works/kepler", "guidelines");
-    expect(
-      Fs.existsSync(Path.join(guidelinesBase, "general", "01-code-style.md")),
-    ).toBe(true);
-    expect(
-      Fs.existsSync(Path.join(guidelinesBase, "typescript", "01-setup.md")),
-    ).toBe(true);
-    expect(
-      Fs.existsSync(Path.join(guidelinesBase, "golang", "code_style.md")),
-    ).toBe(true);
-  });
-
-  it("returns installed template filenames", () => {
-    const result = runSetup();
-    expect(result.templates).toContain("plan.md");
-    expect(result.templates).toContain("task-progress.md");
-    expect(result.templates).toContain("feedback.md");
-    expect(result.templates).toContain("finish.md");
-    expect(result.templates).toContain("glossary.md");
-    expect(result.templates).toContain("wayfinder/map.md");
-    expect(result.templates.length).toBeGreaterThan(0);
-  });
-
-  it("does not expose installed script filenames", () => {
-    const result = runSetup();
-    expect(Object.keys(result)).toEqual(["templates"]);
-  });
-
-  it("leaves an existing helper script directory unchanged", () => {
-    const scriptsBase = Path.join(tmpHome, ".config/vialactea-works/kepler", "scripts");
-    Fs.mkdirSync(Path.join(scriptsBase, "nested"), { recursive: true });
-    Fs.writeFileSync(Path.join(scriptsBase, "legacy.sh"), "legacy helper\n");
-    Fs.writeFileSync(
-      Path.join(scriptsBase, "nested", "config"),
-      Buffer.from([0, 1, 2, 255]),
-    );
-    const before = [
-      Fs.readFileSync(Path.join(scriptsBase, "legacy.sh")),
-      Fs.readFileSync(Path.join(scriptsBase, "nested", "config")),
-    ];
-
-    runSetup();
-    expect(Fs.readdirSync(scriptsBase).sort()).toEqual(["legacy.sh", "nested"]);
-    expect(Fs.readFileSync(Path.join(scriptsBase, "legacy.sh"))).toEqual(
-      before[0],
-    );
-    expect(Fs.readFileSync(Path.join(scriptsBase, "nested", "config"))).toEqual(
-      before[1],
-    );
-  });
-
-  it("is idempotent", () => {
-    runSetup();
-    runSetup();
-
-    expect(
-      Fs.existsSync(Path.join(tmpHome, ".config/vialactea-works/kepler", "templates", "plan.md")),
-    ).toBe(true);
-  });
-
-  it("creates default settings.yaml on init", () => {
-    runSetup();
-
-    const settingsPath = Path.join(tmpHome, ".config/vialactea-works/kepler", "settings.yaml");
-    expect(Fs.existsSync(settingsPath)).toBe(true);
-
-    const content = Fs.readFileSync(settingsPath, "utf-8");
-    expect(content).toContain("name: rtk");
-    expect(content).toContain("name: lsp");
-    expect(content).toContain("name: git");
-  });
-
-  it("does not overwrite existing settings.yaml on re-init", () => {
-    runSetup();
-
-    const settingsPath = Path.join(tmpHome, ".config/vialactea-works/kepler", "settings.yaml");
-    Fs.writeFileSync(
-      settingsPath,
-      "extensions:\n  - name: rtk\n    enabled: false\n",
-    );
-
-    runSetup();
-
-    const content = Fs.readFileSync(settingsPath, "utf-8");
-    expect(content).toContain("enabled: false");
-  });
-});
-
-describe("buildSettingsYaml", () => {
-  it("produces valid YAML with extensions only", () => {
-    const yaml = buildSettingsYaml();
-    const parsed = Yaml.parse(yaml);
-    expect(parsed.extensions).toHaveLength(3);
-    expect(parsed.models).toBeUndefined();
-  });
-
-  it("produces valid YAML with extensions and model aliases", () => {
-    const yaml = buildSettingsYaml({ cheap: "deepseek-v4" });
-    const parsed = Yaml.parse(yaml);
-    expect(parsed.extensions).toHaveLength(3);
-    expect(parsed.models.aliases.cheap).toBe("deepseek-v4");
-  });
-
-  it("omits models section when aliases is empty", () => {
-    const yaml = buildSettingsYaml({});
-    const parsed = Yaml.parse(yaml);
-    expect(parsed.models).toBeUndefined();
-  });
-});
-
-describe("bundle root resolution", () => {
-  let tmpHome: string;
-  let tmpBundleDir: string;
-  const originalHome = process.env.HOME;
-  const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
-  const originalBundleDir = process.env.KEPLER_BUNDLE_DIR;
-
-  beforeEach(() => {
-    tmpHome = Fs.mkdtempSync(Path.join(Os.tmpdir(), "kepler-setup-"));
-    tmpBundleDir = Fs.mkdtempSync(Path.join(Os.tmpdir(), "kepler-bundle-"));
-    process.env.HOME = tmpHome;
-    process.env.XDG_CONFIG_HOME = Path.join(tmpHome, ".config");
-  });
-
-  afterEach(() => {
-    if (originalHome === undefined) delete process.env.HOME;
-    else process.env.HOME = originalHome;
-    if (originalXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
-    delete process.env.KEPLER_BUNDLE_DIR;
-    if (originalBundleDir) {
-      process.env.KEPLER_BUNDLE_DIR = originalBundleDir;
-    }
-    Fs.rmSync(tmpHome, { recursive: true, force: true });
-    Fs.rmSync(tmpBundleDir, { recursive: true, force: true });
-  });
-
-  it("uses KEPLER_BUNDLE_DIR env var to locate bundle assets", () => {
-    const bundleTemplatesDir = Path.join(tmpBundleDir, "templates");
-    Fs.mkdirSync(bundleTemplatesDir, { recursive: true });
-    Fs.writeFileSync(
-      Path.join(bundleTemplatesDir, "plan.md"),
-      "# Plan Template",
-    );
-
-    process.env.KEPLER_BUNDLE_DIR = tmpBundleDir;
-    runSetup();
-
-    const copiedTemplate = Path.join(
-      tmpHome,
-      ".config/vialactea-works/kepler",
-      "templates",
-      "plan.md",
-    );
-    expect(Fs.existsSync(copiedTemplate)).toBe(true);
-    const content = Fs.readFileSync(copiedTemplate, "utf-8");
-    expect(content).toBe("# Plan Template");
-    expect(Fs.existsSync(Path.join(tmpHome, ".config/vialactea-works/kepler", "scripts"))).toBe(
-      false,
-    );
-  });
-
-  it("succeeds when the bundle has no helper scripts", () => {
-    const bundleTemplatesDir = Path.join(tmpBundleDir, "templates");
-    Fs.mkdirSync(bundleTemplatesDir, { recursive: true });
-    Fs.writeFileSync(
-      Path.join(bundleTemplatesDir, "plan.md"),
-      "# Plan Template",
-    );
-
-    process.env.KEPLER_BUNDLE_DIR = tmpBundleDir;
-    runSetup();
-    expect(Fs.existsSync(Path.join(tmpHome, ".config/vialactea-works/kepler", "scripts"))).toBe(
-      false,
-    );
+    expect(() => service.setup()).toThrow(expect.objectContaining({ code: "pi_unavailable" }));
+    expect(Fs.existsSync(Path.join(value.root, ".kepler-dist"))).toBe(false);
+    expect(Fs.existsSync(Path.join(value.root, ".config", "vialactea-works", "kepler"))).toBe(false);
   });
 });

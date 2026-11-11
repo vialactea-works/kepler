@@ -1,45 +1,50 @@
-import { describe, expect, it } from "vitest";
-import { spawnSync } from "node:child_process";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Fs from "node:fs";
-import * as Os from "node:os";
 import * as Path from "node:path";
 import { VERSION } from "../../src/index.js";
+import type { CommandResult } from "../e2e/connectors.js";
+import { createE2EHarness, type E2EHarness } from "../e2e/harness.js";
+import { parseCliEnvelope } from "./result-envelope.js";
 
 const projectRoot = Path.resolve(".");
-const entrypoint = Path.resolve(projectRoot, "packages/cli/src/cli/main.ts");
 const cliPackage = JSON.parse(
   Fs.readFileSync(Path.join(projectRoot, "packages/cli/package.json"), "utf8"),
 ) as { bin: Record<string, string> };
 
-const runCli = (arguments_: string[], env: NodeJS.ProcessEnv = {}) =>
-  spawnSync(process.execPath, ["run", entrypoint, ...arguments_], {
-    cwd: projectRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      ...(env.HOME === undefined
-        ? {}
-        : { XDG_CONFIG_HOME: Path.join(env.HOME, ".config") }),
-      ...env,
-    },
-    timeout: 5000,
-    killSignal: "SIGKILL",
-  });
+let harness: E2EHarness;
 
-const expectUsageFailure = (result: ReturnType<typeof runCli>) => {
-  expect(result.status).toBe(2);
-  expect(result.stdout).toBe("");
-  expect(result.stderr.match(/error:/g) ?? []).toHaveLength(1);
+const runCli = (arguments_: string[], env: NodeJS.ProcessEnv = {}) =>
+  harness.cli.run(arguments_, { cwd: projectRoot, env });
+
+const expectUsageFailure = (result: CommandResult) => {
+  expect(result.exitCode).toBe(1);
+  expect(parseCliEnvelope(result.stdout)).toMatchObject({
+    status: "failed",
+    data: {
+      code: "invalid_arguments",
+      message: expect.any(String),
+      details: {},
+      recovery: expect.any(String),
+    },
+  });
 };
 
+beforeEach(async () => {
+  harness = await createE2EHarness({ application: "docker" });
+});
+
+afterEach(async () => {
+  await harness.cleanup();
+});
+
 describe("main CLI", () => {
-  it("prints the existing root message without arguments", () => {
+  it("shows root help without arguments", () => {
     const result = runCli([]);
 
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe(
-      "Kepler - Template setup CLI\n\nUse --help for available commands\n",
-    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Usage: kepler [options] [command]");
+    expect(result.stdout).toContain("Kepler workflow CLI");
+    expect(result.stdout).toContain("workflow");
     expect(result.stderr).toBe("");
   });
 
@@ -49,13 +54,15 @@ describe("main CLI", () => {
     const result = runCli(["hamilton"]);
 
     expectUsageFailure(result);
-    expect(result.stderr).toContain("unknown command 'hamilton'");
+    expect(parseCliEnvelope(result.stdout).data.message).toContain(
+      "unknown command 'hamilton'",
+    );
   });
 
   it("shows supported root commands without retired global flags", () => {
     const result = runCli(["--help"]);
 
-    expect(result.status).toBe(0);
+    expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Usage: kepler");
     expect(result.stdout).toContain("setup");
     expect(result.stdout).toContain("workbench");
@@ -68,95 +75,89 @@ describe("main CLI", () => {
   it("prints the canonical project version", () => {
     const result = runCli(["--version"]);
 
-    expect(result.status).toBe(0);
+    expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe(`${VERSION}\n`);
     expect(result.stderr).toBe("");
   });
 
   it("rejects unknown root commands and options before setup can run", () => {
-    const directory = Fs.mkdtempSync(
-      Path.join(Os.tmpdir(), "kepler-main-cli-"),
-    );
-    const invalidHome = Path.join(directory, "home-file");
+    const invalidHome = Path.join(harness.resources.rootDirectory, "home-file");
     Fs.writeFileSync(invalidHome, "not a directory");
 
-    try {
-      const unknownCommand = runCli(["unknown-command"], { HOME: invalidHome });
-      const unknownOption = runCli(["setup", "--unknown"], {
-        HOME: invalidHome,
-      });
+    const unknownCommand = runCli(["unknown-command"], { HOME: invalidHome });
+    const unknownOption = runCli(["setup", "--unknown"], {
+      HOME: invalidHome,
+    });
 
-      expectUsageFailure(unknownCommand);
-      expect(unknownCommand.stderr).toContain(
-        "unknown command 'unknown-command'",
-      );
-      expectUsageFailure(unknownOption);
-      expect(unknownOption.stderr).toContain("unknown option '--unknown'");
-      expect(unknownOption.stderr).not.toContain("Setup failed:");
-    } finally {
-      Fs.rmSync(directory, { recursive: true, force: true });
-    }
+    expectUsageFailure(unknownCommand);
+    expect(parseCliEnvelope(unknownCommand.stdout).data.message).toContain(
+      "unknown command 'unknown-command'",
+    );
+    expectUsageFailure(unknownOption);
+    expect(parseCliEnvelope(unknownOption.stdout).data.message).toContain(
+      "unknown option '--unknown'",
+    );
+    expect(parseCliEnvelope(unknownOption.stdout).data.message).not.toContain(
+      "Setup failed:",
+    );
   });
 
   it("rejects retired Effect global flags before setup can run", () => {
-    const directory = Fs.mkdtempSync(
-      Path.join(Os.tmpdir(), "kepler-main-cli-"),
-    );
-    const invalidHome = Path.join(directory, "home-file");
+    const invalidHome = Path.join(harness.resources.rootDirectory, "home-file");
     Fs.writeFileSync(invalidHome, "not a directory");
 
-    try {
-      for (const arguments_ of [
-        ["setup", "--completions", "bash"],
-        ["setup", "--log-level", "info"],
-        ["setup", "--wizard", "false"],
-      ]) {
-        const result = runCli(arguments_, { HOME: invalidHome });
+    for (const arguments_ of [
+      ["setup", "--completions", "bash"],
+      ["setup", "--log-level", "info"],
+      ["setup", "--wizard", "false"],
+    ]) {
+      const result = runCli(arguments_, { HOME: invalidHome });
 
-        expectUsageFailure(result);
-        expect(result.stderr).toMatch(
-          /unknown option '--(completions|log-level|wizard)'/,
-        );
-        expect(result.stderr).not.toContain("Setup failed:");
-      }
-    } finally {
-      Fs.rmSync(directory, { recursive: true, force: true });
+      expectUsageFailure(result);
+      expect(parseCliEnvelope(result.stdout).data.message).toMatch(
+        /unknown option '--(completions|log-level|wizard)'/,
+      );
+      expect(parseCliEnvelope(result.stdout).data.message).not.toContain(
+        "Setup failed:",
+      );
     }
   });
 
   it("rejects surplus setup positionals before setup runs", () => {
-    const directory = Fs.mkdtempSync(
-      Path.join(Os.tmpdir(), "kepler-main-cli-"),
-    );
-    const invalidHome = Path.join(directory, "home-file");
+    const invalidHome = Path.join(harness.resources.rootDirectory, "home-file");
     Fs.writeFileSync(invalidHome, "not a directory");
 
-    try {
-      const result = runCli(["setup", "extra-arg"], { HOME: invalidHome });
+    const result = runCli(["setup", "extra-arg"], { HOME: invalidHome });
 
-      expectUsageFailure(result);
-      expect(result.stderr).toContain("too many arguments");
-      expect(result.stderr).not.toContain("Setup failed:");
-    } finally {
-      Fs.rmSync(directory, { recursive: true, force: true });
-    }
+    expectUsageFailure(result);
+    expect(parseCliEnvelope(result.stdout).data.message).toContain(
+      "too many arguments",
+    );
+    expect(parseCliEnvelope(result.stdout).data.message).not.toContain(
+      "Setup failed:",
+    );
   });
 
-  it("reports setup filesystem failures once with exit code 2", () => {
-    const directory = Fs.mkdtempSync(
-      Path.join(Os.tmpdir(), "kepler-main-cli-"),
-    );
-    const invalidHome = Path.join(directory, "home-file");
-    Fs.writeFileSync(invalidHome, "not a directory");
+  it("rejects setup without a package build identity before filesystem effects", () => {
+    const invalidHome = Path.join(harness.resources.rootDirectory, "home-file");
+    const invalidHomeContents = "not a directory\n";
+    Fs.writeFileSync(invalidHome, invalidHomeContents);
 
-    try {
-      const result = runCli(["setup"], { HOME: invalidHome });
+    const result = runCli(["setup"], { HOME: invalidHome });
 
-      expect(result.status).toBe(2);
-      expect(result.stdout).toBe("");
-      expect(result.stderr.match(/Setup failed:/g) ?? []).toHaveLength(1);
-    } finally {
-      Fs.rmSync(directory, { recursive: true, force: true });
-    }
+    expect(result.exitCode).toBe(1);
+    expect(parseCliEnvelope(result.stdout)).toEqual({
+      status: "failed",
+      data: {
+        code: "build_identity_missing",
+        message: "The executing Kepler binary does not declare a package build identity.",
+        details: {},
+        recovery: "Use an identifiable Kepler package candidate; setup does not fall back to the source checkout or current directory.",
+      },
+    });
+    expect(result.stderr).toBe("");
+    expect(Fs.readFileSync(invalidHome, "utf8")).toBe(invalidHomeContents);
+    expect(Fs.existsSync(Path.join(invalidHome, ".config"))).toBe(false);
+    expect(Fs.existsSync(Path.join(invalidHome, ".kepler-dist"))).toBe(false);
   });
 });

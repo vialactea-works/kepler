@@ -8,6 +8,15 @@ The requester accepted the complete Unit of Work Review contract. It specifies t
 
 This approval concerns the specification. It does not approve an executing Unit of Work or authorize delivery.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | Current unit artifacts and linked support; the completed Implementation handoff, the unit's original Review baseline, and the final integrated checkpoint set for whole-unit comparison; required Activity results, independent feedback, integration provenance, and completion evidence; applicable constraints, requester decisions, approvals, and earlier review findings. See [Inputs](#inputs) and [entry conditions](#entry-conditions). |
+| Lead agent | `kepler-reviewer` owns the independent whole-unit assessment and must not be the primary implementation author for the reviewed result. The orchestrator retains revision authority; the requester retains authority over product outcomes and any applicable acceptance. See [Agent roles](#agent-roles) and [Requester acceptance](#requester-acceptance). |
+| Outputs | CLI-owned whole-unit assessment, findings, and evidence; optional authored analysis under `details/unit-of-work-review/`; any requested additional-review result; requester-acceptance record only when an authority rule or requester instruction requires it; handoff to Deliver. No mandatory `review.md` is required. See [Artifacts and records](#artifacts-and-records), [Evidence coverage](#evidence-coverage), and [Handoff](#handoff). |
+| Gates | **Entry:** Implementation is complete for current material; the integrated result and required evidence are available; review scope and acceptance conditions are explicit. Delivery, publication, deployment, and requester acceptance are not entry requirements. **Advance:** independent assessment and self-review cover the complete outcome; required evidence applies and is retained; blockers are resolved through authorized paths; requested external review is complete; and any applicable requester acceptance is recorded. A new full-suite run is not unconditional. See [entry conditions](#entry-conditions), [Evidence assessment](#evidence-assessment), and [completion conditions](#completion-conditions). |
+
 ## Goal
 
 Determine whether the complete integrated result satisfies the Unit of Work's agreed outcome, functional contracts, and quality obligations.

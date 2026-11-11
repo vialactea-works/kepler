@@ -33,6 +33,24 @@ describe("artifact reader", () => {
     });
   });
 
+  it("reads BOM-prefixed CRLF frontmatter with a YAML document-end marker", async () => {
+    const source =
+      "\uFEFF---\r\nartifact: proposal\r\nchange: demo\r\n...\r\n# Title\r\nBody\r\n";
+    const result = await createArtifactReader(readFrom(source))("proposal.md");
+
+    expect(result).toEqual({
+      _tag: "recognized",
+      sourcePath: "proposal.md",
+      metadata: { artifact: "proposal", change: "demo" },
+      body: "# Title\r\nBody\r\n",
+      locations: {
+        frontmatter: { startLine: 1, endLine: 4 },
+        metadata: { startLine: 2, endLine: 3 },
+        body: { startLine: 5, endLine: 7 },
+      },
+    });
+  });
+
   it("reads the first frontmatter block", async () => {
     const result = await createArtifactReader(
       readFrom(

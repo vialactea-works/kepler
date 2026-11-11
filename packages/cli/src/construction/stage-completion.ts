@@ -1,0 +1,417 @@
+import { createHash, randomUUID } from "node:crypto";
+import * as Path from "node:path";
+import type { EventId } from "@vialactea-works/kepler-core";
+import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
+import type { ScopeSelectors } from "../cli/scope-selectors.js";
+import { createEventJournal, type EventJournal } from "../history/journal.js";
+import { pendingRevisionBarrierFor } from "./revision-state.js";
+import { runWithConstructionUnitControl } from "./unit-control.js";
+import {
+  CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
+  CONSTRUCTION_PHASE,
+  validateConstructionEvent,
+} from "./events.js";
+import type { ConstructionHistoryFact } from "./projection.js";
+import {
+  functionalDesignEvidenceIds,
+  sameArtifactBindings,
+  validateFunctionalDesignCompletionRequest,
+  type FunctionalDesignCompletionRequest,
+} from "./functional-design-completion.js";
+import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
+import type { ConstructionMaterialReader, FunctionalDesignMaterial } from "./material-reader.js";
+export type { FunctionalDesignMaterial } from "./material-reader.js";
+import { createNodeMissionWorkspaceRuntime } from "./mission-workspace-runtime.js";
+import { captureStageCheckpoints } from "./stage-start.js";
+import { recordHomeRepositoryId, verifyStageCheckpointMaterial, verifyStageCheckpointSet } from "./stage-checkpoint-content.js";
+
+export interface FunctionalDesignStageCompletionRuntime {
+  readonly workspace: MissionWorkspaceRuntime;
+  readonly materialReader: ConstructionMaterialReader;
+  readonly identities: { readonly next: () => string };
+  readonly now: () => string;
+  readonly producer: { readonly name: string; readonly version: string };
+  readonly journals: {
+    readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal;
+  };
+}
+
+export type FunctionalDesignStageCompletionResult =
+  | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
+  | { readonly kind: "failed"; readonly data: Readonly<Record<string, unknown>> };
+
+interface ValidatedMaterialFacts {
+  readonly evidence: readonly ConstructionHistoryFact[];
+  readonly approval: ConstructionHistoryFact;
+  readonly checkpoints: readonly unknown[];
+}
+
+const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const isNonEmpty = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+const failure = (
+  code: string,
+  message: string,
+  details: Readonly<Record<string, unknown>> = {},
+  recovery = "Resolve the reported condition and retry the exact Functional Design attempt.",
+): FunctionalDesignStageCompletionResult => ({
+  kind: "failed",
+  data: { code, message, details, recovery },
+});
+
+const propagateReadFailure = (result: Extract<AuditHistoryReadResult, { kind: "failed" }>): FunctionalDesignStageCompletionResult =>
+  failure(result.code, result.message, result.details, result.recovery);
+
+const checkpointKey = (value: unknown): string | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const checkpoints: string[] = [];
+  const repositories = new Set<string>();
+  for (const checkpoint of value) {
+    if (!isRecord(checkpoint) || !isNonEmpty(checkpoint.repository_id) || !isNonEmpty(checkpoint.commit) || repositories.has(checkpoint.repository_id)) return undefined;
+    repositories.add(checkpoint.repository_id);
+    checkpoints.push(`${checkpoint.repository_id}\0${checkpoint.commit}`);
+  }
+  return JSON.stringify(checkpoints.sort());
+};
+
+const latestAttemptStart = (facts: readonly ConstructionHistoryFact[]): ConstructionHistoryFact | undefined =>
+  facts.filter((fact) => ["construction.stage-attempt-started", "construction.stage-resumed"].includes(fact.event.type)).at(-1);
+
+type FunctionalDesignHistoryUnit = Pick<
+  Extract<AuditHistoryReadResult, { kind: "loaded" }>["unit"],
+  "missionId" | "unitId" | "evidence" | "approvals"
+>;
+
+const validateFunctionalDesignCompletionFacts = (
+  unit: FunctionalDesignHistoryUnit,
+  stageAttemptId: string,
+  startEventId: EventId,
+  approvalEventId: string,
+  artifactBindings: FunctionalDesignMaterial["artifactBindings"],
+  assessments: FunctionalDesignCompletionRequest["assessments"],
+): { readonly kind: "valid"; readonly facts: ValidatedMaterialFacts } | {
+  readonly kind: "invalid";
+  readonly details: Readonly<Record<string, unknown>>;
+} => {
+  const idsByKind = {
+    self_review: assessments.self_review.evidence_id,
+    decision_resolution: assessments.decision_resolution.evidence_id,
+    handoff: assessments.handoff.evidence_id,
+  } as const;
+  const checksByKind = {
+    self_review: "functional-design-self-review",
+    decision_resolution: "functional-design-decision-resolution",
+    handoff: "functional-design-quality-handoff",
+  } as const;
+  const evidence: ConstructionHistoryFact[] = [];
+  let selectedCheckpoints: readonly unknown[] = [];
+  for (const kind of ["self_review", "decision_resolution", "handoff"] as const) {
+    const matches = unit.evidence
+      .map((entry) => entry.fact)
+      .filter((fact) => fact.event.data.evidence_id === idsByKind[kind]);
+    const fact = matches.length === 1 ? matches[0] : undefined;
+    if (!fact || fact.event.type !== "construction.evidence-recorded" ||
+        fact.event.data.mission_id !== unit.missionId || fact.event.data.unit_id !== unit.unitId ||
+        fact.event.data.stage !== "functional-design" || fact.event.data.stage_attempt_id !== stageAttemptId ||
+        fact.event.data.check !== checksByKind[kind] || !isRecord(fact.event.data.result) ||
+        fact.event.data.result.status !== "passed" ||
+        !sameArtifactBindings(fact.event.data.artifact_bindings, artifactBindings) ||
+        !fact.event.caused_by.includes(startEventId)) {
+      return { kind: "invalid", details: { evidence: kind, evidence_id: idsByKind[kind], reason: "missing, failed, stale-attempt, or stale-material evidence" } };
+    }
+    const observedCheckpointKey = checkpointKey(fact.event.data.checkpoints);
+    if (observedCheckpointKey === undefined || observedCheckpointKey === "[]" || !Array.isArray(fact.event.data.checkpoints)) {
+      return { kind: "invalid", details: { evidence: kind, evidence_id: idsByKind[kind], reason: "named evidence requires its own valid non-empty checkpoint set" } };
+    }
+    if (selectedCheckpoints.length === 0) selectedCheckpoints = fact.event.data.checkpoints;
+    evidence.push(fact);
+  }
+  const approvalMatches = unit.approvals
+    .map((entry) => entry.fact)
+    .filter((fact) => String(fact.event.id) === approvalEventId);
+  const approval = approvalMatches.length === 1 ? approvalMatches[0] : undefined;
+  if (!approval || approval.event.type !== "construction.approval-recorded" ||
+      approval.event.data.mission_id !== unit.missionId || approval.event.data.unit_id !== unit.unitId ||
+      approval.event.data.stage !== "functional-design" || approval.event.data.stage_attempt_id !== stageAttemptId ||
+      !sameArtifactBindings(approval.event.data.artifact_bindings, artifactBindings) ||
+      checkpointKey(approval.event.data.checkpoints) === undefined || checkpointKey(approval.event.data.checkpoints) === "[]" ||
+      !approval.event.caused_by.includes(startEventId)) {
+    return { kind: "invalid", details: { approval_event_id: approvalEventId, reason: "missing approval for the current attempt or current material" } };
+  }
+  return {
+    kind: "valid",
+    facts: { evidence, approval, checkpoints: selectedCheckpoints },
+  };
+};
+
+const commonDirectory = async (
+  runtime: FunctionalDesignStageCompletionRuntime,
+  repositoryRoot: string,
+): Promise<string | undefined> => {
+  const result = await runtime.workspace.git.run(repositoryRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  if (result.status !== 0 || result.stdout.trim().length === 0) return undefined;
+  try {
+    return await runtime.workspace.fileSystem.realpath(Path.resolve(repositoryRoot, result.stdout.trim()));
+  } catch {
+    return undefined;
+  }
+};
+
+export class FunctionalDesignStageCompletion {
+  constructor(
+    private readonly contexts: AuditContextResolver,
+    private readonly runtime: FunctionalDesignStageCompletionRuntime,
+  ) {}
+
+  async execute(
+    selectors: ScopeSelectors,
+    rawRequest: unknown,
+    project?: string,
+  ): Promise<FunctionalDesignStageCompletionResult> {
+    if (!selectors.unit || selectors.stage !== "functional-design" || !selectors.attempt ||
+        selectors.task !== undefined || selectors.activity !== undefined || selectors.implementationAttempt !== undefined ||
+        selectors.mission !== undefined) {
+      return failure("invalid_stage_completion_scope", "Functional Design completion requires exactly --unit, --stage functional-design, and --attempt.", {
+        unit_id: selectors.unit,
+        stage: selectors.stage,
+        attempt_id: selectors.attempt,
+      });
+    }
+    const validated = validateFunctionalDesignCompletionRequest(rawRequest);
+    if (validated.kind === "invalid") {
+      return failure("invalid_functional_design_completion_request", "The typed Functional Design assessment request failed validation.", { issues: validated.issues }, "Correct the typed assessments and exact approval event reference, then retry.");
+    }
+    const firstRead = await this.contexts.readUnit(selectors.unit, project);
+    if (firstRead.kind === "failed") return propagateReadFailure(firstRead);
+    const commonDir = await commonDirectory(this.runtime, firstRead.root);
+    if (!commonDir) return failure("stage_coordination_unavailable", "Git could not resolve the record home's common directory.", { repository_root: firstRead.root });
+    const acquired = await this.runtime.workspace.coordination.acquire({
+      commonDirectory: commonDir,
+      location: { kind: "mission", missionId: firstRead.missionId },
+      resourceKey: createHash("sha256").update(JSON.stringify([firstRead.missionId, selectors.unit, "stage", "functional-design"])).digest("hex"),
+      owner: {
+        machine_id: this.runtime.workspace.identity.machine_id,
+        process_id: this.runtime.workspace.identity.process_id,
+        process_incarnation_id: this.runtime.workspace.identity.process_incarnation_id,
+        mission_id: firstRead.missionId,
+        resource_scope: `construction/stage/${selectors.unit}/functional-design`,
+        attempt_context: selectors.attempt,
+      },
+    });
+    if (acquired.kind === "failed") return failure(acquired.code, acquired.message, acquired.details, acquired.recovery);
+
+    let result: FunctionalDesignStageCompletionResult;
+    try {
+      const loaded = await this.contexts.readUnit(selectors.unit, project);
+      if (loaded.kind === "failed") result = propagateReadFailure(loaded);
+      else if (loaded.root !== firstRead.root || loaded.missionId !== firstRead.missionId) {
+        result = failure("stage_scope_changed", "Unit membership changed while acquiring stage coordination.", { unit_id: selectors.unit });
+      } else {
+        result = await this.completeLoaded(loaded, selectors.attempt, validated.request, project);
+      }
+    } catch (error) {
+      result = failure("stage_completion_failed", "Kepler could not validate Functional Design completion safely.", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    const released = await acquired.lease.release();
+    if (released.kind === "failed") {
+      return failure("stage_coordination_release_failed", "The stage operation could not confirm that it released its coordination claim.", {
+        ...released.details,
+        operation_result: result.kind,
+        ...(result.kind === "success" ? { completion_event_id: result.data.id } : {}),
+      }, released.recovery);
+    }
+    return result;
+  }
+
+  private async completeLoaded(
+    loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
+    stageAttemptId: string,
+    request: FunctionalDesignCompletionRequest,
+    project?: string,
+  ): Promise<FunctionalDesignStageCompletionResult> {
+    if (loaded.unit.workflow !== "standard") return failure("unsupported_workflow", "Functional Design completion requires the recorded Standard workflow binding.", { workflow: loaded.unit.workflow });
+    const stage = loaded.unit.stages.find((candidate) => candidate.stage === "functional-design");
+    const attempt = stage?.attempts.find((candidate) => candidate.attemptId === stageAttemptId);
+    if (!stage || stage.state !== "running" || stage.currentAttemptId !== stageAttemptId || !attempt || attempt.state !== "running") {
+      return failure("stage_attempt_not_current", "The selected Functional Design attempt is not the current running attempt.", {
+        selected_attempt_id: stageAttemptId,
+        current_attempt_id: stage?.currentAttemptId,
+        state: stage?.state,
+      });
+    }
+    const start = latestAttemptStart(attempt.facts);
+    if (!start) return failure("stage_attempt_start_missing", "The selected running attempt has no validated start fact.", { attempt_id: stageAttemptId });
+
+    const created = loaded.unit.created;
+    const persistedUnitDirectory = created?.event.type === "construction.unit-created"
+      ? created.event.data.directory
+      : undefined;
+    const materialResult = await this.runtime.materialReader.readFunctionalDesignMaterial({
+      repositoryRoot: loaded.root,
+      missionId: loaded.missionId,
+      unitId: loaded.unit.unitId,
+      persistedUnitDirectory,
+    });
+    if (materialResult.kind === "invalid") return failure("functional_design_artifacts_invalid", "Functional Design artifacts or linked stage-supporting documents failed validation.", { diagnostics: materialResult.diagnostics }, "Correct the reported artifacts and rerun completion.");
+    const material = materialResult.material;
+    const handoff = request.assessments.handoff;
+    if (handoff.unit_directory !== material.unitDirectory || JSON.stringify(handoff.artifacts) !== JSON.stringify(material.artifactPaths)) {
+      return failure("functional_design_handoff_mismatch", "The Quality handoff must identify the current Unit of Work directory and all required and linked Functional Design artifacts.", {
+        expected_unit_directory: material.unitDirectory,
+        expected_artifacts: material.artifactPaths,
+      });
+    }
+    const materialFacts = validateFunctionalDesignCompletionFacts(
+      loaded.unit,
+      stageAttemptId,
+      start.event.id,
+      request.approval_event_id,
+      material.artifactBindings,
+      request.assessments,
+    );
+    if (materialFacts.kind === "invalid") {
+      return failure("functional_design_evidence_invalid", "Every named Functional Design evidence result and requester approval must be bound to this attempt and current artifact material.", materialFacts.details);
+    }
+    const commonDir = await commonDirectory(this.runtime, loaded.root);
+    if (!commonDir) return failure("stage_coordination_unavailable", "Git could not resolve the record home's common directory.", { repository_root: loaded.root });
+    const actualCheckpoints = await captureStageCheckpoints(this.runtime, loaded, commonDir);
+    if (actualCheckpoints.kind === "failed") return failure(actualCheckpoints.code, actualCheckpoints.message, actualCheckpoints.details);
+    const repositoryId = recordHomeRepositoryId(loaded.history.events);
+    const artifactPaths = material.artifactPaths.map((artifactPath) => Path.join(material.unitDirectory, artifactPath));
+    const recordHomeCheckpoint = repositoryId ? actualCheckpoints.checkpoints.find((checkpoint) => checkpoint.repository_id === repositoryId) : undefined;
+    if (!repositoryId || !recordHomeCheckpoint) return failure("functional_design_checkpoint_missing", "The record-home repository must have a current committed checkpoint.", { repository_id: repositoryId });
+    const currentMaterial = await verifyStageCheckpointMaterial(this.runtime.workspace, {
+      repositoryRoot: loaded.root, repositoryId, checkpoint: recordHomeCheckpoint, artifactPaths,
+    });
+    if (currentMaterial.kind === "invalid") return failure("functional_design_checkpoint_material_mismatch", "Every Functional Design artifact must match its content in the current record-home checkpoint.", { artifact_paths: currentMaterial.artifactPaths });
+    for (const fact of [...materialFacts.facts.evidence, materialFacts.facts.approval]) {
+      const verifiedSet = await verifyStageCheckpointSet(this.runtime.workspace, actualCheckpoints.repositoryRoots, fact.event.data.checkpoints);
+      if (verifiedSet.kind === "invalid") return failure("functional_design_evidence_checkpoint_invalid", "Every evidence and approval checkpoint must resolve in its selected repository workspace.", {
+        event_id: fact.event.id, repository_ids: verifiedSet.repositoryIds, invalid_commits: verifiedSet.invalidCommits,
+      });
+      const checkpoint = Array.isArray(fact.event.data.checkpoints)
+        ? fact.event.data.checkpoints.find((item) => isRecord(item) && item.repository_id === repositoryId)
+        : undefined;
+      if (!isRecord(checkpoint)) return failure("functional_design_evidence_checkpoint_missing", "Every evidence and approval checkpoint set must include the record-home repository.", { event_id: fact.event.id, repository_id: repositoryId });
+      const materialAtCheckpoint = await verifyStageCheckpointMaterial(this.runtime.workspace, {
+        repositoryRoot: loaded.root, repositoryId, checkpoint, artifactPaths,
+      });
+      if (materialAtCheckpoint.kind === "invalid") return failure("functional_design_evidence_material_checkpoint_mismatch", "Functional Design material must exist unchanged in each evidence and approval checkpoint.", {
+        event_id: fact.event.id, artifact_paths: materialAtCheckpoint.artifactPaths,
+      });
+    }
+
+    const eventId = this.runtime.identities.next();
+    const journalId = this.runtime.identities.next();
+    if (!uuidV4.test(eventId) || !uuidV4.test(journalId) || eventId === journalId ||
+        loaded.history.events.some((record) => record.event?.id === eventId)) {
+      return failure("stage_completion_identity_failed", "Kepler could not allocate distinct event and journal identities.");
+    }
+    const evidenceIds = functionalDesignEvidenceIds(request.assessments);
+    const causedBy = [start.event.id, materialFacts.facts.approval.event.id, ...materialFacts.facts.evidence.map((fact) => fact.event.id)];
+    const candidate = {
+      id: eventId,
+      phase: CONSTRUCTION_PHASE,
+      type: "construction.stage-attempt-completed",
+      envelope_version: 1,
+      event_version: CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION,
+      journal_id: journalId,
+      recorded_at: this.runtime.now(),
+      producer: this.runtime.producer,
+      caused_by: [...new Set(causedBy)],
+      data: {
+        mission_id: loaded.missionId,
+        unit_id: loaded.unit.unitId,
+        stage: "functional-design",
+        stage_attempt_id: stageAttemptId,
+        evidence_ids: evidenceIds,
+        checkpoints: actualCheckpoints.checkpoints,
+        functional_design_assessment: {
+          approval_event_id: materialFacts.facts.approval.event.id,
+          artifact_bindings: material.artifactBindings,
+          artifact_paths: material.artifactPaths,
+          assessments: request.assessments,
+        },
+      },
+    };
+    const validation = validateConstructionEvent(candidate);
+    if (validation.status !== "valid") {
+      return failure("stage_completion_event_invalid", "The typed Functional Design completion event failed Construction validation.", {
+        issues: validation.status === "invalid" ? validation.issues : [validation.reason],
+      });
+    }
+    const guarded = await runWithConstructionUnitControl(
+      this.runtime.workspace,
+      commonDir,
+      loaded.missionId,
+      loaded.unit.unitId,
+      async (): Promise<FunctionalDesignStageCompletionResult> => {
+        const latest = await this.contexts.readUnit(loaded.unit.unitId, project);
+        if (latest.kind === "failed") return propagateReadFailure(latest);
+        const latestStage = latest.unit.stages.find((candidate) => candidate.stage === "functional-design");
+        if (latest.root !== loaded.root || latest.missionId !== loaded.missionId || latest.unit.blocked ||
+            latestStage?.state !== "running" || latestStage.currentAttemptId !== stageAttemptId) {
+          return failure("stage_attempt_not_current", "The selected Functional Design attempt changed before completion could be appended.", {
+            selected_attempt_id: stageAttemptId,
+            current_attempt_id: latestStage?.currentAttemptId,
+            state: latestStage?.state,
+          });
+        }
+        const barrier = pendingRevisionBarrierFor(latest, { unitId: loaded.unit.unitId, stage: "functional-design", stageAttemptId });
+        if (barrier) return failure("revision_barrier_pending", "The selected stage attempt is behind an authorized revision barrier.", {
+          revision_id: barrier.revisionId,
+          authorization_event_id: barrier.authorizationEventId,
+          affected_scopes: barrier.affectedScopes,
+        }, "Stop and reconcile affected workers, apply the authorized cascade, then retry completion.");
+        try {
+          await this.runtime.journals.create(loaded.root, loaded.missionId, journalId).append(validation.event);
+        } catch (error) {
+          return failure("stage_completion_append_failed", "Kepler could not durably append the completion event.", {
+            journal_id: journalId,
+            message: error instanceof Error ? error.message : String(error),
+          }, "Inspect the selected history journals for the exact event before retrying; preserve uncertain effects.");
+        }
+        return {
+          kind: "success",
+          data: {
+            id: validation.event.id,
+            journal_id: validation.event.journal_id,
+            unit_id: loaded.unit.unitId,
+            stage: "functional-design",
+            attempt_id: stageAttemptId,
+            evidence_ids: evidenceIds,
+            approval_event_id: materialFacts.facts.approval.event.id,
+          },
+        };
+      },
+    );
+    if (guarded.kind === "failed") return failure(guarded.code, guarded.message, guarded.details, guarded.recovery);
+    return guarded.value;
+  }
+}
+
+export const createNodeFunctionalDesignStageCompletionRuntime = (
+  producer: { readonly name: string; readonly version: string },
+  materialReader: ConstructionMaterialReader,
+): FunctionalDesignStageCompletionRuntime => {
+  const workspace = createNodeMissionWorkspaceRuntime();
+  return {
+    workspace,
+    materialReader,
+    identities: { next: randomUUID },
+    now: () => new Date().toISOString(),
+    producer,
+    journals: {
+      create: (recordHome, missionId, journalId) => createEventJournal({
+        recordHome,
+        missionId,
+        journalId,
+        phase: CONSTRUCTION_PHASE,
+      }),
+    },
+  };
+};

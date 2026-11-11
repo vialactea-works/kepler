@@ -1,0 +1,16 @@
+{
+  "name": "kepler-resources",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "skills": [
+      "./bundle/skills"
+    ],
+    "subagents": {
+      "agents": [
+        "./bundle/agents/pi/v1"
+      ]
+    }
+  }
+}

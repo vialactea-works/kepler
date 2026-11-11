@@ -1,6 +1,6 @@
 {
   "name": "@vialactea-works/kepler-cli",
-  "version": "0.10.3",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -9,21 +9,23 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "cd ../.. && bun --bun vitest run --config vitest.config.ts tests/cli tests/workbench"
+    "test": "cd ../.. && bun run build && bun --bun vitest run --config vitest.config.ts tests/cli tests/workbench"
   },
   "dependencies": {
-    "@vialactea-works/kepler-core": "workspace:*",
     "@nestjs/common": "12.1.0",
     "@nestjs/core": "12.1.0",
+    "@vialactea-works/kepler-core": "workspace:*",
     "ajv": "8.17.1",
     "marked": "15.0.12",
     "nest-commander": "3.21.0",
+    "proper-lockfile": "4.1.2",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "yaml": "2.4.5"
   },
   "devDependencies": {
     "@nestjs/testing": "12.1.0",
-    "@types/inquirer": "8.2.13"
+    "@types/inquirer": "8.2.13",
+    "@types/proper-lockfile": "4.1.4"
   }
 }

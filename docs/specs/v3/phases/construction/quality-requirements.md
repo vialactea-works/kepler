@@ -8,6 +8,15 @@ The requester has accepted this stage specification, including Maintainability, 
 
 This acceptance does not approve a particular Unit of Work or show that implementation is complete.
 
+## Stage characteristics
+
+| Characteristic | Summary |
+| --- | --- |
+| Inputs | The current unit definition, accepted `design.md` and its relevant support, concerns passed from Functional Design, requester instructions, constraints, Project references, and available source, operational information, and tests. See [Inputs](#inputs) and [entry conditions](#entry-conditions). |
+| Lead agent | `kepler-architect` owns context investigation, quality-question resolution with the requester, `quality.md`, and its consistency review. The requester retains authority over targets, trade-offs, and approval. See [Agent roles](#agent-roles) and [Requester approval](#requester-approval). |
+| Outputs | Required `quality.md`; optional linked files under `details/quality-requirements/`; validation and self-review evidence; required requester-approval record; requested external-review result when applicable; handoff to Implementation Planning. See [Artifacts](#artifacts), [Evidence coverage](#evidence-coverage), and [Handoff](#handoff). |
+| Gates | **Entry:** Functional Design is complete for the current unit and its current outputs are available. **Advance:** applicable categories and quality conditions are explicit, the document is validated and self-reviewed, blocking findings and material choices are resolved, any requested external review is complete, and requester approval is recorded. A selected technical solution and application-test results are not required. See [entry conditions](#entry-conditions) and [completion conditions](#completion-conditions). |
+
 ## Goal
 
 State the quality targets and constraints that apply to one Unit of Work. Give Implementation Planning sufficient information to select a technical solution and make sure it meets material quality conditions.

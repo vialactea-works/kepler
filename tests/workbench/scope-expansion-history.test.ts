@@ -8,7 +8,13 @@ import { resolveTaskCheckpoint } from "../../packages/cli/src/workbench/task-che
 import type { ScopeExpansion, ScopeExpansionHistoryGit } from "../../packages/cli/src/workbench/scope-expansions.js";
 
 const sourcePath = ".kepler/changes/demo/tasks/task-1/progress.md";
-const environment = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" };
+const environment: NodeJS.ProcessEnv = {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  HOME: Os.tmpdir(),
+  PATH: process.env.PATH ?? "",
+};
 let temporary: string;
 let key: string;
 let sequence = 0;
@@ -64,7 +70,7 @@ const fixture = async (sourcePredatesTask = false) => {
 beforeAll(async () => {
   temporary = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-scope-history-"));
   key = Path.join(temporary, "signing-key");
-  const result = spawnSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key], { encoding: "utf8" });
+  const result = spawnSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key], { encoding: "utf8", env: environment });
   if (result.status !== 0) throw new Error(result.stderr);
 });
 afterAll(async () => { if (temporary) await Fs.rm(temporary, { recursive: true, force: true }); });

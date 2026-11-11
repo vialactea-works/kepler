@@ -1,0 +1,148 @@
+{
+  "manifest_format_version": 2,
+  "kepler_release": "3.0.0",
+  "files": {
+    "agents/claude-code/v1/kepler-architect.md": "sha256:cde6bd8f24fbfd88f933bc876b2d77eff1dca0756dba2ab0c9aa4037187d53a6",
+    "agents/claude-code/v1/kepler-coder.md": "sha256:515506090d041ef09c792114ffeac8fb39563da4b23ab27ebc0fd0f126c1478b",
+    "agents/claude-code/v1/kepler-orchestrator.md": "sha256:f086b1e15baa0cdf48ae9e7cddf95cd4c5aa8f3b237cc0603a0975e4c5d98534",
+    "agents/claude-code/v1/kepler-reviewer.md": "sha256:f9c48be02dbce74ed92c4b26f70ed4a1356bf3d1c2b183da31ee3bc67e0497bc",
+    "agents/pi/v1/kepler-architect.md": "sha256:f288cd7b0ecee274594d1213d1c31e5335fab4a72af783aa3f373b5c9f98a14f",
+    "agents/pi/v1/kepler-coder.md": "sha256:d26e304c93eb8313ab3b408d56efd0912386ad052f7911d7271c1fe0529b2eea",
+    "agents/pi/v1/kepler-orchestrator.md": "sha256:edee21ccea02a5124d21890fd3b2b0f953b06e97ef584566e2508961fb75867b",
+    "agents/pi/v1/kepler-reviewer.md": "sha256:155275348bc3fa56a29d2d04946af2a1996151e0a9365c4b93ef441c4db9d9b1",
+    "guidelines/.gitkeep": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "guidelines/general/01-code-style.md": "sha256:305c986ef2354604588b9f7ec71296dafb4a7c10b234f5bd1a49771b7e1561b3",
+    "guidelines/general/guideline.yml": "sha256:818b23579aeaa461311e00fefc0da4484535557b54b085c9c7951b5ae0e56d2c",
+    "guidelines/golang/code_style.md": "sha256:85f8f296dd0a60547243d59e5db791e06e8c00549a5de3c65a6a8c2955e949bc",
+    "guidelines/golang/e2e_testing.md": "sha256:ca75f9806634b84f316250ddd588e06402d9b8f52907cdc74682049c00010c12",
+    "guidelines/golang/guideline.yml": "sha256:fe6fa76cd50d123816166888756d24693a7abe0331194f6f9223c99b06c082ff",
+    "guidelines/golang/patterns.md": "sha256:a006101a502ac4876290cdb3ce67e03d88dcb7e548816e9986208b75451cc06f",
+    "guidelines/golang/setup.md": "sha256:825fda33c412ac2647fd44ee732ba8e833199df6569e797c09836d5b6db6f1be",
+    "guidelines/golang/testing.md": "sha256:ea1b7ff26757b87d6b7d7825554f07606238a5bd8b75de532ebef69c2ad07e5e",
+    "guidelines/typescript/01-setup.md": "sha256:16993aa4475cdd7e52a28b638470ef0b35d598d52cea7f5fb3cc137bb720d0ae",
+    "guidelines/typescript/02-code-style.md": "sha256:16cf63bdb1f583e8273dbf29d01582f34190d7e47253a69f6560bee8c50a5bb5",
+    "guidelines/typescript/03-design-patterns.md": "sha256:328fbc9050d2c561d19acc83728d83b665d59dafecd3968682ebe0eb14f7d705",
+    "guidelines/typescript/04-unit-testing.md": "sha256:27ece91d965e4d4158f513b7e02f2824777237b029b45615b8135f7e18bd69d2",
+    "guidelines/typescript/05-e2e-testing.md": "sha256:af0485da419e0737284524ec85cf7c41d564676624272b2a5a4520a30ab2661a",
+    "guidelines/typescript/guideline.yml": "sha256:eb836d02c6186b21587b186ffb5b4b0aff6c463f4f0bac774b8e2e7fa0ac422e",
+    "pi-package.json": "sha256:6594d2b9f91be4ace7c359eab26a5aa1c3b2fcb56a9a2980d64eb3b5b1c9f192",
+    "skills/kepler-code-feedback/SKILL.md": "sha256:ae4f87d822d19533a4acfbe65b5bf4a21d777f657b59b0e931843c583a249662",
+    "skills/kepler-code/SKILL.md": "sha256:ffdb6395eb0856f40a0ee21a84234c6dd4aca1dddc8f8a19f058862f968c8f7d",
+    "skills/kepler-design/SKILL.md": "sha256:7e7e61f5ff279de9f359f0fb4a7e655793b9e9c393691834b219a00185de515b",
+    "skills/kepler-domain-modelling/NOTICE": "sha256:3fce890aabd543037c23faebd5d38c3031afab627ea13afb7d0713e2534b3258",
+    "skills/kepler-domain-modelling/SKILL.md": "sha256:88d2355196e0689d2dc7b658b9501aa40622c15b007d72771e9fcc4cc2bfbf2d",
+    "skills/kepler-finish-work/SKILL.md": "sha256:a7ee0247a140f60099f6582f743baaaea7d8a2af36ff8906500b373405fc1a8b",
+    "skills/kepler-finish-work/references/spec-altitude.md": "sha256:1adbba982cdf1310b15d550b7efc40f19589fe87b8d3d70b23c70586cad6ea6c",
+    "skills/kepler-grilling/NOTICE": "sha256:7af7889fb3cc4b435ba61637f254e47798ccd35ca937c6ef6dba88cc0b5dfe1c",
+    "skills/kepler-grilling/SKILL.md": "sha256:dffe3918c2b5101ffcac8143c064375a1fdc246e02833a3acea3c257a542966f",
+    "skills/kepler-orchestrate/SKILL.md": "sha256:1e6becd8793eba70bc7adc578c39140366f9111215e0d57123ae3dc031c0a82e",
+    "skills/kepler-plan/SKILL.md": "sha256:021d3d156db59446f81012e7c09874130f9af7e55a85451212ba1cf055d41757",
+    "skills/kepler-plan/references/task-graph.md": "sha256:bc51551c9fdeba9c5222c3c3fe993c1487eec142aa606f9f1c6353ca12b7dd0f",
+    "skills/kepler-quality/SKILL.md": "sha256:4a67ea5fb1c9246fbfc49864bf76aa1a3c958dea96892f9372f92a8eeb3b8838",
+    "skills/kepler-research/NOTICE": "sha256:71168255d925d0deb29bacc2f5e6f456b121b31aa9dd493ef660bee4675880cb",
+    "skills/kepler-research/SKILL.md": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
+    "skills/kepler-review/SKILL.md": "sha256:37817ad76b89e3f9ff7e414d8ce6a96dfc5d93748dd0cc6f894590b1a49c74dd",
+    "templates/README.md": "sha256:1aef9f905444007102fa89d1f2a5bd683dfa1bd5af70e9453d348879529bd6de",
+    "templates/critique.md": "sha256:1cd7886f18cb6879699e87dc8f3f855714091b9d42ac520e6ce670b86d3d36fe",
+    "templates/design.md": "sha256:0c30fd7f9db0c2766368f0b34b45d75727d12fe019b0e17b49ef2dc98ea1e4e9",
+    "templates/feedback.md": "sha256:53bcb710db8c0cb3b9ec573cd726d30c8847a08c4b3904758fb3b2cf2cfc342b",
+    "templates/finish.md": "sha256:6ec228b68f1c606677d5bc5591c7d18d5c2d8c61f2e172c0fe2db32fe5066cab",
+    "templates/glossary.md": "sha256:6c2c95b8478b953b0afc2ba6df55e9837ef6accc5e519d70a05c53168a3d6d8d",
+    "templates/plan.md": "sha256:731d12315c8cdb72ccf18a9f698873e228c3f6bc34bccee97f1b74b2edfb670c",
+    "templates/progress.md": "sha256:04eb08d7d09c433b9d161b09733b40dce6d7454d32ea594471db09e334ecf2cc",
+    "templates/proposal.md": "sha256:24cb70f1ebd3815177f1131c8f7f6be5b49cbcd1aa569c700bb8e42526c757a1",
+    "templates/requirements-change.md": "sha256:c782ca12ec66c4e9ed34e2f90a152da8a78c8b90943114dbb1e500cf84868d28",
+    "templates/requirements-spec.md": "sha256:1dad8b034772c26286bd1a76dde6f1041eb96abe4095058b05ffa025cc6793b0",
+    "templates/review.md": "sha256:4dca21df44b0a4d447dffe9ec333e099fdd259865f8a1e554e5678b9ee2cfda5",
+    "templates/task-progress.md": "sha256:cca44ca5e7f5d67f6c9b99be98c63c76ababce3ca08d20939bfec1a58f72f2ac",
+    "templates/v3/construction/delivery.md": "sha256:e0eab07f659cd0b54ff70f5819aff6d80c04771177c4675a25459e3537484e53",
+    "templates/v3/construction/design.md": "sha256:8ad93e298bb2f67d11407e5ef7eaacb1c04219914e23a96fbf35f0cdc7b0b33e",
+    "templates/v3/construction/plan.md": "sha256:f85d54c94909076a922805205cc3095514f98b902cb8af8939abf1ed99b03608",
+    "templates/v3/construction/quality.md": "sha256:127a91a01fef0ba2d330cbb98c862218a1fe92c1abe66ddc1a1ad26c5f260354",
+    "templates/v3/construction/supporting-document.md": "sha256:15dc7002106ffca86d54f424ce2beddaa8eb92c25b08cdb2b3f617f2bb2ecc2e",
+    "templates/v3/construction/unit-of-work.md": "sha256:cc9619a3d05c67ff69be603d705d924c36f898910b1b61fe3210313e300e54fa",
+    "templates/wayfinder/map.md": "sha256:2582f149733d883e5961b3ddb6ae512dcc5b33d983d86e968ca487b633d7b159",
+    "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
+    "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
+  },
+  "resource_digest": "sha256:e3e92246aa36da9ae0cb22791549c05616999766cedbde2a846802aef419251d",
+  "skills": [
+    {
+      "id": "kepler-design",
+      "digest": "sha256:7e7e61f5ff279de9f359f0fb4a7e655793b9e9c393691834b219a00185de515b",
+      "required": true
+    },
+    {
+      "id": "kepler-quality",
+      "digest": "sha256:4a67ea5fb1c9246fbfc49864bf76aa1a3c958dea96892f9372f92a8eeb3b8838",
+      "required": true
+    },
+    {
+      "id": "kepler-plan",
+      "digest": "sha256:021d3d156db59446f81012e7c09874130f9af7e55a85451212ba1cf055d41757",
+      "required": true
+    },
+    {
+      "id": "kepler-orchestrate",
+      "digest": "sha256:1e6becd8793eba70bc7adc578c39140366f9111215e0d57123ae3dc031c0a82e",
+      "required": true
+    },
+    {
+      "id": "kepler-code",
+      "digest": "sha256:ffdb6395eb0856f40a0ee21a84234c6dd4aca1dddc8f8a19f058862f968c8f7d",
+      "required": true
+    },
+    {
+      "id": "kepler-code-feedback",
+      "digest": "sha256:ae4f87d822d19533a4acfbe65b5bf4a21d777f657b59b0e931843c583a249662",
+      "required": true
+    },
+    {
+      "id": "kepler-review",
+      "digest": "sha256:37817ad76b89e3f9ff7e414d8ce6a96dfc5d93748dd0cc6f894590b1a49c74dd",
+      "required": true
+    },
+    {
+      "id": "kepler-finish-work",
+      "digest": "sha256:a7ee0247a140f60099f6582f743baaaea7d8a2af36ff8906500b373405fc1a8b",
+      "required": true
+    },
+    {
+      "id": "kepler-grilling",
+      "digest": "sha256:dffe3918c2b5101ffcac8143c064375a1fdc246e02833a3acea3c257a542966f",
+      "required": false
+    },
+    {
+      "id": "kepler-domain-modelling",
+      "digest": "sha256:88d2355196e0689d2dc7b658b9501aa40622c15b007d72771e9fcc4cc2bfbf2d",
+      "required": false
+    },
+    {
+      "id": "kepler-research",
+      "digest": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
+      "required": false
+    }
+  ],
+  "pi_agents": [
+    {
+      "role": "architect",
+      "agent_id": "kepler-architect",
+      "digest": "sha256:f288cd7b0ecee274594d1213d1c31e5335fab4a72af783aa3f373b5c9f98a14f"
+    },
+    {
+      "role": "orchestrator",
+      "agent_id": "kepler-orchestrator",
+      "digest": "sha256:edee21ccea02a5124d21890fd3b2b0f953b06e97ef584566e2508961fb75867b"
+    },
+    {
+      "role": "coder",
+      "agent_id": "kepler-coder",
+      "digest": "sha256:d26e304c93eb8313ab3b408d56efd0912386ad052f7911d7271c1fe0529b2eea"
+    },
+    {
+      "role": "reviewer",
+      "agent_id": "kepler-reviewer",
+      "digest": "sha256:155275348bc3fa56a29d2d04946af2a1996151e0a9365c4b93ef441c4db9d9b1"
+    }
+  ]
+}

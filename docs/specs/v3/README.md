@@ -4,21 +4,21 @@
 
 This folder is the canonical source for the version 3 Kepler workflow. Use this specification to make skills, CLI features, templates, tests, and user documentation.
 
-This reference contains accepted contracts and designs in progress. Each document states its status. An accepted contract does not show implementation or release.
+This reference contains approved Construction MVP contracts and deferred design work. Each document states its status. An approved contract does not show implementation or release.
 
 [Authoring progress](authoring_progress.md) lists the next decisions, shared open questions, and deferred work.
 
 [Skills](skills.md) sets version 3 skill names and responsibilities.
 
-[CLI commands and contracts](cli.md) records accepted CLI decisions, proposed command contracts, and open interface details.
+[CLI commands and contracts](cli.md) defines the approved CLI interfaces under SH122 and the later mission preparation recovery amendment under SH125. Details left unspecified remain implementation choices.
 
 [Mission](mission.md) owns the accepted mission identity, record-home, workspace, storage, checkpoint, recovery, and pre-mission contracts.
 
 [Git diff packages](diff-package.md) sets rules for generated inspection material in three existing Construction scopes. It is a Git capability, not a new workflow milestone.
 
-The [Construction runtime draft](phases/construction/runtime.md) gives proposed Construction state and event details. The accepted [Mission contract](mission.md) owns mission and storage policy. Neither document adds a stage.
+The [Construction runtime contract](phases/construction/runtime.md) defines approved Construction state, event, and operation requirements under CN23. The accepted [Mission contract](mission.md) owns mission and storage policy. Neither document adds a stage.
 
-The [installation contract](installation.md) contains accepted setup, intended-target, and resource-ownership rules under SH114, SH116, and SH117. Its installation-generation schema stays a proposal. Neither document shows implemented or released v3 behavior.
+SH124 approves the original [installation contract](installation.md), including its format-one installation-generation record. The approved [unified-release design](../../unified-release-design.md) amends setup and Pi resource ownership; SH114, SH116, and SH117 remain historical records with their original scope. The [implementation plan](../../unified-release-implementation-plan.md) fixes the resulting receipt, version, selector, transfer, and verification contracts. Design and plan approval define contracts, not release evidence. The current uncommitted source candidate implements this amendment; see the [installation status](installation.md#implementation-and-release-status). No 3.0.0 release is published.
 
 The version 2 reference stays in a separate document set. Its contracts do not automatically apply to version 3.
 
@@ -50,7 +50,7 @@ Intent documents belong to Inception. Their structure and organization terms are
 
 | Area | Location | Responsibility |
 | --- | --- | --- |
-| Core concepts | This directory. | Give shared concepts, artifact rules, effort, revision, and tracking rules. |
+| Core concepts | This directory. | Give shared concepts, artifact rules, effort, revision, and tracking rules. The [Stage contract](stage.md) defines four shared stage characteristics. |
 | Phase contracts | `phases/<phase>/` | Set phase-owned stage contracts and execution scopes. |
 | Construction Activities | [activities/](phases/construction/activities/README.md) within Construction. | Give compact contracts for Activities inside Implementation. |
 | Workflow composition | [workflows/standard/](workflows/standard/README.md) | Select stages and set their order and routing. |
@@ -61,9 +61,9 @@ These locations organize the specification. The [Mission contract](mission.md#du
 
 A **workflow** selects a series of phase-owned stages. Its definition sets their order and routing. The selected stages keep their own contracts.
 
-A **Unit of Work** replaces the previous **change** concept. Standard has one Unit of Work per mission. A Unit of Work can contain several implementation tasks. The shared [Unit of Work draft](unit-of-work.md) sets its acceptance boundary, decomposition procedure, and walking skeleton kind.
+A **Unit of Work** replaces the previous **change** concept. Standard has one Unit of Work per mission. A Unit of Work can contain several implementation tasks. The shared [Unit of Work contract](unit-of-work.md), approved under SH123, sets its acceptance boundary, decomposition procedure, and walking skeleton kind.
 
-A **stage** sets a phase-owned responsibility that workflows can use. Its phase contract sets its execution scope. A skill gives a procedure that can help with that responsibility. Stage boundaries do not depend on skill names or packaging.
+A **stage** is a phase-owned responsibility that a workflow can select. Its owning phase sets its scope and detailed contract. The shared [Stage contract](stage.md) defines its Inputs, Lead agent, Outputs, and Gates. A workflow sets order and routing without replacing that contract. A skill gives a procedure that can help with the responsibility. Stage boundaries do not depend on skill names or packaging.
 
 An [Activity](activity.md) is a bounded execution responsibility within a stage. Its owning phase or stage sets its scope, outcomes, procedure, checks, evidence, completion, correction paths, and handoffs. Activities are not stages, agents, skills, planned tasks, or independent lifecycle milestones.
 
@@ -132,6 +132,6 @@ Stages apply this shared definition to their work. Activities inherit their owni
 
 Use ASD-STE100 Simplified Technical English for text added or changed in this reference. Keep commands, paths, schema fields, and stored values in their exact spelling.
 
-Keep links in this specification within `v3/`. Use the local skill reference instead of links to current skill implementations.
+Keep normative capability and state links within `v3/`. A narrow exception permits links to the approved governing `docs/unified-release-design.md` and its `docs/unified-release-implementation-plan.md` ledger outside `v3/` for provenance and implementation boundaries. These references do not replace canonical contracts or prove shipped behavior. Use the local skill reference instead of links to current skill implementations.
 
 The ASD-STE100 standard is at `https://www.asd-ste100.org/`. This reference does not claim certified language validation.

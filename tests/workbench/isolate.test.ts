@@ -18,6 +18,7 @@ import {
   makeChangeDir,
   makeRepo,
   runCommand,
+  fixtureProcess,
   cleanupRepos,
 } from "./helpers.js";
 
@@ -35,7 +36,7 @@ const inDirectory = (directory: string) => {
 
 const runIsolation = (
   args: IsolationArguments,
-  runtime: IsolationRuntime = createRuntime(),
+  runtime: IsolationRuntime = createRuntime({ process: fixtureProcess }),
 ): Promise<IsolationResult> =>
   new IsolateService(runtime).execute(args);
 
@@ -77,7 +78,9 @@ describe("isolation check", () => {
     const repo = makeRepo();
     process.chdir(Os.tmpdir());
     let cwd = repo;
-    const service = new IsolateService(createRuntime({ cwd: () => cwd }));
+    const service = new IsolateService(
+      createRuntime({ cwd: () => cwd, process: fixtureProcess }),
+    );
 
     const checkResult = await service.execute({ mode: "check" });
     expect(checkResult.exitCode).toBe(1);
@@ -216,9 +219,10 @@ describe("isolation check", () => {
     const repo = inDirectory(makeRepo());
     git(repo, "checkout", "-q", "-b", "add-auth");
     const changeDir = makeChangeDir(repo, "add-auth");
-    const fileSystem = createRuntime().fileSystem;
+    const fileSystem = createRuntime({ process: fixtureProcess }).fileSystem;
     const runtime = createRuntime({
       cwd: () => repo,
+      process: fixtureProcess,
       fileSystem: {
         ...fileSystem,
         realpath: async (sourcePath) => {

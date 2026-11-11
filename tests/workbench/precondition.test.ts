@@ -1308,7 +1308,7 @@ describe("precondition repository gates", () => {
       });
     const breakdown = taskBreakdownDigest(
       [1],
-      [{ id: 1, title: "Implement", dependsOn: [], source: originalDefinition }],
+      [{ id: 1, source: originalDefinition }],
     );
     const makePlan = (definition: string) =>
       `---\nartifact: plan\nchange: scaffold-proof\nstatus: approved\ncreated: 2026-09-12\nauthor: test\ndecision: accepted\nroute_unit: null\ninitialization:\n  version: 1\n  base: ${base}\n  authority: requester-record-33\n  breakdown: ${breakdown}\n  taskIds: [1]\n---\n# Plan: Scaffold proof\n\n## Overview\n\n## Tasks\n\n${definition}\n- Notes: ${makeContext(definition)}\n\n## Done when\n\nThe task is complete.\n`;

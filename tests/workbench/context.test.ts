@@ -277,14 +277,7 @@ const createInitialContextScaffold = (
   const taskBlock = `${definition}\n- Notes: ${inputContext}`;
   const breakdown = taskBreakdownDigest(
     [1],
-    [{
-      id: 1,
-      title: "Create file",
-      dependsOn: [],
-      filesDeclared: !dependencyMode,
-      files: dependencyMode ? [] : ["src/new.ts"],
-      source: definition,
-    }],
+    [{ id: 1, source: definition }],
   );
   write(
     repository,

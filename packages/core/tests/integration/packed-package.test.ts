@@ -1,0 +1,143 @@
+import { execa } from "execa";
+import * as Fs from "node:fs/promises";
+import * as Os from "node:os";
+import * as Path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+
+const repositoryRoot = Path.resolve(import.meta.dirname, "../../../..");
+const coreDirectory = Path.join(repositoryRoot, "packages", "core");
+const temporaryRoots: string[] = [];
+const maxDiagnosticCharacters = 4096;
+
+const diagnosticTail = (value: unknown): string =>
+  typeof value === "string"
+    ? value.slice(-maxDiagnosticCharacters)
+    : "";
+
+const run = async (
+  command: string,
+  args: readonly string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> => {
+  try {
+    await execa(command, [...args], {
+      cwd,
+      env,
+      extendEnv: false,
+      maxBuffer: 1_000_000,
+      timeout: 120_000,
+    });
+  } catch (error) {
+    const result = error as {
+      readonly exitCode?: unknown;
+      readonly stderr?: unknown;
+      readonly stdout?: unknown;
+    };
+    throw new Error(
+      [
+        `${command} ${args.join(" ")} failed with exit code ${String(result.exitCode)}`,
+        diagnosticTail(result.stderr),
+        diagnosticTail(result.stdout),
+      ].filter(Boolean).join("\n"),
+    );
+  }
+};
+
+afterEach(async () => {
+  for (const root of temporaryRoots.splice(0)) {
+    await Fs.rm(root, { recursive: true, force: true });
+    await expect(Fs.access(root)).rejects.toThrow();
+  }
+});
+
+describe("packed Core package", () => {
+  it("installs into an isolated consumer with usable declarations and runtime behavior", async () => {
+    const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-packed-core-"));
+    temporaryRoots.push(root);
+    const archive = Path.join(root, "kepler-core.tgz");
+    const consumer = Path.join(root, "consumer");
+    const home = Path.join(root, "home");
+    const config = Path.join(root, "config");
+    const cache = Path.join(root, "cache");
+    await Promise.all([
+      Fs.mkdir(consumer, { recursive: true }),
+      Fs.mkdir(home, { recursive: true }),
+      Fs.mkdir(config, { recursive: true }),
+      Fs.mkdir(cache, { recursive: true }),
+    ]);
+
+    const env: NodeJS.ProcessEnv = {
+      HOME: home,
+      XDG_CACHE_HOME: cache,
+      XDG_CONFIG_HOME: config,
+      npm_config_registry: "https://registry.npmjs.org",
+      npm_config_userconfig: Path.join(home, ".npmrc"),
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      PATH: process.env.PATH ?? "",
+      TMPDIR: root,
+    };
+
+    await run("bun", ["pm", "pack", "--filename", archive, "--quiet"], coreDirectory, env);
+    await Fs.writeFile(
+      Path.join(consumer, "package.json"),
+      JSON.stringify({ name: "kepler-core-consumer", private: true, type: "module" }),
+    );
+    await run("bun", ["add", `file:${archive}`], consumer, env);
+
+    const expectedHome = Path.join(config, "vialactea-works", "kepler");
+    await Fs.writeFile(
+      Path.join(consumer, "index.ts"),
+      [
+        'import { EVENT_ENVELOPE_VERSION, KeplerConfigError, KeplerService, parseKeplerSettings, parseMarkdownArtifact, validateArtifact, validateEventEnvelope, type EventEnvelope, type KeplerServiceOptions, type KeplerSettings } from "@vialactea-works/kepler-core";',
+        'import type { ArtifactOwnership } from "@vialactea-works/kepler-core";',
+        `const options: KeplerServiceOptions = { homeDirectory: ${JSON.stringify(home)}, xdgConfigHome: ${JSON.stringify(config)} };`,
+        'const settings: KeplerSettings = parseKeplerSettings("enabled: true");',
+        "const paths = new KeplerService(options).globalPaths();",
+        'const ownership: ArtifactOwnership = { scope: "unit", unitId: "2026-10-20-packed-package" };',
+        'const source = "---\\nid: 11111111-1111-4111-8111-111111111111\\ntype: unit-of-work\\nschema_version: 3\\nunit_id: 2026-10-20-packed-package\\nauthor: Ada Lovelace <ada@example.com>\\n---\\n# Unit\\n";',
+        'const parsed = parseMarkdownArtifact("unit-of-work.md", source);',
+        'if (parsed.kind !== "parsed") throw new Error("Packed Markdown parser failed");',
+        'const validation = validateArtifact(parsed, ownership);',
+        'if (validation.kind !== "valid" || validation.artifact.metadata.type !== "unit-of-work") throw new Error("Packed artifact validation failed");',
+        'const invalidSource = source.replace("schema_version: 3", "schema_version: 99");',
+        'const invalidParsed = parseMarkdownArtifact("unit-of-work.md", invalidSource);',
+        'if (invalidParsed.kind !== "parsed") throw new Error("Packed invalid artifact parser failed");',
+        'const invalidValidation = validateArtifact(invalidParsed, ownership);',
+        'if (invalidValidation.kind !== "invalid" || !invalidValidation.diagnostics.some((diagnostic) => diagnostic.code === "unsupported-schema-version")) throw new Error("Packed artifact failure contract failed");',
+        'let settingsFailure = false;',
+        'try { parseKeplerSettings("[]", "packed-invalid.yaml"); } catch (error) { settingsFailure = error instanceof KeplerConfigError && error.configPath === "packed-invalid.yaml"; }',
+        'if (!settingsFailure) throw new Error("Packed settings failure contract failed");',
+        'const event: EventEnvelope = { id: "11111111-1111-4111-8111-111111111111" as EventEnvelope["id"], phase: "construction", type: "construction.test", envelope_version: EVENT_ENVELOPE_VERSION, event_version: 1, journal_id: "22222222-2222-4222-8222-222222222222" as EventEnvelope["journal_id"], recorded_at: "2026-10-20T00:00:00.000Z", producer: { name: "packed-consumer", version: "1" }, caused_by: [], data: {} };',
+        'if (validateEventEnvelope(event).status !== "valid") throw new Error("Packed event validation failed");',
+        'if (validateEventEnvelope({ ...event, recorded_at: "2026-10-20T00:00:00+00:00" }).status !== "invalid") throw new Error("Packed event failure contract failed");',
+        `if (paths.home !== ${JSON.stringify(expectedHome)} || settings.enabled !== true) throw new Error("Packed Core contract failed");`,
+        "",
+      ].join("\n"),
+    );
+    const tsconfig = Path.join(consumer, "tsconfig.json");
+    await Fs.writeFile(
+      tsconfig,
+      JSON.stringify({
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          noEmit: true,
+          strict: true,
+          target: "ES2024",
+          types: [],
+        },
+        files: ["index.ts"],
+      }),
+    );
+
+    await run(
+      process.execPath,
+      [Path.join(repositoryRoot, "node_modules", "typescript", "bin", "tsc"), "--project", tsconfig],
+      consumer,
+      env,
+    );
+    await run(process.execPath, [Path.join(consumer, "index.ts")], consumer, env);
+  }, 120_000);
+});

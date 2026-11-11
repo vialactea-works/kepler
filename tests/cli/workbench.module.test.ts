@@ -3,6 +3,7 @@ import { type INestApplicationContext } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { CommandFactory } from "nest-commander";
 import { describe, expect, it } from "vitest";
+import { parseCliEnvelope } from "./result-envelope.js";
 import { WorkbenchModule } from "../../packages/cli/src/cli/nest/workbench.module.js";
 import {
   CONTEXT_RUNTIME,
@@ -132,13 +133,19 @@ describe("WorkbenchModule", () => {
   it("reports usage for the bare workbench group without starting an operation", async () => {
     const originalArgv = process.argv;
     const originalExitCode = process.exitCode;
+    const originalStdoutWrite = process.stdout.write;
     const originalStderrWrite = process.stderr.write;
+    let stdout = "";
     let stderr = "";
     let application: INestApplicationContext | undefined;
 
     try {
       process.argv = [...originalArgv.slice(0, 2), "workbench"];
       process.exitCode = 0;
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+        return true;
+      }) as typeof process.stdout.write;
       process.stderr.write = ((chunk: string | Uint8Array) => {
         stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
         return true;
@@ -150,11 +157,21 @@ describe("WorkbenchModule", () => {
         },
       });
 
-      expect(process.exitCode).toBe(2);
+      expect(process.exitCode).toBe(1);
+      expect(parseCliEnvelope(stdout)).toMatchObject({
+        status: "failed",
+        data: {
+          code: "operation_failed",
+          message: "error: workbench requires a subcommand",
+          details: {},
+          recovery: expect.any(String),
+        },
+      });
       expect(stderr).toBe("error: workbench requires a subcommand\n");
     } finally {
       process.argv = originalArgv;
       process.exitCode = originalExitCode;
+      process.stdout.write = originalStdoutWrite;
       process.stderr.write = originalStderrWrite;
       await application?.close();
     }

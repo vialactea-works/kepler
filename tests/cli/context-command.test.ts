@@ -2,6 +2,7 @@ import "reflect-metadata";
 import type { DynamicModule, INestApplicationContext } from "@nestjs/common";
 import { CommandFactory } from "nest-commander";
 import { describe, expect, it } from "vitest";
+import { unwrapLegacyOutput } from "./result-envelope.js";
 import { DiffCommand } from "../../packages/cli/src/cli/nest/diff.command.js";
 import { IsolateCommand } from "../../packages/cli/src/cli/nest/isolate.command.js";
 import { PreconditionCommand } from "../../packages/cli/src/cli/nest/precondition.command.js";
@@ -123,7 +124,7 @@ async function runCli(
     await application?.close();
   }
 
-  return { calls, exitCode, stderr, stdout };
+  return { calls, exitCode, stderr, stdout: unwrapLegacyOutput(stdout) };
 }
 
 describe("ContextCommand", () => {
@@ -208,7 +209,7 @@ describe("ContextCommand", () => {
     ]);
 
     expect(harness.calls).toEqual([]);
-    expect(harness.exitCode).toBe(2);
+    expect(harness.exitCode).toBe(1);
     expect(harness.stdout).toBe("");
     expect(harness.stderr).toBe("error: --all takes no change directory\n");
   });
