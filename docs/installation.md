@@ -2,7 +2,7 @@
 
 Kepler setup initializes a version-specific resource home. It does not install the CLI, select a release, change `PATH`, or configure a coding-agent host. Use your existing software manager to install and select the CLI, then set `KEPLER_HOME` to the matching absolute home before running setup.
 
-The published `v3.0.0` release predates this versioned-home contract. The current source candidate is not a replacement release. Do not use these instructions to treat the old published setup behavior as the new contract.
+The published `v3.0.0` release implements this versioned-home contract.
 
 ## Choose a version-specific home
 
