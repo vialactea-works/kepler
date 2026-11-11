@@ -121,7 +121,7 @@ function currentTarget(): ReleaseTarget {
 }
 
 function makeTemporaryRoot(): string {
-  const root = Fs.mkdtempSync(Path.join(Os.tmpdir(), "kepler-bootstrap-e2e-"));
+  const root = Fs.mkdtempSync(Path.join(Fs.realpathSync(Os.tmpdir()), "kepler-bootstrap-e2e-"));
   temporaryRoots.push(root);
   return root;
 }
