@@ -11,7 +11,7 @@ import { createReleaseArchiveFixture } from "../helpers/release-archive-fixture.
 const temporaryRoots: string[] = [];
 
 function temporaryRoot(): string {
-  const root = Fs.mkdtempSync(Path.join(Os.tmpdir(), "kepler-release-archive-integration-"));
+  const root = Fs.mkdtempSync(Path.join(Fs.realpathSync(Os.tmpdir()), "kepler-release-archive-integration-"));
   temporaryRoots.push(root);
   return root;
 }
@@ -87,6 +87,12 @@ describe("target archive filesystem integration", () => {
     expect(() => extractTargetArchive(archive, Path.join(redirected, "through-link")))
       .toThrow(/normalized child/i);
     expect(Fs.existsSync(Path.join(root, "through-link"))).toBe(false);
+
+    const physicalDestination = Path.join(Fs.realpathSync(redirected), "through-link");
+    const validated = extractTargetArchive(archive, physicalDestination);
+    expect(validateTargetPackageRoot(physicalDestination)).toEqual(validated);
+    expect(Fs.statSync(Path.join(physicalDestination, "bin", "kepler")).mode & 0o777).toBe(0o755);
+    expect(Fs.statSync(Path.join(physicalDestination, "package.json")).mode & 0o777).toBe(0o644);
   });
 
   it("requires exact inventory, regular files, checksums, and whole-package mode profiles", () => {

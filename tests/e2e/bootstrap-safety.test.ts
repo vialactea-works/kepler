@@ -218,6 +218,29 @@ describe("bootstrap archive identity and resource guards", () => {
     expect(Fs.existsSync(Path.join(result.home, ".kepler-dist", "current"))).toBe(false);
   });
 
+  it("reports an unexpected shell expansion failure without invoking candidate setup", async () => {
+    const root = makeTemporaryRoot();
+    const target = currentTarget();
+    const archive = createCandidateArchive("3.0.0", target, 'printf "setup invoked\\n" > "$HOME/setup-invoked"');
+    const assets = createAssets(Path.join(root, "assets"), archive, target);
+    const fakeBin = createFakeCurl(root);
+    const source = Fs.readFileSync(Path.join(repositoryRoot, "install.sh"), "utf8");
+    const call = '  install_kepler "$platform" "$tag" "$work_dir"';
+    expect(source).toContain(call);
+    const script = Path.join(root, "expansion-failure-install.sh");
+    Fs.writeFileSync(script, source.replace(call, `  printf '%s\\n' "$KEPLER_TEST_UNSET"\n${call}`));
+
+    const result = await runInstaller({ root, assets, fakeBin, script });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("KEPLER_TEST_UNSET");
+    expect(result.stderr).toContain("unbound variable");
+    expect(Fs.existsSync(Path.join(result.home, "setup-invoked"))).toBe(false);
+    const retained = retainedWorkDirectory(result.temporaryDirectory);
+    expect(result.stderr).not.toContain("(exit 0)");
+    expect(Fs.readdirSync(retained)).toEqual([]);
+  });
+
   it.each(malformedIdentityOutputs(currentTarget()))("rejects malformed output: %s", async (_case, identityOutput) => {
     const root = makeTemporaryRoot();
     const target = currentTarget();
