@@ -8,6 +8,7 @@ import {
 } from "../../scripts/release-preparation.js";
 
 const skillIds = [
+  "kepler-init",
   "kepler-mission-startup",
   "kepler-design",
   "kepler-quality",

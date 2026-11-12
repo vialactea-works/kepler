@@ -8,7 +8,7 @@ Kepler setup seeds packaged resources into the selected `KEPLER_HOME`. It does n
 
 Keep each complete skill directory, including reference files and notices. Use resources from the home that matches the selected CLI. See [Installation](installation.md#resources-and-host-ownership).
 
-The source `skills/` directory contains more procedures than the resource package. The generated package exposes the following thirteen skills (nine required Standard entry/stage/Activity resources and four supporting resources). A file in a home does not prove that a host loaded it. Do not assume the selected installed release contains the same inventory as this source candidate; inspect its matching manifest.
+The source `skills/` directory contains the same fourteen skill trees as the generated package (nine required Standard entry/stage/Activity resources and five optional supporting resources). A file in a home does not prove that a host loaded it. Do not assume the selected installed release contains the same inventory as this source candidate; inspect its matching manifest.
 
 ## Developer skill route
 
@@ -45,6 +45,7 @@ Standard uses six stages. Code Generation, Code Validation, and Code Integration
 
 | Skill | Use |
 | --- | --- |
+| [`kepler-init`](../bundle/skills/kepler-init/SKILL.md) | Prepare an existing Git project for Kepler v3; no mission, unit, or stage is created. This skill does not direct the next workflow step. |
 | [`kepler-grilling`](../bundle/skills/kepler-grilling/SKILL.md) | Examine a plan or decision through focused questions. |
 | [`kepler-domain-modelling`](../bundle/skills/kepler-domain-modelling/SKILL.md) | Establish domain terms, model boundaries, and ownership. |
 | [`kepler-research`](../bundle/skills/kepler-research/SKILL.md) | Check uncertain facts against primary sources and record findings. |

@@ -48,7 +48,7 @@ Setup rejects a symlink or non-directory at `KEPLER_HOME`, non-regular resource 
 
 ## Resources and host ownership
 
-The current source package includes thirteen portable skill trees, four Pi role definitions, four Claude Code role definitions, templates, and guidelines. An installed release may differ: inspect its matching manifest. These are packaged files, not host registrations. A host or skill manager owns installation, discovery, loading, permissions, and session lifecycle. Avoid duplicate skill copies.
+The current source package includes fourteen portable skill trees, four Pi role definitions, four Claude Code role definitions, templates, and guidelines. An installed release may differ: inspect its matching manifest. These are packaged files, not host registrations. A host or skill manager owns installation, discovery, loading, permissions, and session lifecycle. Avoid duplicate skill copies.
 
 For Pi, the documented `--skill <path>` option can load the complete selected `$KEPLER_HOME/skills` directory for a session; Pi also discovers directories with `SKILL.md` under configured user/project skill locations. Confirm the named skills appear and that you can load their full instructions (for example `/skill:kepler-mission-startup`). Pi's ordinary skill loader does not itself install Kepler's role definitions. Configure your existing agent host/subagent manager to expose `$KEPLER_HOME/agents/pi/v1/` and verify the four roles, their tool capabilities, and a separate non-author reviewer context before Implementation. Do not assume a Markdown file alone enables dispatch or enforces permissions.
 
@@ -56,7 +56,7 @@ For Claude Code, the host owns discovery of `.claude/skills/` and `.claude/agent
 
 For another host, require equivalent skill-directory loading (including references/notices), role selection, subprocess/Git access, isolated authors, independent reviewers, and explicit permission controls. If any capability is missing, stop and report the smallest missing configuration. Resource files do not certify that a host loaded or followed them; setup success reports only home initialization.
 
-Before a mission, ask your coding agent: “Check that this session can use the selected Kepler CLI and matching home, load its Kepler skills and roles, and verify independent worker contexts. Tell me what needs my authorization before installing or changing host configuration.” See the [prompt-first tutorial](missions/tutorial.md).
+To prepare an existing Git project without starting work, ask the agent to use optional `kepler-init`. It checks the worktree root and safely establishes the local `.kepler/` marker without scaffolding old change-based artifacts or creating a mission. Separately, before a mission, ask your coding agent: “Check that this session can use the selected Kepler CLI and matching home, load its Kepler skills and roles, and verify independent worker contexts. Tell me what needs my authorization before installing or changing host configuration.” See the [prompt-first tutorial](missions/tutorial.md).
 
 ## Project and legacy data
 

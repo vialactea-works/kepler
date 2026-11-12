@@ -9,7 +9,7 @@ decision: skipped
 
 <!--
   Canonical ubiquitous language
-  Produced by: kepler-init; maintained through kepler-wayfinder-domain-modeling and the Wayfinder closing act.
+  Historical change-based producer: legacy init; maintained through historical domain modeling and Wayfinder work.
   Lives at: .kepler/specs/glossary.md
   Keep requirements-spec metadata and all five required sections for artifact-lint compatibility.
   This is vocabulary support, not a new business capability or an implementation specification.

@@ -8,6 +8,7 @@ import {
 import type { ContentDigest } from "../packages/cli/src/cli/content-digest.js";
 
 const skillIds = [
+  "kepler-init",
   "kepler-mission-startup",
   "kepler-design",
   "kepler-quality",

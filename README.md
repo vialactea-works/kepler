@@ -19,7 +19,7 @@ The `v3.0.0` tag's setup implementation requires an absolute `KEPLER_HOME` and i
 
 ## Work through Standard
 
-Ask your coding agent to run `kepler-mission-startup` to create a mission and its unit. Then use `kepler-design`, `kepler-quality`, `kepler-plan`, `kepler-orchestrate`, an independent `kepler-review`, and `kepler-finish-work` in order. Ask `kepler-resume` to inspect or reconcile interrupted work. The agent executes CLI operations and builds their JSON; you make consequential decisions and explicitly approve current Functional Design and Quality Requirements. See [Skills and roles](docs/skills.md) and the [mission tutorial](docs/missions/tutorial.md) for copyable prompts.
+For an existing Git project that needs local preparation, `kepler-init` can establish v3 project readiness without starting a mission. Ask your coding agent to run `kepler-mission-startup` when you want to create a mission and its unit. Then use `kepler-design`, `kepler-quality`, `kepler-plan`, `kepler-orchestrate`, an independent `kepler-review`, and `kepler-finish-work` in order. Ask `kepler-resume` to inspect or reconcile interrupted work. The agent executes CLI operations and builds their JSON; you make consequential decisions and explicitly approve current Functional Design and Quality Requirements. See [Skills and roles](docs/skills.md) and the [mission tutorial](docs/missions/tutorial.md) for copyable prompts.
 
 The [operator walkthrough](docs/cli/standard-walkthrough.md) retains complete CLI requests and the [CLI reference](docs/cli.md) documents exact commands. There is no `mission run` or global `status` command.
 

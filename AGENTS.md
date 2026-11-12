@@ -12,7 +12,7 @@ The repository has two packages:
 Other relevant areas:
 
 - `bundle/` — versioned templates, guidelines, portable skills, Claude Code role definitions, and their manifest.
-- `skills/` — skill sources. The release bundle contains eleven v3 skills; other repository skills are not automatically part of that release bundle.
+- `skills/` — source for the fourteen v3 skill trees copied into the release bundle. `kepler-init` prepares a Git project without creating a mission; old change-based skills are not shipped.
 - `docs/specs/v3/` — detailed Construction and installation contracts; check their implementation/status notes before using them as evidence of shipped behavior.
 - `docs/` — user, contributor, workflow, and release documentation.
 - `tests/` — Vitest unit, integration, packed-package, and execa-driven CLI E2E tests.

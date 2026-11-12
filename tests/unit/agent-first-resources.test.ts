@@ -10,7 +10,7 @@ const requiredSkills = [
   "kepler-mission-startup", "kepler-design", "kepler-quality", "kepler-plan",
   "kepler-orchestrate", "kepler-code", "kepler-code-feedback", "kepler-review", "kepler-finish-work",
 ];
-const supportingSkills = ["kepler-grilling", "kepler-domain-modelling", "kepler-research", "kepler-resume"];
+const supportingSkills = ["kepler-init", "kepler-grilling", "kepler-domain-modelling", "kepler-research", "kepler-resume"];
 
 const packageSnapshot = () => {
   const plan = planResourceGeneration(root, VERSION);
@@ -31,6 +31,9 @@ describe("agent-first resource package", () => {
       expect(manifest.skills).toContainEqual(expect.objectContaining({ id, required: false }));
     }
     expect(manifest.skills).toHaveLength(requiredSkills.length + supportingSkills.length);
+    const sourceSkillIds = Fs.readdirSync(Path.join(root, "skills"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+    expect(sourceSkillIds).toEqual(manifest.skills.map((skill) => skill.id).sort());
   });
 
   it("ships complete package-local operational recipes and resolvable skill references", () => {

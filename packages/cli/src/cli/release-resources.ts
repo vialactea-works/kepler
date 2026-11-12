@@ -51,6 +51,7 @@ export class ResourceManifestError extends Error {
 }
 
 const skillIds = [
+  "kepler-init",
   "kepler-mission-startup",
   "kepler-design",
   "kepler-quality",
@@ -127,8 +128,8 @@ const resourceManifestSchema = closedObject({
   resource_digest: digest,
   skills: {
     type: "array",
-    minItems: 13,
-    maxItems: 13,
+    minItems: 14,
+    maxItems: 14,
     items: closedObject({ id: text, digest, required: { type: "boolean" } }),
   },
   agent_profiles: {
@@ -346,7 +347,7 @@ function validateSkillSet(skills: readonly ResourceSkill[]): void {
     skills.some(({ id, required }) => expected.get(id) !== required)
   ) {
     throw new ResourceManifestError(
-      "Resource manifest must declare the thirteen accepted skills with their required status",
+      "Resource manifest must declare the fourteen accepted skills with their required status",
     );
   }
 }

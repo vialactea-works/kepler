@@ -33,7 +33,7 @@ The initialized home contains these top-level entries:
 | `settings.yaml` | Kepler settings, seeded as an empty mapping (`{}\n`). |
 | `home-metadata.json` | Initialization format, release, resource digest, and pending status when initialization is incomplete. |
 
-The resource package binds one Kepler release to its complete sorted file inventory and content digests. The current manifest format is 3. This source candidate declares thirteen skills and eight agent profiles: four Pi profiles and four Claude Code profiles. These files are data in the Kepler home. Their presence does not configure a host or show that a host loaded them.
+The resource package binds one Kepler release to its complete sorted file inventory and content digests. The current manifest format is 3. This source candidate declares fourteen skills and eight agent profiles: four Pi profiles and four Claude Code profiles. These files are data in the Kepler home. Their presence does not configure a host or show that a host loaded them.
 
 ## Setup contract
 
