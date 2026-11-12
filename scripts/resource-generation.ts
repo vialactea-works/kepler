@@ -8,6 +8,7 @@ import {
 import type { ContentDigest } from "../packages/cli/src/cli/content-digest.js";
 
 const skillIds = [
+  "kepler-mission-startup",
   "kepler-design",
   "kepler-quality",
   "kepler-plan",
@@ -19,6 +20,7 @@ const skillIds = [
   "kepler-grilling",
   "kepler-domain-modelling",
   "kepler-research",
+  "kepler-resume",
 ] as const;
 
 export interface ResourceFileChange {

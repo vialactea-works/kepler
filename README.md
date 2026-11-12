@@ -7,26 +7,21 @@ The CLI records state, evidence, approvals, and repository checkpoints. A checkp
 ## Learn Kepler
 
 - Start at the [documentation index](docs/README.md).
-- Follow the [complete mission tutorial](docs/missions/tutorial.md).
-- Look up commands in the [CLI reference](docs/cli.md).
+- Follow the [prompt-first Standard mission tutorial](docs/missions/tutorial.md); ask your coding agent to use the named skill at each step.
+- Use the [CLI reference](docs/cli.md) when building agent integrations or inspecting a critical operation.
 - Read [state and artifacts](docs/missions/state-and-artifacts.md) to understand stored records.
 
 ## Install
 
 Use your software manager to install and select a Kepler CLI version. Set `KEPLER_HOME` to an absolute, version-specific path before running `kepler setup`. Kepler setup initializes that home; it does not install the CLI, change `PATH`, or register resources with a coding-agent host. See [Installation](docs/installation.md) and [Configuration](docs/configuration.md).
 
-The published `v3.0.0` release predates the versioned-home contract described here. The current source candidate is not a replacement release.
+The `v3.0.0` tag's setup implementation requires an absolute `KEPLER_HOME` and initializes a release-bound resource home. Verify the selected binary and resources match before loading them into a host; Kepler setup does not activate host skills.
 
-## Inspect the interface
+## Work through Standard
 
-```bash
-kepler --version
-kepler --help
-kepler mission create --help
-kepler workflow construction unit create --help
-```
+Ask your coding agent to run `kepler-mission-startup` to create a mission and its unit. Then use `kepler-design`, `kepler-quality`, `kepler-plan`, `kepler-orchestrate`, an independent `kepler-review`, and `kepler-finish-work` in order. Ask `kepler-resume` to inspect or reconcile interrupted work. The agent executes CLI operations and builds their JSON; you make consequential decisions and explicitly approve current Functional Design and Quality Requirements. See [Skills and roles](docs/skills.md) and the [mission tutorial](docs/missions/tutorial.md) for copyable prompts.
 
-Use the [tutorial](docs/missions/tutorial.md) for complete request bodies and a continuous workflow. There is no `mission run` or global `status` command. Query progress with `unit show`, `stage show`, `task list`, `task show`, `activity show`, or `audit list`.
+The [operator walkthrough](docs/cli/standard-walkthrough.md) retains complete CLI requests and the [CLI reference](docs/cli.md) documents exact commands. There is no `mission run` or global `status` command.
 
 ## Version boundaries
 

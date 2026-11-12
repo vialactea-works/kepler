@@ -1,6 +1,6 @@
 # Mission commands
 
-Use this reference to create a Standard mission or continue its preparation. A mission records a request, selected repositories, and workspace choices. It does not run workers. See the [tutorial](../missions/tutorial.md) for the complete sequence.
+Use this reference to create a Standard mission or continue its preparation. A mission records a request, selected repositories, and workspace choices. It does not run workers. See the [operator walkthrough](standard-walkthrough.md) for complete CLI mechanics or the [developer tutorial](../missions/tutorial.md) for agent prompts.
 
 ## `mission create`
 

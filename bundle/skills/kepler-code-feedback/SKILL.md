@@ -5,6 +5,8 @@ description: Independently validate one task's generated output and record Code 
 
 # Code Validation
 
+Use the [packaged agent operations](../kepler-mission-startup/references/agent-operations.md) and complete request examples to build strict CLI requests and capture actual results. The developer invokes the orchestrator, which dispatches you separately from the Code Generation author. Report feedback and exact check/evidence results to the orchestrator; never ask the developer to run task commands or select attempt IDs.
+
 ## When to Use
 
 Use for the Code Validation Activity of one explicitly assigned task after Code Generation has completed. Review the actual candidate as a non-author. This skill is not whole-unit Review and does not perform Code Integration.

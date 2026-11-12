@@ -94,6 +94,6 @@ Normal success exits 0. Invalid selectors, unavailable or mismatched source reco
 
 ## Related commands and sources
 
-Use [audit queries](audit.md#query-history) to inspect source facts. Use [stage assessments](stage-assessments.md) to understand completion bindings. The [tutorial](../missions/tutorial.md) keeps inspection separate from check execution and approval.
+Use [audit queries](audit.md#query-history) to inspect source facts. Use [stage assessments](stage-assessments.md) to understand completion bindings. The [operator walkthrough](standard-walkthrough.md) keeps inspection separate from check execution and approval.
 
 Implementation: [option parser](../../packages/cli/src/cli/diff-package-options.ts), [source resolver](../../packages/cli/src/construction/diff-package-source.ts), [package service](../../packages/cli/src/workbench/diff-package.ts), [Git adapter](../../packages/cli/src/workbench/git-diff-package.ts), and [commands](../../packages/cli/src/cli/nest/diff-package.commands.ts).

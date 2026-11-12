@@ -1,6 +1,6 @@
 # Standard Construction workflow
 
-Use this explanation to understand Kepler's execution model. Follow the [mission tutorial](missions/tutorial.md) for a guided exercise. Use the [CLI reference](cli.md) for command details.
+Use this explanation to understand Kepler's execution model. Follow the [prompt-first mission tutorial](missions/tutorial.md) to give an agent the named skills in order. The [CLI reference](cli.md) serves agents and operators who need exact command details.
 
 ## Concepts
 
@@ -46,7 +46,7 @@ The workflow does not require an existing application or test suite. A Git proje
 | Application operations | Check scope, history, material, authority, and state before a transition. |
 | History | Retain the facts from which workflow state is derived. |
 | Git and filesystem adapters | Read artifacts and checkpoints. Apply the operation's permitted local effects. |
-| Skills | Explain the procedure for a stage or supporting activity. |
+| Skills | Explain a stage, pre-stage startup, interrupted-work recovery, or a supporting Activity. The developer invokes them through prompts. |
 | Host or team | Assign workers, run commands, provide independent review, and manage sessions. |
 
 The application core uses typed ports for external effects. Nest commands adapt the CLI to those operations. CLI interfaces are not a general workflow engine or a distributed scheduler.

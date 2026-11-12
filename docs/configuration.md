@@ -1,6 +1,6 @@
 # Configuration and paths
 
-Use this reference to select project and Kepler resource paths. Kepler has no general `config` command or global `--config` option.
+Use this reference to select project and Kepler resource paths. For normal mission work, ask your coding agent to follow the [prompt-first tutorial](missions/tutorial.md) instead of setting selectors by hand. Kepler has no general `config` command or global `--config` option.
 
 ## Select a project
 
@@ -37,7 +37,7 @@ The caller chooses `<version>` to match the installed CLI. Each version has its 
 | `$KEPLER_HOME/home-metadata.json` | Release and resource-digest identity for safe initialization and resume. |
 | `.kepler/missions/<mission-id>/` | Project-owned mission artifacts and history. |
 
-Setup seeds an empty home once. Repeating setup for the same release preserves edits and deletions. It does not migrate configuration between versions or update host settings. See [Installation](installation.md).
+Setup seeds an empty home once. Repeating setup for the same release preserves edits and deletions. It does not migrate configuration between versions or update host settings. The host must load the complete matching skill directories and profile definitions independently; see [Installation and host resource loading](installation.md#resources-and-host-ownership).
 
 ## Optional Core settings
 

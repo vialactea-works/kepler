@@ -5,6 +5,8 @@ description: Independently assess whether the complete integrated Unit of Work s
 
 # Unit of Work Review
 
+The developer asks an independent reviewer to assess the complete unit after Implementation. Read the [packaged agent operations](../kepler-mission-startup/references/agent-operations.md) and complete request examples. The host must establish you did not author the candidate; a role name alone is insufficient. Execute Kepler commands and retain exact evidence/assessment identities yourself. Start only an eligible attempt or continue the same safe unended attempt. Report findings to the orchestrator for authorized correction; on completion report the reviewed source and evidence, remaining limits, and offer: “Use kepler-finish-work for this reviewed unit; confirm the requested outcome, recipient, destination and operation authority before acting.” Do not perform delivery yourself.
+
 ## When to Use
 
 Use for the Standard Unit of Work Review stage after Implementation has completed its own assessment for the current unit. Review the integrated outcome independently; task-level feedback is not a substitute.

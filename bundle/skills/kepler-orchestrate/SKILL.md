@@ -5,6 +5,8 @@ description: Coordinate the unit-scoped Implementation stage and the separate ta
 
 # Implementation Coordination
 
+The developer authorizes implementation of the current plan; you own CLI mechanics and worker dispatch, not their task-by-task commands. Read the [packaged agent operations](../kepler-mission-startup/references/agent-operations.md) and complete request examples. Verify the host actually has separate Generation and non-author Validation worker contexts before admission. Start only an eligible unit attempt or continue the same safe unended attempt. Report accepted task outputs, combined checks, current Implementation assessment, receipts and blockers, then offer: “Use kepler-review in an independent non-author context for the full integrated unit; do not deliver yet.” Do not start Review yourself.
+
 ## When to Use
 
 Use for the Standard Implementation stage of one Unit of Work. This skill coordinates workers and CLI-owned transitions; it does not write implementation, task graphs, journals, projections, or worker evidence. It owns the unit Implementation attempt and coordinates separate per-task Activity attempts, including Code Integration.

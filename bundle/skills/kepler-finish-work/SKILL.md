@@ -5,6 +5,8 @@ description: Prepare, authorize, perform, verify, and hand off the delivery outc
 
 # Deliver
 
+The developer requests a specific outcome, destination and recipient after independent Review. Read the [packaged agent operations](../kepler-mission-startup/references/agent-operations.md) and complete request examples. You execute the CLI and authorized project-native operations; do not hand the developer command lists. Start only an eligible attempt or continue the same safe unended attempt. Ask for missing operation permission, verify actual effects, and report the reviewed source, outcome, evidence, limits and recipient handoff. Deliver is the last Standard stage; do not invent a mission-finish operation or silently downgrade an unfinished requested outcome.
+
 ## When to Use
 
 Use for the Standard Deliver stage after Unit of Work Review is complete for the current material. Deliver can end in an agreed repository handoff or another requested outcome. Publication, merge, release, and deployment are not automatic.

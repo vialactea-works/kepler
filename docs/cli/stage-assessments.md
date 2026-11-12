@@ -1,6 +1,6 @@
 # Stage completion assessments
 
-Use this reference to build the JSON input for `workflow construction stage complete`. It describes the implemented validators. It does not define new specification requirements. Use the [tutorial](../missions/tutorial.md) for complete request construction and execution order.
+Use this reference to build the JSON input for `workflow construction stage complete`. It describes the implemented validators. It does not define new specification requirements. Use the [operator walkthrough](standard-walkthrough.md) for complete request construction and execution order; the [developer tutorial](../missions/tutorial.md) uses agent prompts.
 
 ## Common rules
 
@@ -83,7 +83,7 @@ An obligation-coverage item has `reference`, `disposition`, `task_ids`, and `rat
 
 An approval basis is either `{ "kind": "requester-instruction", "request_event_id": "<event-id>" }` or `{ "kind": "authority-rule", "reference": "<authority-reference>" }`. Required approval needs a matching current approval event. Do not invent an approval requirement or omit an existing one.
 
-The handoff binds exact input artifacts, graph version, and task IDs. Its verification-obligation text and prerequisite-condition text must correspond to the graph. Use the complete serialization shown in the tutorial, rather than a shortened summary.
+The handoff binds exact input artifacts, graph version, and task IDs. Its verification-obligation text and prerequisite-condition text must correspond to the graph. Use the complete serialization shown in the [operator walkthrough](standard-walkthrough.md), rather than a shortened summary.
 
 Required evidence names are `planning-artifact-validation`, `planning-task-graph-validation`, and `planning-self-review`. Requested external review uses `planning-external-review` and the matching request.
 
@@ -171,4 +171,4 @@ Source: [Deliver completion](../../packages/cli/src/construction/deliver-stage-c
 
 An invalid request, missing current evidence, mismatched checkpoint, stale artifact, missing authority, or unsafe coordination condition fails with exit 1. Read the structured details. Preserve recorded work. Use an explicit corrected operation when retry is safe; use [Recovery](../recovery.md) when attempt or ownership facts are uncertain.
 
-See [Construction commands](construction.md#stage-complete), [Audit](audit.md), and the [complete mission tutorial](../missions/tutorial.md).
+See [Construction commands](construction.md#stage-complete), [Audit](audit.md), and the [operator walkthrough](standard-walkthrough.md).

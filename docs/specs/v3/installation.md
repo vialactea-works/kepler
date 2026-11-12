@@ -2,7 +2,7 @@
 
 [Version 3 reference](README.md) | [CLI contract](cli.md) | [Skills](skills.md) | [Construction runtime contract](phases/construction/runtime.md) | [Authoring progress](authoring_progress.md)
 
-**Status:** SH124 approved the original installation contract. The requester later amended its installation boundary: Kepler requires an externally selected, version-specific `KEPLER_HOME`; setup initializes that home and does not install or register the CLI or host resources. This amendment supersedes conflicting installation behavior in SH114, SH117, and the earlier unified-release design. Those records remain historical. The current source candidate implements the amended boundary. Published `v3.0.0` still has the earlier setup behavior; a corrected release has not been published. This contract does not authorize live installation, migration, publication, or deployment.
+**Status:** SH124 approved the original installation contract. The requester later amended its installation boundary: Kepler requires an externally selected, version-specific `KEPLER_HOME`; setup initializes that home and does not install or register the CLI or host resources. This amendment supersedes conflicting installation behavior in SH114, SH117, and the earlier unified-release design. Those records remain historical. The current source candidate implements the amended boundary. The published `v3.0.0` tag's setup code requires `KEPLER_HOME` and initializes a release-bound home. Its published resource inventory may differ from this source candidate; no release containing this candidate is claimed. This contract does not authorize live installation, migration, publication, or deployment.
 
 ## Purpose and boundary
 
@@ -33,7 +33,7 @@ The initialized home contains these top-level entries:
 | `settings.yaml` | Kepler settings, seeded as an empty mapping (`{}\n`). |
 | `home-metadata.json` | Initialization format, release, resource digest, and pending status when initialization is incomplete. |
 
-The resource package binds one Kepler release to its complete sorted file inventory and content digests. The current manifest format is 3. It declares eleven skills and eight agent profiles: four Pi profiles and four Claude Code profiles. These files are data in the Kepler home. Their presence does not configure a host or show that a host loaded them.
+The resource package binds one Kepler release to its complete sorted file inventory and content digests. The current manifest format is 3. This source candidate declares thirteen skills and eight agent profiles: four Pi profiles and four Claude Code profiles. These files are data in the Kepler home. Their presence does not configure a host or show that a host loaded them.
 
 ## Setup contract
 
@@ -92,4 +92,4 @@ An installation change does not convert earlier change-based artifacts, rewrite 
 
 ## Implementation and release status
 
-The active source candidate implements the versioned-home contract and removes the prior installer and Pi-registration flow. Its checks do not certify a published release. Published `v3.0.0` remains the earlier implementation. A corrected release requires fresh source, package, archive, checksum, provenance, and target-native verification; previous release evidence does not certify changed bytes. No release recreation, publication, live installation, migration, or deployment is claimed here.
+The active source candidate implements the versioned-home contract and removes the prior installer and Pi-registration flow. Its checks do not certify a published release. The published `v3.0.0` tag requires `KEPLER_HOME`; it does not contain this source candidate's added skills. A subsequent release requires fresh source, package, archive, checksum, provenance, and target-native verification; previous release evidence does not certify changed bytes. No release recreation, publication, live installation, migration, or deployment is claimed here.

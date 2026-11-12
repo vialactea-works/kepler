@@ -5,6 +5,8 @@ description: Implement the assigned task's Code Generation Activity under the cu
 
 # Code Generation
 
+Use the [packaged agent operations](../kepler-mission-startup/references/agent-operations.md) and complete request examples to build strict CLI requests and capture actual evidence. The developer invokes the orchestrator, not you for each task. Return exact checked output and evidence to the orchestrator; never ask the developer to run task commands or select attempt IDs.
+
 ## When to Use
 
 Use only for the Code Generation Activity of one explicitly assigned and admitted task within a current unit Implementation attempt. Do not use this skill for independent Validation or task Integration.
