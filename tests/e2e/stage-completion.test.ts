@@ -745,6 +745,54 @@ afterEach(async () => {
 });
 
 describe("Functional Design stage completion CLI E2E", () => {
+  it("revises completed design with running Quality and restarts only the reopened design", async () => {
+    const harness = await createE2EHarness({ application: "native" });
+    harnesses.push(harness);
+    await createAuditHistory(harness.resources.repositoryDirectory, undefined, { includeImplementationFacts: false });
+    const material = await createProjectArtifacts(harness);
+    const audit = createAuditDriver(harness);
+    const evidence = recordEvidence(audit, auditFixture.stageAttemptId, material);
+    const approval = recordApproval(audit, material);
+    const completed = new StageCompletionCliDriver(harness.cli).complete(
+      auditFixture.unitId, auditFixture.stageAttemptId, completionRequest(evidence, approval),
+    );
+    expect(completed.exitCode, JSON.stringify(completed.result)).toBe(0);
+    const startArgs = ["workflow", "construction", "stage", "start", "--unit", auditFixture.unitId];
+    const inputs = JSON.stringify({ inputs: [{ reference: "request:revision", purpose: "Requester adds a bundled authoring skill" }] });
+    const quality = harness.cli.run([...startArgs, "--stage", "quality-requirements", "--request", inputs]);
+    expect(quality.exitCode, quality.stdout).toBe(0);
+    const request = JSON.stringify({
+      orchestrator_decision: "Reopen Functional Design and all downstream stages",
+      reason: "The requester adds a bundled authoring skill",
+      inputs: [{ reference: "request:revision", purpose: "Additional deliverable" }],
+    });
+    const reviseArgs = ["workflow", "construction", "revise", "--unit", auditFixture.unitId,
+      "--stage", "functional-design", "--attempt", auditFixture.stageAttemptId];
+    const first = harness.cli.run(reviseArgs, { stdin: request });
+    expect(first.exitCode, first.stdout).toBe(0);
+    expect(JSON.parse(first.stdout)).toMatchObject({ status: "success", data: { status: "barrier_pending" } });
+    const second = harness.cli.run(reviseArgs, { stdin: request });
+    expect(second.exitCode, second.stdout).toBe(0);
+    expect(JSON.parse(second.stdout)).toMatchObject({ status: "success", data: { status: "barrier_complete" } });
+    const shown = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    expect(shown.exitCode, shown.stdout).toBe(0);
+    expect(JSON.parse(shown.stdout)).toMatchObject({ status: "success", data: { unit: {
+      blocked: false,
+      stages: expect.arrayContaining([
+        expect.objectContaining({ stage: "functional-design", state: "reopened" }),
+        expect.objectContaining({ stage: "quality-requirements", state: "reopened" }),
+      ]),
+    } } });
+    const snapshot = await audit.journalSnapshot();
+    const retried = harness.cli.run(reviseArgs, { stdin: request });
+    expect(retried.exitCode, retried.stdout).toBe(0);
+    expect(await audit.journalSnapshot()).toBe(snapshot);
+    const restarted = harness.cli.run([...startArgs, "--stage", "functional-design", "--request", inputs]);
+    expect(restarted.exitCode, restarted.stdout).toBe(0);
+    const prematureQuality = harness.cli.run([...startArgs, "--stage", "quality-requirements", "--request", inputs]);
+    expect(prematureQuality.exitCode).toBe(1);
+  }, 120_000);
+
   it("completes the current attempt with validated artifacts, passed named evidence, explicit approval, and typed handoff", async () => {
     const harness = await createE2EHarness({ application: "native" });
     harnesses.push(harness);
