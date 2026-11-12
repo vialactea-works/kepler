@@ -12,12 +12,11 @@ new writing. For an existing artifact, `kepler workbench lint` alone determines 
 schema validity; a lint-valid file is not invalid because its presentation differs from a
 template.
 
-Templates for the seven-stage spec-driven pipeline. Each maps to a well-known standard,
-taken in spirit (right-sized), not by conformance.
+The following change-based templates remain for historical workbench artifacts. Their skill names describe historical producers, not skills shipped with v3. Use `v3/construction/` for new Standard mission artifacts. Each maps to a well-known standard, taken in spirit (right-sized), not by conformance.
 
 | Template | Document | Owns | Instance path | Produced or updated by |
 | --- | --- | --- | --- | --- |
-| `glossary.md` | Canonical glossary | Context-scoped language | `.kepler/specs/glossary.md` | kepler-init / domain modeling / Wayfinder closing act |
+| `glossary.md` | Canonical glossary | Context-scoped language | `.kepler/specs/glossary.md` | Legacy project init / domain modeling / Wayfinder closing act |
 | `proposal.md` | PRD | Why, domain scope and boundary impact | `<change>/proposal.md` | kepler-propose |
 | `requirements-change.md` | SRS (delta) | What | `<change>/requirements/<capability>.md` | kepler-propose |
 | `requirements-spec.md` | SRS (canonical) | What | `.kepler/specs/<capability>.md` | kepler-finish-work / kepler-compose-spec |
@@ -87,7 +86,7 @@ frontmatter owns route status and each unit's identity, lifecycle status, depend
 backing tickets. Downstream processes update that mutable metadata without rewriting the body;
 Wayfinder clears fog, propose and plan create implementation artifacts, and code and finish-work
 build and ship them. Unlike `specs/` and `changes/`, the `.kepler/maps/` directory is not
-scaffolded by `kepler-init`; the wayfinder skill creates it on first use.
+scaffolded by the former change-based init procedure; the historical wayfinder skill created it on first use.
 
 ## Where these templates live
 
@@ -102,7 +101,7 @@ earlier.
 
 ## Where the artifacts they produce live
 
-Per-project, under the project's `.kepler/` directory (created by `kepler-init`):
+Historically, change-based artifacts lived under the project's `.kepler/` directory (prepared by the former init procedure):
 
 ```text
 .kepler/

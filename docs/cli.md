@@ -1,6 +1,6 @@
 # CLI reference
 
-Use this reference to operate the implemented Kepler CLI. Follow the [mission tutorial](missions/tutorial.md) for a continuous example. These pages describe executable behavior; they do not replace the [specifications](specs/v3/README.md).
+This is the complete command and JSON reference for coding agents and operators. Developers should follow the [prompt-first mission tutorial](missions/tutorial.md), while the [Standard CLI walkthrough](cli/standard-walkthrough.md) preserves a continuous mechanics exercise. These pages describe executable behavior; they do not replace the [specifications](specs/v3/README.md).
 
 ## Find a command
 
@@ -66,7 +66,7 @@ kepler audit record evidence --project "$PROJECT" --unit "$UNIT" \
 
 The filenames in these examples are caller-owned inputs. Kepler does not create them. JSON options do not accept a filename in place of JSON. There is no `--request-file` option.
 
-Use strict JSON. Typed validators reject unsupported fields, duplicate selectors, and invalid identity formats. Some parsers also reject duplicate JSON object keys. The [stage assessment reference](cli/stage-assessments.md) describes completion inputs. The tutorial supplies complete request construction.
+Use strict JSON. Typed validators reject unsupported fields, duplicate selectors, and invalid identity formats. Some parsers also reject duplicate JSON object keys. The [stage assessment reference](cli/stage-assessments.md) describes completion inputs. The [operator walkthrough](cli/standard-walkthrough.md) supplies complete request construction.
 
 ## Output and exit behavior
 

@@ -1,6 +1,6 @@
 # Mission state and artifacts
 
-Use this explanation to inspect mission records or integrate a tool with the CLI. Start with the [tutorial](tutorial.md) if you are new to Kepler.
+Use this explanation to inspect mission records or integrate a tool with the CLI. For normal developer work, start with the [prompt-first mission tutorial](tutorial.md); agents and operators can use the [complete CLI walkthrough](../cli/standard-walkthrough.md) for exact mechanics.
 
 ## Identify the scope
 

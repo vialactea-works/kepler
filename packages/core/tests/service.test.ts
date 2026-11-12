@@ -244,7 +244,7 @@ describe("Kepler config", () => {
   });
 
   it("returns no config when settings do not exist and still requires KEPLER_HOME", () => {
-    expect(() => new KeplerService().loadConfig()).toThrow(KeplerHomeError);
+    expect(() => new KeplerService({ environment: {} }).loadConfig()).toThrow(KeplerHomeError);
     const service = new KeplerService({ environment: { KEPLER_HOME: makeDirectory() } });
     expect(service.loadConfig()).toBeUndefined();
   });

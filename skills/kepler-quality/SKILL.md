@@ -5,6 +5,8 @@ description: Define and review applicable quality requirements for a Constructio
 
 # Quality Requirements
 
+The developer asks you to assess quality targets and show the current committed requirements for explicit approval. Read the [packaged agent operations](../kepler-mission-startup/references/agent-operations.md) and complete request examples. You execute Kepler commands and manage strict JSON and evidence IDs, not the developer. Start only an eligible attempt or continue the same safe unended attempt. Report the approved material and exact checkpoint, decisions, receipts and blockers, then offer: “Use kepler-plan for this unit; prepare and validate the plan and task graph without starting implementation.” Do not start Planning yourself.
+
 ## When to Use
 
 Use when Quality Requirements is the current Standard stage for a unit whose Functional Design is complete under its contract. Existing application code, production measurements, a complete `quality.md`, or Inception are not prerequisites.

@@ -5,6 +5,8 @@ description: Select and document the technical solution and task graph for a Con
 
 # Implementation Planning
 
+The developer asks you to select and explain a technical solution, author and validate a task graph, and stop before implementation. Read the [packaged agent operations](../kepler-mission-startup/references/agent-operations.md) and complete request examples. You execute Kepler commands, build the strict requests, and retain receipts. Start only an eligible attempt or continue the same safe unended attempt; ask about consequential choices and conditional approval rather than assuming consent. Report actual graph and plan, coverage, prerequisites, receipts and blockers, then offer: “Use kepler-orchestrate to implement this approved scope with separate Generation and Validation workers; do not deliver.”
+
 ## When to Use
 
 Use when Implementation Planning is the current Standard stage and current Functional Design and Quality Requirements outputs and their required evidence are available. Existing code, tests, completed Initialization or Inception, and a preselected technical solution are not entry requirements. Plan the foundation needed for greenfield work or a walking skeleton.

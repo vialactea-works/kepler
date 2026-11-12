@@ -14,10 +14,9 @@ decision: accepted | rejected | skipped
 
   Write readable documentation in plain prose and tables. Stay at altitude: describe the capability's guarantees, not one commit's implementation. Keep the Requirement/SHALL/Scenario form in the change's requirements/<capability>.md deltas.
 
-  Two skills produce this artifact:
-    - kepler-finish-work incorporates a change's structured requirement deltas.
-    - kepler-compose-spec writes it directly by reformatting an old spec or examining code.
-  Both follow the altitude and skeleton rules in their references/spec-altitude.md.
+  Historical change-based workflows produced this artifact by incorporating requirement deltas
+  or directly authoring a canonical spec. The former skill-level altitude reference is no longer
+  packaged; this template retains the readable-prose and five-section guidance for old artifacts.
 
   Keep all five top-level sections; lint requires them. If a section has no applicable facts, keep it concise and omit optional subsections rather than inventing content. Prefer flowing prose, but accept any presentation in an existing spec that passes lint.
 

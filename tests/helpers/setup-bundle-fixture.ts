@@ -1,6 +1,8 @@
 import { createResourceManifest, type ResourcePackageSnapshot } from "../../packages/cli/src/cli/release-resources.js";
 
 const skillIds = [
+  "kepler-init",
+  "kepler-mission-startup",
   "kepler-design",
   "kepler-quality",
   "kepler-plan",
@@ -12,6 +14,7 @@ const skillIds = [
   "kepler-grilling",
   "kepler-domain-modelling",
   "kepler-research",
+  "kepler-resume",
 ];
 const constructionTemplatePaths = [
   "templates/v3/construction/unit-of-work.md",

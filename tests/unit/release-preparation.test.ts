@@ -8,6 +8,8 @@ import {
 } from "../../scripts/release-preparation.js";
 
 const skillIds = [
+  "kepler-init",
+  "kepler-mission-startup",
   "kepler-design",
   "kepler-quality",
   "kepler-plan",
@@ -19,6 +21,7 @@ const skillIds = [
   "kepler-grilling",
   "kepler-domain-modelling",
   "kepler-research",
+  "kepler-resume",
 ];
 const roles = [
   ["architect", "kepler-architect"],

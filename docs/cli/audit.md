@@ -75,7 +75,7 @@ A request has this shape; replace all identities and checkpoint values with actu
 }
 ```
 
-The angle-bracket values are reference notation, not valid literal IDs. The [tutorial](../missions/tutorial.md) constructs real values.
+The angle-bracket values are reference notation, not valid literal IDs. The [operator walkthrough](standard-walkthrough.md) constructs real values.
 
 Use `task-prerequisite` only with the exact task and current Implementation attempt. Do not add Activity scope to that proof. Bind its input to the exact prerequisite condition or description. Recording proof still requires a running parent, even if an earlier attempt admitted the task.
 

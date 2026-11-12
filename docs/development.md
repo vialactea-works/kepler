@@ -69,14 +69,14 @@ bun run release:check
 
 `release:prepare` also accepts `minor`, `major`, or an explicit version. It writes package versions, source release constants, generated resources, and a release note. Resource generation can also delete stale bundled skill files. **Do not run it in a documentation-only task.**
 
-For an authorized packaged-resource change:
+For an authorized packaged-resource change (including a new skill ID, which must appear in both `scripts/resource-generation.ts` and `packages/cli/src/cli/release-resources.ts`, in fixtures and inventory tests, and in the host profiles):
 
 ```bash
 bun run prepare:bundle
 bun run release:check
 ```
 
-The preparation command writes packaged resources and their manifest. It can also delete stale bundled skill files. Review the complete inventory and digest. Make packaged-resource changes in `bundle/`, not in a user's initialized home.
+The preparation command writes packaged resources and their manifest. It can also delete stale bundled skill files. Review the complete inventory, required flags, nested references/notices, host profiles, and digest. Author skill changes in `skills/` and profiles in `bundle/agents/`; generation copies complete skill trees to `bundle/skills/`. Never change a user's initialized home to simulate a package update. Keep skill/package checks distinct from live-agent adherence.
 
 A complete target archive contains the compiled CLI and resource package. The archive builder verifies embedded identity, source, frozen dependencies, resources, and written bytes. Production builds require eligible clean source. Development identity does not become production identity because files are copied or a filename changes.
 

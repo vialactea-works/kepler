@@ -5,6 +5,8 @@ description: Run Functional Design for a Construction Unit of Work under its acc
 
 # Functional Design
 
+The developer asks you to define this unit's behavior, review the committed material with them, and request explicit approval before completing this stage. Read the [packaged agent operations](../kepler-mission-startup/references/agent-operations.md) and its complete request examples before acting. You execute Kepler commands and track attempt/evidence IDs; do not ask the developer to author JSON or run CLI commands. Start only an eligible attempt or continue the same safe unended attempt. Report actual artifacts, checkpoint, evidence, blockers, and the next prompt: “Use kepler-quality for this unit; show me the quality requirements for approval.” Do not start Quality yourself.
+
 ## When to Use
 
 Use when Functional Design is the current Standard stage for a selected Unit of Work. Begin from the request and available context; completed Inception, application code, a complete domain model, and pre-authored unit documents are not entry requirements.

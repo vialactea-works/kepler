@@ -21,10 +21,31 @@ describe("versioned home resource manifest", () => {
 
     expect(result.manifest.manifest_format_version).toBe(3);
     expect(result.manifest.kepler_release).toBe("3.0.0");
-    expect(result.manifest.skills).toHaveLength(11);
+    expect(result.manifest.skills).toHaveLength(14);
+    expect(result.manifest.skills).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "kepler-init", required: false }),
+      expect.objectContaining({ id: "kepler-mission-startup", required: true }),
+      expect.objectContaining({ id: "kepler-resume", required: false }),
+      expect.objectContaining({ id: "kepler-design", required: true }),
+      expect.objectContaining({ id: "kepler-research", required: false }),
+    ]));
     expect(result.manifest.agent_profiles).toHaveLength(8);
     expect(result.manifest).not.toHaveProperty("pi_agents");
     expect(result.files).toHaveLength(fixture.files.length);
+  });
+
+  it("rejects missing or misclassified project, entry and recovery skills", () => {
+    const fixture = createSetupBundleFixture();
+    const manifest = parseResourceManifest(fixture.manifest);
+    for (const id of ["kepler-init", "kepler-mission-startup"]) {
+      const withoutSkill = fixture.files.filter((file) => file.path !== `skills/${id}/SKILL.md`);
+      expect(() => createResourceManifest("3.0.0", withoutSkill)).toThrow("Missing required resource");
+    }
+    for (const id of ["kepler-init", "kepler-mission-startup", "kepler-resume"]) {
+      const changed = { ...manifest, skills: manifest.skills.map((skill) => skill.id === id ? { ...skill, required: !skill.required } : skill) };
+      expect(() => parseResourceManifest(JSON.stringify({ ...changed, resource_digest: resourceManifestContentDigest(changed) })))
+        .toThrow("fourteen accepted skills with their required status");
+    }
   });
 
   it("rejects incomplete, unsafe, duplicate, or tampered inventory entries", () => {

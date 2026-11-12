@@ -1,6 +1,6 @@
 # Construction commands
 
-Use this reference to operate a mission-owned Unit of Work. Follow the [tutorial](../missions/tutorial.md) before recording a complete workflow. See [CLI conventions](../cli.md) for JSON output, exit codes, and project selection.
+Use this reference to operate a mission-owned Unit of Work. Follow the [operator walkthrough](standard-walkthrough.md) for complete request mechanics or the [developer tutorial](../missions/tutorial.md) for prompt-based work. See [CLI conventions](../cli.md) for JSON output, exit codes, and project selection.
 
 All commands start with `kepler workflow construction`. Each accepts optional `--project <path>` and `-h, --help`. The project defaults to the current Git working-tree root with an existing local `.kepler/` directory. Queries do not change workflow history. Mutations append history and can create local coordination data. A failed result can follow a partial effect.
 
