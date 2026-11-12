@@ -635,6 +635,25 @@ export class Revision {
       for (const action of actions) {
         let ending = action.ending;
         if (!ending) {
+          const prior = revisionBoundaryFact(loaded, {
+            kind: "stage",
+            unitId: loaded.unit.unitId,
+            stage: action.scope.stage,
+            attemptId: action.scope.stage_attempt_id,
+          });
+          if (!prior) return { kind: "failed", result: revisionFailure("revision_transition_history_missing", "The affected stage attempt has no recorded state-transition fact.", {
+            stage: action.scope.stage,
+            stage_attempt_id: action.scope.stage_attempt_id,
+          }) };
+          const childAttempts = action.scope.stage === "implementation"
+            ? loaded.unit.tasks.flatMap((task) => task.activities.flatMap((activity) =>
+                activity.attempts.filter((attempt) => attempt.stageAttemptId === action.scope.stage_attempt_id)))
+            : [];
+          if (childAttempts.some((attempt) => attempt.facts.length === 0)) return { kind: "failed", result: revisionFailure("revision_transition_history_missing", "An affected child Activity attempt has no recorded state-transition fact.", {
+            stage: action.scope.stage,
+            stage_attempt_id: action.scope.stage_attempt_id,
+          }) };
+          const childCauses = childAttempts.flatMap((attempt) => attempt.facts.slice(-1).map((fact) => fact.event.id));
           const candidate = {
             id: nextIdentity() as EventId,
             phase: CONSTRUCTION_PHASE,
@@ -644,7 +663,7 @@ export class Revision {
             producer: this.runtime.producer,
             type: "construction.stage-attempt-ended-by-revision",
             recorded_at: this.runtime.now(),
-            caused_by: [authorization.id],
+            caused_by: [...new Set([authorization.id, prior.event.id, ...childCauses])],
             data: {
               mission_id: loaded.missionId as MissionId,
               unit_id: loaded.unit.unitId as UnitId,
@@ -796,6 +815,20 @@ export class Revision {
       for (const action of actions) {
         let ending = action.ending;
         if (action.scope.prior_attempt === "present" && !ending) {
+          const prior = revisionBoundaryFact(loaded, {
+            kind: "activity",
+            unitId: loaded.unit.unitId,
+            taskId: action.scope.task_id,
+            activity: action.scope.activity,
+            implementationAttemptId: action.scope.stage_attempt_id,
+            attemptId: action.scope.activity_attempt_id,
+          });
+          if (!prior) return { kind: "failed", result: revisionFailure("revision_transition_history_missing", "The affected Activity attempt has no recorded state-transition fact.", {
+            task_id: action.scope.task_id,
+            activity: action.scope.activity,
+            stage_attempt_id: action.scope.stage_attempt_id,
+            activity_attempt_id: action.scope.activity_attempt_id,
+          }) };
           const candidate = {
             id: nextIdentity() as EventId,
             phase: CONSTRUCTION_PHASE,
@@ -805,7 +838,7 @@ export class Revision {
             producer: this.runtime.producer,
             type: "construction.activity-attempt-ended-by-revision",
             recorded_at: this.runtime.now(),
-            caused_by: [authorization.id],
+            caused_by: [...new Set([authorization.id, prior.event.id])],
             data: {
               mission_id: loaded.missionId as MissionId,
               unit_id: loaded.unit.unitId as UnitId,

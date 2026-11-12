@@ -24,6 +24,12 @@ A pause request records `pausing`; it does not stop the worker. Only after termi
 
 An upstream change may require a revision from the earliest affected stage. The orchestrator stops affected work, reconciles locks and effects, then uses the authorized revision route. Task-local correction is different from reopening a whole unit; Code Integration's eligible check retry uses the same attempt. After a new Implementation attempt, task prerequisites need applicable current proof. See [Construction recovery operations](cli/recovery-operations.md#resume-construction-work).
 
+### Unordered revision transitions
+
+A revision-ending event records both its authorization and the exact affected attempt's latest state-transition event as direct causes. An Implementation ending also names its child Activities' latest transitions as causes. Reopening depends on that ending and authorization. These links preserve order when stages and Activities write separate journals; a shared ancestor or an attempt ID alone does not establish event order.
+
+If a previous CLI appended revision transitions without those links, the unit can become blocked with `unordered-transitions`. The revision reports `revision_transition_confirmation_failed` when it cannot re-read history, or `revision_transition_projection_blocked` when the re-read succeeds but the projection is blocked. Preserve the authorization, transition journals, and original artifacts. Updating the writer prevents new incomplete links but does not repair existing records. Do not edit journals, infer order from timestamps or `affected_scopes`, create a replacement mission, or start replacement work to bypass the failure. The current CLI has no supported operation for attesting the missing historical order; report the exact events and obtain an explicit recovery procedure before continuing.
+
 ## Integration acceptance and release
 
 If Integration stops, the agent inspects its exact token, captured target, prepared candidate, check evidence, accepted state, and actual target. It keeps an uncertain lock intact. A command can fail after acceptance was recorded; another acceptance or release without reconciliation could corrupt attribution. It never force-releases a lock or calls a failed/inconclusive check passed. See [Integration recovery operations](cli/recovery-operations.md#integration-acceptance-and-release).

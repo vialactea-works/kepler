@@ -36,7 +36,9 @@ export interface FunctionalDesignTestFixture {
   readonly cleanup: () => Promise<void>;
 }
 
-export const createFunctionalDesignFixture = async (): Promise<FunctionalDesignTestFixture> => {
+export const createFunctionalDesignFixture = async (
+  options: { readonly includeImplementationFacts?: boolean } = {},
+): Promise<FunctionalDesignTestFixture> => {
   const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-functional-design-"));
   try {
     await Fs.mkdir(Path.join(root, ".kepler"), { recursive: true });
@@ -48,7 +50,7 @@ export const createFunctionalDesignFixture = async (): Promise<FunctionalDesignT
     await Fs.writeFile(Path.join(root, "README.md"), "# Functional Design fixture\n", "utf8");
     execFileSync("git", ["add", "README.md"], { cwd: root });
     execFileSync("git", ["commit", "-q", "-m", "Create Functional Design fixture"], { cwd: root });
-    await createAuditHistory(root);
+    await createAuditHistory(root, undefined, options);
     const unitRoot = Path.join(root, completionUnitDirectory);
     await Fs.mkdir(Path.join(unitRoot, "details", "functional-design"), { recursive: true });
     const artifactBindings: Array<{ artifact_id: string; content_version: string }> = [];
