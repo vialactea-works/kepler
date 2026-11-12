@@ -553,7 +553,7 @@ describe("Construction history projection", () => {
     expect(projection.units[0]?.stages.find((stage) => stage.stage === "functional-design")?.state).toBe("unknown");
   });
 
-  it("ends only affected stage attempts and preserves upstream history for a derived cascade", () => {
+  it.each(["shared", "separate", "separate-ordered"])("requires recorded ordering for revision transitions across %s journals", (journals) => {
     const journalId = "journal-stage-revision-cascade";
     const unitCreated = created("event-stage-cascade-unit", ids.unit, journalId);
     const designAttempt = "20000000-0000-4000-8000-000000000020";
@@ -597,19 +597,32 @@ describe("Construction history projection", () => {
     const implementationEnded = event("event-stage-cascade-implementation-ended", "construction.stage-attempt-ended-by-revision", {
       mission_id: missionId, unit_id: ids.unit, stage: "implementation", stage_attempt_id: implementationAttempt,
       revision_id: ids.revision, reason: "Authorized revision",
-    }, journalId, [authorized.id]);
+    }, journalId, journals === "separate-ordered" ? [authorized.id, implementationStart.id] : [authorized.id]);
     const implementationReopened = event("event-stage-cascade-implementation-reopened", "construction.stage-reopened", {
       mission_id: missionId, unit_id: ids.unit, stage: "implementation", stage_attempt_id: implementationAttempt,
       revision_id: ids.revision, reason: "Re-execute Implementation",
     }, journalId, [implementationEnded.id, authorized.id]);
-    const history = collectHistory(missionId, [source("origin://stage-revision-cascade", journalId, [
+    const records = [
       unitCreated, designStart, qualityStart, implementationStart, interaction, authorized,
       qualityEnded, qualityReopened, implementationEnded, implementationReopened,
-    ])]);
+    ];
+    const sources = journals === "shared"
+      ? [source("origin://stage-revision-cascade", journalId, records)]
+      : records.map((record) => {
+          const separate = { ...record, journal_id: `${journalId}-${record.id}` };
+          return source(`origin://${separate.journal_id}`, separate.journal_id, [separate]);
+        });
+    const history = collectHistory(missionId, sources);
     const projection = projectConstruction(history);
     const unit = projection.units[0];
 
     expect(projection.projectionIssues.map((issue) => issue.code)).not.toContain("invalid-revision-transition");
+    if (journals === "separate") {
+      expect(unit?.blocked).toBe(true);
+      expect(projection.projectionIssues.map((issue) => issue.code)).toContain("unordered-transitions");
+      expect(unit?.stages.every((stage) => stage.state === "unknown")).toBe(true);
+      return;
+    }
     expect(unit?.stages.find((stage) => stage.stage === "functional-design")).toMatchObject({
       state: "running",
       currentAttemptId: designAttempt,
