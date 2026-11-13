@@ -54,13 +54,13 @@ const envelopeFromJournal = (journal: HistoryControlJournal): EventEnvelope => {
 };
 
 const requiredControl = (journals: readonly HistoryControlJournal[], id: string, digest?: string): HistoryControl => {
-  const matching = journals.filter((journal) => {
-    try {
-      const parsed = parseStrictJson(utf8.decode(journal.bytes));
-      return parsed.kind === "parsed" && record(parsed.value) && parsed.value.id === id;
-    } catch { return false; }
-  });
-  if (matching.length !== 1) throw new HistoryError("history_control_missing", "A required control event is unavailable or ambiguous.", { event_id: id });
+  const matching = journals.flatMap((journal) => scanJournalBytes(journal.bytes).lines.flatMap((line) => {
+    if (line.raw === undefined) return [];
+    const parsed = parseStrictJson(line.raw);
+    return parsed.kind === "parsed" && record(parsed.value) && parsed.value.id === id ? [journal] : [];
+  }));
+  if (matching.length > 1) throw new HistoryError("history_control_conflict", "A selected or required control identity has multiple recorded claims.", { event_id: id });
+  if (matching.length === 0) throw new HistoryError("history_control_missing", "A required control event is unavailable.", { event_id: id });
   if (digest !== undefined && historyDigest(matching[0]!.bytes) !== digest) throw new HistoryError("history_control_conflict", "A required prior control no longer matches its recorded byte hash.", { event_id: id });
   return parseHistoryControl(envelopeFromJournal(matching[0]!));
 };
@@ -91,15 +91,18 @@ const verifyGuard = (input: HistoryGatewayInput, root: HistoryControl): void => 
   if (event.phase !== "construction" || event.type !== "construction.history-generation-required" || event.event_version !== 1 || canonicalJson(event.caused_by) !== canonicalJson([root.id]) || Object.keys(data).length !== 3 || data.mission_id !== input.missionId || data.generation_id !== root.data.generation_id || data.control_event_id !== root.id) throw new HistoryError("history_guard_invalid", "The older-reader guard does not match its selected history root.");
 };
 
-export const selectMissionHistory = (input: HistoryGatewayInput): MissionHistoryView => {
+export interface HistoryControlSelection extends Omit<MissionHistoryView, "sources" | "history"> {
+  readonly rootControl?: HistoryControl;
+}
+
+export const selectHistoryControl = (input: HistoryGatewayInput): HistoryControlSelection => {
   if (!uuid.test(input.missionId)) throw new HistoryError("history_scope_invalid", "The mission requires a full lowercase UUIDv4 identity.");
   if (!input.complete) throw new HistoryError("history_source_incomplete", "Current history source coverage is incomplete.");
   if (input.activation === null) {
     if (input.generationEvidence || input.generationSources.length || input.controlJournals.length || input.guardJournals.length || input.sharedHistoryVersion || input.pendingRecovery) throw new HistoryError("history_selection_missing", "Generation or recovery evidence exists without an active selection. Preserve it and inspect recovery status.");
     if (input.legacySources.some((source) => source.phase !== "construction" || source.generationId !== undefined)) throw new HistoryError("history_phase_unsupported", "Legacy history includes an unsupported phase or generation.");
     return {
-      missionId: input.missionId, mode: "legacy", controlReceipts: [], sources: input.legacySources,
-      history: collectHistory(input.missionId, input.legacySources, { completeness: "complete" }), pendingRecovery: false,
+      missionId: input.missionId, mode: "legacy", controlReceipts: [], pendingRecovery: false,
     };
   }
   let control: HistoryControl;
@@ -112,6 +115,7 @@ export const selectMissionHistory = (input: HistoryGatewayInput): MissionHistory
   if (matching.length !== 1 || !equalBytes(matching[0]!.bytes, input.activation)) throw new HistoryError("history_control_conflict", "The activation bytes do not match the one recorded control journal.");
   const recorded = parseHistoryControl(envelopeFromJournal(matching[0]!));
   if (recorded.id !== control.id) throw new HistoryError("history_control_conflict", "The activation event identity does not match its journal.");
+  requiredControl(input.controlJournals, control.id, historyDigest(input.activation));
   let root = control;
   const receipts: HistoryControl[] = [control];
   if (control.type === "mission.history-rebuilt") {
@@ -124,24 +128,48 @@ export const selectMissionHistory = (input: HistoryGatewayInput): MissionHistory
   if (root.type === "mission.history-reset" && root.data.manifest.format === "kepler.mission-history-reset" && root.data.manifest.previous_control.event_id !== null) {
     const previous = requiredControl(input.controlJournals, root.data.manifest.previous_control.event_id, root.data.manifest.previous_control.content_version ?? undefined);
     if (previous.data.mission_id !== input.missionId) throw new HistoryError("history_scope_invalid", "The prior control belongs to another mission.");
+    if (previous.data.generation_id === root.data.generation_id) throw new HistoryError("history_generation_reused", "A reset cannot reuse its verified predecessor's generation.");
+    receipts.unshift(previous);
   }
   verifyGuard(input, root);
-  const mode = historyMode(control);
+  return { missionId: input.missionId, mode: historyMode(control), generationId: control.data.generation_id, historyVersion: control.id, control, rootControl: root, controlReceipts: receipts, pendingRecovery: input.pendingRecovery };
+};
+
+export const selectMissionHistory = (input: HistoryGatewayInput): MissionHistoryView => {
+  const selection = selectHistoryControl(input);
+  if (selection.mode === "legacy") return { ...selection, sources: input.legacySources, history: collectHistory(input.missionId, input.legacySources, { completeness: "complete" }) };
+  const control = selection.control!;
+  const { mode } = selection;
   const sources = mode === "recovering" ? [] : mergeGenerationSources(input.generationSources, input.missionId, control.data.generation_id);
   const history = collectHistory(input.missionId, sources, { completeness: "complete", generationId: control.data.generation_id });
   if (mode === "active") {
     const manifest = control.data.manifest;
     if (manifest.format === "kepler.mission-history-reset") throw new HistoryError("history_control_invalid", "An active selection cannot use a reset manifest.");
+    const prefixes: HistoryJournalSource[] = [];
     for (const expected of manifest.candidate_journals) {
       const source = sources.find((item) => item.phase === expected.phase && item.journalId === expected.journal_id);
       if (!source || source.bytes.length < expected.byte_length || historyDigest(source.bytes.subarray(0, expected.byte_length)) !== expected.content_version) throw new HistoryError("history_original_prefix_changed", "A published initial journal prefix is missing or changed.", { journal_id: expected.journal_id });
+      prefixes.push({ ...source, bytes: source.bytes.subarray(0, expected.byte_length) });
     }
-    if (control.type === "mission.history-initialized") {
-      const creation = history.events.find((item) => item.event?.id === control.caused_by[0] && item.status === "valid");
-      if (!creation?.constructionEvent || creation.constructionEvent.type !== "construction.mission-created" || creation.constructionEvent.data.mission_id !== input.missionId) throw new HistoryError("history_initial_creation_missing", "The initial selection requires its valid mission-creation event.");
+    const published = collectHistory(input.missionId, prefixes, { completeness: "complete", generationId: control.data.generation_id });
+    if (canonicalJson(historyState(published)) !== canonicalJson(manifest.expected_state)) throw new HistoryError("history_expected_state_mismatch", "The published journal prefixes do not establish the approved initial state.");
+    if (control.type === "mission.history-initialized" && manifest.format === "kepler.mission-history-initialization") {
+      const creation = published.events.find((item) => item.event?.id === control.caused_by[0] && item.status === "valid")?.constructionEvent;
+      if (!creation || creation.type !== "construction.mission-created" || creation.data.mission_id !== input.missionId) throw new HistoryError("history_initial_creation_missing", "The initial selection requires its valid published mission-creation event.");
+      const binding = manifest.mission_binding;
+      const home = creation.data.record_home;
+      const contexts = creation.data.contexts;
+      if (!record(home) || !Array.isArray(contexts) || home.repository_id !== binding.record_home_repository_id || creation.data.workflow !== binding.workflow || !(creation.data.request === binding.request_reference || `event:${creation.id}` === binding.request_reference || contexts.some((item: unknown) => record(item) && item.reference === binding.request_reference))) throw new HistoryError("history_initial_binding_mismatch", "The published creation fact does not establish the initial mission binding.");
+      const unknownUnits = published.events.flatMap((item) => {
+        const id = item.constructionEvent?.type === "construction.unit-created" ? item.constructionEvent.data.unit_id : undefined;
+        return typeof id === "string" && !binding.unit_ids.includes(id) ? [id] : [];
+      });
+      if (unknownUnits.length) throw new HistoryError("history_initial_binding_mismatch", "Published units are absent from their known mission identities.", { unit_ids: unknownUnits });
     }
+    const controlIds = new Set(selection.controlReceipts.map((receipt) => receipt.id));
+    if (history.events.some((item) => item.event && controlIds.has(item.event.id))) throw new HistoryError("history_event_identity_conflict", "A phase event reuses a selected control identity.");
   }
-  return { missionId: input.missionId, mode, generationId: control.data.generation_id, historyVersion: control.id, control, controlReceipts: receipts, sources, history, pendingRecovery: input.pendingRecovery };
+  return { ...selection, sources, history };
 };
 
 const withoutSourceCoordinates = (value: unknown): unknown => {

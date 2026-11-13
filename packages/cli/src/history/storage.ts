@@ -1,7 +1,7 @@
-import { HistoryError, historyDigest, historyMode, parseHistoryControl, type HistorySourceEntry } from "./control.js";
+import { HistoryError, historyDigest, parseHistoryControl, type HistorySourceEntry } from "./control.js";
 import type { HistoryJournalSource } from "./collection.js";
 import type { HistoryFiles, HistoryLocation, HistoryOrigin, HistoryRepositories, HistoryRepositoryContext, HistorySnapshot, HistorySnapshotFile } from "./files.js";
-import { selectMissionHistory, type HistoryControlJournal, type HistoryGatewayInput, type HistoryGenerationSource, type MissionHistoryView } from "./gateway.js";
+import { selectHistoryControl, selectMissionHistory, type HistoryControlJournal, type HistoryGatewayInput, type HistoryGenerationSource, type MissionHistoryView } from "./gateway.js";
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -16,6 +16,7 @@ export interface HistoryReadOptions {
   readonly sharedHistoryVersion?: string;
   readonly pendingRecovery?: boolean;
   readonly originIds?: ReadonlySet<string>;
+  readonly includeCurrentOrigin?: boolean;
 }
 
 export class HistoryStorage {
@@ -68,15 +69,27 @@ export class HistoryStorage {
     const guardJournals = await this.controlJournals({ root: context.recordHome, relative: `${historyRoot}/control` });
     const generationSources: HistoryGenerationSource[] = [];
     const legacySources: HistoryJournalSource[] = [];
-    let selected: ReturnType<typeof parseHistoryControl> | undefined;
-    if (activation) { try { selected = parseHistoryControl(utf8.decode(activation)); } catch { selected = undefined; } }
     const originIds = new Set(context.origins.map((origin) => origin.id));
     let complete = options.originIds === undefined ? context.unavailableOrigins.length === 0 : [...options.originIds].every((id) => originIds.has(id));
-    if (selected && historyMode(selected) === "active") {
+    if (!activation) {
       for (const origin of context.origins) {
-        if (origin.root !== context.recordHome && options.originIds && !options.originIds.has(origin.id)) continue;
+        try {
+          const peerEntries = origin.root === context.recordHome ? localEntries : await this.files.list({ root: origin.root, relative: historyRoot });
+          if (peerEntries.some((entry) => ["control", "generations"].includes(entry.name))) generationEvidence = true;
+        } catch { complete = false; }
+      }
+    }
+    const header: HistoryGatewayInput = { missionId, activation, controlJournals, guardJournals, generationSources: [], legacySources: [], generationEvidence, complete, pendingRecovery: options.pendingRecovery ?? false, ...(options.sharedHistoryVersion ? { sharedHistoryVersion: options.sharedHistoryVersion } : {}) };
+    const selection = selectHistoryControl(header);
+    const selected = selection.control;
+    if (selected && selection.mode === "active") {
+      for (const origin of context.origins) {
+        if (origin.root === context.recordHome ? options.includeCurrentOrigin === false : options.originIds && !options.originIds.has(origin.id)) continue;
         const peer = origin.root === context.recordHome ? activation : await this.files.read({ root: origin.root, relative: `${historyRoot}/control/active.json` }).catch(() => undefined);
-        if (!peer) continue;
+        if (!peer) {
+          if (options.originIds?.has(origin.id)) throw new HistoryError("history_source_incomplete", "A registered current working copy has no readable activation record.", { origin: origin.id });
+          continue;
+        }
         if (!equal(peer, activation!)) {
           let peerControl: ReturnType<typeof parseHistoryControl> | undefined;
           try { peerControl = parseHistoryControl(utf8.decode(peer)); } catch { peerControl = undefined; }
@@ -84,18 +97,13 @@ export class HistoryStorage {
           if (options.originIds?.has(origin.id)) throw new HistoryError("history_stale_checkout", "A registered current working copy has another or damaged history selection.", { origin: origin.id });
           continue;
         }
+        if (origin.root !== context.recordHome) selectHistoryControl({ ...header, activation: peer, controlJournals: await this.controlJournals({ root: origin.root, relative: `${historyRoot}/control/events` }), guardJournals: await this.controlJournals({ root: origin.root, relative: `${historyRoot}/control` }) });
         generationSources.push(...(await this.phaseJournals(origin, missionId, `${historyRoot}/generations/${selected.data.generation_id}`, selected.data.generation_id)).map((source) => ({ ...source, generationId: selected!.data.generation_id })));
       }
-    } else if (!activation) {
-      for (const origin of context.origins) {
-        try {
-          const peerEntries = origin.root === context.recordHome ? localEntries : await this.files.list({ root: origin.root, relative: historyRoot });
-          if (peerEntries.some((entry) => ["control", "generations"].includes(entry.name))) generationEvidence = true;
-        } catch { complete = false; }
-      }
-      if (!generationEvidence && complete) for (const origin of context.origins) legacySources.push(...await this.phaseJournals(origin, missionId, historyRoot));
+    } else if (selection.mode === "legacy") {
+      for (const origin of context.origins) legacySources.push(...await this.phaseJournals(origin, missionId, historyRoot));
     }
-    return { missionId, activation, controlJournals, guardJournals, generationSources, legacySources, generationEvidence, complete, pendingRecovery: options.pendingRecovery ?? false, ...(options.sharedHistoryVersion ? { sharedHistoryVersion: options.sharedHistoryVersion } : {}) };
+    return { ...header, generationSources, legacySources };
   }
 
   public async read(recordHome: string, missionId: string, options: HistoryReadOptions = {}): Promise<MissionHistoryView> {
