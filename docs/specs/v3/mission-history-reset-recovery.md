@@ -1,14 +1,17 @@
 # Mission history reset and reconstruction
 
-[Mission](mission.md) | [Shared runtime](runtime.md) | [CLI contract](cli.md) | [Narrow recovery alternative](phases/construction/revision-order-recovery.md)
+[Mission](mission.md) | [Shared runtime](runtime.md) | [CLI contract](cli.md)
 
-**Status: Draft for requester review. The mission-history runtime is not implemented.**
+**Status: Accepted by the requester on 2026-11-13. CLI implementation is authorized.**
 
-The requester selected the unified layout and requested the lifecycle-migration skill. These selections do not approve the complete recovery contract.
+Approved revision: `c3027935a54b0536216b3dedae97696f3204e7fa`.
+Approved file SHA-256: `5caa137ab3522f4bd0afdd66e15260e6d4ec408cfb4acd097f8b48992cf087ee`.
+The requester explicitly approved this contract and authorized its necessary CLI features in the implementation request.
+These bindings identify the exact approved text before status and superseded-draft navigation cleanup.
 
-This document proposes a general recovery method for mission history. It does not replace an accepted contract.
-It preserves the separate revision-order recovery proposal. The requester has not rejected or approved that proposal.
-Approval of this document does not authorize implementation, a mission reset, software installation, or deployment.
+This contract amends the linked mission and shared runtime rules at the stated history-selection boundaries.
+The requester authorized deletion of the earlier revision-order recovery draft. Its original bytes remain in Git history.
+Actual mission changes, software installation, release, and deployment retain their separate permission requirements.
 
 ## 1. Purpose
 
@@ -91,7 +94,7 @@ Derive the mode from the event type. Keep phase progress in phase journals.
 This proposal adds an authoritative activation record. It is not a disposable projection.
 The record selects journals; it does not contain an independently maintained copy of stage status.
 This is an explicit exception to the current rules against a separate state authority.
-No existing approval grants that exception.
+The requester approval grants this documented history-selection exception.
 
 ## 4. Storage and preservation
 
@@ -571,12 +574,13 @@ Do not use a real user mission as a fixture. Do not add smoke or performance tes
 | Narrow ordering attestation | Preserves normal history rules with a small exception. It addresses only its defined ordering defect. |
 | Generation reset with local preservation | Supports different failures and reviewed reconstruction. It requires a shared gateway and explicit activation authority. |
 
-This draft selects generation reset for review. It preserves the narrow proposal as a separate alternative.
+This contract selects generation reset. The requester authorized removal of the superseded narrow draft.
 
-Approval would accept the generation boundary, local preservation, activation events, reconstruction authority, manifest decisions, and common CLI guards.
-It would also accept generation-qualified journal identity and the new activation-record exception to current shared rules.
+The requester accepted the generation boundary, local preservation, activation events, reconstruction authority, manifest decisions, and common CLI guards.
+The approval also covers generation-qualified journal identity and the activation-record exception to current shared rules.
 
 Reset approval and reconstruction approval are separate decisions for an actual mission.
 New work, new artifact approvals, external operations, implementation, release, and host changes retain their separate permission requirements.
-The layout and lifecycle-migration resource changes do not authorize runtime migration, reset, installation, release, or deployment.
-Preserve the narrow proposal and live mission records. The complete recovery contract still requires requester approval.
+The implementation request authorizes the necessary CLI features and removal of the superseded draft.
+It does not approve an actual migration or reset manifest, software installation, release, or deployment.
+Preserve live mission records until their exact operation and manifest have separate approval.
