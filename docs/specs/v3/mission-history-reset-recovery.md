@@ -2,7 +2,9 @@
 
 [Mission](mission.md) | [Shared runtime](runtime.md) | [CLI contract](cli.md) | [Narrow recovery alternative](phases/construction/revision-order-recovery.md)
 
-**Status: Draft for requester review. This proposal has no approval and no implementation.**
+**Status: Draft for requester review. The mission-history runtime is not implemented.**
+
+The requester selected the unified layout and requested the lifecycle-migration skill. These selections do not approve the complete recovery contract.
 
 This document proposes a general recovery method for mission history. It does not replace an accepted contract.
 It preserves the separate revision-order recovery proposal. The requester has not rejected or approved that proposal.
@@ -67,18 +69,21 @@ Old history remains available through explicit archive inspection. It cannot bec
 
 ### 3.2 Select one authority
 
-Add two typed control events: `mission.history-reset` and `mission.history-rebuilt`.
+Add three typed control events: `mission.history-initialized`, `mission.history-reset`, and `mission.history-rebuilt`.
 Also add the phase-owned compatibility guard defined in Section 10.
 Set `phase` to `mission-recovery`. This shared namespace controls history selection. It is not a new execution phase.
-Both events use `envelope_version: 1` and `event_version: 1`. Keep the ten envelope fields unchanged.
+All three events use `envelope_version: 1` and `event_version: 1`. Keep the ten envelope fields unchanged.
 Their `data` has exactly `mission_id`, `generation_id`, `manifest`, `manifest_hash`, `requester`, and `decision_reference`.
 Each control event requires its corresponding manifest format.
 The repeated identities and requester must match the complete manifest. The hash must match its canonical bytes.
 
 A reset names the previous valid control event in `caused_by` when that predecessor can be verified.
 Otherwise, it uses `[]` and records the exact superseded raw input in the approved manifest.
+An initialized event names the mission-creation event retained in its selected generation as a direct cause.
+It selects history for new mission startup or an approved format migration. It does not create another mission.
 A rebuilt event is directly caused by its selected reset event. Archive references do not create causal links.
 
+`mission.history-initialized` selects its checked initial journals in `active` mode.
 `mission.history-reset` selects a generation in `recovering` mode.
 `mission.history-rebuilt` selects its approved journals in `active` mode.
 Derive the mode from the event type. Keep phase progress in phase journals.
@@ -97,26 +102,35 @@ Use these paths under the selected record home:
 ```text
 .kepler/missions/<mission-id>/
   history/
-    <phase>/<journal-id>.jsonl
-    mission-recovery/<journal-id>.jsonl
-  history-control/
-    active.json
-  history-generations/
-    <generation-id>/<phase>/<journal-id>.jsonl
+    control/
+      active.json
+      events/<journal-id>.jsonl
+      <guard-journal-id>.jsonl
+    generations/
+      <generation-id>/<phase>/<journal-id>.jsonl
 ```
 
-The original `history/<phase>/` files remain original history. Never overwrite them to make recovery succeed.
-The new `mission-recovery` journals contain immutable control events. Each control operation uses one exact pending event envelope.
+The reserved `control/` and `generations/` directories are not phases.
+Direct `history/<phase>/` directories are deprecated migration inputs. They are not part of the target layout.
+New writers must never create or append phase journals there, including compatibility guards.
+Preserve original bytes in verified archives before retiring those directories through an approved operation.
+
+The `control/events/` journals contain immutable control events. Each control operation uses one exact pending event envelope.
 Use a fresh journal for each control event. Its journal contains only that event and its line ending.
 
 `active.json` contains the complete selected control event. Its bytes must match its immutable journal record.
 Publish this file through one durable atomic replacement. It is the activation point, not a second independent decision.
 Retain each previous control event in its journal. Preserve damaged activation bytes in the archive.
-Normal readers validate the selected control event and its required reset context before reading phase history.
-They must not require excluded control records to pass validation. Never select control by its timestamp or directory order.
+Validate the control selection and manifest before loading phase journals. Then validate required causes and selected phase history together.
+An initialized selection can require its mission-creation fact from that selected generation.
+Never replay excluded phase history to choose the generation.
+Readers must not require excluded control records to pass validation. Never select control by its timestamp or directory order.
 
 The selected generation contains the only phase journals used for current state.
-A journal's logical identity includes its generation. Identical journal IDs in different generations do not cause automatic merging.
+A journal's logical identity is `(mission_id, generation_id, phase, journal_id)`.
+The directory supplies generation identity. Carry it explicitly through source adapters, exports, imports, and conflict checks.
+A detached journal needs generation metadata or a generation-bearing filename. Do not add a membership field to retained event bytes.
+Identical journal IDs in different generations do not cause automatic merging.
 Within one generation, contradictory copies of one logical journal still cause an error.
 Event IDs remain immutable. One event ID must never identify different event content.
 
@@ -157,6 +171,41 @@ Copy necessary evidence into a permitted retained location before publication, o
 A handoff must carry the activation record, its matching control event, selected journals, required compatibility guards, and necessary evidence.
 Transfer an old local archive only when the handoff needs it or the requester selects that transfer.
 Report an unavailable archive without silently restoring old history or claiming that the archive remains accessible.
+
+### 4.4 Deprecation and lifecycle migration
+
+The supporting release makes direct `history/<phase>/` directories read-only migration sources.
+Queries can report their existing progress and `migration_required` condition. Ordinary mutations must stop until migration completes.
+Do not keep a permanent second writable layout or silently migrate during a query.
+
+Use `kepler-lifecycle-migration` to select the dated guide for the source and target formats.
+Its guide lives at `referenses/migrations/<YYYY-MM-DD>-<migration-name>.md` inside the skill.
+The source candidate includes the skill. Its first history-layout guide remains planned until the required runtime operation exists.
+A guide describes the contract change, supporting release, prerequisites, exact operations, preservation, verification, and interrupted-operation handling.
+
+A healthy format migration preserves all validated events and the derived workflow state.
+Its approved manifest binds the guide hash, complete input inventory, target generation, verified archive, and exact source retirement.
+It uses `mission.history-initialized` to publish the new selection. It does not reconstruct decisions or reset progress.
+If history needs semantic corrections, stop format migration and obtain a separate recovery decision.
+
+After verified publication, retire only the unchanged direct phase sources named in that manifest.
+Keep their original bytes in the local archive. Do not leave those directories as alternative active or writable sources.
+Retirement must exclude `history/control/` and `history/generations/`. Never remove the history root.
+Remove a legacy directory only after preserving its approved files and confirming that no unknown entries remain.
+Changed or unknown files block retirement. A partial retirement leaves migration incomplete and ordinary mutations fenced.
+Retry only the missing approved steps. Retained intent and archive verification must distinguish earlier effects from missing work.
+A reset from the legacy layout must follow the same preservation and source-retirement rules.
+Direct phase directories can remain only as identified incomplete migration inputs, never as a permanent second writable layout.
+
+### 4.5 New mission startup
+
+New missions use a generation from their first phase event. They must not start in the deprecated layout.
+Normal startup authority covers this initial selection. It does not require a reset or a separate recovery approval.
+
+Save the selected generation and exact pending records in the existing startup instructions.
+Stage the initial phase journals, append `mission.history-initialized`, and publish its matching activation record after validation.
+Retain mission creation under its owning phase. The control event selects its history; it does not replace creation authority.
+An interrupted startup keeps its original mission and generation identities. Complete only missing authorized startup steps from retained intent.
 
 ## 5. Procedure
 
@@ -210,6 +259,8 @@ Create the archive and verify every available source copy.
 Retain the exact pending reset and compatibility-guard envelopes before the first authoritative write. Also retain their resolved instructions.
 Append `mission.history-reset` and its required compatibility guards. Then publish the matching activation record.
 Report the archive reference, generation ID, control event ID, and recovery mode.
+Retire any deprecated source paths named in the approved reset manifest after activation.
+Changed sources or failed retirement leave a partial reset. Keep normal mutations fenced and preserve the retained intent.
 
 Normal commands must now exclude old phase history. Ordinary workflow mutations remain blocked during recovery mode.
 Queries must report recovery mode instead of presenting an empty history as a new or completed mission.
@@ -310,6 +361,7 @@ The reset manifest has these fields:
 | `source_inventory` | Available sources, origins, relative paths, byte lengths, and hashes. |
 | `known_missing_sources` | Known losses, their basis, and their consequences. An empty list is permitted. |
 | `archive_id`, `generation_id` | Exact proposed local archive and new generation identities. |
+| `source_retirement` | Exact deprecated paths, original hashes, and verified archive bindings. Empty when no retirement is needed. |
 | `requester`, `reason` | Decision attribution and the reset purpose. |
 | `reconciliation` | Worker, ownership, repository, external-effect, and compatibility findings with retained references. |
 | `accepted_limits` | Explicit limits on preservation, reconstruction, or continuation. |
@@ -345,7 +397,26 @@ Every available original history range must have a disposition. Artifacts and ev
 Keep large candidate bytes in retained files with exact hashes. A digest without accessible content is insufficient.
 The expected state is a reviewed snapshot, not a mutable progress store. Derive later progress from the selected phase journals.
 
-## 7. Proposed CLI and skill
+### 6.4 Initial selection manifest
+
+Use format `kepler.mission-history-initialization`, version `1`, for new startup or healthy format migration.
+Its `operation` is `create` or `migrate`. Keep those authority paths separate.
+
+| Field | Content |
+| --- | --- |
+| `format`, `version`, `operation` | The initialization format, version, and selected operation. |
+| `mission_binding`, `generation_id` | Exact record home, mission, workflow, request, known units, and proposed generation. |
+| `source_inventory`, `archive_id` | Complete migration inputs and verified archive. For new startup, use empty inputs and `null`. |
+| `guide`, `guide_hash` | The dated migration guide and exact hash. For new startup, use `null`. |
+| `candidate_journals`, `expected_state` | Exact initial journal prefixes and checked phase state. Migration must preserve the original state. |
+| `source_retirement` | Exact source paths, identities, hashes, and archive bindings. New startup uses an empty array. |
+| `requester`, `operation_authority` | Attribution, existing startup request, and required authority mode. The migration approval reference stays outside the preview hash. |
+
+Use the common inventory ordering and hash rules. The initialization event retains this complete manifest and its decision reference.
+An empty input inventory must not hide existing mission records. Reconcile partial startup through its original retained instructions.
+Publication does not complete migration until its approved source retirement and final verification also succeed.
+
+## 7. Proposed CLI and skills
 
 These commands are proposals. They are not available in the current CLI.
 Each command selects `--mission <mission-id>` and the explicit record home through `--project <path>`.
@@ -353,12 +424,13 @@ Each command selects `--mission <mission-id>` and the explicit record home throu
 | Command | Purpose and effects |
 | --- | --- |
 | `kepler recovery inspect` | Read raw inputs, show control state, and report available archives. No writes. |
+| `kepler recovery migrate` | Preview or apply a healthy layout migration. Preserve workflow state and retire approved legacy paths. |
 | `kepler recovery reset` | Preview or apply an approved reset. Apply archives inputs and publishes recovery mode. |
 | `kepler recovery reconstruct` | Prepare or check a reconstruction manifest and candidate. Preparation writes draft files only. |
 | `kepler recovery publish` | Preview or publish an approved candidate under the selected reset version. |
 | `kepler recovery status` | Report exact control identity, partial writes, archive verification, and remaining work. No writes. |
 
-Reset and publish read one JSON object from stdin.
+Migrate, reset, and publish read one JSON object from stdin.
 A preview request contains `phase: "preview"` and the complete proposed `manifest`.
 An apply request repeats that manifest with `phase: "apply"`, `approved_manifest_hash`, `requester`, and `decision_reference`.
 The requester must match the manifest. Apply must independently validate the manifest instead of trusting a supplied hash.
@@ -374,13 +446,17 @@ The proposed `kepler-recover` skill explains this sequence and helps prepare the
 It offers a clean restart when the requester does not want to reconstruct old progress.
 It asks about uncertain facts, presents differences, and obtains explicit decisions before apply or publish.
 It uses CLI operations for every authoritative write. It cannot approve its own plan or bypass a rejected validation.
-This draft does not create or package that skill.
+This draft does not create or package that recovery skill.
+
+The source candidate separately packages `kepler-lifecycle-migration` with its dated migration catalog.
+It handles documented contract and file-format transitions. A planned guide permits inspection and planning, not migration writes.
+The skill cannot substitute manual journal moves for an unavailable CLI operation.
 
 ## 8. Rules for every CLI history consumer
 
 All mission history consumers must use one generation-aware history gateway.
 Select the activation record before parsing phase journals. Otherwise, damaged excluded history would still block recovery.
-Ordinary audit queries must expose the selected reset and rebuilt control receipts. Label them as control facts, not phase progress.
+Ordinary audit queries must expose the selected control receipts. Label them as control facts, not phase progress.
 
 | Consumer | Required behavior |
 | --- | --- |
@@ -393,12 +469,12 @@ Ordinary audit queries must expose the selected reset and rebuilt control receip
 | Caches and pagination | Bind to the control identity and generation. Reject stale cursors and discard stale derived views. |
 | Helpers and skills | Use the same gateway and explicit history version for mission writes. |
 
-After reset, every ordinary mission mutation requires `--history-version <control-event-id>` or the equivalent typed API field.
+For a generation-based mission, every ordinary mutation requires `--history-version <control-event-id>` or the equivalent typed API field.
 An absent or stale version must fail before any effect. A fresh automatic read must not silently authorize an old request.
 Worker instructions and pending operations must retain this binding. Late workers cannot write to or complete the new history.
 
-With no recovery records, keep the existing legacy mission-history behavior.
-With any reset evidence but a missing, damaged, or conflicting activation record, stop normal mission commands.
+With only direct phase journals, expose read-only legacy state and `migration_required`. Reject ordinary writes to that layout.
+With generation or control evidence but a missing, damaged, or conflicting activation record, stop normal mission commands.
 Unfinished recovery intent also blocks normal mutations, even when the previous activation record remains valid.
 Queries can report the pending recovery and last published history version. They must not claim execution readiness.
 Do not silently fall back to legacy journals. Use raw recovery inspection and a new approved reset when necessary.
@@ -441,15 +517,17 @@ Keep every available earlier archive. Do not require an old software defect to b
 The current CLI has no generation gateway or reset bootstrap path. This proposal requires those changes across all consumers.
 A new activation record cannot be treated as an optional extension by a compatible reader.
 
-Before reset, stop clients that cannot honor the recovery fence and generation binding.
+Before generation publication, stop clients that cannot honor the recovery fence and generation binding.
 A new control namespace alone does not guarantee that an older reader will stop.
 The current collector can accept an event from another phase without checking its type.
 
-For Standard, append `construction.history-generation-required` to a fresh journal under the legacy `history/construction/` path.
+For Standard, store `construction.history-generation-required` in a fresh `history/control/<guard-journal-id>.jsonl` file.
 Set its `phase` to `construction`. Keep envelope and event versions at `1`.
-Its data has exactly `mission_id`, `generation_id`, and `reset_event_id`. It is directly caused by that reset event.
-The release must prove that supported older Construction readers stop on this required type.
-Compatible readers select history first. They do not interpret this legacy guard as phase progress.
+Its data has exactly `mission_id`, `generation_id`, and `control_event_id`. Its direct cause is the initial or reset control event.
+The reserved control path is not a phase path. The new gateway validates this guard through its dedicated control adapter.
+Older readers infer phase from the directory name. The release must prove that they reject this new layout before effects.
+Do not create `history/construction/` just to protect an old reader.
+Compatible readers select history first. They do not interpret this control guard as phase progress.
 Other phases require equivalent tested guards before recovery support is claimed.
 
 Verify the guard before activation and retain it during handoff. Reuse its exact pending envelope after an uncertain append.
@@ -464,6 +542,9 @@ This contract does not install a CLI, change a loaded session's resources, publi
 
 | Scenario | Required result |
 | --- | --- |
+| New mission startup | Write only generation journals, publish the initial selection, and preserve identities after interrupted startup. |
+| Healthy legacy layout | Migrate exact events without changing workflow state. Retire only verified approved sources. |
+| Changed legacy files or interrupted source retirement | Preserve unknown bytes and keep migration incomplete. Never leave two writable layouts. |
 | Different old defects, unsupported events, damaged tails, or no valid old prefix | Raw inspection and reset preview work without normal projection. |
 | Known missing records or all prior progress excluded | Preserve available bytes, declare losses, and prepare a safe clean restart. |
 | Backup failure, input change, or missing manifest approval | No activation. Report copies or pending effects already created. |
@@ -497,5 +578,5 @@ It would also accept generation-qualified journal identity and the new activatio
 
 Reset approval and reconstruction approval are separate decisions for an actual mission.
 New work, new artifact approvals, external operations, implementation, release, and host changes retain their separate permission requirements.
-Drafting permission covers only this proposal.
-Preserve existing proposals, accepted specifications, mission files, installed resources, and application code.
+The layout and lifecycle-migration resource changes do not authorize runtime migration, reset, installation, release, or deployment.
+Preserve the narrow proposal and live mission records. The complete recovery contract still requires requester approval.

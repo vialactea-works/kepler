@@ -48,7 +48,7 @@ Setup rejects a symlink or non-directory at `KEPLER_HOME`, non-regular resource 
 
 ## Resources and host ownership
 
-The current source package includes fourteen portable skill trees, four Pi role definitions, four Claude Code role definitions, templates, and guidelines. An installed release may differ: inspect its matching manifest. These are packaged files, not host registrations. A host or skill manager owns installation, discovery, loading, permissions, and session lifecycle. Avoid duplicate skill copies.
+The current source package includes fifteen portable skill trees, four Pi role definitions, four Claude Code role definitions, templates, and guidelines. An installed release may differ: inspect its matching manifest. These are packaged files, not host registrations. A host or skill manager owns installation, discovery, loading, permissions, and session lifecycle. Avoid duplicate skill copies.
 
 For Pi, the documented `--skill <path>` option can load the complete selected `$KEPLER_HOME/skills` directory for a session; Pi also discovers directories with `SKILL.md` under configured user/project skill locations. Confirm the named skills appear and that you can load their full instructions (for example `/skill:kepler-mission-startup`). Pi's ordinary skill loader does not itself install Kepler's role definitions. Configure your existing agent host/subagent manager to expose `$KEPLER_HOME/agents/pi/v1/` and verify the four roles, their tool capabilities, and a separate non-author reviewer context before Implementation. Do not assume a Markdown file alone enables dispatch or enforces permissions.
 

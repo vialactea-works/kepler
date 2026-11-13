@@ -16,6 +16,12 @@ This skill is a read-only navigator when asked only to inspect. For recovery it 
 3. Inspect the selected `stage show` for all stages relevant to the blocker; for Implementation use `task list`, `task show`, `task ready`, and `activity show` with exact parent attempt IDs. Use `kepler audit list --unit <unit-id> --fields type,data --limit 100 --project <record-home>` with cursor pagination and `audit show` to recover original start inputs/event IDs when necessary. Check current artifacts, Git checkpoints, host worker sessions, locks and external effects as applicable. A successful query does not establish progress; read the derived state, blockers and unknowns.
 4. Report what is completed, unstarted, running, paused, blocked, or unknown, with supporting IDs and evidence; identify the owning skill and next copyable prompt. If Deliver is complete and verified, report its handoff. Do not repeat it.
 
+## Deprecated formats
+
+If the selected release reports a deprecated format, hand the request to `kepler-lifecycle-migration`.
+It checks the dated guide, runtime capabilities, preservation, and migration authority.
+Do not convert formats as an ordinary resume step. A planned migration guide does not permit writes.
+
 ## Resume safely when requested
 
 - **Preparation:** confirm the original startup operation ended and its exact mission ID and record home are known. Reconcile saved workspace choices, partial branch/worktree effects, and attachment state. Use `kepler mission prepare --mission <original-id> --project <original-home>` for missing preparation; never repeat `mission create`. A historical preparation response omits local workspace bindings and does not prove readiness. If a mission has no unit, hand off to `kepler-mission-startup` for guarded unit creation. Reconcile a lost `unit create` response through unit inventory and history before trying again.

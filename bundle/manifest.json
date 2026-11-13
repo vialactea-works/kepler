@@ -4,11 +4,11 @@
   "files": {
     "agents/claude-code/v1/kepler-architect.md": "sha256:dd2e24cd50ef0946f088f6673e8793cc2ccb16dffc6815436bca09dccbc64866",
     "agents/claude-code/v1/kepler-coder.md": "sha256:7b64ae6c2efdaa5dfb049352ac086f688351508c1bf3b63725c45ee4dfb5b0ae",
-    "agents/claude-code/v1/kepler-orchestrator.md": "sha256:aeccc7e9f64de51e1af93e11e3fb6089a72a78324d2fd5dc5d00a91f0263b52f",
+    "agents/claude-code/v1/kepler-orchestrator.md": "sha256:30bf2f00c7d81732d082c0c7df532a7a4a896b175b8ac3c391d2ef223dc5df6a",
     "agents/claude-code/v1/kepler-reviewer.md": "sha256:39bde10bb927cbc04eb7f93a06a13752397bf76e1a8dca986b2410ae7af4d33d",
     "agents/pi/v1/kepler-architect.md": "sha256:72fb9e96d97eed1ceceb260cbb01594ebcd72746b04a4e67275fbf044a668ee4",
     "agents/pi/v1/kepler-coder.md": "sha256:52b71541da63877a867fb8b2b5a9a6deeaa8a81ffec1e7d0d15507800a662815",
-    "agents/pi/v1/kepler-orchestrator.md": "sha256:b1a3c7e08aaff231a1b2242edc42a93e01bea17961b3a7224cd04a8c52a852fa",
+    "agents/pi/v1/kepler-orchestrator.md": "sha256:ca2f1e94d72e1d6793be7f7f3bb98b7cb3573e39050f507dcba8ce2f21c8a82a",
     "agents/pi/v1/kepler-reviewer.md": "sha256:b07a4ba4b1cf030a8248f3aff0d80ed4de28cfceb6bffadfa6daa37b30ae0b57",
     "guidelines/.gitkeep": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "guidelines/general/01-code-style.md": "sha256:305c986ef2354604588b9f7ec71296dafb4a7c10b234f5bd1a49771b7e1561b3",
@@ -34,6 +34,8 @@
     "skills/kepler-grilling/NOTICE": "sha256:7af7889fb3cc4b435ba61637f254e47798ccd35ca937c6ef6dba88cc0b5dfe1c",
     "skills/kepler-grilling/SKILL.md": "sha256:dffe3918c2b5101ffcac8143c064375a1fdc246e02833a3acea3c257a542966f",
     "skills/kepler-init/SKILL.md": "sha256:62cc81b1b6282d0f7228b2237f4717bd89a27c7e8b84be60474fc56471213ed1",
+    "skills/kepler-lifecycle-migration/SKILL.md": "sha256:52bd46d55d78c66ecb3b8f56509b20a95466b395339f90a22a154f2448c906c1",
+    "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md": "sha256:0628000c862f8e35aed431091e62880fca5c916cf9f64555e4be9654045c5f33",
     "skills/kepler-mission-startup/SKILL.md": "sha256:9f5eec98306ee4677079bdac89018f49975d6763d1b1f8b2d47e063419b1e3e4",
     "skills/kepler-mission-startup/references/agent-operations.md": "sha256:b7c5423876aa0814d13e89abfb9af77b5551975dd8f2e4b730261ddf2cf22ddd",
     "skills/kepler-mission-startup/references/standard-cli-walkthrough.md": "sha256:15e80f7170acf071dd377cc656bde5b139fa2a0b4239f5f32a59f17a6f81b4f6",
@@ -43,7 +45,7 @@
     "skills/kepler-quality/SKILL.md": "sha256:92534d365668c047bd4655d1976d5cc34116d4df56e9dc62fa5195090ff8a361",
     "skills/kepler-research/NOTICE": "sha256:71168255d925d0deb29bacc2f5e6f456b121b31aa9dd493ef660bee4675880cb",
     "skills/kepler-research/SKILL.md": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
-    "skills/kepler-resume/SKILL.md": "sha256:2d04c05e6f9c76529db099e1b7b1fe6c14a83b0cbda5494ef963372e8e63363a",
+    "skills/kepler-resume/SKILL.md": "sha256:6672b206d58e482b42bdca9076eb0176b74596f663bed32d284bd3417fbc8562",
     "skills/kepler-review/SKILL.md": "sha256:df0ac953adaf3ae0e5ad0d4dc1bcc8e2ee5f3a5a187b97f224e0535ee48e5290",
     "templates/README.md": "sha256:8b50f5559320bafa83c596d5b54b2bd32afbef97e0614f8232db168c5dbb38d1",
     "templates/critique.md": "sha256:1cd7886f18cb6879699e87dc8f3f855714091b9d42ac520e6ce670b86d3d36fe",
@@ -68,7 +70,7 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "resource_digest": "sha256:bcddae22dfdc955f6a3918c25bab67560345001612783df859148fc557697684",
+  "resource_digest": "sha256:2e3455269cd49267e1dee59c9ad0e6dd395f04bee7788c8ffa3f335094d868ee",
   "skills": [
     {
       "id": "kepler-init",
@@ -137,7 +139,12 @@
     },
     {
       "id": "kepler-resume",
-      "digest": "sha256:2d04c05e6f9c76529db099e1b7b1fe6c14a83b0cbda5494ef963372e8e63363a",
+      "digest": "sha256:6672b206d58e482b42bdca9076eb0176b74596f663bed32d284bd3417fbc8562",
+      "required": false
+    },
+    {
+      "id": "kepler-lifecycle-migration",
+      "digest": "sha256:52bd46d55d78c66ecb3b8f56509b20a95466b395339f90a22a154f2448c906c1",
       "required": false
     }
   ],
@@ -148,7 +155,7 @@
     },
     {
       "id": "agents/pi/v1/kepler-orchestrator.md",
-      "digest": "sha256:b1a3c7e08aaff231a1b2242edc42a93e01bea17961b3a7224cd04a8c52a852fa"
+      "digest": "sha256:ca2f1e94d72e1d6793be7f7f3bb98b7cb3573e39050f507dcba8ce2f21c8a82a"
     },
     {
       "id": "agents/pi/v1/kepler-coder.md",
@@ -164,7 +171,7 @@
     },
     {
       "id": "agents/claude-code/v1/kepler-orchestrator.md",
-      "digest": "sha256:aeccc7e9f64de51e1af93e11e3fb6089a72a78324d2fd5dc5d00a91f0263b52f"
+      "digest": "sha256:30bf2f00c7d81732d082c0c7df532a7a4a896b175b8ac3c391d2ef223dc5df6a"
     },
     {
       "id": "agents/claude-code/v1/kepler-coder.md",

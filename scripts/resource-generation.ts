@@ -22,6 +22,7 @@ const skillIds = [
   "kepler-domain-modelling",
   "kepler-research",
   "kepler-resume",
+  "kepler-lifecycle-migration",
 ] as const;
 
 export interface ResourceFileChange {

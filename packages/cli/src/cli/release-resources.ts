@@ -65,6 +65,7 @@ const skillIds = [
   "kepler-domain-modelling",
   "kepler-research",
   "kepler-resume",
+  "kepler-lifecycle-migration",
 ] as const;
 
 const standardSkillIds = new Set<string>([
@@ -128,8 +129,8 @@ const resourceManifestSchema = closedObject({
   resource_digest: digest,
   skills: {
     type: "array",
-    minItems: 14,
-    maxItems: 14,
+    minItems: 15,
+    maxItems: 15,
     items: closedObject({ id: text, digest, required: { type: "boolean" } }),
   },
   agent_profiles: {
@@ -347,7 +348,7 @@ function validateSkillSet(skills: readonly ResourceSkill[]): void {
     skills.some(({ id, required }) => expected.get(id) !== required)
   ) {
     throw new ResourceManifestError(
-      "Resource manifest must declare the fourteen accepted skills with their required status",
+      "Resource manifest must declare the fifteen accepted skills with their required status",
     );
   }
 }

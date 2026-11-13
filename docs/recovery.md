@@ -10,6 +10,15 @@ If an operation stopped:
 
 The agent should report the exact unit, attempt and evidence, known and unknown effects, next safe action, and any information only you can supply. It performs routine Kepler CLI operations itself. Complete selectors, input shapes, and failure cases are in [Recovery operations for agents and operators](cli/recovery-operations.md).
 
+## Deprecated formats and lifecycle migration
+
+Use `kepler-lifecycle-migration` when an upgrade requires a documented file or contract migration.
+It selects a dated guide, checks runtime support, and presents an exact manifest for your approval.
+A planned guide permits inspection and planning only. It does not authorize manual journal conversion.
+The first [history-layout guide](../bundle/skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md) is planned.
+The current source does not implement generation migration or reset operations.
+Normal interruption recovery remains separate from format migration and from a decision to reconstruct damaged history.
+
 ## Continue mission preparation
 
 If mission creation stopped, give the agent the original mission ID and record home when available. It checks the original startup operation ended, inspects saved selections and partial workspace/branch effects, and continues the *same* mission. Repeating mission creation allocates another identity. An already recorded preparation response does not establish current workspace readiness. If the unit was created before a lost response, the agent must find and reuse it rather than create a duplicate.
