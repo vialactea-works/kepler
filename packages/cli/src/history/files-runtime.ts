@@ -93,6 +93,7 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
       const temporary = Path.join(Path.dirname(path), `.${Path.basename(path)}.${historyDigest(bytes).slice(7)}.pending`);
       let result: HistoryFileWrite | undefined;
       let failure: unknown;
+      let didFail = false;
       try {
         const previous = await read(location);
         if (previous && sameBytes(previous, bytes)) {
@@ -134,11 +135,11 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
           if (!published || !sameBytes(published, bytes)) throw new HistoryError("history_file_changed", "The durable history output could not be confirmed.", { path });
           result = { status: previous === undefined ? "created" : "replaced", content_version: historyDigest(bytes), byte_length: bytes.length };
         }
-      } catch (error) { failure = error; }
+      } catch (error) { failure = error; didFail = true; }
       try { await claim.release(); } catch (error) {
-        throw new HistoryError("history_storage_release_failed", "History output may be durable, but its writer claim could not be released.", { path, temporary_path: temporary, operation_error: failure ? errorMessage(failure) : null, release_error: errorMessage(error), output_status: result?.status ?? "uncertain" });
+        throw new HistoryError("history_storage_release_failed", "History output may be durable, but its writer claim could not be released.", { path, temporary_path: temporary, operation_error: didFail ? errorMessage(failure) : null, release_error: errorMessage(error), output_status: result?.status ?? "uncertain" });
       }
-      if (failure) {
+      if (didFail) {
         if (failure instanceof HistoryError) throw new HistoryError(failure.code, failure.message, { ...failure.details, path, temporary_path: temporary, output_status: result?.status ?? "uncertain" });
         throw new HistoryError("history_storage_failure", "History storage could not complete the requested write.", { path, temporary_path: temporary, message: errorMessage(failure) });
       }
@@ -150,6 +151,8 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
       if (!await ancestors(location, false)) return "missing";
       const claim = await journals.acquireWriterLock(path, location.root);
       let failure: unknown;
+      let didFail = false;
+      let unlinked = false;
       let result: "removed" | "missing" = "missing";
       try {
         const bytes = await read(location);
@@ -158,15 +161,20 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
           await withVerifiedHistoryDirectory(Path.dirname(path), location.root, async (directory) => {
             await directory.verify();
             await Fs.unlink(directory.entry(Path.basename(path)));
+            unlinked = true;
             await directory.sync();
           });
           result = "removed";
         }
-      } catch (error) { failure = error; }
+      } catch (error) { failure = error; didFail = true; }
+      const retirementStatus = unlinked ? result === "removed" ? "removed" : "removed-unconfirmed" : didFail ? "uncertain" : "missing";
       try { await claim.release(); } catch (error) {
-        throw new HistoryError("history_storage_release_failed", "Source retirement may have occurred, but its writer claim could not be released.", { path, operation_error: failure ? errorMessage(failure) : null, release_error: errorMessage(error), retirement_status: result });
+        throw new HistoryError("history_storage_release_failed", "Source retirement may have occurred, but its writer claim could not be released.", { path, operation_error: didFail ? errorMessage(failure) : null, release_error: errorMessage(error), retirement_status: retirementStatus });
       }
-      if (failure) throw failure;
+      if (didFail) {
+        if (failure instanceof HistoryError) throw new HistoryError(failure.code, failure.message, { ...failure.details, path, retirement_status: retirementStatus });
+        throw new HistoryError("history_storage_failure", "Source retirement could not be confirmed.", { path, message: errorMessage(failure), retirement_status: retirementStatus });
+      }
       return result;
     },
     removeEmptyDirectory: async (location) => {

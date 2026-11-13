@@ -184,6 +184,18 @@ describe("durable history filesystem", () => {
     expect(await Fs.readFile(Path.join(path, "preserved-source", "source"))).toEqual(Buffer.from(bytes));
   });
 
+  it.each([undefined, null, 0, ""])("does not report a failed source read as a completed retirement: %s", async (failure) => {
+    const path = await root();
+    const location = { root: path, relative: "legacy/source" };
+    const original = utf8("original bytes");
+    await createNodeHistoryFiles().write(location, original, { kind: "create" });
+    const storage: JournalFileSystem = { ...nodeJournalFileSystem, openRead: async () => { throw failure; } };
+    const files = createNodeHistoryFiles(storage);
+    await expect(files.remove(location, historyDigest(original))).rejects.toMatchObject({ code: "history_storage_failure", details: { message: String(failure) } });
+    await expect(files.write(location, utf8("replacement"), { kind: "replace", expected: historyDigest(original) })).rejects.toMatchObject({ code: "history_storage_failure", details: { message: String(failure) } });
+    expect(await Fs.readFile(Path.join(path, location.relative))).toEqual(Buffer.from(original));
+  });
+
   it("retires only the exact file and removes only an empty directory", async () => {
     const path = await root();
     const files = createNodeHistoryFiles();
