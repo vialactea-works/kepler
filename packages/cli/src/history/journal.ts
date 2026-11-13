@@ -35,7 +35,7 @@ export interface JournalFileSystem {
   readonly realpath: (path: string) => Promise<string>;
   readonly mkdir: (path: string, root: string) => Promise<void>;
   readonly openRead: (path: string, root: string) => Promise<JournalReadHandle>;
-  readonly openAppend: (path: string, root: string) => Promise<{ readonly handle: JournalHandle; readonly created: boolean }>;
+  readonly openAppend: (path: string, root: string, privateMode?: 0o600) => Promise<{ readonly handle: JournalHandle; readonly created: boolean }>;
   readonly acquireWriterLock: (path: string, root: string) => Promise<JournalWriterLock>;
   readonly syncDirectory: (path: string, root: string) => Promise<void>;
 }
@@ -45,6 +45,8 @@ export interface JournalCoordinates {
   readonly missionId: string;
   readonly phase: string;
   readonly journalId: string;
+  readonly generationId?: string;
+  readonly kind?: "phase" | "control" | "guard";
 }
 
 export type JournalProblemCode =
@@ -136,21 +138,37 @@ interface CanonicalJsonObject {
 
 type CanonicalJson = null | string | number | boolean | readonly CanonicalJson[] | CanonicalJsonObject;
 
-const canonicalValue = (value: unknown): CanonicalJson => {
+const canonicalValue = (value: unknown, ancestors = new WeakSet<object>()): CanonicalJson => {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (Array.isArray(value)) return value.map(canonicalValue);
-  if (isRecord(value)) {
-    const entries: [string, CanonicalJson][] = [];
-    const keys = Object.keys(value).sort((left, right) => {
-      if (left < right) return -1;
-      if (left > right) return 1;
-      return 0;
-    });
-    for (const key of keys) entries.push([key, canonicalValue(value[key])]);
-    return Object.fromEntries(entries);
+  if (typeof value !== "object" || value === null || ancestors.has(value)) throw new Error("Event contains a non-JSON value");
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype || Reflect.ownKeys(value).length !== value.length + 1) throw new Error("Event contains a non-JSON array");
+      return Array.from({ length: value.length }, (_, index) => {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor?.enumerable || !("value" in descriptor)) throw new Error("Event contains a non-JSON array");
+        return canonicalValue(descriptor.value, ancestors);
+      });
+    }
+    if (isRecord(value)) {
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) throw new Error("Event contains a non-JSON object");
+      const entries: [string, CanonicalJson][] = [];
+      const keys = Object.keys(value).sort();
+      if (Reflect.ownKeys(value).length !== keys.length) throw new Error("Event contains a non-JSON object");
+      for (const key of keys) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor?.enumerable || !("value" in descriptor)) throw new Error("Event contains a non-JSON object");
+        entries.push([key, canonicalValue(descriptor.value, ancestors)]);
+      }
+      return Object.fromEntries(entries);
+    }
+    throw new Error("Event contains a non-JSON value");
+  } finally {
+    ancestors.delete(value);
   }
-  throw new Error("Event contains a non-JSON value");
 };
 
 export const serializeJournalEvent = (event: EventEnvelope): string => {
@@ -169,6 +187,8 @@ export const serializeJournalEvent = (event: EventEnvelope): string => {
   if (encoded === undefined) throw new Error("Event cannot be serialized as JSON");
   return encoded;
 };
+
+export const canonicalJson = (value: unknown): string => JSON.stringify(canonicalValue(value));
 
 const scanLine = (
   bytes: Uint8Array,
@@ -251,16 +271,16 @@ export const scanJournalBytes = (bytes: Uint8Array): JournalScan => {
 export const journalPath = (coordinates: JournalCoordinates): string => {
   if (!Path.isAbsolute(coordinates.recordHome) || !uuidV4.test(coordinates.missionId) ||
       !phaseSegment.test(coordinates.phase) || !safeSegment.test(coordinates.journalId) ||
-      coordinates.journalId === "." || coordinates.journalId === "..") {
+      coordinates.journalId === "." || coordinates.journalId === ".." ||
+      (coordinates.kind !== undefined && !["phase", "control", "guard"].includes(coordinates.kind)) ||
+      (coordinates.generationId !== undefined && !uuidV4.test(coordinates.generationId)) ||
+      (coordinates.kind === "control" && (coordinates.phase !== "mission-recovery" || coordinates.generationId !== undefined)) ||
+      (coordinates.kind === "guard" && (coordinates.phase !== "construction" || coordinates.generationId !== undefined))) {
     throw new JournalAppendError("invalid-location", "Journal location contains an invalid path identity", coordinates.recordHome);
   }
   return Path.resolve(
     coordinates.recordHome,
-    ".kepler",
-    "missions",
-    coordinates.missionId,
-    "history",
-    coordinates.phase,
+    ...directoriesFor(coordinates),
     `${coordinates.journalId}.jsonl`,
   );
 };
@@ -617,7 +637,8 @@ export const nodeJournalFileSystem: JournalFileSystem = {
       if (!transferred) await parentHandle.close();
     }
   },
-  openAppend: async (path, root) => {
+  openAppend: async (path, root, privateMode) => {
+    if (privateMode !== undefined && privateMode !== 0o600) throw new Error("Private history files require mode 0600");
     const parentPath = Path.dirname(path);
     const parentHandle = await openVerifiedDirectory(parentPath, root);
     const openedPath = pathFromDirectory(parentHandle, parentPath, Path.basename(path));
@@ -627,11 +648,11 @@ export const nodeJournalFileSystem: JournalFileSystem = {
     let transferred = false;
     try {
       try {
-        handle = await Fs.open(openedPath, appendFlags | FsConstants.O_EXCL, 0o666);
+        handle = await Fs.open(openedPath, appendFlags | FsConstants.O_EXCL, privateMode ?? 0o666);
         created = true;
       } catch (error) {
         if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
-        handle = await Fs.open(openedPath, appendFlags, 0o666);
+        handle = await Fs.open(openedPath, appendFlags, privateMode ?? 0o666);
       }
       const openedHandle = handle;
       if (!openedHandle) throw new Error("Journal append handle was not opened");
@@ -640,6 +661,10 @@ export const nodeJournalFileSystem: JournalFileSystem = {
         await verifyOpenedJournalFile(openedHandle, openedPath, path, root);
       };
       await verify();
+      if (privateMode !== undefined) {
+        if ((await openedHandle.stat()).nlink !== 1) throw new Error("Private history writes cannot use a multiply linked file");
+        await openedHandle.chmod(privateMode);
+      }
       const close = async (): Promise<void> => {
         try {
           await openedHandle.close();
@@ -680,7 +705,7 @@ const directoriesFor = (coordinates: JournalCoordinates): readonly string[] => [
   ...locationDirectories,
   coordinates.missionId,
   "history",
-  coordinates.phase,
+  ...(coordinates.kind === "control" ? ["control", "events"] : coordinates.kind === "guard" ? ["control"] : coordinates.generationId ? ["generations", coordinates.generationId, coordinates.phase] : [coordinates.phase]),
 ];
 
 const validateRoot = async (storage: JournalFileSystem, recordHome: string, journalPathValue: string): Promise<string> => {
