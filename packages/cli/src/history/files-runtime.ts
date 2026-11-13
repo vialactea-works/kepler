@@ -3,7 +3,7 @@ import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import { HistoryError, historyDigest, safeHistoryRelativePath } from "./control.js";
 import type { HistoryDirectoryEntry, HistoryFiles, HistoryFileWrite, HistoryLocation } from "./files.js";
-import { nodeJournalFileSystem, type JournalFileSystem, type JournalReadHandle } from "./journal.js";
+import { nodeJournalFileSystem, withVerifiedHistoryDirectory, type JournalFileSystem, type JournalReadHandle } from "./journal.js";
 
 const sameBytes = (left: Uint8Array, right: Uint8Array): boolean => left.length === right.length && left.every((byte, index) => byte === right[index]);
 const missing = (error: unknown): boolean => error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
@@ -35,9 +35,7 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
       let kind = await journals.inspect(current);
       if (kind === "missing" && create) {
         try {
-          await journals.mkdir(current, location.root);
-          const directory = await Fs.open(current, FsConstants.O_RDONLY | FsConstants.O_DIRECTORY | FsConstants.O_NOFOLLOW);
-          try { await directory.chmod(0o700); await directory.sync(); } finally { await directory.close(); }
+          await journals.mkdir(current, location.root, 0o700);
         } catch (error) {
           if (!(error !== null && typeof error === "object" && "code" in error && error.code === "EEXIST")) throw error;
         }
@@ -45,6 +43,7 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
       }
       if (kind === "missing") return false;
       if (kind !== "directory" || await journals.realpath(current) !== current) throw new HistoryError("history_path_unsafe", "A history storage ancestor is not a regular canonical directory.", { path: current });
+      if (create) await journals.syncDirectory(Path.dirname(current), location.root);
     }
     return true;
   };
@@ -77,8 +76,11 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
     const existing = await read({ root, relative });
     if (!existing) return;
     if (!sameBytes(existing, bytes)) throw new HistoryError("history_temporary_conflict", "An existing pending output differs from the exact retained output.", { temporary_path: path });
-    await Fs.unlink(path);
-    await journals.syncDirectory(Path.dirname(path), root);
+    await withVerifiedHistoryDirectory(Path.dirname(path), root, async (directory) => {
+      await directory.verify();
+      await Fs.unlink(directory.entry(Path.basename(path)));
+      await directory.sync();
+    });
   };
   return {
     read,
@@ -114,18 +116,20 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
           } finally { await pending.handle.close(); }
           const current = await read(location);
           if (mode.kind === "replace" && (current ? historyDigest(current) : null) !== mode.expected) throw new HistoryError("history_file_changed", "The activation input changed while its replacement was prepared.", { path });
-          if (mode.kind === "create") {
-            try { await Fs.link(temporary, path); } catch (error) {
-              if (!(error !== null && typeof error === "object" && "code" in error && error.code === "EEXIST")) throw error;
-              const existing = await read(location);
-              if (!existing || !sameBytes(existing, bytes)) throw new HistoryError("history_file_conflict", "A conflicting output appeared before publication.", { path });
-            }
-            await journals.syncDirectory(Path.dirname(path), location.root);
-            await removeTemporary(location.root, temporary, bytes);
-          } else {
-            await Fs.rename(temporary, path);
-            await journals.syncDirectory(Path.dirname(path), location.root);
-          }
+          await withVerifiedHistoryDirectory(Path.dirname(path), location.root, async (directory) => {
+            await directory.verify();
+            const source = directory.entry(Path.basename(temporary));
+            const target = directory.entry(Path.basename(path));
+            if (mode.kind === "create") {
+              try { await Fs.link(source, target); } catch (error) {
+                if (!(error !== null && typeof error === "object" && "code" in error && error.code === "EEXIST")) throw error;
+                const existing = await read(location);
+                if (!existing || !sameBytes(existing, bytes)) throw new HistoryError("history_file_conflict", "A conflicting output appeared before publication.", { path });
+              }
+            } else await Fs.rename(source, target);
+            await directory.sync();
+          });
+          if (mode.kind === "create") await removeTemporary(location.root, temporary, bytes);
           const published = await read(location);
           if (!published || !sameBytes(published, bytes)) throw new HistoryError("history_file_changed", "The durable history output could not be confirmed.", { path });
           result = { status: previous === undefined ? "created" : "replaced", content_version: historyDigest(bytes), byte_length: bytes.length };
@@ -151,8 +155,11 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
         const bytes = await read(location);
         if (bytes !== undefined) {
           if (historyDigest(bytes) !== expected) throw new HistoryError("history_source_changed", "A source changed before its approved retirement.", { path });
-          await Fs.unlink(path);
-          await journals.syncDirectory(Path.dirname(path), location.root);
+          await withVerifiedHistoryDirectory(Path.dirname(path), location.root, async (directory) => {
+            await directory.verify();
+            await Fs.unlink(directory.entry(Path.basename(path)));
+            await directory.sync();
+          });
           result = "removed";
         }
       } catch (error) { failure = error; }
@@ -169,8 +176,11 @@ export const createNodeHistoryFiles = (journals: JournalFileSystem = nodeJournal
       if (kind === "missing") return "missing";
       if (kind !== "directory" || await journals.realpath(path) !== path) throw new HistoryError("history_path_unsafe", "Only a canonical empty legacy directory can be retired.", { path });
       try {
-        await Fs.rmdir(path);
-        await journals.syncDirectory(Path.dirname(path), location.root);
+        await withVerifiedHistoryDirectory(Path.dirname(path), location.root, async (directory) => {
+          await directory.verify();
+          await Fs.rmdir(directory.entry(Path.basename(path)));
+          await directory.sync();
+        });
         return "removed";
       } catch (error) {
         if (missing(error)) return "missing";

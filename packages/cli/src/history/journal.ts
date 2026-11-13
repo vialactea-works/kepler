@@ -33,7 +33,7 @@ export interface JournalWriterLock {
 export interface JournalFileSystem {
   readonly inspect: (path: string) => Promise<JournalPathKind>;
   readonly realpath: (path: string) => Promise<string>;
-  readonly mkdir: (path: string, root: string) => Promise<void>;
+  readonly mkdir: (path: string, root: string, privateMode?: 0o700) => Promise<void>;
   readonly openRead: (path: string, root: string) => Promise<JournalReadHandle>;
   readonly openAppend: (path: string, root: string, privateMode?: 0o600) => Promise<{ readonly handle: JournalHandle; readonly created: boolean }>;
   readonly acquireWriterLock: (path: string, root: string) => Promise<JournalWriterLock>;
@@ -342,6 +342,36 @@ const openVerifiedDirectory = async (
   }
 };
 
+export interface VerifiedHistoryDirectory {
+  readonly entry: (name: string) => string;
+  readonly verify: () => Promise<void>;
+  readonly sync: () => Promise<void>;
+}
+
+export const withVerifiedHistoryDirectory = async <T>(
+  path: string,
+  root: string,
+  operation: (directory: VerifiedHistoryDirectory) => Promise<T>,
+): Promise<T> => {
+  if (!Path.isAbsolute(root) || await Fs.realpath(root) !== root) throw new Error("History effects require a canonical storage root");
+  const handle = await openVerifiedDirectory(path, root);
+  let active = true;
+  const verify = async (): Promise<void> => {
+    if (!active) throw new Error("The verified history directory is closed");
+    await verifyOpenedDirectoryPath(handle, path, root);
+  };
+  const entry = (name: string): string => {
+    if (!active || !name || [".", ".."].includes(name) || /[/\\\\\0]/.test(name)) throw new Error("History effects require one filename in an open verified directory");
+    return pathFromDirectory(handle, path, name);
+  };
+  try {
+    await verify();
+    const value = await operation({ entry, verify, sync: async () => { await verify(); await handle.sync(); } });
+    await verify();
+    return value;
+  } finally { active = false; await handle.close(); }
+};
+
 const verifyOpenedJournalFile = async (
   handle: Awaited<ReturnType<typeof Fs.open>>,
   openedPath: string,
@@ -562,13 +592,14 @@ const acquireNodeJournalWriterLock = async (path: string, root: string): Promise
   }
 };
 
-const mkdirNodeJournalDirectory = async (path: string, root: string): Promise<void> => {
+const mkdirNodeJournalDirectory = async (path: string, root: string, privateMode?: 0o700): Promise<void> => {
+  if (privateMode !== undefined && privateMode !== 0o700) throw new Error("Private history directories require mode 0700");
   const parentPath = Path.dirname(path);
   const parentHandle = await openVerifiedDirectory(parentPath, root);
   const openedPath = pathFromDirectory(parentHandle, parentPath, Path.basename(path));
   let createdStat: Awaited<ReturnType<typeof Fs.lstat>> | undefined;
   try {
-    await Fs.mkdir(openedPath);
+    await Fs.mkdir(openedPath, privateMode);
     createdStat = await Fs.lstat(openedPath);
     const resolvedOpenedPath = await Fs.realpath(openedPath);
     const resolvedPath = await Fs.realpath(path);

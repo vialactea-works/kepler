@@ -4,7 +4,7 @@ import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { HistoryError, historyDigest } from "../../packages/cli/src/history/control.js";
 import { createNodeHistoryFiles } from "../../packages/cli/src/history/files-runtime.js";
-import { createEventJournal, nodeJournalFileSystem, type JournalFileSystem } from "../../packages/cli/src/history/journal.js";
+import { createEventJournal, nodeJournalFileSystem, withVerifiedHistoryDirectory, type VerifiedHistoryDirectory, type JournalFileSystem } from "../../packages/cli/src/history/journal.js";
 import { collectHistory } from "../../packages/cli/src/history/collection.js";
 import { historyGenerationFixture, historyTestBytes } from "../support/history-generation.js";
 
@@ -119,6 +119,71 @@ describe("durable history filesystem", () => {
     expect(await Fs.readFile(Path.join(outside, "secret"), "utf8")).toBe("outside bytes");
   });
 
+  it.each(["create", "replace"] as const)("rejects a parent swap before %s publication can change an unrelated directory", async (kind) => {
+    const path = await root();
+    const outside = await root();
+    const inside = Path.join(path, "inside");
+    const target = Path.join(inside, "output");
+    await Fs.mkdir(inside);
+    const original = utf8("original selection");
+    if (kind === "replace") await createNodeHistoryFiles().write({ root: path, relative: "inside/output" }, original, { kind: "create" });
+    if (kind === "replace") await Fs.writeFile(Path.join(outside, "output"), "unrelated original");
+    let temporary = "";
+    let prepared = false;
+    let swapped = false;
+    const swap = async () => {
+      if (swapped) return;
+      await Fs.writeFile(Path.join(outside, Path.basename(temporary)), "unrelated pending bytes");
+      await Fs.rename(inside, Path.join(path, "preserved-source"));
+      await Fs.symlink(outside, inside, "dir");
+      swapped = true;
+    };
+    const storage: JournalFileSystem = { ...nodeJournalFileSystem,
+      inspect: async (value) => {
+        const result = await nodeJournalFileSystem.inspect(value);
+        if (kind === "create" && value === target && prepared) await swap();
+        return result;
+      },
+      openAppend: async (...args) => {
+        temporary = args[0];
+        const opened = await nodeJournalFileSystem.openAppend(...args);
+        return { ...opened, handle: { ...opened.handle, close: async () => { await opened.handle.close(); prepared = true; } } };
+      },
+      openRead: async (value, selectedRoot) => {
+        const opened = await nodeJournalFileSystem.openRead(value, selectedRoot);
+        return { ...opened, close: async () => { await opened.close(); if (kind === "replace" && value === target && prepared) await swap(); } };
+      },
+    };
+    await expect(createNodeHistoryFiles(storage).write({ root: path, relative: "inside/output" }, utf8("new selection"), kind === "create" ? { kind: "create" } : { kind: "replace", expected: historyDigest(original) })).rejects.toBeDefined();
+    expect(swapped).toBe(true);
+    if (kind === "replace") expect(await Fs.readFile(Path.join(outside, "output"), "utf8")).toBe("unrelated original");
+    else await expect(Fs.lstat(Path.join(outside, "output"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await Fs.readFile(Path.join(outside, Path.basename(temporary)), "utf8")).toBe("unrelated pending bytes");
+  });
+
+  it("rejects a parent swap before source retirement can delete an unrelated file", async () => {
+    const path = await root();
+    const outside = await root();
+    const location = { root: path, relative: "inside/source" };
+    const source = Path.join(path, "inside", "source");
+    const bytes = utf8("approved original");
+    await createNodeHistoryFiles().write(location, bytes, { kind: "create" });
+    await Fs.writeFile(Path.join(outside, "source"), "unrelated original");
+    const storage: JournalFileSystem = { ...nodeJournalFileSystem, openRead: async (value, selectedRoot) => {
+      const opened = await nodeJournalFileSystem.openRead(value, selectedRoot);
+      return { ...opened, close: async () => {
+        await opened.close();
+        if (value === source) {
+          await Fs.rename(Path.join(path, "inside"), Path.join(path, "preserved-source"));
+          await Fs.symlink(outside, Path.join(path, "inside"), "dir");
+        }
+      } };
+    } };
+    await expect(createNodeHistoryFiles(storage).remove(location, historyDigest(bytes))).rejects.toBeDefined();
+    expect(await Fs.readFile(Path.join(outside, "source"), "utf8")).toBe("unrelated original");
+    expect(await Fs.readFile(Path.join(path, "preserved-source", "source"))).toEqual(Buffer.from(bytes));
+  });
+
   it("retires only the exact file and removes only an empty directory", async () => {
     const path = await root();
     const files = createNodeHistoryFiles();
@@ -132,6 +197,35 @@ describe("durable history filesystem", () => {
     expect(await files.remove(location, historyDigest(original))).toBe("missing");
     expect(await files.removeEmptyDirectory({ root: path, relative: "legacy/phase" })).toBe("removed");
     expect(await files.list({ root: path, relative: "legacy" })).toEqual([]);
+  });
+
+  it("bounds verified directory capabilities to safe entry names and their callback lifetime", async () => {
+    const path = await root();
+    let retained: VerifiedHistoryDirectory | undefined;
+    expect(await withVerifiedHistoryDirectory(path, path, async (directory) => {
+      retained = directory;
+      for (const name of ["", ".", "..", "../escape", "child/escape", "child\\escape", "\0"]) expect(() => directory.entry(name)).toThrow();
+      await directory.verify();
+      await directory.sync();
+      return "verified";
+    })).toBe("verified");
+    expect(() => retained!.entry("late")).toThrow("open verified directory");
+    await expect(retained!.verify()).rejects.toThrow("closed");
+    await expect(withVerifiedHistoryDirectory(path, path, async () => { throw new Error("Caller failure"); })).rejects.toThrow("Caller failure");
+    expect(await createNodeHistoryFiles().list({ root: path, relative: "absent" })).toEqual([]);
+  });
+
+  it("refuses a multiply linked private output before changing an outside file's bytes or mode", async () => {
+    const path = await root();
+    const outside = await root();
+    const original = Path.join(outside, "original");
+    const borrowed = Path.join(path, "borrowed");
+    await Fs.writeFile(original, "unchanged original", { mode: 0o640 });
+    const mode = (await Fs.stat(original)).mode;
+    await Fs.link(original, borrowed);
+    await expect(nodeJournalFileSystem.openAppend(borrowed, path, 0o600)).rejects.toThrow("multiply linked");
+    expect(await Fs.readFile(original, "utf8")).toBe("unchanged original");
+    expect((await Fs.stat(original)).mode).toBe(mode);
   });
 
   it("routes phase, control and guard journals without recreating a direct phase directory", async () => {
