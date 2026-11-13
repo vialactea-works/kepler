@@ -81,9 +81,21 @@ export interface HistoryAction {
   readonly reason: string;
   readonly authority: {
     readonly decision_reference: string;
-    readonly artifact_bindings: readonly { readonly artifact_id: string; readonly content_version: HistoryDigest }[];
+    readonly artifact_bindings: readonly {
+      readonly artifact_id: string;
+      readonly content_version?: HistoryDigest;
+      readonly checkpoint?: { readonly repository_id: string; readonly commit: string };
+    }[];
   } | null;
   readonly proof: HistoryMaterial | null;
+  readonly loss_reference: string | null;
+  readonly data_bindings: readonly { readonly pointer: string; readonly action_id: string }[];
+  readonly output: {
+    readonly event_id: string | null;
+    readonly journal_id: string | null;
+    readonly byte_offset: number | null;
+    readonly byte_length: number | null;
+  };
 }
 
 export interface HistoryRequiredMaterial {
@@ -134,6 +146,7 @@ export interface HistoryRebuildManifest {
   readonly archive_id: string;
   readonly archive_inventory_hash: HistoryDigest;
   readonly actions: readonly HistoryAction[];
+  readonly dependency_order: readonly string[];
   readonly candidate_journals: readonly HistoryCandidateJournal[];
   readonly required_material: HistoryRequiredMaterial;
   readonly expected_state: Readonly<Record<string, unknown>>;
@@ -189,7 +202,7 @@ const reconciliation = object({
   summary: text,
 });
 const journal = object({ phase: { const: "construction" }, journal_id: uuid, byte_length: integer, content_version: digest, reference: text });
-const sourceRange = object({ source_id: text, byte_offset: integer, byte_length: { ...integer, minimum: 1 } });
+const sourceRange = object({ source_id: text, byte_offset: integer, byte_length: integer });
 const proposedEvent = object({
   phase: { const: "construction" }, type: text, event_version: { type: "integer", minimum: 1 }, data: jsonObject,
   causes: array({
@@ -200,10 +213,21 @@ const proposedEvent = object({
     ],
   }),
 });
-const approval = object({ decision_reference: text, artifact_bindings: array(object({ artifact_id: uuid, content_version: digest })) });
+const artifactCheckpoint = object({ repository_id: text, commit: { type: "string", pattern: "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" } });
+const authorityBinding: AnySchemaObject = {
+  oneOf: [
+    object({ artifact_id: uuid, content_version: digest }),
+    object({ artifact_id: uuid, checkpoint: artifactCheckpoint }),
+    object({ artifact_id: uuid, content_version: digest, checkpoint: artifactCheckpoint }),
+  ],
+};
+const approval = object({ decision_reference: text, artifact_bindings: array(authorityBinding) });
+const output = object({ event_id: nullable(uuid), journal_id: nullable(uuid), byte_offset: nullable(integer), byte_length: nullable({ ...integer, minimum: 1 }) });
+const dataBinding = object({ pointer: text, action_id: uuid });
 const action = object({
   id: uuid, action: { enum: ["retain", "replace", "add", "exclude"] }, source: nullable(sourceRange), event: nullable(proposedEvent),
-  reason: text, authority: nullable(approval), proof: nullable(material),
+  reason: text, authority: nullable(approval), proof: nullable(material), loss_reference: nullable(text),
+  data_bindings: array(dataBinding), output,
 });
 const resetSchema = object({
   format: { const: "kepler.mission-history-reset" }, version: { const: 1 }, mission_binding: binding,
@@ -221,7 +245,7 @@ const initializationSchema = object({
 });
 const rebuildSchema = object({
   format: { const: "kepler.mission-history-rebuild" }, version: { const: 1 }, mission_id: uuid, generation_id: uuid,
-  reset_event_id: uuid, archive_id: uuid, archive_inventory_hash: digest, actions: array(action),
+  reset_event_id: uuid, archive_id: uuid, archive_inventory_hash: digest, actions: array(action), dependency_order: uniqueStrings,
   candidate_journals: array(journal, 1),
   required_material: object({
     artifact_bindings: array(object({ artifact_id: uuid, reference: text, content_version: digest })),
@@ -241,11 +265,21 @@ const fail = (message: string, details: Readonly<Record<string, unknown>> = {}):
 const duplicate = (values: readonly string[], label: string): void => {
   if (new Set(values).size !== values.length) fail(`${label} must be unique.`);
 };
-const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
+const compare = (left: string, right: string): number => {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+};
 export const historyDigest = (value: string | Uint8Array): HistoryDigest => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 export const historyManifestDigest = (manifest: HistoryManifest): HistoryDigest => historyDigest(canonicalJson(manifest));
 export const historyManifestMission = (manifest: HistoryManifest): string =>
   manifest.format === "kepler.mission-history-rebuild" ? manifest.mission_id : manifest.mission_binding.mission_id;
+
+const controlTypeForManifest = (manifest: HistoryManifest): HistoryControlType => {
+  if (manifest.format === "kepler.mission-history-reset") return "mission.history-reset";
+  if (manifest.format === "kepler.mission-history-rebuild") return "mission.history-rebuilt";
+  return "mission.history-initialized";
+};
 
 export const parseHistoryManifest = (input: unknown): HistoryManifest => {
   let value = input;
@@ -274,18 +308,67 @@ export const parseHistoryManifest = (input: unknown): HistoryManifest => {
       if (item.archive_reference !== `local-archive:${manifest.archive_id}`) fail("Retirement requires its exact approved local archive binding.");
     }
   }
-  if (manifest.format === "kepler.mission-history-reset" && manifest.previous_control.event_id !== null && manifest.previous_control.content_version === null) fail("A prior control identity requires its original byte hash.");
+  if (manifest.format === "kepler.mission-history-reset") {
+    duplicate(manifest.known_missing_sources.map((entry) => entry.reference), "Declared missing-source references");
+    if (manifest.previous_control.event_id !== null && manifest.previous_control.content_version === null) fail("A prior control identity requires its original byte hash.");
+  }
   if (manifest.format === "kepler.mission-history-initialization") {
     if (manifest.operation === "create" && (manifest.archive_id !== null || manifest.source_inventory.length || manifest.source_retirement.length || manifest.guide !== null || manifest.guide_hash !== null || manifest.operation_authority.kind !== "startup-request")) fail("New startup cannot adopt migration inputs or approvals.");
     if (manifest.operation === "migrate" && (!manifest.archive_id || !manifest.guide || !manifest.guide_hash || !manifest.source_inventory.length || manifest.operation_authority.kind !== "manifest-approval")) fail("Migration requires an archive, guide, source inventory, and manifest approval.");
   }
   if (manifest.format === "kepler.mission-history-rebuild") {
     duplicate(manifest.actions.map((entry) => entry.id), "Action identities");
+    duplicate(manifest.dependency_order, "Generated action dependency order");
+    duplicate(manifest.actions.map((entry) => entry.output.event_id).filter((id): id is string => id !== null), "Output event identities");
+    const generated = new Set(manifest.actions.filter((entry) => entry.event !== null).map((entry) => entry.id));
+    if (manifest.dependency_order.length !== generated.size || manifest.dependency_order.some((id) => !generated.has(id))) fail("Dependency order must name every generated event exactly once.");
     for (const item of manifest.actions) {
-      if ((item.action === "retain" || item.action === "exclude") && (!item.source || item.event !== null || item.authority !== null || item.proof !== null)) fail("Retain and exclude actions require source bytes and cannot invent event data.");
-      if (item.action === "replace" && (!item.source || !item.event)) fail("A replacement requires source bytes and supported event data.");
+      const coordinates = [item.output.event_id, item.output.journal_id, item.output.byte_offset, item.output.byte_length];
+      const allNull = coordinates.every((coordinate) => coordinate === null);
+      const allPresent = coordinates.every((coordinate) => coordinate !== null);
+      if ((item.action === "retain" || item.action === "replace" || item.action === "add") && !allPresent) fail("Retained, replaced, and added facts require complete output coordinates.");
+      if (item.action === "exclude" && (!allNull || item.loss_reference !== null)) fail("Excluded bytes have no output coordinates or declared-loss reference.");
+      if (item.action === "retain" && (!item.source || item.event !== null || item.authority !== null || item.proof !== null || item.loss_reference !== null || item.data_bindings.length)) fail("Retain actions require exact source bytes and cannot invent event data.");
+      if (item.action === "exclude" && (!item.source || item.event !== null || item.authority !== null || item.proof !== null || item.data_bindings.length)) fail("Exclude actions require exact source bytes and cannot invent event data.");
+      if (item.action === "replace" && (!item.source || !item.event || item.loss_reference !== null)) fail("A replacement requires source bytes and supported event data.");
       if (item.action === "add" && (item.source !== null || !item.event)) fail("An added event cannot impersonate an existing source range.");
+      if (item.action !== "add" && item.loss_reference !== null) fail("Only a missing-source addition can cite a declared loss.");
+      if (item.source && !Number.isSafeInteger(item.source.byte_offset + item.source.byte_length)) fail("Source ranges must have safe integer boundaries.");
+      duplicate(item.data_bindings.map((binding) => binding.pointer), "Data binding pointers");
     }
+    const actionOrder = [...manifest.actions].sort((left, right) => compare(left.source?.source_id ?? left.loss_reference ?? "", right.source?.source_id ?? right.loss_reference ?? "") ||
+      (left.source?.byte_offset ?? -1) - (right.source?.byte_offset ?? -1) || compare(left.id, right.id));
+    if (canonicalJson(actionOrder) !== canonicalJson(manifest.actions)) fail("Reconstruction actions must be sorted by source identity, source offset, and action identity.");
+    const dependencyPositions = new Map(manifest.dependency_order.map((id, index) => [id, index]));
+    for (const item of manifest.actions) {
+      if (item.event) {
+        const dependencies = [
+          ...item.event.causes.flatMap((cause) => cause.action_id ? [cause.action_id] : []),
+          ...item.data_bindings.map((binding) => binding.action_id),
+        ];
+        for (const dependency of dependencies) {
+          const target = manifest.actions.find((candidate) => candidate.id === dependency);
+          if (!target) throw new HistoryError("history_manifest_invalid", "Generated event dependencies must resolve to an output fact.");
+          if (target.output.event_id === null) fail("Generated event dependencies must resolve to an output fact.");
+          if (target.event && (dependencyPositions.get(dependency) ?? Infinity) >= (dependencyPositions.get(item.id) ?? -1)) fail("Generated event dependencies must precede their dependents.");
+        }
+      }
+      const output = item.output;
+      if (output.event_id === null) continue;
+      const candidate = manifest.candidate_journals.find((journal) => journal.journal_id === output.journal_id && journal.phase === "construction");
+      if (!candidate || output.byte_offset === null || output.byte_length === null || output.byte_offset + output.byte_length > candidate.byte_length) fail("Action output coordinates must be contained in a candidate journal.");
+    }
+    for (const candidate of manifest.candidate_journals) {
+      if (candidate.byte_length === 0) fail("A candidate journal must contain at least one complete event.");
+      const ranges = manifest.actions.filter((item) => item.output.journal_id === candidate.journal_id).map((item) => item.output).sort((left, right) => (left.byte_offset ?? -1) - (right.byte_offset ?? -1));
+      let offset = 0;
+      for (const range of ranges) {
+        if (range.byte_offset !== offset || range.byte_length === null) fail("Action output mappings must cover candidate bytes exactly once.");
+        offset += range.byte_length!;
+      }
+      if (offset !== candidate.byte_length) fail("Candidate journals require complete action output coverage.");
+    }
+    if (manifest.actions.some((item) => item.output.event_id !== null && !manifest.candidate_journals.some((journal) => journal.journal_id === item.output.journal_id))) fail("Action output journals must appear in the candidate inventory.");
   }
   if (manifest.format !== "kepler.mission-history-reset") {
     duplicate(manifest.candidate_journals.map((entry) => `${entry.phase}/${entry.journal_id}`), "Candidate journals");
@@ -312,7 +395,7 @@ export const parseHistoryControl = (input: unknown): HistoryControl => {
   const data = event.data;
   if (!record(data) || !exact(data, ["mission_id", "generation_id", "manifest", "manifest_hash", "requester", "decision_reference"])) throw new HistoryError("history_control_invalid", "The control payload must contain exactly the supported fields.");
   const manifest = parseHistoryManifest(data.manifest);
-  const expectedType = manifest.format === "kepler.mission-history-reset" ? "mission.history-reset" : manifest.format === "kepler.mission-history-rebuild" ? "mission.history-rebuilt" : "mission.history-initialized";
+  const expectedType = controlTypeForManifest(manifest);
   if (event.type !== expectedType || data.mission_id !== historyManifestMission(manifest) || data.generation_id !== manifest.generation_id || data.requester !== manifest.requester || data.manifest_hash !== historyManifestDigest(manifest) || typeof data.decision_reference !== "string" || !data.decision_reference.trim()) throw new HistoryError("history_control_invalid", "The control event does not match its complete approved manifest.");
   if (manifest.format === "kepler.mission-history-reset") {
     const expected = manifest.previous_control.event_id === null ? [] : [manifest.previous_control.event_id];
@@ -348,7 +431,7 @@ export const createHistoryControl = (input: {
   return parseHistoryControl({
     id: input.id,
     phase: "mission-recovery",
-    type: manifest.format === "kepler.mission-history-reset" ? "mission.history-reset" : manifest.format === "kepler.mission-history-rebuild" ? "mission.history-rebuilt" : "mission.history-initialized",
+    type: controlTypeForManifest(manifest),
     envelope_version: 1,
     event_version: 1,
     journal_id: input.journalId,

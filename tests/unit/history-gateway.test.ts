@@ -93,7 +93,21 @@ describe("generation-aware history gateway", () => {
   it("requires the matching reset context for a rebuilt selection", () => {
     const f = historyGenerationFixture();
     const root = createHistoryControl({ id: randomUUID(), journalId: randomUUID(), recordedAt: "2026-11-13T00:01:00Z", producer: { name: "kepler", version: "3.1.0" }, manifest: f.resetManifest, decisionReference: "decision:reset", causes: [] });
-    const manifest: HistoryRebuildManifest = { format: "kepler.mission-history-rebuild", version: 1, mission_id: f.missionId, generation_id: f.generationId, reset_event_id: root.id, archive_id: f.archiveId, archive_inventory_hash: historyDigest("archive"), actions: [], candidate_journals: f.manifest.candidate_journals, required_material: { artifact_bindings: [], checkpoints: [], evidence: [] }, expected_state: f.manifest.expected_state, continuation: { operation: "inspect current unit", unresolved_work: [], required_approvals: [] }, requester: "Requester", reconciliation: historyTestReconciliation };
+    const candidate = f.manifest.candidate_journals[0]!;
+    const actionId = randomUUID();
+    const manifest: HistoryRebuildManifest = {
+      format: "kepler.mission-history-rebuild", version: 1, mission_id: f.missionId, generation_id: f.generationId,
+      reset_event_id: root.id, archive_id: f.archiveId, archive_inventory_hash: historyDigest("archive"),
+      actions: [{
+        id: actionId, action: "add", source: null,
+        event: { phase: "construction", type: "construction.interaction-recorded", event_version: 1, data: { mission_id: f.missionId }, causes: [] },
+        reason: "Fixture reconstruction action", authority: null, proof: null, loss_reference: null, data_bindings: [],
+        output: { event_id: randomUUID(), journal_id: candidate.journal_id, byte_offset: 0, byte_length: candidate.byte_length },
+      }], dependency_order: [actionId], candidate_journals: f.manifest.candidate_journals,
+      required_material: { artifact_bindings: [], checkpoints: [], evidence: [] }, expected_state: f.manifest.expected_state,
+      continuation: { operation: "inspect current unit", unresolved_work: [], required_approvals: [] }, requester: "Requester",
+      reconciliation: historyTestReconciliation,
+    };
     const control = createHistoryControl({ id: randomUUID(), journalId: randomUUID(), recordedAt: "2026-11-13T00:02:00Z", producer: { name: "kepler", version: "3.1.0" }, manifest, decisionReference: "decision:rebuild", causes: [root.id] });
     const guard = historyTestEvent("construction.history-generation-required", { mission_id: f.missionId, generation_id: f.generationId, control_event_id: root.id }, randomUUID(), [root.id]);
     const activation = historyTestBytes([control]);

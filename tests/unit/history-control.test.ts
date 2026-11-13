@@ -43,13 +43,24 @@ const initial = (): HistoryInitializationManifest => ({
   expected_state: { units: [] }, source_retirement: [], requester: "Requester",
   operation_authority: { kind: "startup-request", request_reference: "request:original" },
 });
-const rebuilt = (): HistoryRebuildManifest => ({
-  format: "kepler.mission-history-rebuild", version: 1, mission_id: missionId, generation_id: generationId,
-  reset_event_id: randomUUID(), archive_id: archiveId, archive_inventory_hash: hash, actions: [],
-  candidate_journals: initial().candidate_journals, required_material: { artifact_bindings: [], checkpoints: [], evidence: [] },
-  expected_state: { units: [] }, continuation: { operation: "inspect the selected unit", unresolved_work: [], required_approvals: [] },
-  requester: "Requester", reconciliation,
-});
+const rebuilt = (): HistoryRebuildManifest => {
+  const candidateJournals = initial().candidate_journals;
+  const candidate = candidateJournals[0]!;
+  const actionId = randomUUID();
+  return {
+    format: "kepler.mission-history-rebuild", version: 1, mission_id: missionId, generation_id: generationId,
+    reset_event_id: randomUUID(), archive_id: archiveId, archive_inventory_hash: hash,
+    actions: [{
+      id: actionId, action: "add", source: null,
+      event: { phase: "construction", type: "construction.interaction-recorded", event_version: 1, data: { mission_id: missionId }, causes: [] },
+      reason: "Fixture reconstruction action", authority: null, proof: null, loss_reference: null, data_bindings: [],
+      output: { event_id: randomUUID(), journal_id: candidate.journal_id, byte_offset: 0, byte_length: candidate.byte_length },
+    }], dependency_order: [actionId], candidate_journals: candidateJournals,
+    required_material: { artifact_bindings: [], checkpoints: [], evidence: [] },
+    expected_state: { units: [] }, continuation: { operation: "inspect the selected unit", unresolved_work: [], required_approvals: [] },
+    requester: "Requester", reconciliation,
+  };
+};
 const control = (manifest: HistoryResetManifest | HistoryInitializationManifest | HistoryRebuildManifest) => ({
   id: randomUUID(), phase: "mission-recovery", envelope_version: 1, event_version: 1, journal_id: randomUUID(),
   recorded_at: "2026-11-13T00:00:00Z", producer: { name: "kepler", version: "3.1.0" },
