@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { missionStartupResourceKey } from "../../packages/cli/src/construction/mission-startup-resource.js";
 import { historyAdmissionResourceKey, parseLiveHistoryBinding, type HistoryExclusiveScope } from "../../packages/cli/src/history/access.js";
 import { createHistoryControl, historyDigest, type HistorySourceEntry } from "../../packages/cli/src/history/control.js";
 import { historyInventory } from "../../packages/cli/src/history/storage.js";
@@ -19,6 +20,12 @@ const installControl = (h: ReturnType<typeof historyAccessFixture>, f: ReturnTyp
 };
 
 describe("shared history binding", () => {
+  it("retains the existing canonical startup resource identity", () => {
+    const mission = "10000000-0000-4000-8000-000000000001";
+    expect(missionStartupResourceKey("/git", mission)).toBe("6ac9499196533a9f29f85731f213039637f52fd65dfdf9eb5cc4a8ddd3b94666");
+    expect(missionStartupResourceKey("/other", mission)).not.toBe(missionStartupResourceKey("/git", mission));
+    expect(missionStartupResourceKey("/git", randomUUID())).not.toBe(missionStartupResourceKey("/git", mission));
+  });
   it("parses exact current identities and scopes admission by actual common directory and mission", () => {
     const f = historyGenerationFixture();
     const h = historyAccessFixture(f);
@@ -190,18 +197,45 @@ describe("history access and admission", () => {
     await h.access.withRecovery("/record", f.missionId, async (scope) => {
       retained = scope;
       expect(scope.ownSources).toHaveLength(1);
-      expect(historyInventory(await h.storage.snapshot("/record", f.missionId, { ownedOutputs: scope.ownSources }))).toEqual(before);
-      const incorrect = scope.ownSources.map((source) => ({ ...source, content_version: historyDigest("unknown original") }));
-      const notExcluded = historyInventory(await h.storage.snapshot("/record", f.missionId, { ownedOutputs: incorrect }));
-      expect(notExcluded).toContainEqual(scope.ownSources[0]);
+      expect(historyInventory(await h.access.snapshot(scope))).toEqual(before);
+      expect(historyInventory(await h.storage.snapshot("/record", f.missionId))).toContainEqual(scope.ownSources[0]);
+      await expect(h.access.snapshot({ ...scope, ownSources: before })).rejects.toMatchObject({ code: "history_fence_required" });
+      const ownerPath = `/git/${scope.ownSources[0]!.path}`;
+      const original = h.entries.get(ownerPath)!;
+      h.entries.set(ownerPath, h.encode({ different: true }));
+      await expect(h.access.snapshot(scope)).rejects.toMatchObject({ code: "history_ownership_changed" });
+      h.entries.set(ownerPath, original);
     });
+    await expect(h.access.snapshot(retained!)).rejects.toMatchObject({ code: "history_fence_required" });
     await expect(h.access.publishBinding(retained!, f.control, null)).rejects.toMatchObject({ code: "history_fence_required" });
+  });
+
+  it("rejects a startup label on a different coordination resource", async () => {
+    const f = historyGenerationFixture();
+    const h = historyAccessFixture(f, { bound: false });
+    const claimed = await h.runtime.coordination.acquire({ commonDirectory: "/git", location: { kind: "mission", missionId: f.missionId }, resourceKey: "a".repeat(64), owner: { ...h.runtime.identity, mission_id: f.missionId, resource_scope: "mission-startup" } });
+    if (claimed.kind !== "acquired") throw new Error("Expected a relabeled fixture claim");
+    let called = false;
+    await expect(h.access.withStartup("/record", f.missionId, claimed.lease, async () => { called = true; })).rejects.toMatchObject({ code: "history_startup_authority_invalid" });
+    expect(called).toBe(false);
+    expect(h.entries.has(h.bindingPath)).toBe(false);
+    await claimed.lease.release();
+  });
+
+  it("does not let an arbitrary caller omit a foreign source from raw inspection", async () => {
+    const f = historyGenerationFixture();
+    const h = historyAccessFixture(f);
+    expectTypeOf(h.storage.snapshot).parameters.toEqualTypeOf<[recordHome: string, missionId: string]>();
+    const original = await h.storage.snapshot("/record", f.missionId);
+    const foreign = historyInventory(original)[0]!;
+    const inspected = await Reflect.apply(h.storage.snapshot, h.storage, ["/record", f.missionId, { ownedOutputs: [foreign] }]);
+    expect(historyInventory(inspected)).toContainEqual(foreign);
   });
 
   it("requires the real startup claim for initial binding and blocks unresolved foreign locks", async () => {
     const f = historyGenerationFixture();
     const h = historyAccessFixture(f, { bound: false });
-    const claimed = await h.runtime.coordination.acquire({ commonDirectory: "/git", location: { kind: "mission", missionId: f.missionId }, resourceKey: "a".repeat(64), owner: { ...h.runtime.identity, mission_id: f.missionId, resource_scope: "mission-startup" } });
+    const claimed = await h.runtime.coordination.acquire({ commonDirectory: "/git", location: { kind: "mission", missionId: f.missionId }, resourceKey: missionStartupResourceKey("/git", f.missionId), owner: { ...h.runtime.identity, mission_id: f.missionId, resource_scope: "mission-startup" } });
     if (claimed.kind !== "acquired") throw new Error("Expected a startup fixture claim");
     await expect(h.access.withRecovery("/record", f.missionId, async () => "unsafe")).rejects.toMatchObject({ code: "history_ownership_unresolved" });
     await h.access.withStartup("/record", f.missionId, claimed.lease, async (scope) => {
@@ -223,7 +257,7 @@ describe("history access and admission", () => {
     h.entries.set(`/peer/.kepler/missions/${f.missionId}/history/generations/${f.generationId}/construction/${journal}.jsonl`, historyTestBytes([interaction]));
     const original = h.entries.get(h.bindingPath)!;
     expect((await h.access.read("/record", f.missionId)).history.events).toHaveLength(4);
-    const acquired = await h.runtime.coordination.acquire({ commonDirectory: "/git", location: { kind: "mission", missionId: f.missionId }, resourceKey: "a".repeat(64), owner: { ...h.runtime.identity, mission_id: f.missionId, resource_scope: "mission-startup" } });
+    const acquired = await h.runtime.coordination.acquire({ commonDirectory: "/git", location: { kind: "mission", missionId: f.missionId }, resourceKey: missionStartupResourceKey("/git", f.missionId), owner: { ...h.runtime.identity, mission_id: f.missionId, resource_scope: "mission-startup" } });
     if (acquired.kind !== "acquired") throw new Error("Expected a startup fixture claim");
     await h.access.withStartup("/record", f.missionId, acquired.lease, (scope) => h.access.publishBinding(scope, f.control, historyDigest(original)));
     await acquired.lease.release();
@@ -235,7 +269,7 @@ describe("history access and admission", () => {
     const f = historyGenerationFixture();
     const h = historyAccessFixture(f);
     const transition = async (previous: ReturnType<typeof createHistoryControl>) => h.access.withRecovery("/record", f.missionId, async (scope) => {
-      const inventory = historyInventory(await h.storage.snapshot("/record", f.missionId, { ownedOutputs: scope.ownSources }));
+      const inventory = historyInventory(await h.access.snapshot(scope));
       const original = h.entries.get(h.bindingPath)!;
       const reset = createHistoryControl({ id: randomUUID(), journalId: randomUUID(), recordedAt: f.control.recorded_at, producer: f.control.producer, manifest: { ...f.resetManifest, generation_id: randomUUID(), previous_control: { event_id: previous.id, content_version: historyDigest(historyTestBytes([previous])) }, source_inventory: inventory }, decisionReference: "decision:reset", causes: [previous.id] });
       installControl(h, f, reset);
@@ -249,6 +283,16 @@ describe("history access and admission", () => {
     h.entries.set(`/record/.kepler/missions/${f.missionId}/history/control/active.json`, historyTestBytes([first]));
     await expect(h.access.withRecovery("/record", f.missionId, (scope) => h.access.publishBinding(scope, first, historyDigest(current)))).rejects.toMatchObject({ code: "history_activation_stale" });
     expect(parseLiveHistoryBinding(h.entries.get(h.bindingPath)!).history_version).toBe(later.id);
+  });
+
+  it.each(["unknown", "non-uuid.json", ".retained.partial"])("refuses unrecognized or interrupted writer records: %s", async (name) => {
+    const f = historyGenerationFixture();
+    const h = historyAccessFixture(f);
+    const path = `/git/kepler/missions/${f.missionId}/coordination/history-writers/${name}`;
+    const original = Uint8Array.from([255, 123]);
+    h.entries.set(path, original);
+    await expect(h.access.withRecovery("/record", f.missionId, async () => "unsafe")).rejects.toMatchObject({ code: "history_writers_active" });
+    expect(h.entries.get(path)).toEqual(original);
   });
 
   it("reports admission-release failure and preserves its registered writer without executing it", async () => {

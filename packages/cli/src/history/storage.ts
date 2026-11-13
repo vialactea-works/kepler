@@ -22,7 +22,7 @@ export interface HistoryReadOptions {
 export class HistoryStorage {
   public constructor(public readonly files: HistoryFiles, public readonly repositories: HistoryRepositories) {}
 
-  public async snapshot(recordHome: string, missionId: string, options: { readonly ownedOutputs?: readonly HistorySourceEntry[] } = {}): Promise<HistorySnapshot> {
+  public async snapshot(recordHome: string, missionId: string): Promise<HistorySnapshot> {
     validateMission(missionId);
     const context = await this.repositories.resolve(recordHome);
     const origins: HistoryOrigin[] = [...context.origins, { id: "local-runtime", label: "private local runtime", root: context.commonDirectory }];
@@ -33,10 +33,11 @@ export class HistoryStorage {
       try {
         const bytes = await this.files.read({ root: origin.root, relative });
         if (bytes === undefined) unavailable.push({ source_id: sourceId, path: relative, kind: "missing", reason: "An enumerated source disappeared during inspection." });
-        else if (!options.ownedOutputs?.some((item) => item.source_id === sourceId && item.origin === origin.id && item.path === relative && item.byte_length === bytes.length && item.content_version === historyDigest(bytes))) files.push({ sourceId, origin: origin.id, path: relative, bytes });
+        else files.push({ sourceId, origin: origin.id, path: relative, bytes });
       } catch (error) { unavailable.push({ source_id: sourceId, path: relative, kind: "unreadable", reason: error instanceof Error ? error.message : String(error) }); }
     };
     const walk = async (origin: HistoryOrigin, relative: string): Promise<void> => {
+      if (origin.id === "local-runtime" && relative === `kepler/missions/${missionId}/recovery/archives`) return;
       try {
         for (const entry of await this.files.list({ root: origin.root, relative })) {
           const path = `${relative}/${entry.name}`;
@@ -49,7 +50,7 @@ export class HistoryStorage {
     for (const origin of context.origins) await walk(origin, missionPath(missionId));
     const runtime = origins.find((origin) => origin.id === "local-runtime")!;
     const localBase = `kepler/missions/${missionId}`;
-    for (const path of [`${localBase}/workspaces`, `${localBase}/recovery/pending`, `${localBase}/coordination`]) await walk(runtime, path);
+    for (const path of [`${localBase}/workspaces`, `${localBase}/recovery`, `${localBase}/coordination`]) await walk(runtime, path);
     return { recordHome: context.recordHome, commonDirectory: context.commonDirectory, missionId, origins, files: files.sort((a, b) => compare(a.sourceId, b.sourceId)), unavailable: unavailable.sort((a, b) => compare(a.source_id, b.source_id)) };
   }
 

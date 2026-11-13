@@ -5,6 +5,7 @@ import * as Os from "node:os";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNodeMissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace-runtime.js";
+import { missionStartupResourceKey } from "../../packages/cli/src/construction/mission-startup-resource.js";
 import { createNodeHistoryAccess } from "../../packages/cli/src/history/access-runtime.js";
 import { historyInventory } from "../../packages/cli/src/history/storage.js";
 import { createHistoryControl } from "../../packages/cli/src/history/control.js";
@@ -61,11 +62,32 @@ describe("real shared history coordination", () => {
     await secondWriter.release();
     const before = historyInventory(await access.storage.snapshot(root, f.missionId));
     await access.withRecovery(root, f.missionId, async (scope) => {
-      expect(historyInventory(await access.storage.snapshot(root, f.missionId, { ownedOutputs: scope.ownSources }))).toEqual(before);
+      expect(historyInventory(await access.snapshot(scope))).toEqual(before);
       await expect(second.beginMutation(request)).rejects.toMatchObject({ code: "resource_contended" });
     });
     expect(await Fs.readdir(writers)).toEqual([]);
     expect((await access.read(root, f.missionId)).history.events).toHaveLength(3);
+  });
+
+  it("requires the canonical startup claim and verifies its actual ownership bytes", async () => {
+    const { root, f, access } = await repository();
+    const workspace = createNodeMissionWorkspaceRuntime({ cwd: root });
+    const context = await access.storage.context(root);
+    const owner = { ...workspace.identity, mission_id: f.missionId, resource_scope: "mission-startup" };
+    const wrong = await workspace.coordination.acquire({ commonDirectory: context.commonDirectory, location: { kind: "mission", missionId: f.missionId }, resourceKey: "a".repeat(64), owner });
+    if (wrong.kind !== "acquired") throw new Error("Expected an isolated wrong-resource fixture claim");
+    await expect(access.withStartup(root, f.missionId, wrong.lease, async () => "unsafe")).rejects.toMatchObject({ code: "history_startup_authority_invalid" });
+    expect((await wrong.lease.release()).kind).toBe("released");
+    const startup = await workspace.coordination.acquire({ commonDirectory: context.commonDirectory, location: { kind: "mission", missionId: f.missionId }, resourceKey: missionStartupResourceKey(context.commonDirectory, f.missionId), owner });
+    if (startup.kind !== "acquired") throw new Error("Expected an isolated startup fixture claim");
+    try {
+      await access.withStartup(root, f.missionId, startup.lease, async (scope) => {
+        expect(scope.ownSources).toHaveLength(2);
+        expect((await access.snapshot(scope)).files).toHaveLength(4);
+        await access.publishBinding(scope, f.control, null);
+      });
+      expect((await access.read(root, f.missionId)).coordination).toBe("bound");
+    } finally { expect((await startup.lease.release()).kind).toBe("released"); }
   });
 
   it("shares one head across real working copies and rejects stale local selection before writes", async () => {

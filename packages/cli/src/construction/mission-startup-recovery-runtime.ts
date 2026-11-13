@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { missionStartupResourceKey } from "./mission-startup-resource.js";
 import { constants as FsConstants } from "node:fs";
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
@@ -177,7 +177,7 @@ export const createNodeMissionStartupRecoveryRuntime = (
   readHistory: async (recordHome, missionId) =>
     collectHistory(missionId, await readHistorySources(recordHome, missionId, fileSystem), { completeness: "complete" }),
   acquireMission: async (commonDirectory, missionId) => {
-    const resourceKey = createHash("sha256").update(`mission-startup\0${commonDirectory}\0${missionId}`).digest("hex");
+    const resourceKey = missionStartupResourceKey(commonDirectory, missionId);
     const acquired = await workspace.coordination.acquire({
       commonDirectory,
       location: { kind: "mission", missionId },

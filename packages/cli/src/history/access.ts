@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import * as Path from "node:path";
 import type { MissionCoordination, MissionCoordinationLease } from "../construction/mission-coordination.js";
 import type { MissionWorkspaceIdentity } from "../construction/mission-workspace.js";
+import { missionStartupResourceKey } from "../construction/mission-startup-resource.js";
 import { parseStrictJson } from "../json/strict-json.js";
 import { assertHistoryVersion, HistoryError, historyDigest, parseHistoryControl, type HistoryControl, type HistoryDigest, type HistorySourceEntry } from "./control.js";
-import type { HistoryLocation, HistoryRepositoryContext } from "./files.js";
+import type { HistoryLocation, HistoryRepositoryContext, HistorySnapshot } from "./files.js";
 import type { MissionHistoryView } from "./gateway.js";
 import { canonicalJson } from "./journal.js";
 import { HistoryStorage } from "./storage.js";
@@ -94,6 +95,7 @@ export const parseLiveHistoryBinding = (input: Uint8Array): LiveHistoryBinding =
 
 export class HistoryAccess {
   private readonly exclusiveScopes = new WeakSet<HistoryExclusiveScope>();
+  private readonly exclusiveInputs = new WeakMap<HistoryExclusiveScope, readonly HistorySourceEntry[]>();
 
   public constructor(public readonly storage: HistoryStorage, private readonly runtime: HistoryAccessRuntime) {}
 
@@ -111,6 +113,18 @@ export class HistoryAccess {
     if (binding && (binding.generation_id !== view.generationId || binding.selection_hash !== selectionHash)) throw new HistoryError("history_binding_conflict", "The shared binding does not match the exact selected control bytes.");
     const pendingSources = await this.pending(context, view);
     return { ...view, coordination: !binding ? "unbound" : binding.origins.includes(origin) ? "bound" : "unjoined", ...(selectionHash ? { selectionHash } : {}), pendingSources, pendingRecovery: pendingSources.some((item) => item.status === "pending") };
+  }
+
+  public async snapshot(scope: HistoryExclusiveScope): Promise<HistorySnapshot> {
+    const owned = await this.assertScope(scope);
+    const snapshot = await this.storage.snapshot(scope.context.recordHome, scope.missionId);
+    await this.assertScope(scope);
+    if (snapshot.recordHome !== scope.context.recordHome || snapshot.commonDirectory !== scope.context.commonDirectory) throw new HistoryError("history_ownership_changed", "The fenced snapshot belongs to a changed physical repository context.");
+    for (const source of owned) {
+      const file = snapshot.files.find((item) => item.sourceId === source.source_id && item.origin === source.origin && item.path === source.path);
+      if (!file || file.bytes.length !== source.byte_length || historyDigest(file.bytes) !== source.content_version) throw new HistoryError("history_ownership_changed", "A held claim changed while the fenced input inventory was collected.");
+    }
+    return { ...snapshot, files: snapshot.files.filter((file) => !owned.some((source) => source.source_id === file.sourceId && source.origin === file.origin && source.path === file.path)) };
   }
 
   public async beginMutation(input: HistoryMutationRequest): Promise<HistoryWriterLease> {
@@ -211,6 +225,7 @@ export class HistoryAccess {
   public async publishBinding(scope: HistoryExclusiveScope, input: HistoryControl, expected: HistoryDigest | null): Promise<void> {
     if (!this.exclusiveScopes.has(scope)) throw new HistoryError("history_fence_required", "Shared activation requires its live exclusive mission fence.");
     const control = parseHistoryControl(canonicalJson(input));
+    await this.assertScope(scope);
     const confirmed = await this.storage.context(scope.context.recordHome);
     if (confirmed.commonDirectory !== scope.context.commonDirectory || confirmed.recordHome !== scope.context.recordHome || currentOrigin(confirmed) !== currentOrigin(scope.context)) throw new HistoryError("history_selection_changed", "The repository identity changed while its exclusive fence was held.");
     if (control.data.mission_id !== scope.missionId || (scope.kind === "startup" ? control.type !== "mission.history-initialized" || control.data.manifest.format !== "kepler.mission-history-initialization" || control.data.manifest.operation !== "create" : control.data.manifest.format === "kepler.mission-history-initialization" && control.data.manifest.operation === "create")) throw new HistoryError("history_activation_authority_invalid", "This fence cannot publish the selected activation authority.");
@@ -284,6 +299,17 @@ export class HistoryAccess {
     }
   }
 
+  private async assertScope(scope: HistoryExclusiveScope): Promise<readonly HistorySourceEntry[]> {
+    const owned = this.exclusiveInputs.get(scope);
+    if (!this.exclusiveScopes.has(scope) || !owned) throw new HistoryError("history_fence_required", "Input exclusions require their live exclusive mission fence.");
+    for (const source of owned) {
+      const contents = await this.storage.files.read({ root: scope.context.commonDirectory, relative: source.path });
+      if (!contents || contents.length !== source.byte_length || historyDigest(contents) !== source.content_version) throw new HistoryError("history_ownership_changed", "An exclusive mission claim is missing or changed.");
+    }
+    if (!this.exclusiveScopes.has(scope)) throw new HistoryError("history_fence_required", "The exclusive mission fence ended while its claims were checked.");
+    return owned;
+  }
+
   private async claimSource(context: HistoryRepositoryContext, missionId: string, lease: MissionCoordinationLease): Promise<HistorySourceEntry> {
     const directory = `${base(missionId)}/coordination`;
     const name = Path.basename(lease.lockPath);
@@ -299,6 +325,12 @@ export class HistoryAccess {
   private async exclusive<T>(recordHome: string, missionId: string, kind: HistoryExclusiveScope["kind"], allowedLocks: readonly MissionCoordinationLease[], operation: (scope: HistoryExclusiveScope) => Promise<T>): Promise<T> {
     validateMission(missionId);
     const context = await this.storage.context(recordHome);
+    if (kind === "startup") {
+      const startup = allowedLocks[0];
+      const expected = Path.join(context.commonDirectory, base(missionId), "coordination", missionStartupResourceKey(context.commonDirectory, missionId));
+      if (allowedLocks.length !== 1 || !startup || startup.lockPath !== expected || startup.owner.resource_scope !== "mission-startup") throw new HistoryError("history_startup_authority_invalid", "Initial publication requires the canonical mission-startup resource claim.");
+      await this.claimSource(context, missionId, startup);
+    }
     const admission = await this.acquire(context, missionId, kind);
     const frozenContext = immutableContext(context);
     const ownSources: HistorySourceEntry[] = [];
@@ -309,14 +341,16 @@ export class HistoryAccess {
       for (const lease of [admission, ...allowedLocks]) ownSources.push(await this.claimSource(context, missionId, lease));
       Object.freeze(ownSources);
       const writers = await this.storage.files.list({ root: context.commonDirectory, relative: `${base(missionId)}/coordination/history-writers` });
-      if (writers.some((entry) => uuid.test(entry.name.slice(0, -5)) && entry.name.endsWith(".json"))) throw new HistoryError("history_writers_active", "Registered or damaged writer claims prevent a recovery transition. Reconcile them through the existing ownership controls.");
+      if (writers.length) throw new HistoryError("history_writers_active", "Registered, partial, or unrecognized writer records prevent a recovery transition. Reconcile their ownership first.");
       const claims = await this.storage.files.list({ root: context.commonDirectory, relative: `${base(missionId)}/coordination` });
       const allowed = new Set([Path.basename(admission.lockPath), ...allowedLocks.map((lease) => Path.basename(lease.lockPath))]);
       if (claims.some((entry) => /^[0-9a-f]{64}(?:$|\.)/.test(entry.name) && !allowed.has(entry.name))) throw new HistoryError("history_ownership_unresolved", "A mission claim or release marker must be reconciled before this transition.");
+      this.exclusiveInputs.set(scope, ownSources);
       this.exclusiveScopes.add(scope);
       value = await operation(scope);
     } catch (error) { failure = { error }; }
     this.exclusiveScopes.delete(scope);
+    this.exclusiveInputs.delete(scope);
     await this.releaseAdmission(admission, failure);
     if (failure) throw failure.error;
     return value as T;
