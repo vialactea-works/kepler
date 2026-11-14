@@ -90,6 +90,10 @@ export class HistoryArchives {
     bindIndex(index, manifest);
     const snapshot: HistorySnapshot = { ...captured, origins: captured.origins.map((origin) => ({ ...origin })), files: captured.files.map((file) => ({ ...file, bytes: new Uint8Array(file.bytes) })), unavailable: captured.unavailable.map((source) => ({ ...source })) };
     if (snapshot.missionId !== index.mission_id || canonicalJson(historyInventory(snapshot)) !== canonicalJson(index.source_inventory)) throw new HistoryError("history_archive_binding_mismatch", "The preservation snapshot does not match the approved complete inventory.");
+    if (snapshot.unavailable.some((source) => source.kind !== "missing")) throw new HistoryError("history_archive_source_unavailable", "Existing unreadable or unsafe inputs cannot be omitted from verified preservation.", { sources: snapshot.unavailable });
+    for (const source of snapshot.unavailable) {
+      if (manifest.format !== "kepler.mission-history-reset" || !manifest.known_missing_sources.some((loss) => loss.reference === source.source_id)) throw new HistoryError("history_archive_loss_undeclared", "Each known missing source requires its exact declared loss reference.", { source_id: source.source_id });
+    }
     const indexBytes = encoder.encode(canonicalJson(index));
     const context = await this.storage.context(snapshot.recordHome);
     if (context.recordHome !== snapshot.recordHome || context.commonDirectory !== snapshot.commonDirectory) throw new HistoryError("history_archive_context_changed", "The physical record home or Git common directory changed before preservation.");

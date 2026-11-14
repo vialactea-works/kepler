@@ -108,6 +108,22 @@ describe("verified history archives", () => {
     expect((await h.storage.snapshot("/record", f.missionId)).files).toEqual(snapshot.files);
   });
 
+  it.each(["unreadable", "unsafe"] as const)("does not substitute a loss claim for existing unpreservable bytes: %s", async (kind) => {
+    const { snapshot, manifest, archives, index, h, prefix } = await fixture();
+    const captured = { ...snapshot, unavailable: [{ source_id: "source:unavailable", path: "existing/source", kind, reason: "Fixture source cannot be preserved" }] };
+    await expect(archives.preserve(manifest, index, captured)).rejects.toMatchObject({ code: "history_archive_source_unavailable" });
+    expect([...h.entries.keys()].some((path) => path.startsWith(prefix))).toBe(false);
+  });
+
+  it("requires an exact explicit declaration for a source that is known to be missing", async () => {
+    const { snapshot, manifest, archives, index } = await fixture();
+    const captured = { ...snapshot, unavailable: [{ source_id: "source:missing", path: "absent/source", kind: "missing" as const, reason: "The source is absent" }] };
+    await expect(archives.preserve(manifest, index, captured)).rejects.toMatchObject({ code: "history_archive_loss_undeclared" });
+    const accepted = { ...manifest, known_missing_sources: [{ reference: "source:missing", reason: "Requester confirms the source is lost", consequences: "No progress can be accepted from these lost bytes" }] };
+    const proposed = await archives.prepare(accepted, captured);
+    expect((await archives.preserve(accepted, proposed, captured)).manifest).toEqual(accepted);
+  });
+
   it("retains partial preservation and resumes the exact original index and source copies", async () => {
     const { f, h, snapshot, manifest, archives, index, prefix } = await fixture();
     let writes = 0;
