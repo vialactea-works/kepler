@@ -16,7 +16,7 @@ Use `kepler-lifecycle-migration` when an upgrade requires a documented file or c
 It selects a dated guide, checks runtime support, and presents an exact manifest for your approval.
 A planned guide permits inspection and planning only. It does not authorize manual journal conversion.
 The first [history-layout guide](../bundle/skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md) is planned.
-The current source does not implement generation migration or reset operations.
+The development source implements generation-aware recovery commands. This does not establish release availability. The migration command rejects a planned guide; inspect the selected binary and matching resources before any operation. See [Mission-history recovery commands](cli/history-recovery.md).
 Normal interruption recovery remains separate from format migration and from a decision to reconstruct damaged history.
 
 ## Continue mission preparation
@@ -37,7 +37,7 @@ An upstream change may require a revision from the earliest affected stage. The 
 
 A revision-ending event records both its authorization and the exact affected attempt's latest state-transition event as direct causes. An Implementation ending also names its child Activities' latest transitions as causes. Reopening depends on that ending and authorization. These links preserve order when stages and Activities write separate journals; a shared ancestor or an attempt ID alone does not establish event order.
 
-If a previous CLI appended revision transitions without those links, the unit can become blocked with `unordered-transitions`. The revision reports `revision_transition_confirmation_failed` when it cannot re-read history, or `revision_transition_projection_blocked` when the re-read succeeds but the projection is blocked. Preserve the authorization, transition journals, and original artifacts. Updating the writer prevents new incomplete links but does not repair existing records. Do not edit journals, infer order from timestamps or `affected_scopes`, create a replacement mission, or start replacement work to bypass the failure. The current CLI has no supported operation for attesting the missing historical order; report the exact events and obtain an explicit recovery procedure before continuing.
+If a previous CLI appended revision transitions without those links, the unit can become blocked with `unordered-transitions`. The revision reports `revision_transition_confirmation_failed` when it cannot re-read history, or `revision_transition_projection_blocked` when the re-read succeeds but the projection is blocked. Preserve the authorization, transition journals, and original artifacts. Updating the writer prevents new incomplete links but does not repair existing records. Do not edit journals, infer order from timestamps or `affected_scopes`, create a replacement mission, or start replacement work to bypass the failure. The prevention fix cannot attest the missing order. Report the exact events, inspect raw history with a compatible recovery CLI, and obtain separate exact reset and reconstruction decisions under [mission-history recovery](cli/history-recovery.md). Do not apply a migration or infer an order merely to bypass the failure.
 
 ## Integration acceptance and release
 

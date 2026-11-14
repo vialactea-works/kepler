@@ -25,28 +25,28 @@
     "guidelines/typescript/04-unit-testing.md": "sha256:27ece91d965e4d4158f513b7e02f2824777237b029b45615b8135f7e18bd69d2",
     "guidelines/typescript/05-e2e-testing.md": "sha256:af0485da419e0737284524ec85cf7c41d564676624272b2a5a4520a30ab2661a",
     "guidelines/typescript/guideline.yml": "sha256:eb836d02c6186b21587b186ffb5b4b0aff6c463f4f0bac774b8e2e7fa0ac422e",
-    "skills/kepler-code-feedback/SKILL.md": "sha256:c575b71ec04475b9abbd005837824946b479cc94192102c9ea045eb585e41376",
-    "skills/kepler-code/SKILL.md": "sha256:80066612cf893965f6baae2216af56454a90711d9b63598015940094d9008fc0",
-    "skills/kepler-design/SKILL.md": "sha256:4f49ed62203fae3517026e25aaca873c11891d60a4bcc60698b18f6228f805aa",
+    "skills/kepler-code-feedback/SKILL.md": "sha256:af01233c02de3ed5e006b6359ba96e51d25d314b440d0d66d2feb2b3ee7356ca",
+    "skills/kepler-code/SKILL.md": "sha256:ae396dd888ad473b28c8b85c89cca92f90ca64e8faec1c34b7e79e3ed6d97a8e",
+    "skills/kepler-design/SKILL.md": "sha256:e58a4be3de79db1551412900bfb15cd00a0477954f5199d531aaffa93c016805",
     "skills/kepler-domain-modelling/NOTICE": "sha256:3fce890aabd543037c23faebd5d38c3031afab627ea13afb7d0713e2534b3258",
     "skills/kepler-domain-modelling/SKILL.md": "sha256:88d2355196e0689d2dc7b658b9501aa40622c15b007d72771e9fcc4cc2bfbf2d",
-    "skills/kepler-finish-work/SKILL.md": "sha256:ca1ce707e93dbb3eb8bf794b967ffcd0ba54e061b5569449f8499d4bf6b87602",
+    "skills/kepler-finish-work/SKILL.md": "sha256:ba14289ba9429810cd0d18363fd02be83edda1721ecf6e100975e5e111718c86",
     "skills/kepler-grilling/NOTICE": "sha256:7af7889fb3cc4b435ba61637f254e47798ccd35ca937c6ef6dba88cc0b5dfe1c",
-    "skills/kepler-grilling/SKILL.md": "sha256:dffe3918c2b5101ffcac8143c064375a1fdc246e02833a3acea3c257a542966f",
+    "skills/kepler-grilling/SKILL.md": "sha256:1b75fed8480a06e8165b52f8c04d5e824006842859844965a47c9cdc6ad26410",
     "skills/kepler-init/SKILL.md": "sha256:62cc81b1b6282d0f7228b2237f4717bd89a27c7e8b84be60474fc56471213ed1",
     "skills/kepler-lifecycle-migration/SKILL.md": "sha256:52bd46d55d78c66ecb3b8f56509b20a95466b395339f90a22a154f2448c906c1",
-    "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md": "sha256:0628000c862f8e35aed431091e62880fca5c916cf9f64555e4be9654045c5f33",
-    "skills/kepler-mission-startup/SKILL.md": "sha256:9f5eec98306ee4677079bdac89018f49975d6763d1b1f8b2d47e063419b1e3e4",
-    "skills/kepler-mission-startup/references/agent-operations.md": "sha256:b7c5423876aa0814d13e89abfb9af77b5551975dd8f2e4b730261ddf2cf22ddd",
-    "skills/kepler-mission-startup/references/standard-cli-walkthrough.md": "sha256:15e80f7170acf071dd377cc656bde5b139fa2a0b4239f5f32a59f17a6f81b4f6",
-    "skills/kepler-orchestrate/SKILL.md": "sha256:b8c3c75f155d6cc549e6671545f34fa45d9dc8342d4cf91ab0805563165d276d",
-    "skills/kepler-plan/SKILL.md": "sha256:f22c2a10d6a33c68d0e9e1719768e02946943d93ff945fce9550b802de900c46",
+    "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md": "sha256:5f39b88c9c0e7de86315e29001179367f234e2cac240ec09f363efe07edad99e",
+    "skills/kepler-mission-startup/SKILL.md": "sha256:9f4a17b08ee36e56de3ad9e825334d6bdff9577b66d51e197b7e8ecbaa27fe33",
+    "skills/kepler-mission-startup/references/agent-operations.md": "sha256:ae69d3962b062956c11b4e2b2043992cd6ea6057be65e39c40e010f4b758137a",
+    "skills/kepler-mission-startup/references/standard-cli-walkthrough.md": "sha256:0cf7321a3c75f982e0a711ff629e71c1224846957b5c68c275703c1580d3a718",
+    "skills/kepler-orchestrate/SKILL.md": "sha256:37c3274726e523a4313c61b53a5bb0d31632eeae38bad759120f74dc6029b963",
+    "skills/kepler-plan/SKILL.md": "sha256:1480191a9981c241862cfe1f7c5c844ca61b1eb07bef7fb34b3e0a1f3503f1cd",
     "skills/kepler-plan/references/task-graph.md": "sha256:bc51551c9fdeba9c5222c3c3fe993c1487eec142aa606f9f1c6353ca12b7dd0f",
-    "skills/kepler-quality/SKILL.md": "sha256:92534d365668c047bd4655d1976d5cc34116d4df56e9dc62fa5195090ff8a361",
+    "skills/kepler-quality/SKILL.md": "sha256:9c8efe4fdf25b953762d0ac2885f0be77d54ac5eee33da4be958af8767277bd1",
     "skills/kepler-research/NOTICE": "sha256:71168255d925d0deb29bacc2f5e6f456b121b31aa9dd493ef660bee4675880cb",
     "skills/kepler-research/SKILL.md": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
-    "skills/kepler-resume/SKILL.md": "sha256:6672b206d58e482b42bdca9076eb0176b74596f663bed32d284bd3417fbc8562",
-    "skills/kepler-review/SKILL.md": "sha256:df0ac953adaf3ae0e5ad0d4dc1bcc8e2ee5f3a5a187b97f224e0535ee48e5290",
+    "skills/kepler-resume/SKILL.md": "sha256:48fc4132ec1e20d4e0a2eed71f90b16843f42b4d662c09baf4857a08520f09e3",
+    "skills/kepler-review/SKILL.md": "sha256:25aa756d7269409c95e8484a5c09a2b0812fa9585aacb7e561c66f5c39a32019",
     "templates/README.md": "sha256:8b50f5559320bafa83c596d5b54b2bd32afbef97e0614f8232db168c5dbb38d1",
     "templates/critique.md": "sha256:1cd7886f18cb6879699e87dc8f3f855714091b9d42ac520e6ce670b86d3d36fe",
     "templates/design.md": "sha256:0c30fd7f9db0c2766368f0b34b45d75727d12fe019b0e17b49ef2dc98ea1e4e9",
@@ -70,7 +70,7 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "resource_digest": "sha256:2e3455269cd49267e1dee59c9ad0e6dd395f04bee7788c8ffa3f335094d868ee",
+  "resource_digest": "sha256:8feb4ee06162b8d72a9325b839355cb81ae0fdd89a184169afe7f04a5b465765",
   "skills": [
     {
       "id": "kepler-init",
@@ -79,52 +79,52 @@
     },
     {
       "id": "kepler-mission-startup",
-      "digest": "sha256:9f5eec98306ee4677079bdac89018f49975d6763d1b1f8b2d47e063419b1e3e4",
+      "digest": "sha256:9f4a17b08ee36e56de3ad9e825334d6bdff9577b66d51e197b7e8ecbaa27fe33",
       "required": true
     },
     {
       "id": "kepler-design",
-      "digest": "sha256:4f49ed62203fae3517026e25aaca873c11891d60a4bcc60698b18f6228f805aa",
+      "digest": "sha256:e58a4be3de79db1551412900bfb15cd00a0477954f5199d531aaffa93c016805",
       "required": true
     },
     {
       "id": "kepler-quality",
-      "digest": "sha256:92534d365668c047bd4655d1976d5cc34116d4df56e9dc62fa5195090ff8a361",
+      "digest": "sha256:9c8efe4fdf25b953762d0ac2885f0be77d54ac5eee33da4be958af8767277bd1",
       "required": true
     },
     {
       "id": "kepler-plan",
-      "digest": "sha256:f22c2a10d6a33c68d0e9e1719768e02946943d93ff945fce9550b802de900c46",
+      "digest": "sha256:1480191a9981c241862cfe1f7c5c844ca61b1eb07bef7fb34b3e0a1f3503f1cd",
       "required": true
     },
     {
       "id": "kepler-orchestrate",
-      "digest": "sha256:b8c3c75f155d6cc549e6671545f34fa45d9dc8342d4cf91ab0805563165d276d",
+      "digest": "sha256:37c3274726e523a4313c61b53a5bb0d31632eeae38bad759120f74dc6029b963",
       "required": true
     },
     {
       "id": "kepler-code",
-      "digest": "sha256:80066612cf893965f6baae2216af56454a90711d9b63598015940094d9008fc0",
+      "digest": "sha256:ae396dd888ad473b28c8b85c89cca92f90ca64e8faec1c34b7e79e3ed6d97a8e",
       "required": true
     },
     {
       "id": "kepler-code-feedback",
-      "digest": "sha256:c575b71ec04475b9abbd005837824946b479cc94192102c9ea045eb585e41376",
+      "digest": "sha256:af01233c02de3ed5e006b6359ba96e51d25d314b440d0d66d2feb2b3ee7356ca",
       "required": true
     },
     {
       "id": "kepler-review",
-      "digest": "sha256:df0ac953adaf3ae0e5ad0d4dc1bcc8e2ee5f3a5a187b97f224e0535ee48e5290",
+      "digest": "sha256:25aa756d7269409c95e8484a5c09a2b0812fa9585aacb7e561c66f5c39a32019",
       "required": true
     },
     {
       "id": "kepler-finish-work",
-      "digest": "sha256:ca1ce707e93dbb3eb8bf794b967ffcd0ba54e061b5569449f8499d4bf6b87602",
+      "digest": "sha256:ba14289ba9429810cd0d18363fd02be83edda1721ecf6e100975e5e111718c86",
       "required": true
     },
     {
       "id": "kepler-grilling",
-      "digest": "sha256:dffe3918c2b5101ffcac8143c064375a1fdc246e02833a3acea3c257a542966f",
+      "digest": "sha256:1b75fed8480a06e8165b52f8c04d5e824006842859844965a47c9cdc6ad26410",
       "required": false
     },
     {
@@ -139,7 +139,7 @@
     },
     {
       "id": "kepler-resume",
-      "digest": "sha256:6672b206d58e482b42bdca9076eb0176b74596f663bed32d284bd3417fbc8562",
+      "digest": "sha256:48fc4132ec1e20d4e0a2eed71f90b16843f42b4d662c09baf4857a08520f09e3",
       "required": false
     },
     {

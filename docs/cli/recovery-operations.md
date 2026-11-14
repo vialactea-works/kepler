@@ -1,5 +1,7 @@
 # Recovery operations for agents and operators
 
+Use [Mission-history recovery commands](history-recovery.md) for generation selection, deprecated phase layouts, or approved history reset and reconstruction. The operations below keep their ordinary interruption scope. History recovery requires separate exact decisions; it does not authorize installation, release, or live mission changes by itself.
+
 Developers should use the [prompt-first recovery guide](../recovery.md). The commands below illustrate agent/operator operations, not developer steps.
 
 Use this guide when mission preparation, a worker, Integration, or setup stops before you can confirm the result. Kepler records workflow history separately from agent sessions. A timeout does not prove that a worker stopped or a write failed.

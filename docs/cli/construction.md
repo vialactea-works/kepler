@@ -26,14 +26,14 @@ The examples use IDs returned by earlier operations. `$PROJECT` is the record-ho
 ### `unit create`
 
 ```text
-kepler workflow construction unit create <slug> --mission <mission-id>
+kepler workflow construction unit create --history-version <control-event-id> <slug> --mission <mission-id>
   [--effort <level>] [--stage-effort <stage=level> ...] [--project <path>]
 ```
 
 `<slug>` contains lowercase alphanumeric words separated by single hyphens. `--mission` is required and selects a prepared Standard mission. Effort is `minimal`, `standard`, or `comprehensive`. The default is `standard`. Repeat `--stage-effort` only for distinct supported stages. There are no stage overrides by default.
 
 ```bash
-kepler workflow construction unit create owner-access --mission "$MISSION" \
+kepler workflow construction unit create --history-version "$HISTORY_VERSION" owner-access --mission "$MISSION" \
   --effort standard --stage-effort unit-of-work-review=comprehensive --project "$PROJECT"
 ```
 
@@ -82,7 +82,7 @@ Returns the current projection, attempt/event references, effective effort, evid
 ### `stage start`
 
 ```text
-kepler workflow construction stage start --unit <unit-id> --stage <stage>
+kepler workflow construction stage start --history-version <control-event-id> --unit <unit-id> --stage <stage>
   --request <json> [--project <path>]
 ```
 
@@ -95,7 +95,7 @@ Request:
 At least one input is required. Each input has only a non-empty `reference` and `purpose`.
 
 ```bash
-kepler workflow construction stage start --unit "$UNIT" --stage functional-design \
+kepler workflow construction stage start --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage functional-design \
   --request '{"inputs":[{"reference":"request:owner-access","purpose":"Requested access policy"}]}' \
   --project "$PROJECT" > stage-start.json
 ```
@@ -105,12 +105,12 @@ The operation checks mission preparation, unit binding, current workspace checkp
 ### `stage complete`
 
 ```text
-kepler workflow construction stage complete --unit <unit-id> --stage <stage>
+kepler workflow construction stage complete --history-version <control-event-id> --unit <unit-id> --stage <stage>
   --attempt <attempt-id> --request <json> [--project <path>]
 ```
 
 ```bash
-kepler workflow construction stage complete --unit "$UNIT" --stage functional-design \
+kepler workflow construction stage complete --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage functional-design \
   --attempt "$ATTEMPT" --request "$(cat functional-design-completion.json)" --project "$PROJECT"
 ```
 
@@ -229,12 +229,12 @@ Blocking Implementation prerequisites need task-scoped `task-prerequisite` evide
 ### `task admit`
 
 ```text
-kepler workflow construction task admit --unit <unit-id> --task <task-id>
+kepler workflow construction task admit --history-version <control-event-id> --unit <unit-id> --task <task-id>
   --implementation-attempt <attempt-id> [--prerequisites <json>] [--project <path>]
 ```
 
 ```bash
-kepler workflow construction task admit --unit "$UNIT" --task "$TASK" \
+kepler workflow construction task admit --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" \
   --implementation-attempt "$IMPL" --prerequisites '{"prerequisite_evidence_ids":[]}' --project "$PROJECT"
 ```
 
@@ -261,12 +261,12 @@ Returns that occurrence's state, attempts, event references, evidence, blockers,
 ### `activity start`
 
 ```text
-kepler workflow construction activity start --unit <unit-id> --task <task-id>
+kepler workflow construction activity start --history-version <control-event-id> --unit <unit-id> --task <task-id>
   --activity <activity> --implementation-attempt <attempt-id> [--evidence <json>] [--project <path>]
 ```
 
 ```bash
-kepler workflow construction activity start --unit "$UNIT" --task "$TASK" \
+kepler workflow construction activity start --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" \
   --activity code-generation --implementation-attempt "$IMPL" --project "$PROJECT" > activity-start.json
 ```
 
@@ -277,13 +277,13 @@ The shared parser lists `--attempt`, but start rejects a supplied attempt select
 ### `activity complete`
 
 ```text
-kepler workflow construction activity complete --unit <unit-id> --task <task-id>
+kepler workflow construction activity complete --history-version <control-event-id> --unit <unit-id> --task <task-id>
   --activity <activity> --implementation-attempt <attempt-id> --attempt <activity-attempt-id>
   [--evidence <json>] [--project <path>]
 ```
 
 ```bash
-kepler workflow construction activity complete --unit "$UNIT" --task "$TASK" \
+kepler workflow construction activity complete --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" \
   --activity code-generation --implementation-attempt "$IMPL" --attempt "$ATTEMPT" \
   --evidence "$(cat activity-evidence.json)" --project "$PROJECT"
 ```
@@ -348,8 +348,8 @@ Every operation also exposes `--lock-token <token>`, `--prepared-event-id <event
 ### Lock and prepare
 
 ```bash
-kepler workflow construction integration lock "${integration_scope[@]}"
-kepler workflow construction integration prepare "${integration_scope[@]}" \
+kepler workflow construction integration lock --history-version "$HISTORY_VERSION" "${integration_scope[@]}"
+kepler workflow construction integration prepare --history-version "$HISTORY_VERSION" "${integration_scope[@]}" \
   --lock-token "$LOCK_TOKEN" --request "$(cat integration-candidate.json)"
 ```
 
@@ -364,7 +364,7 @@ An explicitly unborn target uses `{ "repository_id": "repo-main", "no_commit": t
 ### Record check evidence
 
 ```bash
-kepler workflow construction integration evidence "${integration_scope[@]}" \
+kepler workflow construction integration evidence --history-version "$HISTORY_VERSION" "${integration_scope[@]}" \
   --lock-token "$LOCK_TOKEN" --request "$(cat integration-check.json)"
 ```
 
@@ -387,9 +387,9 @@ Run the actual command while holding the lock. Record its actual result afterwar
 ### Accept or release
 
 ```bash
-kepler workflow construction integration accept "${integration_scope[@]}" \
+kepler workflow construction integration accept --history-version "$HISTORY_VERSION" "${integration_scope[@]}" \
   --lock-token "$LOCK_TOKEN" --prepared-event-id "$PREPARED_EVENT"
-kepler workflow construction integration release "${integration_scope[@]}" --lock-token "$LOCK_TOKEN"
+kepler workflow construction integration release --history-version "$HISTORY_VERSION" "${integration_scope[@]}" --lock-token "$LOCK_TOKEN"
 ```
 
 These are alternative paths. Acceptance requires current successful evidence for the unchanged candidate. Release is for incomplete work; it cannot abort accepted work or discard a changed target. There is no force-unlock command.
@@ -419,9 +419,9 @@ Success returns `findings: []`. Invalid material fails with `construction_lint_f
 ### `revise`
 
 ```text
-kepler workflow construction revise --unit <unit-id> --stage <stage>
+kepler workflow construction revise --history-version <control-event-id> --unit <unit-id> --stage <stage>
   --attempt <stage-attempt-id> [--project <path>]
-kepler workflow construction revise --unit <unit-id> --task <task-id>
+kepler workflow construction revise --history-version <control-event-id> --unit <unit-id> --task <task-id>
   --activity <activity> --implementation-attempt <attempt-id> --attempt <activity-attempt-id>
   [--project <path>]
 ```
@@ -433,7 +433,7 @@ Read one strict UTF-8 JSON object from stdin:
 ```
 
 ```bash
-kepler workflow construction revise --unit "$UNIT" --stage functional-design \
+kepler workflow construction revise --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage functional-design \
   --attempt "$ATTEMPT" --project "$PROJECT" < revision.json
 ```
 

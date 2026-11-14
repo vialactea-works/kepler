@@ -21,9 +21,9 @@ Mutations need the applicable current scope. A stage record uses unit, stage, an
 ## Record facts
 
 ```text
-kepler audit record evidence --unit <unit-id> [scope options] [--project <path>]
-kepler audit record approval --unit <unit-id> [scope options] [--project <path>]
-kepler audit record interaction --unit <unit-id> [scope options] [--project <path>]
+kepler audit record evidence --history-version <control-event-id> --unit <unit-id> [scope options] [--project <path>]
+kepler audit record approval --history-version <control-event-id> --unit <unit-id> [scope options] [--project <path>]
+kepler audit record interaction --history-version <control-event-id> --unit <unit-id> [scope options] [--project <path>]
 ```
 
 Supply one strict JSON object on stdin. The input must use UTF-8 and be at most 16 MiB. A terminal prompt, empty input, invalid encoding, invalid JSON, or oversized input fails. The commands do not provide `--request` or an interactive questionnaire.
@@ -58,7 +58,7 @@ Optional fields:
 Use the selected current scope and complete bindings:
 
 ```bash
-kepler audit record evidence --unit "$UNIT" --stage functional-design \
+kepler audit record evidence --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage functional-design \
   --attempt "$ATTEMPT" --project "$PROJECT" < functional-design-evidence.json
 ```
 
@@ -86,7 +86,7 @@ Use the separate [Integration evidence operation](construction.md#record-check-e
 Required fields are `requester`, `inputs`, `artifact_bindings`, `checkpoints`, and `decision_reference`. The requester and decision reference are non-empty text. Bind the exact approved material and applicable checkpoint set.
 
 ```bash
-kepler audit record approval --unit "$UNIT" --stage functional-design \
+kepler audit record approval --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage functional-design \
   --attempt "$ATTEMPT" --project "$PROJECT" < functional-design-approval.json
 ```
 
@@ -108,7 +108,7 @@ Effort selection includes `selected_by`. A unit selection uses `target: "unit"`,
 A delivery outcome has `outcome`, `requested_outcome`, `destination`, and `recipient`. Supported outcomes are `repository-handoff`, `review-request`, `publication`, `deployment`, and `other`. It requires a requester participant and a Deliver stage attempt, without task or Activity scope.
 
 ```bash
-kepler audit record interaction --unit "$UNIT" --stage deliver \
+kepler audit record interaction --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage deliver \
   --attempt "$ATTEMPT" --project "$PROJECT" < delivery-outcome.json
 ```
 

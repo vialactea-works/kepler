@@ -63,10 +63,12 @@ Confirm `execution_started` is `false`. A success with `historical: true` return
 
 After successful mission preparation, inspect `kepler workflow construction unit list --project <record-home-root>` and, for any likely existing membership, `unit show --unit <unit-id> --project <record-home-root>`. Use the returned mission identity and actual records. If that mission already owns its unit, reuse its exact ID and directory; do not invoke `unit create` again. Conflicting or unknown membership is a blocker to reconcile, not a reason to make another mission.
 
+Before creating a unit, run `kepler recovery inspect --mission <mission-id> --project <record-home-root>`. Require `selection_status: validated`, `mode: active`, and no pending recovery. Retain its exact `history_version` and `generation_id` for later mutations and worker handoffs. Do not infer the version from a timestamp or refresh it for an old request.
+
 For a prepared mission without a unit, agree a lowercase hyphenated slug and effort (`standard` unless the requester selects another applicable effort), then call:
 
 ```text
-kepler workflow construction unit create <slug> --mission <mission-id> --effort <level> --project <record-home-root>
+kepler workflow construction unit create --history-version <control-event-id> <slug> --mission <mission-id> --effort <level> --project <record-home-root>
 ```
 
 The CLI returns `unit_id`, directory, membership, workflow binding, and `execution_started: false`. Read back `unit show`, verify the mission and `standard` binding and absence of a stage attempt, then hand off to `kepler-design`. If the unit-create response is lost or fails after effects, inspect unit inventory and history before considering a retry; a second unit cannot be attached to the mission. Do not edit membership, attachments, or journal data to force a retry. Preserve partial effects and route uncertain state through `kepler-resume`.

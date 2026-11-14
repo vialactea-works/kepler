@@ -12,9 +12,9 @@ target_layout: mission-history-generations
 
 ## Status and applicability
 
-**Planned. No migration operation is available in the current source candidate.**
-This guide permits inspection and a migration proposal. It does not permit manual conversion or claim runtime support.
-The new history contract remains a proposal. Selection of its layout does not approve the complete recovery contract.
+**Planned. No supporting release is selected for this guide.**
+The development source implements generation recovery and a release-gated migration command. That source does not make this guide operational.
+This guide permits inspection and a migration proposal. It does not permit manual conversion. The general recovery contract is accepted; each actual operation still needs its exact separate decision.
 
 Apply this guide to version 3 missions with journals directly under `history/<phase>/`.
 It does not apply to earlier change-based records, host configuration, or unrelated data.
@@ -68,7 +68,10 @@ While this guide remains planned, stop after inspection and planning. Do not exe
 
 ### 1. Inspect and preview
 
-Use the released operation to inspect available raw files.
+Confirm that the selected release provides `kepler recovery inspect` and `kepler recovery migrate` with exact mission and project selectors. Run `kepler recovery inspect --mission <mission-id> --project <record-home>` to inspect available raw files. Do not apply this planned guide.
+
+In the supporting release, `migrate` reads one strict JSON request on stdin. Preview uses `{ "phase": "preview", "manifest": <complete manifest> }`. Apply uses `"phase": "apply"` with `approved_manifest_hash`, the exact `requester`, and a retained `decision_reference`. The manifest binds the resource reference `resource:skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md` and its actual guide hash. The CLI must verify the matched resource package, released status, and supporting version before migration.
+
 Prepare a manifest that binds this guide's hash, source inventory, target generation, archive, and expected workflow state.
 Include the proposed control records, older-reader protection, source retirement, and all known limitations.
 
@@ -127,7 +130,7 @@ Do not start the next stage or repeat an external action as part of migration.
 ## Interruption and later migration
 
 Keep exact pending envelopes, original operation identities, approved manifests, and observed partial effects.
-Use the released operation's status and retry procedure. Never allocate replacement records to conceal an uncertain append.
+Use `kepler recovery status --mission <mission-id> --project <record-home>` to inspect retained state. Retry the same exact apply request only after reconciling its actual effects. Never allocate replacement records to conceal an uncertain append.
 
 A published generation with unfinished source retirement is a partial migration.
 A retry must verify its original archive and finish only the missing approved steps.

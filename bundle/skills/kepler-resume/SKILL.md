@@ -22,6 +22,14 @@ If the selected release reports a deprecated format, hand the request to `kepler
 It checks the dated guide, runtime capabilities, preservation, and migration authority.
 Do not convert formats as an ordinary resume step. A planned migration guide does not permit writes.
 
+## Inspect history selection
+
+When normal history loading is blocked, use `kepler recovery inspect --mission <mission-id> --project <record-home>` and `kepler recovery status` with the same selectors. These commands inspect raw bytes and retained operations without changing history. They do not prove ownership, worker termination, or permission for reset.
+
+For ordinary mutations, retain the exact validated `history_version` and pass `--history-version <control-event-id>` with the original request. Carry the selected generation and version in worker handoffs. Stop on a changed version, recovering selection, pending instructions, or an unjoined copy. Do not refresh an old request to bypass a guard.
+
+A damaged-history reset or reconstruction is a separate requester-owned operation. Report the raw evidence and required decisions, then use only the compatible CLI's exact preview, approved manifest, retained proof, and retry contracts. This navigator does not infer recovery authority from the original work request. Keep planned lifecycle migration separate.
+
 ## Resume safely when requested
 
 - **Preparation:** confirm the original startup operation ended and its exact mission ID and record home are known. Reconcile saved workspace choices, partial branch/worktree effects, and attachment state. Use `kepler mission prepare --mission <original-id> --project <original-home>` for missing preparation; never repeat `mission create`. A historical preparation response omits local workspace bindings and does not prove readiness. If a mission has no unit, hand off to `kepler-mission-startup` for guarded unit creation. Reconcile a lost `unit create` response through unit inventory and history before trying again.
@@ -30,4 +38,4 @@ Do not convert formats as an ordinary resume step. A planned migration guide doe
 - **Revision:** determine earliest affected stage from evidence, stop affected workers, reconcile locks/effects, and have the orchestrator authorize the existing `revise` operation. Do not reopen a later stage as a shortcut for a changed earlier obligation. Preserve retained-scope bindings and require new approval only for current revised material where the contract requires it.
 - **Deliver:** inspect exact requested outcome, permissions, operation records and external state. A failed/absent response may follow real remote effects. Do not repeat a non-idempotent operation or silently substitute local handoff. Hand off to `kepler-finish-work` only after confirming authority and the first unverified safe step.
 
-If a conflict, unknown owner, unavailable original input, or missing permission prevents a safe next operation, preserve all evidence and ask for the minimum missing fact or authorization. Never reset, delete, clean, overwrite or edit journal/projection data as recovery. Report the precise blocker and the next skill prompt rather than telling the developer to run Kepler CLI commands.
+If a conflict, unknown owner, unavailable original input, or missing permission prevents a safe next operation, preserve all evidence and ask for the minimum missing fact or authorization. Never use manual reset, deletion, cleanup, overwrite, or journal/projection edits as an ordinary resume operation. Report the precise blocker and the next skill prompt rather than telling the developer to run Kepler CLI commands.
