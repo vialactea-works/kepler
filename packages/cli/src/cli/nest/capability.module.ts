@@ -118,6 +118,7 @@ import {
 } from "./capability.commands.js";
 import {
   GIT_DIFF_PACKAGE_OPERATION,
+  createHistoryBoundDiffPackageOperation,
   GitDiffPackageCommand,
   GitDiffPackageIntegrationCommand,
   GitDiffPackageUnitReviewCommand,
@@ -213,11 +214,14 @@ const constructionMaterialReader = createNodeConstructionMaterialReader(createNo
     },
     {
       provide: GIT_DIFF_PACKAGE_OPERATION,
-      useFactory: (contexts: AuditContextResolver) => new GitDiffPackageService(
-        new ConstructionDiffPackageSources(contexts),
-        new GitDiffPackageAdapter(),
+      useFactory: (contexts: AuditContextResolver, mutations: MissionMutations) => createHistoryBoundDiffPackageOperation(
+        new GitDiffPackageService(
+          new ConstructionDiffPackageSources(contexts),
+          new GitDiffPackageAdapter(),
+        ),
+        mutations,
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, MissionMutations],
     },
     {
       provide: AuditQueries,

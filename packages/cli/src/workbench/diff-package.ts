@@ -42,6 +42,12 @@ const json = (value: unknown): string => JSON.stringify(value, null, 2);
 const checkpoint = (value: DiffPackageResolvedSource["comparisons"][number]["base"]): string =>
   "noCommit" in value ? "no commit recorded" : value.commit;
 
+const sourceRecordId = (record: DiffPackageResolvedSource["sourceRecords"][number]): string => {
+  const id = "id" in record ? record.id : undefined;
+  if (typeof id !== "string") throw new Error("A selected source record has no event identity.");
+  return id;
+};
+
 const patchFence = (content: string, label: string): string => {
   const runs = content.match(/~+/g) ?? [];
   const longest = runs.reduce((current, run) => Math.max(current, run.length), 0);
@@ -151,6 +157,11 @@ export const renderGitDiffPackage = (
     ...(scope.kind === "validation" ? [`- Original Generation attempt: ${scope.generationAttemptId}`] : []),
     ...(scope.kind === "integration" ? [`- Integration attempt: ${scope.integrationAttemptId}`] : []),
     `- Mission: ${source.missionId}`,
+    `- History mode: ${source.historyMetadata.mode}`,
+    `- History version: ${source.historyVersion ?? "unavailable"}`,
+    `- History generation: ${source.generationId ?? "unavailable"}`,
+    `- Migration required: ${source.historyMetadata.migration_required === true ? "yes" : "no"}`,
+    `- Recovery pending: ${source.historyMetadata.pending_recovery === true ? "yes" : "no"}`,
     `- Record-home repository: ${source.recordHomeRepositoryId}`,
     `- Record-home working tree: ${source.projectRoot}`,
     `- Repository-qualified comparisons: ${comparisons.length}`,
@@ -161,6 +172,15 @@ export const renderGitDiffPackage = (
     patchFence(json({
       scope: source.scope,
       mission_id: source.missionId,
+      history_selection: {
+        mode: source.historyMetadata.mode,
+        history_version: source.historyVersion,
+        generation_id: source.generationId,
+        pending_recovery: source.historyMetadata.pending_recovery,
+        migration_required: source.historyMetadata.migration_required,
+        control_receipts: source.historyMetadata.control_receipts,
+        control_receipts_truncated: source.historyMetadata.control_receipts_truncated,
+      },
       record_home_repository_id: source.recordHomeRepositoryId,
       workspace_repositories: source.workspaceRepositories,
       comparison_bindings: source.comparisons,
@@ -170,13 +190,13 @@ export const renderGitDiffPackage = (
       activity_evidence: source.activityEvidence,
       retained_scope_applicability: source.retainedScopes,
       integration_history: source.integrationHistory,
-      source_record_ids: source.sourceRecords.map((record) => String(record.id)),
+      source_record_ids: source.sourceRecords.map(sourceRecordId),
       source_records: source.sourceRecords,
     }), "json"),
     "",
     "## Authority and applicability",
     "",
-    "This package is derived inspection material. It does not prove named checks passed, approval, source authority, or task completion. The listed Construction records and original scope, material, Activity, and checkpoint bindings remain authoritative. A current consumer assesses historical and retained inputs under its own contract and performs any required fresh work. Package generation creates no attempt, rerun, check, approval, or lifecycle transition.",
+    "This package is derived inspection material. It does not prove readiness, named checks passed, approval, source authority, or task completion. The listed selected-history identity, Construction records, and original scope, material, Activity, and checkpoint bindings remain authoritative. A current consumer assesses historical and retained inputs under its own contract and performs any required fresh work. Package generation creates no attempt, rerun, check, approval, or lifecycle transition.",
     "",
     "## Changed paths, statistics, and patches",
     "",
@@ -201,7 +221,7 @@ export const renderGitDiffPackage = (
 
 export class GitDiffPackageService {
   constructor(
-    private readonly sources: ConstructionDiffPackageSources,
+    private readonly sources: Pick<ConstructionDiffPackageSources, "resolve">,
     private readonly git: GitDiffPackageAdapter,
   ) {}
 
@@ -225,8 +245,11 @@ export class GitDiffPackageService {
         ...(request.scope.kind === "validation" ? { generation_attempt_id: request.scope.generationAttemptId } : {}),
         ...(request.scope.kind === "integration" ? { integration_attempt_id: request.scope.integrationAttemptId } : {}),
         mission_id: resolved.source.missionId,
+        history_version: resolved.source.historyVersion,
+        generation_id: resolved.source.generationId,
+        history_metadata: resolved.source.historyMetadata,
         source_bindings: resolved.source.comparisons,
-        source_event_ids: resolved.source.sourceRecords.map((record) => String(record.id)),
+        source_event_ids: resolved.source.sourceRecords.map(sourceRecordId),
         output: written.path,
         fingerprint: rendered.fingerprint,
         empty: rendered.empty,
