@@ -43,6 +43,7 @@ export interface HistoryMutationRequest {
 export interface HistoryWriterLease {
   readonly view: CoordinatedHistory;
   readonly reference: string;
+  readonly assertHeld: () => Promise<void>;
   readonly release: () => Promise<void>;
 }
 
@@ -151,7 +152,19 @@ export class HistoryAccess {
       const output = await this.storage.files.write(location, contents, { kind: "create" });
       if (output.status !== "created") throw new HistoryError("history_writer_identity_reused", "An ordinary writer cannot adopt an existing writer identity.");
       let released = false;
-      writer = { view, reference: location.relative, release: async () => {
+      const generationId = view.generationId;
+      const selectionHash = view.selectionHash;
+      writer = { view, reference: location.relative, assertHeld: async () => {
+        if (released) throw new HistoryError("history_writer_lease_lost", "The writer claim has already been released.", { reference: location.relative });
+        const retained = await this.storage.files.read(location);
+        if (!retained || historyDigest(retained) !== historyDigest(contents)) throw new HistoryError("history_writer_lease_lost", "The writer claim no longer contains its owner's exact bytes.", { reference: location.relative });
+        const physical = await this.storage.context(selectedRoot);
+        if (physical.commonDirectory !== commonDirectory || physical.recordHome !== selectedRoot || currentOrigin(physical) !== origin) throw new HistoryError("history_ownership_changed", "The writer's physical repository context changed after admission.");
+        const current = await this.read(selectedRoot, request.missionId);
+        this.assertMutation(current, request.historyVersion);
+        if (current.generationId !== generationId || current.selectionHash !== selectionHash) throw new HistoryError("history_selection_changed", "The writer's selected generation changed after admission.");
+        if (released) throw new HistoryError("history_writer_lease_lost", "The writer claim was released while its ownership was checked.", { reference: location.relative });
+      }, release: async () => {
         if (released) return;
         const result = await this.storage.files.remove(location, historyDigest(contents));
         if (result !== "removed") throw new HistoryError("history_writer_lease_lost", "The writer claim disappeared before its owner released it.", { reference: location.relative });
@@ -164,11 +177,11 @@ export class HistoryAccess {
     return writer;
   }
 
-  public async withMutation<T>(request: HistoryMutationRequest, operation: (view: CoordinatedHistory) => Promise<T>): Promise<T> {
+  public async withMutation<T>(request: HistoryMutationRequest, operation: (view: CoordinatedHistory, writer: HistoryWriterLease) => Promise<T>): Promise<T> {
     const writer = await this.beginMutation(request);
     let value: T | undefined;
     let failure: { readonly error: unknown } | undefined;
-    try { value = await operation(writer.view); } catch (error) { failure = { error }; }
+    try { value = await operation(writer.view, writer); } catch (error) { failure = { error }; }
     try { await writer.release(); } catch (error) {
       throw new HistoryError("history_writer_release_failed", "The mutation ended, but its history writer claim could not be released.", { reference: writer.reference, operation_callback: failure ? "threw" : "returned", operation_error: failure ? message(failure.error) : null, release_error: message(error), effects_uncertain: true });
     }

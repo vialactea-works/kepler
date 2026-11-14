@@ -16,6 +16,9 @@ import {
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
 import { AppModule } from "../../packages/cli/src/cli/app.module.js";
 import { createEventJournal } from "../../packages/cli/src/history/journal.js";
+import { createNodeHistoryAccess } from "../../packages/cli/src/history/access-runtime.js";
+import { historyReaderMetadata } from "../../packages/cli/src/history/reader.js";
+import { createNodeMissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace-runtime.js";
 import { VERSION } from "../../src/index.js";
 import { taskGraphExample } from "../fixtures/task-graph.js";
 
@@ -72,6 +75,12 @@ const createProject = async (name: string): Promise<GitFixture> => {
   runGit(root, globalConfig, "add", ".");
   runGit(root, globalConfig, "commit", "-q", "-m", "Create CLI fixture");
   return { root, parent, globalConfig };
+};
+
+const selectedHistory = async (root: string, missionId: string) => {
+  const view = await createNodeHistoryAccess(createNodeMissionWorkspaceRuntime({ cwd: root })).read(root, missionId);
+  if (view.mode !== "active" || !view.historyVersion || !view.generationId) throw new Error("CLI request fixtures require active selected history.");
+  return { historyVersion: view.historyVersion, generationId: view.generationId, historyMetadata: historyReaderMetadata(view) };
 };
 
 const snapshot = async (root: string): Promise<string> => {
@@ -263,7 +272,8 @@ describe("v3 root command tree", () => {
       },
     });
     const missionId = response.data.mission_id as string;
-    const historyPath = Path.join(fixture.root, ".kepler", "missions", missionId, "history", "construction");
+    const selection = await selectedHistory(fixture.root, missionId);
+    const historyPath = Path.join(fixture.root, ".kepler", "missions", missionId, "history", "generations", selection.generationId, "construction");
     const files = await Fs.readdir(historyPath);
     const events = (await Fs.readFile(Path.join(historyPath, files[0]!), "utf8"))
       .trimEnd()
@@ -301,8 +311,17 @@ describe("v3 root command tree", () => {
     const missionResponse = JSON.parse(missionResult.stdout);
     expect(missionResponse.status).toBe("success");
     const missionId = missionResponse.data.mission_id as string;
+    const selection = await selectedHistory(fixture.root, missionId);
+    const unitArguments = ["workflow", "construction", "unit", "create", "stage-start", "--mission", missionId, "--project", fixture.root];
+    const beforeUnit = await snapshot(fixture.root);
+    for (const versionArguments of [[], ["--history-version", randomUUID()]]) {
+      const rejected = await withGitEnvironment(fixture.globalConfig, () => runCli([...unitArguments, ...versionArguments]));
+      expect(rejected.exitCode).toBe(1);
+      expect(JSON.parse(rejected.stdout)).toMatchObject({ status: "failed", data: { code: versionArguments.length ? "history_version_mismatch" : "history_version_required" } });
+      expect(await snapshot(fixture.root)).toBe(beforeUnit);
+    }
     const unitResult = await withGitEnvironment(fixture.globalConfig, () =>
-      runCli(["workflow", "construction", "unit", "create", "stage-start", "--mission", missionId, "--project", fixture.root]),
+      runCli([...unitArguments, "--history-version", selection.historyVersion]),
     );
     expect(unitResult.exitCode).toBe(0);
     const unitResponse = JSON.parse(unitResult.stdout);
@@ -313,7 +332,7 @@ describe("v3 root command tree", () => {
     });
 
     const result = await withGitEnvironment(fixture.globalConfig, () =>
-      runCli(["workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design", "--request", request, "--project", fixture.root]),
+      runCli(["workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design", "--request", request, "--project", fixture.root, "--history-version", selection.historyVersion]),
     );
 
     expect(result.exitCode).toBe(0);
@@ -344,9 +363,11 @@ describe("v3 root command tree", () => {
     );
     expect(mission.exitCode).toBe(0);
     const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const selection = await selectedHistory(fixture.root, missionId);
     const createUnit = async (name: string, selectedMission = missionId): Promise<string> => {
+      const selected = await selectedHistory(fixture.root, selectedMission);
       const result = await withGitEnvironment(fixture.globalConfig, () =>
-        runCli(["workflow", "construction", "unit", "create", name, "--mission", selectedMission, "--project", fixture.root]),
+        runCli(["workflow", "construction", "unit", "create", name, "--mission", selectedMission, "--project", fixture.root, "--history-version", selected.historyVersion]),
       );
       expect(result.exitCode, result.stdout).toBe(0);
       return JSON.parse(result.stdout).data.unit_id as string;
@@ -355,13 +376,13 @@ describe("v3 root command tree", () => {
     const inputs = [{ reference: "request:scope", purpose: "Requester scope for Functional Design" }];
     const start = await withGitEnvironment(fixture.globalConfig, () => runCli([
       "workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design",
-      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root, "--history-version", selection.historyVersion,
     ]));
     expect(start.exitCode).toBe(0);
     const attemptId = JSON.parse(start.stdout).data.attempt_id as string;
     const pause = async (request: Readonly<Record<string, unknown>>) => withGitEnvironment(fixture.globalConfig, () => runCli([
       "workflow", "construction", "stage", "pause", "--unit", unitId, "--stage", "functional-design",
-      "--attempt", attemptId, "--request", JSON.stringify(request), "--project", fixture.root,
+      "--attempt", attemptId, "--request", JSON.stringify(request), "--project", fixture.root, "--history-version", selection.historyVersion,
     ]));
     const requested = await pause({ phase: "request", reason: "Pause before review" });
     expect(requested.exitCode).toBe(0);
@@ -372,7 +393,7 @@ describe("v3 root command tree", () => {
     expect(JSON.parse(pausing.stdout)).toMatchObject({ status: "success", data: { state: "pausing", current_attempt_id: attemptId } });
     const blockedStart = await withGitEnvironment(fixture.globalConfig, () => runCli([
       "workflow", "construction", "stage", "start", "--unit", unitId, "--stage", "functional-design",
-      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root, "--history-version", selection.historyVersion,
     ]));
     expect(JSON.parse(blockedStart.stdout)).toMatchObject({ status: "failed", data: { code: "stage_attempt_unavailable" } });
 
@@ -383,9 +404,10 @@ describe("v3 root command tree", () => {
     expect(unrelatedMission.exitCode).toBe(0);
     const unrelatedMissionId = JSON.parse(unrelatedMission.stdout).data.mission_id as string;
     const unrelatedUnitId = await createUnit("unrelated-scope", unrelatedMissionId);
+    const unrelatedSelection = await selectedHistory(fixture.root, unrelatedMissionId);
     const unrelated = await withGitEnvironment(fixture.globalConfig, () => runCli([
       "workflow", "construction", "stage", "start", "--unit", unrelatedUnitId, "--stage", "functional-design",
-      "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+      "--request", JSON.stringify({ inputs }), "--project", fixture.root, "--history-version", unrelatedSelection.historyVersion,
     ]));
     expect(unrelated.exitCode).toBe(0);
     expect(JSON.parse(unrelated.stdout)).toMatchObject({ status: "success", data: { unit_id: unrelatedUnitId, worker_dispatched: false } });
@@ -409,7 +431,7 @@ describe("v3 root command tree", () => {
 
     const resumed = await withGitEnvironment(fixture.globalConfig, () => runCli([
       "workflow", "construction", "stage", "resume", "--unit", unitId, "--stage", "functional-design",
-      "--attempt", attemptId, "--request", JSON.stringify({ inputs }), "--project", fixture.root,
+      "--attempt", attemptId, "--request", JSON.stringify({ inputs }), "--project", fixture.root, "--history-version", selection.historyVersion,
     ]));
     expect(resumed.exitCode).toBe(0);
     expect(JSON.parse(resumed.stdout)).toMatchObject({
@@ -420,7 +442,7 @@ describe("v3 root command tree", () => {
       "workflow", "construction", "stage", "show", "--unit", unitId, "--stage", "functional-design", "--project", fixture.root,
     ]));
     expect(JSON.parse(running.stdout)).toMatchObject({ status: "success", data: { state: "running", current_attempt_id: attemptId } });
-    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", missionId, "history", "construction");
+    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", missionId, "history", "generations", selection.generationId, "construction");
     const events = (await Promise.all((await Fs.readdir(historyDirectory)).map((file) => Fs.readFile(Path.join(historyDirectory, file), "utf8"))))
       .join("").trimEnd().split("\n").map((line) => JSON.parse(line) as { type: string; data: Record<string, unknown> });
     const pauseEvents = events.filter((event) => event.type.includes("stage-pause") || event.type === "construction.stage-paused" || event.type === "construction.stage-resumed");
@@ -468,8 +490,9 @@ describe("v3 root command tree", () => {
     );
     expect(mission.exitCode).toBe(0);
     const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const selection = await selectedHistory(fixture.root, missionId);
     const createdUnit = await withGitEnvironment(fixture.globalConfig, () =>
-      runCli(["workflow", "construction", "unit", "create", "later-stage", "--mission", missionId, "--project", fixture.root]),
+      runCli(["workflow", "construction", "unit", "create", "later-stage", "--mission", missionId, "--project", fixture.root, "--history-version", selection.historyVersion]),
     );
     expect(createdUnit.exitCode).toBe(0);
     const unitId = JSON.parse(createdUnit.stdout).data.unit_id as string;
@@ -510,7 +533,7 @@ describe("v3 root command tree", () => {
       const before = await snapshot(historyDirectory);
       const result = await withGitEnvironment(fixture.globalConfig, () => runCli([
         "workflow", "construction", "stage", "complete", "--unit", unitId, "--stage", stage,
-        "--attempt", "20000000-0000-4000-8000-000000000099", "--request", JSON.stringify(request), "--project", fixture.root,
+        "--attempt", "20000000-0000-4000-8000-000000000099", "--request", JSON.stringify(request), "--project", fixture.root, "--history-version", selection.historyVersion,
       ]));
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toBe("");
@@ -706,9 +729,10 @@ describe("Construction query CLI", () => {
     ]));
     expect(mission.exitCode, mission.stdout).toBe(0);
     const missionId = JSON.parse(mission.stdout).data.mission_id as string;
+    const selection = await selectedHistory(fixture.root, missionId);
     const created = await withGitEnvironment(fixture.globalConfig, () => runCli([
       "workflow", "construction", "unit", "create", "query-unit",
-      "--mission", missionId, "--project", fixture.root,
+      "--mission", missionId, "--project", fixture.root, "--history-version", selection.historyVersion,
     ]));
     expect(created.exitCode, created.stdout).toBe(0);
     const unitId = JSON.parse(created.stdout).data.unit_id as string;
@@ -743,7 +767,7 @@ describe("Construction query CLI", () => {
       "No open decisions.",
       "",
     ].join("\n"));
-    return { ...fixture, missionId, unitId, graph, graphPath };
+    return { ...fixture, ...selection, missionId, unitId, graph, graphPath };
   };
 
   const query = async (
@@ -762,7 +786,7 @@ describe("Construction query CLI", () => {
     expect(Object.keys(response).sort()).toEqual(["data", "status"]);
     expect(response.status).toBe(exitCode === 0 ? "success" : "failed");
     if (exitCode === 1) {
-      expect(Object.keys(response.data).sort()).toEqual(["code", "details", "message", "recovery"]);
+      expect(Object.keys(response.data).sort()).toEqual(["code", "details", "history_metadata", "message", "recovery"]);
       expect(response.data.message).toEqual(expect.any(String));
       expect(response.data.recovery).toEqual(expect.any(String));
     }
@@ -830,7 +854,7 @@ describe("Construction query CLI", () => {
     };
     const graph = { ...fixture.graph, tasks: [{ ...task, prerequisites: [prerequisite] }, fixture.graph.tasks[1]!] };
     await Fs.writeFile(fixture.graphPath, `${JSON.stringify(graph, null, 2)}\n`);
-    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", fixture.missionId, "history", "construction");
+    const historyDirectory = Path.join(fixture.root, ".kepler", "missions", fixture.missionId, "history", "generations", fixture.generationId, "construction");
     const journalFiles = (await Fs.readdir(historyDirectory)).filter((name) => name.endsWith(".jsonl"));
     const records = (await Promise.all(journalFiles.map(async (name) =>
       (await Fs.readFile(Path.join(historyDirectory, name), "utf8")).trimEnd().split("\n")
@@ -847,6 +871,7 @@ describe("Construction query CLI", () => {
       missionId: fixture.missionId,
       journalId: unitCreated.journal_id,
       phase: CONSTRUCTION_PHASE,
+      generationId: fixture.generationId,
     });
     await journal.append(constructionEvent(stageStartId, unitCreated.journal_id, "construction.stage-attempt-started", {
       mission_id: fixture.missionId,
@@ -898,6 +923,7 @@ describe("Construction query CLI", () => {
     expect(data).toEqual({
       record_home: fixture.root,
       mission_id: fixture.missionId,
+      history_metadata: fixture.historyMetadata,
       unit_id: fixture.unitId,
       task_id: task.id,
       task_state: "ready",
@@ -940,7 +966,7 @@ describe("Construction query CLI", () => {
   it("lints the canonical graph successfully without changing files or history", async () => {
     const fixture = await createQueryFixture();
 
-    expect(await query(fixture, ["lint"])).toEqual({ findings: [] });
+    expect(await query(fixture, ["lint"])).toEqual({ findings: [], history_metadata: fixture.historyMetadata });
   });
 
   it.each(["show", "ready"])("rejects task %s for an unknown task without changing files or history", async (operation) => {

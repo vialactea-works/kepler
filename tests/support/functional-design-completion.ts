@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
+import { selectFixtureHistory } from "./history-consumers.js";
 import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
 import * as Path from "node:path";
-import { AuditContextResolver, createNodeAuditContextFileSystem, createNodeAuditJournalFactory } from "../../packages/cli/src/audit/context.js";
+import { AuditContextResolver, createNodeAuditContextRuntime } from "../../packages/cli/src/audit/context.js";
 import { AuditRecording } from "../../packages/cli/src/audit/recording.js";
 import { CONSTRUCTION_PHASE, type ConstructionStage } from "../../packages/cli/src/construction/events.js";
 import {
@@ -13,6 +14,7 @@ import {
 import { createNodeRepositoryArtifactFileSystem } from "../../packages/cli/src/construction/artifacts.js";
 import { createNodeConstructionMaterialReader } from "../../packages/cli/src/construction/node-material-reader.js";
 import { ProjectResolver } from "../../packages/cli/src/cli/project-selection.js";
+import type { ConstructionJournals } from "../../packages/cli/src/construction/journals.js";
 import { auditFixture, createAuditHistory } from "../e2e/fixtures/histories/audit.js";
 
 export const completionUnitDirectory = `.kepler/missions/${auditFixture.missionId}/construction/units-of-work/${auditFixture.unitId}`;
@@ -27,8 +29,13 @@ const artifactSources = {
   "details/functional-design/domain-model.md": `---\nid: ${artifactIds["details/functional-design/domain-model.md"]}\ntype: supporting-document\nschema_version: 3\nunit_id: ${auditFixture.unitId}\nauthor: Ada Lovelace <ada@example.com>\n---\n# Domain model detail\n\nThe model preserves the current contract.\n`,
 } as const;
 
+const fixtureSelections = new Map<string, { readonly generationId: string; readonly journals: ConstructionJournals }>();
+
 export interface FunctionalDesignTestFixture {
   readonly root: string;
+  readonly historyVersion: string;
+  readonly generationId: string;
+  readonly journals: ConstructionJournals;
   readonly contexts: AuditContextResolver;
   readonly recording: AuditRecording;
   readonly artifactBindings: readonly { readonly artifact_id: string; readonly content_version: string }[];
@@ -82,12 +89,9 @@ export const createFunctionalDesignFixture = async (
         configValue: async () => ({ status: 0, stdout: "", stderr: "" }),
       },
     });
-    const contexts = new AuditContextResolver({
-      projects,
-      fileSystem: createNodeAuditContextFileSystem(),
-      journals: createNodeAuditJournalFactory(),
-      identities: { next: randomUUID },
-    });
+    const selected = await selectFixtureHistory(root, auditFixture.missionId);
+    fixtureSelections.set(root, { generationId: selected.generationId, journals: selected.journals });
+    const contexts = new AuditContextResolver(createNodeAuditContextRuntime(projects, selected.access, selected.auditJournals));
     const recording = new AuditRecording(contexts, {
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00Z",
@@ -95,13 +99,20 @@ export const createFunctionalDesignFixture = async (
     });
     return {
       root,
+      historyVersion: selected.historyVersion,
+      generationId: selected.generationId,
+      journals: selected.journals,
       contexts,
       recording,
       artifactBindings,
       checkpoints: [{ repository_id: "repo-main", commit }],
-      cleanup: async () => Fs.rm(root, { recursive: true, force: true }),
+      cleanup: async () => {
+        fixtureSelections.delete(root);
+        await Fs.rm(root, { recursive: true, force: true });
+      },
     };
   } catch (error) {
+    fixtureSelections.delete(root);
     await Fs.rm(root, { recursive: true, force: true });
     throw error;
   }
@@ -114,6 +125,7 @@ export const createStageCompletionService = (
   createNodeFunctionalDesignStageCompletionRuntime(
     { name: "kepler-test", version: "0.10.3" },
     createNodeConstructionMaterialReader(createNodeRepositoryArtifactFileSystem()),
+    fixture.journals,
   ),
 );
 
@@ -138,6 +150,7 @@ export const recordFunctionalDesignEvidence = async (
       unit: auditFixture.unitId,
       stage,
       attempt,
+      historyVersion: fixture.historyVersion,
     }, {
       inputs: fixture.artifactBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Current Functional Design material" })),
       artifact_bindings: fixture.artifactBindings,
@@ -162,6 +175,7 @@ export const recordFunctionalDesignApproval = async (
     unit: auditFixture.unitId,
     stage: "functional-design",
     attempt: auditFixture.stageAttemptId,
+    historyVersion: fixture.historyVersion,
   }, {
     requester: "Requester",
     inputs: fixture.artifactBindings.map((binding) => ({ reference: `artifact:${binding.artifact_id}`, purpose: "Current Functional Design material approved" })),
@@ -217,7 +231,9 @@ export const functionalDesignRequest = (
 };
 
 export const historySnapshot = async (root: string): Promise<string> => {
-  const directory = Path.join(root, ".kepler", "missions", auditFixture.missionId, "history", CONSTRUCTION_PHASE);
+  const selected = fixtureSelections.get(root);
+  if (!selected) throw new Error("The Functional Design fixture has no selected history.");
+  const directory = Path.join(root, ".kepler", "missions", auditFixture.missionId, "history", "generations", selected.generationId, CONSTRUCTION_PHASE);
   const names = (await Fs.readdir(directory)).sort();
   const entries = await Promise.all(names.map(async (name) => [name, await Fs.readFile(Path.join(directory, name), "utf8")]));
   return JSON.stringify(entries);

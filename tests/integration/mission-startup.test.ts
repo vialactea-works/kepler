@@ -176,14 +176,6 @@ const createStartupWithRuntime = (
     projects: { resolve: (project) => projects.resolve(project) },
     workspaces: createMissionWorkspacePreparation(workspaceRuntime),
     recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, intentFileSystem, journalFactory ?? createStartupJournalFactory()),
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        phase: CONSTRUCTION_PHASE,
-        journalId,
-      }),
-    },
     identities: { next: nextIdentity },
     now: () => "2026-10-21T14:00:00.000Z",
     producer: { name: "kepler-cli", version: "0.10.3" },
@@ -265,14 +257,6 @@ const createStartupWithOnePreparationFailure = (
     projects: { resolve: (project) => projects.resolve(project) },
     workspaces,
     recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        phase: CONSTRUCTION_PHASE,
-        journalId,
-      }),
-    },
     identities: { next: randomUUID },
     now: () => "2026-10-21T14:00:00.000Z",
     producer: { name: "kepler-cli", version: "0.10.3" },
@@ -372,6 +356,28 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     expect(await Fs.readFile(activationPath)).toEqual(await Fs.readFile(Path.join(historyRoot, "control", "events", `${activation.journal_id}.jsonl`)));
     expect(await Fs.access(Path.join(historyRoot, CONSTRUCTION_PHASE)).then(() => true, () => false)).toBe(false);
     expect(await Fs.access(await historyPhaseDirectory(repository, result.missionId)).then(() => true, () => false)).toBe(true);
+  });
+
+  it("reports retained pending recovery instead of historical preparation without changing its sources", async () => {
+    const environment = await createEnvironment("prepared-history-recovery-pending");
+    const repository = await createRepository(environment, "record-home");
+    const startup = createStartup(environment.parent);
+    const created = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository)));
+    expect(created.kind).toBe("prepared");
+    if (created.kind !== "prepared") return;
+    const common = await commonDirectory(repository, environment);
+    const pendingRoot = Path.join(common, "kepler", "missions", created.missionId, "recovery", "pending");
+    await Fs.mkdir(pendingRoot, { recursive: true });
+    const pendingPath = Path.join(pendingRoot, `${"a".repeat(64)}.json`);
+    const pending = "Retained unknown operation instructions must remain fenced.\n";
+    await Fs.writeFile(pendingPath, pending);
+    const history = await readEvents(repository, created.missionId);
+    const selected = await Fs.readFile(Path.join(repository, ".kepler", "missions", created.missionId, "history", "control", "active.json"));
+    const result = await withGitEnvironment(environment, () => startup.prepare(repository, created.missionId));
+    expect(result).toMatchObject({ kind: "failed", code: "history_recovery_pending", details: { pending_recovery: true } });
+    expect(await readEvents(repository, created.missionId)).toEqual(history);
+    expect(await Fs.readFile(pendingPath, "utf8")).toBe(pending);
+    expect(await Fs.readFile(Path.join(repository, ".kepler", "missions", created.missionId, "history", "control", "active.json"))).toEqual(selected);
   });
 
   it("returns historical prepared facts when intent and attachment are absent after HEAD advances", async () => {
@@ -525,14 +531,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
       recovery: createNodeMissionStartupRecoveryRuntime(runtime),
-      journals: {
-        create: (recordHomePath, missionId, journalId) => createEventJournal({
-          recordHome: recordHomePath,
-          missionId,
-          phase: CONSTRUCTION_PHASE,
-          journalId,
-        }),
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -774,14 +772,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
       recovery: createNodeMissionStartupRecoveryRuntime(runtime),
-      journals: {
-        create: (recordHomePath, missionId, journalId) => createEventJournal({
-          recordHome: recordHomePath,
-          missionId,
-          phase: CONSTRUCTION_PHASE,
-          journalId,
-        }),
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1116,14 +1106,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
       recovery: createNodeMissionStartupRecoveryRuntime(runtime),
-      journals: {
-        create: (recordHomePath, missionId, journalId) => createEventJournal({
-          recordHome: recordHomePath,
-          missionId,
-          phase: CONSTRUCTION_PHASE,
-          journalId,
-        }),
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1189,23 +1171,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
       recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              if (failCreatedAppend && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-created") {
-                failCreatedAppend = false;
-                throw new Error("injected creation append failure before write");
-              }
-              return journal.append(event);
-            },
-          };
-        },
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1260,28 +1225,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
       recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              if (removeCreationTerminator && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-created") {
-                await journal.append(event);
-                removeCreationTerminator = false;
-                unterminatedJournalPath = journal.path;
-                const bytes = await Fs.readFile(journal.path);
-                expect(bytes.at(-1)).toBe(10);
-                await Fs.writeFile(journal.path, bytes.subarray(0, bytes.length - 1));
-                throw new Error("interrupted after complete creation bytes but before final LF");
-              }
-              return journal.append(event);
-            },
-          };
-        },
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1334,28 +1277,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
       recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              const appended = await journal.append(event);
-              if (removePreparedTerminator && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
-                removePreparedTerminator = false;
-                unterminatedJournalPath = journal.path;
-                const bytes = await Fs.readFile(journal.path);
-                expect(bytes.at(-1)).toBe(10);
-                await Fs.writeFile(journal.path, bytes.subarray(0, bytes.length - 1));
-                throw new Error("interrupted after complete prepared bytes but before final LF");
-              }
-              return appended;
-            },
-          };
-        },
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1421,23 +1342,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
       recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              if (failPreparedAppend && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
-                failPreparedAppend = false;
-                throw new Error("injected prepared append failure");
-              }
-              return journal.append(event);
-            },
-          };
-        },
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1493,24 +1397,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
       recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              const appended = await journal.append(event);
-              if (failAfterPreparedWrite && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
-                failAfterPreparedWrite = false;
-                throw new Error("injected response loss after prepared append");
-              }
-              return appended;
-            },
-          };
-        },
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1572,23 +1458,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
       recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              if (failPreparedAppend && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
-                failPreparedAppend = false;
-                throw new Error("injected prepared append failure");
-              }
-              return journal.append(event);
-            },
-          };
-        },
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },

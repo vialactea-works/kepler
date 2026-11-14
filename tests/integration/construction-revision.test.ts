@@ -30,7 +30,7 @@ describe("Construction revision with real journals and projection", () => {
       functionalDesignRequest(evidence, approval),
     );
     expect(completion.kind).toBe("success");
-    const runtime = createNodeStageStartRuntime({ name: "kepler-test", version: "3.1.0" });
+    const runtime = createNodeStageStartRuntime({ name: "kepler-test", version: "3.1.0" }, fixture.journals);
     const start = await new StageStart(fixture.contexts, runtime).execute({
       unit: auditFixture.unitId,
       stage: "quality-requirements",

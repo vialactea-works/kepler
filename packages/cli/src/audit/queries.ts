@@ -39,9 +39,16 @@ interface JournalSnapshot {
   readonly digest: string;
 }
 
+export interface AuditHistoryIdentity {
+  readonly historyVersion: string | null;
+  readonly generationId: string | null;
+}
+
 interface CursorPayload {
-  readonly version: 1;
+  readonly version: 2;
   readonly query: string;
+  readonly history_version: string | null;
+  readonly generation_id: string | null;
   readonly offset: number;
   readonly journals: readonly JournalSnapshot[];
 }
@@ -126,6 +133,13 @@ const packCursor = (payload: CursorPayload): string => {
   return `${Buffer.from(json, "utf8").toString("base64url")}.${digest(json)}`;
 };
 
+const isJournalSnapshot = (value: unknown): value is JournalSnapshot => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const snapshot = value as Record<string, unknown>;
+  return typeof snapshot.journal_id === "string" && Number.isInteger(snapshot.count) &&
+    (snapshot.count as number) >= 0 && typeof snapshot.digest === "string";
+};
+
 const unpackCursor = (token: string): CursorPayload | undefined => {
   const separator = token.lastIndexOf(".");
   if (separator < 1) return undefined;
@@ -134,12 +148,29 @@ const unpackCursor = (token: string): CursorPayload | undefined => {
     if (digest(json) !== token.slice(separator + 1)) return undefined;
     const value: unknown = JSON.parse(json);
     if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-    const payload = value as Partial<CursorPayload>;
-    if (payload.version !== 1 || typeof payload.query !== "string" || !Number.isInteger(payload.offset) ||
-        (payload.offset ?? -1) < 0 || !Array.isArray(payload.journals) || payload.journals.some((item) =>
-          typeof item !== "object" || item === null || typeof item.journal_id !== "string" ||
-          !Number.isInteger(item.count) || (item.count as number) < 0 || typeof item.digest !== "string")) return undefined;
-    return payload as CursorPayload;
+    const payload = value as Record<string, unknown>;
+    const historyVersion = payload.history_version;
+    const generationId = payload.generation_id;
+    const offset = payload.offset;
+    const rawJournals = payload.journals;
+    if (payload.version !== 2 || typeof payload.query !== "string" ||
+        !(historyVersion === null || typeof historyVersion === "string") ||
+        !(generationId === null || typeof generationId === "string") || typeof offset !== "number" || !Number.isInteger(offset) ||
+        offset < 0 || !Array.isArray(rawJournals)) return undefined;
+    const journals: JournalSnapshot[] = [];
+    for (const item of rawJournals) {
+      if (!isJournalSnapshot(item)) return undefined;
+      journals.push(item);
+    }
+    if (new Set(journals.map((item) => item.journal_id)).size !== journals.length) return undefined;
+    return {
+      version: 2,
+      query: payload.query,
+      history_version: historyVersion,
+      generation_id: generationId,
+      offset,
+      journals,
+    };
   } catch {
     return undefined;
   }
@@ -177,7 +208,7 @@ const validateSelectedOwnership = (history: HistoryCollection, selectors: ScopeS
   return undefined;
 };
 
-export const listAuditEvents = (history: HistoryCollection, options: AuditListOptions): AuditQueryResult => {
+export const listAuditEvents = (history: HistoryCollection, options: AuditListOptions, identity: AuditHistoryIdentity): AuditQueryResult => {
   if (!options.selectors.unit) return failed("required_selector_missing", "Audit list requires --unit.");
   const ownershipFailure = validateSelectedOwnership(history, options.selectors);
   if (ownershipFailure) return ownershipFailure;
@@ -191,7 +222,9 @@ export const listAuditEvents = (history: HistoryCollection, options: AuditListOp
   let offset = 0;
   if (options.cursor !== undefined) {
     const cursor = unpackCursor(options.cursor);
-    if (!cursor || cursor.query !== key) return failed("invalid_audit_cursor", "The audit cursor is invalid or belongs to a different query.");
+    if (!cursor) return failed("invalid_audit_cursor", "The audit cursor is invalid or belongs to a different query.");
+    if (cursor.history_version !== identity.historyVersion || cursor.generation_id !== identity.generationId) return failed("stale_audit_cursor", "The audit cursor belongs to a different selected history generation.");
+    if (cursor.query !== key) return failed("invalid_audit_cursor", "The audit cursor is invalid or belongs to a different query.");
     const currentSnapshots = new Map(snapshotFor(events).map((snapshot) => [snapshot.journal_id, snapshot]));
     const allowedJournals = new Set<string>();
     for (const snapshot of cursor.journals) {
@@ -210,7 +243,7 @@ export const listAuditEvents = (history: HistoryCollection, options: AuditListOp
   const nextOffset = offset + page.length;
   const hasMore = nextOffset < view.length;
   const journals = options.cursor === undefined ? snapshotFor(events) : unpackCursor(options.cursor)!.journals;
-  const nextCursor = hasMore ? packCursor({ version: 1, query: key, offset: nextOffset, journals }) : null;
+  const nextCursor = hasMore ? packCursor({ version: 2, query: key, history_version: identity.historyVersion, generation_id: identity.generationId, offset: nextOffset, journals }) : null;
   return { kind: "success", data: { events: page.map((item) => projectEvent(item.event, fields)), next_cursor: nextCursor } };
 };
 
@@ -242,8 +275,10 @@ export class AuditQueries {
       message: loaded.message,
       details: loaded.details,
       recovery: loaded.recovery,
+      ...(loaded.history_metadata ? { history_metadata: loaded.history_metadata } : {}),
     } };
-    return listAuditEvents(loaded.history, options);
+    const result = listAuditEvents(loaded.history, options, { historyVersion: loaded.historyMetadata.history_version, generationId: loaded.historyMetadata.generation_id });
+    return { ...result, data: { ...result.data, history_metadata: loaded.historyMetadata } };
   }
 
   async show(unitId: string, journalId: string, eventId: string, project?: string): Promise<AuditQueryResult> {
@@ -256,7 +291,9 @@ export class AuditQueries {
       message: loaded.message,
       details: loaded.details,
       recovery: loaded.recovery,
+      ...(loaded.history_metadata ? { history_metadata: loaded.history_metadata } : {}),
     } };
-    return showAuditEvent(loaded.history, unitId, journalId, eventId);
+    const result = showAuditEvent(loaded.history, unitId, journalId, eventId);
+    return { ...result, data: { ...result.data, history_metadata: loaded.historyMetadata } };
   }
 }

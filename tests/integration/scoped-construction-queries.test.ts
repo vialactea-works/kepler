@@ -14,6 +14,7 @@ import { ConstructionQueries } from "../../packages/cli/src/construction/scoped-
 import { ConstructionLint } from "../../packages/cli/src/construction/construction-lint.js";
 import { createNodeUnitQueryFileSystem } from "../../packages/cli/src/construction/unit-queries-runtime.js";
 import { UnitQueries } from "../../packages/cli/src/construction/unit-queries.js";
+import { createLegacyHistoryFixtureReader } from "../support/selected-history-reader.js";
 import { createEventJournal } from "../../packages/cli/src/history/journal.js";
 import { taskGraphExample } from "../fixtures/task-graph.js";
 
@@ -215,7 +216,7 @@ describe("scoped Construction queries", () => {
     }, [activityStartId]));
 
     const fileSystem = createNodeUnitQueryFileSystem();
-    const units = new UnitQueries({ resolve: async () => ({ kind: "resolved", root }) }, fileSystem);
+    const units = new UnitQueries({ resolve: async () => ({ kind: "resolved", root }) }, fileSystem, createLegacyHistoryFixtureReader(fileSystem));
     const queries = new ConstructionQueries(units, fileSystem);
     const lint = new ConstructionLint(units, fileSystem);
     const before = await snapshot(root);
@@ -228,7 +229,7 @@ describe("scoped Construction queries", () => {
     const lintResult = await lint.execute(unitId);
     const after = await snapshot(root);
 
-    expect(stage).toMatchObject({ unknowns: [] });
+    expect(stage).toMatchObject({ unknowns: [], history_metadata: { mode: "legacy", migration_required: true } });
     expect(stage).toMatchObject({
       kind: "stage-shown",
       stage: "implementation",
@@ -238,13 +239,15 @@ describe("scoped Construction queries", () => {
     });
     expect(tasks).toMatchObject({
       kind: "tasks-listed",
+      history_metadata: { mode: "legacy", migration_required: true },
       tasks: [
         { task_id: task.id, state: "waiting" },
-        { task_id: dependentTask.id, state: "blocked", blockers: [`predecessor-not-integrated:${task.id}`] },
+        { task_id: dependentTask.id, state: "blocked", blockers: ["history-migration-required", `predecessor-not-integrated:${task.id}`] },
       ],
     });
     expect(shownTask).toMatchObject({
       kind: "task-shown",
+      history_metadata: { mode: "legacy", migration_required: true },
       state: "waiting",
       current_scope: { implementation_attempt_id: implementationAttemptId },
       activities: expect.arrayContaining([expect.objectContaining({
@@ -258,18 +261,20 @@ describe("scoped Construction queries", () => {
     });
     expect(readiness).toMatchObject({
       kind: "task-readiness",
+      history_metadata: { mode: "legacy", migration_required: true },
       readiness: "blocked",
       dependencies: [{ task_id: task.id, status: "not_integrated", declared_outputs: task.outputs, integration_events: [], integrated_output_refs: [] }],
       known_prerequisite_facts: [{ evidence_id: prerequisiteEvidenceId, event_id: prerequisiteEvidenceEventId, type: "construction.evidence-recorded" }],
       unknown_prerequisites: [{ description: dependentTask.prerequisites[0]?.description, blocking: true, status: "unknown" }],
-      blockers: [`predecessor-not-integrated:${task.id}`],
+      blockers: ["history-migration-required", `predecessor-not-integrated:${task.id}`],
     });
     expect(shownDependentTask).toMatchObject({
       kind: "task-shown",
-      blockers: [`predecessor-not-integrated:${task.id}`],
+      blockers: ["history-migration-required", `predecessor-not-integrated:${task.id}`],
     });
     expect(activity).toMatchObject({
       kind: "activity-shown",
+      history_metadata: { mode: "legacy", migration_required: true },
       state: "waiting",
       current_attempt_id: activityAttemptId,
       implementation_attempt_id: implementationAttemptId,
@@ -283,7 +288,7 @@ describe("scoped Construction queries", () => {
       })],
       evidence: expect.arrayContaining([expect.objectContaining({ event_id: evidenceEventId, type: "construction.evidence-recorded" })]),
     });
-    expect(lintResult).toEqual({ kind: "valid", findings: [] });
+    expect(lintResult).toMatchObject({ kind: "valid", findings: [], history_metadata: { mode: "legacy", migration_required: true } });
     expect(after).toEqual(before);
 
     const rawPrerequisiteEvidenceId = randomUUID();
@@ -324,6 +329,7 @@ describe("scoped Construction queries", () => {
     const invalidLint = await lint.execute(unitId);
     expect(invalidLint).toMatchObject({
       kind: "invalid",
+      history_metadata: { mode: "legacy", migration_required: true },
       findings: [{
         path: `.kepler/missions/${missionId}/construction/units-of-work/${unitId}/tasks-dag.json`,
         field: "/unsupported",
@@ -352,7 +358,7 @@ describe("scoped Construction queries", () => {
     temporaryRoots.push(root);
     await Fs.mkdir(Path.join(root, ".kepler", "units-of-work", "unbound-unit"), { recursive: true });
     const fileSystem = createNodeUnitQueryFileSystem();
-    const units = new UnitQueries({ resolve: async () => ({ kind: "resolved", root }) }, fileSystem);
+    const units = new UnitQueries({ resolve: async () => ({ kind: "resolved", root }) }, fileSystem, createLegacyHistoryFixtureReader(fileSystem));
     const queries = new ConstructionQueries(units, fileSystem);
 
     expect(await queries.stageShow("unbound-unit", "implementation")).toMatchObject({ kind: "failed", code: "unit_membership_missing" });

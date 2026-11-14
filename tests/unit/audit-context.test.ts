@@ -4,6 +4,7 @@ import type { ConstructionHistoryFact } from "../../packages/cli/src/constructio
 import type { ScopeSelectors } from "../../packages/cli/src/cli/scope-selectors.js";
 import type { EventJournal } from "../../packages/cli/src/history/journal.js";
 import type { ProjectResolver } from "../../packages/cli/src/cli/project-selection.js";
+import type { HistoryReaderMetadata } from "../../packages/cli/src/history/reader.js";
 
 const unitId = "10000000-0000-4000-8000-000000000001";
 const taskId = "20000000-0000-4000-8000-000000000002";
@@ -26,7 +27,18 @@ const admission = (attemptId: string): ConstructionHistoryFact => historyFact(
   { stage_attempt_id: attemptId },
 );
 
+const activeHistoryMetadata: HistoryReaderMetadata = {
+  mode: "active",
+  history_version: "80000000-0000-4000-8000-000000000008",
+  generation_id: "90000000-0000-4000-8000-000000000009",
+  pending_recovery: false,
+  migration_required: false,
+  control_receipts: [],
+  control_receipts_truncated: false,
+};
+
 const loadedUnit = (options: {
+  readonly historyMetadata?: HistoryReaderMetadata;
   readonly admissions?: readonly ConstructionHistoryFact[];
   readonly parentState?: string;
   readonly currentAttemptId?: string;
@@ -36,6 +48,7 @@ const loadedUnit = (options: {
   root: "/virtual",
   missionId: "70000000-0000-4000-8000-000000000007",
   history: {} as AuditHistoryReadResult extends { readonly history: infer H } ? H : never,
+  historyMetadata: options.historyMetadata ?? activeHistoryMetadata,
   projection: {} as AuditHistoryReadResult extends { readonly projection: infer P } ? P : never,
   unit: {
     unitId,
@@ -58,6 +71,7 @@ class StubAuditContextResolver extends AuditContextResolver {
     const runtime: AuditContextRuntime = {
       projects: {} as ProjectResolver,
       fileSystem: {} as AuditContextRuntime["fileSystem"],
+      historyReader: { read: async () => { throw new Error("The stub overrides readUnit."); } },
       journals: { create: () => ({}) as EventJournal },
       identities: { next: () => "80000000-0000-4000-8000-000000000008" },
       taskExists: async () => taskExists,
@@ -70,7 +84,7 @@ class StubAuditContextResolver extends AuditContextResolver {
   }
 }
 
-const selectors: ScopeSelectors = { unit: unitId, task: taskId, implementationAttempt: currentAttemptId };
+const selectors: ScopeSelectors & { readonly historyVersion: string } = { unit: unitId, task: taskId, implementationAttempt: currentAttemptId, historyVersion: activeHistoryMetadata.history_version! };
 
 const resolve = (loaded: AuditHistoryReadResult, taskExists = true, selected = selectors) =>
   new StubAuditContextResolver(loaded, taskExists).resolve(selected, undefined, "evidence", undefined, undefined, true);

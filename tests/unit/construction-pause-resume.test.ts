@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { legacyFixtureJournals } from "../support/history-consumers.js";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
 import * as Path from "node:path";
@@ -84,7 +85,7 @@ const fakeRuntime = (
   inspection: ConstructionPauseResumeRuntime["inspectIntegrationLock"],
   appended: { value: boolean; event?: unknown },
 ): ConstructionPauseResumeRuntime => {
-  const base = createNodeConstructionPauseResumeRuntime({ name: "test", version: "1" });
+  const base = createNodeConstructionPauseResumeRuntime({ name: "test", version: "1" }, legacyFixtureJournals);
   const coordination: MissionWorkspaceRuntime["coordination"] = {
     ...base.workspace.coordination,
     acquire: async () => ({

@@ -1,4 +1,5 @@
 import * as Path from "node:path";
+import { constructionJournalPath } from "./journals.js";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
@@ -714,7 +715,7 @@ export class Revision {
         message: error instanceof Error ? error.message : String(error),
       }) };
     }
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") {
       return { kind: "failed", result: revisionFailure("revision_transition_journal_identity_conflict", "The allocated stage-transition journal identity already has a filesystem entry.", { journal_id: journalId }) };
     }
@@ -897,7 +898,7 @@ export class Revision {
         message: error instanceof Error ? error.message : String(error),
       }) };
     }
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") {
       return { kind: "failed", result: revisionFailure("revision_transition_journal_identity_conflict", "The allocated Activity-transition journal identity already has a filesystem entry.", { journal_id: journalId }) };
     }
@@ -1212,7 +1213,7 @@ export class Revision {
         authorization: validationDetails(authorization),
       });
     }
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
     const journalPathKind = await this.runtime.workspace.fileSystem.pathKind(journalPath);
     if (partialInteraction ? journalPathKind !== "file" : journalPathKind !== "missing") {
       return revisionFailure("revision_journal_identity_conflict", "The revision journal path does not match the expected new or partially written journal state.", {

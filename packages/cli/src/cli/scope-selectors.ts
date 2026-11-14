@@ -24,6 +24,7 @@ export interface ScopeSelectors {
   readonly attempt?: string;
   readonly implementationAttempt?: string;
   readonly mission?: string;
+  readonly historyVersion?: string;
 }
 
 export interface ScopeSelectorFailure {
@@ -93,6 +94,7 @@ const selectorOptions = [
   ["attempt", "attempt"],
   ["implementationAttempt", "implementationAttempt"],
   ["mission", "mission"],
+  ["historyVersion", "historyVersion"],
 ] as const;
 
 const uuidV4Pattern =
@@ -144,7 +146,7 @@ export const parseScopeSelectors = (
     if (selected.kind === "failed") return selected;
     if (selected.kind === "absent") continue;
     if (
-      ["task", "attempt", "implementationAttempt", "mission"].includes(
+      ["task", "attempt", "implementationAttempt", "mission", "historyVersion"].includes(
         selectorName,
       ) && !uuidV4Pattern.test(selected.value)
     ) {

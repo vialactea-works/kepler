@@ -203,9 +203,6 @@ const createRuntime = (overrides: {
         },
       }),
     },
-    journals: {
-      create: () => journal,
-    },
     identities: {
       next: () => configuredIds[nextId++] ?? "50000000-0000-4000-8000-000000000005",
     },
@@ -338,6 +335,24 @@ describe("MissionStartup", () => {
       }],
     });
     expect(events).toHaveLength(2);
+    expect(effects).toEqual([]);
+  });
+
+  it("reports pending recovery before returning a complete historical preparation", async () => {
+    const { runtime, events, effects } = createRuntime();
+    await new MissionStartup(runtime).execute(undefined, request);
+    const pending = new MissionStartup({
+      ...runtime,
+      recovery: { ...runtime.recovery, readHistory: async (root, missionId) => ({
+        ...await runtime.recovery.readHistory(root, missionId), pendingRecovery: true,
+      }) },
+    });
+    const retained = [...events];
+    effects.splice(0);
+    expect(await pending.prepare(undefined, ids[0]!)).toMatchObject({
+      kind: "failed", code: "history_recovery_pending", details: { pending_recovery: true, mission_id: ids[0] },
+    });
+    expect(events).toEqual(retained);
     expect(effects).toEqual([]);
   });
 

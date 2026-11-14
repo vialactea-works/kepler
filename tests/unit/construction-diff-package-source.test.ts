@@ -591,6 +591,15 @@ const makeLoaded = (options: FixtureOptions = {}): Extract<AuditHistoryReadResul
     root: "/record-home",
     missionId: ids.mission,
     history,
+    historyMetadata: {
+      mode: "active",
+      history_version: ids.validation,
+      generation_id: ids.generation,
+      pending_recovery: false,
+      migration_required: false,
+      control_receipts: [],
+      control_receipts_truncated: false,
+    },
     projection: { missionId: ids.mission, blocked: false, historyIssues: [], projectionIssues: [], units: [unit] },
     unit,
   };

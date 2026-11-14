@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { collectHistory } from "../../packages/cli/src/history/collection.js";
-import { listAuditEvents, showAuditEvent } from "../../packages/cli/src/audit/queries.js";
+import { listAuditEvents as queryAuditEvents, showAuditEvent } from "../../packages/cli/src/audit/queries.js";
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
 
 const missionId = "10000000-0000-4000-8000-000000000001";
@@ -46,6 +47,8 @@ const history = (events = records(), selectedMissionId = missionId) => collectHi
 }], { completeness: "complete" });
 
 const selectors = { unit: unitId };
+const legacyIdentity = { historyVersion: null, generationId: null };
+const listAuditEvents = (source: ReturnType<typeof history>, options: Parameters<typeof queryAuditEvents>[1], identity: Parameters<typeof queryAuditEvents>[2] = legacyIdentity) => queryAuditEvents(source, options, identity);
 
 describe("audit list projections", () => {
   it("returns the accepted default fields", () => {
@@ -101,12 +104,24 @@ describe("audit list projections", () => {
     expect(second.data.next_cursor).toBeNull();
   });
 
-  it("rejects malformed, mismatched, expired, and out-of-range cursors", () => {
+  it("rejects malformed, mismatched, expired, duplicate, out-of-range, and stale cursors", () => {
     const initial = listAuditEvents(history(), { selectors, limit: 1 });
     const cursor = initial.data.next_cursor as string;
     expect(listAuditEvents(history(), { selectors, limit: 1, cursor: `${cursor}x` }).kind).toBe("failed");
     expect(listAuditEvents(history(), { selectors, type: "construction.evidence-recorded", limit: 1, cursor }).kind).toBe("failed");
     expect(listAuditEvents(history(records().slice(0, 2)), { selectors, limit: 1, cursor }).data.code).toBe("expired_audit_cursor");
+    const decoded = JSON.parse(Buffer.from(cursor.split(".")[0]!, "base64url").toString("utf8")) as Record<string, unknown>;
+    const journals = decoded.journals as unknown[];
+    const duplicatePayload = { ...decoded, journals: [...journals, ...journals] };
+    const duplicateJson = JSON.stringify(duplicatePayload);
+    const duplicateCursor = `${Buffer.from(duplicateJson).toString("base64url")}.${createHash("sha256").update(duplicateJson).digest("hex")}`;
+    expect(listAuditEvents(history(), { selectors, limit: 1, cursor: duplicateCursor }).data.code).toBe("invalid_audit_cursor");
+    const boundaryPayload = { ...decoded, offset: 99 };
+    const boundaryJson = JSON.stringify(boundaryPayload);
+    const boundaryCursor = `${Buffer.from(boundaryJson).toString("base64url")}.${createHash("sha256").update(boundaryJson).digest("hex")}`;
+    expect(listAuditEvents(history(), { selectors, limit: 1, cursor: boundaryCursor }).data.code).toBe("expired_audit_cursor");
+    const otherHistoryVersion = { historyVersion: "90000000-0000-4000-8000-000000000009", generationId: "90000000-0000-4000-8000-000000000010" };
+    expect(listAuditEvents(history(), { selectors, limit: 1, cursor }, otherHistoryVersion).data.code).toBe("stale_audit_cursor");
     const otherMissionId = "90000000-0000-4000-8000-000000000009";
     const copiedRecords = records().map((record) => ({ ...record, data: { ...record.data, mission_id: otherMissionId } }));
     expect(listAuditEvents(history(copiedRecords, otherMissionId), { selectors, limit: 1, cursor }).data.code).toBe("invalid_audit_cursor");

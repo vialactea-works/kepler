@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { ConstructionJournals } from "./journals.js";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
-import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { pendingRevisionBarrierFor } from "./revision-state.js";
 import { runWithConstructionUnitControl } from "./unit-control.js";
 import {
@@ -31,9 +31,7 @@ export interface FunctionalDesignStageCompletionRuntime {
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
-  readonly journals: {
-    readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal;
-  };
+  readonly journals: ConstructionJournals;
 }
 
 export type FunctionalDesignStageCompletionResult =
@@ -397,6 +395,7 @@ export class FunctionalDesignStageCompletion {
 export const createNodeFunctionalDesignStageCompletionRuntime = (
   producer: { readonly name: string; readonly version: string },
   materialReader: ConstructionMaterialReader,
+  journals: ConstructionJournals,
 ): FunctionalDesignStageCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
@@ -405,13 +404,6 @@ export const createNodeFunctionalDesignStageCompletionRuntime = (
     identities: { next: randomUUID },
     now: () => new Date().toISOString(),
     producer,
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        journalId,
-        phase: CONSTRUCTION_PHASE,
-      }),
-    },
+    journals,
   };
 };

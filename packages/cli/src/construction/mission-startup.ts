@@ -185,14 +185,6 @@ export interface MissionStartupRecovery {
   } | MissionStartupFailure>;
 }
 
-export interface MissionJournalFactory {
-  readonly create: (
-    recordHome: string,
-    missionId: MissionId,
-    journalId: JournalId,
-  ) => EventJournal;
-}
-
 export interface MissionStartupIdentitySource {
   readonly next: () => string;
 }
@@ -203,7 +195,6 @@ export interface MissionStartupRuntime {
   };
   readonly workspaces: MissionWorkspacePreparation;
   readonly recovery: MissionStartupRecovery;
-  readonly journals: MissionJournalFactory;
   readonly identities: MissionStartupIdentitySource;
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
@@ -1089,6 +1080,12 @@ export class MissionStartup {
       historyReadError = error;
     }
     if (observedHistory) {
+      if (observedHistory.pendingRecovery) return failure(
+        "history_recovery_pending",
+        "Retained recovery instructions prevent normal mission preparation, including historical success.",
+        { mission_id: missionId, record_home: identity.root, history_version: observedHistory.historyVersion ?? null, generation_id: observedHistory.generationId ?? null, pending_recovery: true },
+        "Inspect recovery status and finish or explicitly supersede the retained operation before retrying mission preparation.",
+      );
       const historicalPrepared = preparedResultFromCompleteHistory(observedHistory.history, missionId, identity.root);
       if (historicalPrepared?.kind === "prepared") return historicalPrepared;
       if (observedHistory.mode === "legacy" && observedHistory.history.journals.length > 0) {

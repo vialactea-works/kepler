@@ -4,8 +4,10 @@ import { CLI_RELEASE } from "../version.js";
 import {
   GitAuthorLookup,
 } from "../git-author.js";
-import { createEventJournal } from "../../history/journal.js";
-import { CONSTRUCTION_PHASE } from "../../construction/events.js";
+import { HistoryAccess } from "../../history/access.js";
+import { createNodeHistoryAccess } from "../../history/access-runtime.js";
+import { HistoryMutations } from "../../history/mutations.js";
+import { MissionMutations } from "../mission-mutations.js";
 import { MissionStartup } from "../../construction/mission-startup.js";
 import { UnitCreate } from "../../construction/unit-create.js";
 import { UnitQueries } from "../../construction/unit-queries.js";
@@ -129,6 +131,20 @@ const constructionMaterialReader = createNodeConstructionMaterialReader(createNo
 @Module({
   imports: [ResultModule, ProjectSelectionModule],
   providers: [
+    {
+      provide: HistoryAccess,
+      useFactory: () => createNodeHistoryAccess(createNodeMissionWorkspaceRuntime()),
+    },
+    {
+      provide: HistoryMutations,
+      useFactory: (access: HistoryAccess) => new HistoryMutations(access),
+      inject: [HistoryAccess],
+    },
+    {
+      provide: MissionMutations,
+      useFactory: (projects: ProjectResolver, units: UnitQueries, mutations: HistoryMutations) => new MissionMutations(projects, units, mutations),
+      inject: [ProjectResolver, UnitQueries, HistoryMutations],
+    },
     GitCommand,
     GitAuthorCommand,
     GitDiffPackageCommand,
@@ -189,11 +205,11 @@ const constructionMaterialReader = createNodeConstructionMaterialReader(createNo
     MissionPrepareCommand,
     {
       provide: AuditContextResolver,
-      useFactory: (projects: ProjectResolver, queries: ConstructionQueries) => new AuditContextResolver(
-        createNodeAuditContextRuntime(projects, async (unitId, taskId, project) =>
+      useFactory: (projects: ProjectResolver, queries: ConstructionQueries, access: HistoryAccess, mutations: HistoryMutations) => new AuditContextResolver(
+        createNodeAuditContextRuntime(projects, access, mutations.auditJournals, async (unitId, taskId, project) =>
           (await queries.taskExecutionContext(unitId, taskId, project)).kind === "execution-context"),
       ),
-      inject: [ProjectResolver, ConstructionQueries],
+      inject: [ProjectResolver, ConstructionQueries, HistoryAccess, HistoryMutations],
     },
     {
       provide: GIT_DIFF_PACKAGE_OPERATION,
@@ -210,85 +226,85 @@ const constructionMaterialReader = createNodeConstructionMaterialReader(createNo
     },
     {
       provide: FunctionalDesignStageCompletion,
-      useFactory: (contexts: AuditContextResolver) => new FunctionalDesignStageCompletion(
+      useFactory: (contexts: AuditContextResolver, mutations: HistoryMutations) => new FunctionalDesignStageCompletion(
         contexts,
-        createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
+        createNodeFunctionalDesignStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader, mutations.journals),
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, HistoryMutations],
     },
     {
       provide: ImplementationPlanningStageCompletion,
-      useFactory: (contexts: AuditContextResolver) => new ImplementationPlanningStageCompletion(
+      useFactory: (contexts: AuditContextResolver, mutations: HistoryMutations) => new ImplementationPlanningStageCompletion(
         contexts,
-        createNodePlanningStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
+        createNodePlanningStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader, mutations.journals),
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, HistoryMutations],
     },
     {
       provide: ImplementationStageCompletion,
-      useFactory: (contexts: AuditContextResolver) => new ImplementationStageCompletion(
+      useFactory: (contexts: AuditContextResolver, mutations: HistoryMutations) => new ImplementationStageCompletion(
         contexts,
-        createNodeImplementationStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
+        createNodeImplementationStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader, mutations.journals),
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, HistoryMutations],
     },
     {
       provide: ImplementationRetainedScopeAssessment,
-      useFactory: (contexts: AuditContextResolver) => new ImplementationRetainedScopeAssessment(
+      useFactory: (contexts: AuditContextResolver, mutations: HistoryMutations) => new ImplementationRetainedScopeAssessment(
         contexts,
-        createNodeImplementationRetainedScopeAssessmentRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
+        createNodeImplementationRetainedScopeAssessmentRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader, mutations.journals),
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, HistoryMutations],
     },
     {
       provide: UnitOfWorkReviewStageCompletion,
-      useFactory: (contexts: AuditContextResolver) => new UnitOfWorkReviewStageCompletion(
+      useFactory: (contexts: AuditContextResolver, mutations: HistoryMutations) => new UnitOfWorkReviewStageCompletion(
         contexts,
-        createNodeUnitOfWorkReviewCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
+        createNodeUnitOfWorkReviewCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader, mutations.journals),
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, HistoryMutations],
     },
     {
       provide: DeliverStageCompletion,
-      useFactory: (contexts: AuditContextResolver, handoffPreflight: MissionHandoffPreflight) => new DeliverStageCompletion(
+      useFactory: (contexts: AuditContextResolver, handoffPreflight: MissionHandoffPreflight, mutations: HistoryMutations) => new DeliverStageCompletion(
         contexts,
-        createNodeDeliverStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
+        createNodeDeliverStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader, mutations.journals),
         handoffPreflight,
       ),
-      inject: [AuditContextResolver, MissionHandoffPreflight],
+      inject: [AuditContextResolver, MissionHandoffPreflight, HistoryMutations],
     },
     {
       provide: QualityRequirementsStageCompletion,
-      useFactory: (contexts: AuditContextResolver) => new QualityRequirementsStageCompletion(
+      useFactory: (contexts: AuditContextResolver, mutations: HistoryMutations) => new QualityRequirementsStageCompletion(
         contexts,
-        createNodeQualityStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader),
+        createNodeQualityStageCompletionRuntime({ name: "kepler", version: cliVersion }, constructionMaterialReader, mutations.journals),
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, HistoryMutations],
     },
     {
       provide: StageStart,
-      useFactory: (contexts: AuditContextResolver) => new StageStart(
+      useFactory: (contexts: AuditContextResolver, mutations: HistoryMutations) => new StageStart(
         contexts,
-        createNodeStageStartRuntime({ name: "kepler", version: cliVersion }),
+        createNodeStageStartRuntime({ name: "kepler", version: cliVersion }, mutations.journals),
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, HistoryMutations],
     },
     {
       provide: ConstructionPauseResume,
-      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries) => new ConstructionPauseResume(
+      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries, mutations: HistoryMutations) => new ConstructionPauseResume(
         contexts,
         queries,
-        createNodeConstructionPauseResumeRuntime({ name: "kepler", version: cliVersion }),
+        createNodeConstructionPauseResumeRuntime({ name: "kepler", version: cliVersion }, mutations.journals),
       ),
-      inject: [AuditContextResolver, ConstructionQueries],
+      inject: [AuditContextResolver, ConstructionQueries, HistoryMutations],
     },
     {
       provide: Revision,
-      useFactory: (contexts: AuditContextResolver) => new Revision(
+      useFactory: (contexts: AuditContextResolver, mutations: HistoryMutations) => new Revision(
         contexts,
-        createNodeStageStartRuntime({ name: "kepler", version: cliVersion }),
+        createNodeStageStartRuntime({ name: "kepler", version: cliVersion }, mutations.journals),
       ),
-      inject: [AuditContextResolver],
+      inject: [AuditContextResolver, HistoryMutations],
     },
     {
       provide: AuditRecording,
@@ -305,29 +321,22 @@ const constructionMaterialReader = createNodeConstructionMaterialReader(createNo
     },
     {
       provide: UnitCreate,
-      useFactory: (projects: ProjectResolver) => new UnitCreate({
+      useFactory: (projects: ProjectResolver, access: HistoryAccess, mutations: HistoryMutations) => new UnitCreate({
         projects: { resolve: (project) => projects.resolve(project) },
         workspace: createNodeMissionWorkspaceRuntime(),
-        records: createNodeUnitCreateRecords(),
-        journals: {
-          create: (recordHome, missionId, journalId) => createEventJournal({
-            recordHome,
-            missionId,
-            journalId,
-            phase: CONSTRUCTION_PHASE,
-          }),
-        },
+        records: createNodeUnitCreateRecords(access),
+        journals: mutations.journals,
         identities: { next: randomUUID },
         today: machineLocalDate,
         now: () => new Date().toISOString(),
         producer: { name: "kepler", version: cliVersion },
       }),
-      inject: [ProjectResolver],
+      inject: [ProjectResolver, HistoryAccess, HistoryMutations],
     },
     {
       provide: UnitQueries,
-      useFactory: (projects: ProjectResolver) => new UnitQueries(projects, createNodeUnitQueryFileSystem()),
-      inject: [ProjectResolver],
+      useFactory: (projects: ProjectResolver, access: HistoryAccess) => new UnitQueries(projects, createNodeUnitQueryFileSystem(), access),
+      inject: [ProjectResolver, HistoryAccess],
     },
     {
       provide: ConstructionQueries,
@@ -336,30 +345,30 @@ const constructionMaterialReader = createNodeConstructionMaterialReader(createNo
     },
     {
       provide: TaskAdmission,
-      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries) => new TaskAdmission(
+      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries, mutations: HistoryMutations) => new TaskAdmission(
         contexts,
         queries,
-        createNodeTaskAdmissionRuntime({ name: "kepler", version: cliVersion }),
+        createNodeTaskAdmissionRuntime({ name: "kepler", version: cliVersion }, mutations.journals),
       ),
-      inject: [AuditContextResolver, ConstructionQueries],
+      inject: [AuditContextResolver, ConstructionQueries, HistoryMutations],
     },
     {
       provide: ActivityExecution,
-      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries) => new ActivityExecution(
+      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries, mutations: HistoryMutations) => new ActivityExecution(
         contexts,
         queries,
-        createNodeActivityExecutionRuntime({ name: "kepler", version: cliVersion }),
+        createNodeActivityExecutionRuntime({ name: "kepler", version: cliVersion }, mutations.journals),
       ),
-      inject: [AuditContextResolver, ConstructionQueries],
+      inject: [AuditContextResolver, ConstructionQueries, HistoryMutations],
     },
     {
       provide: IntegrationExecution,
-      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries) => new IntegrationExecution(
+      useFactory: (contexts: AuditContextResolver, queries: ConstructionQueries, mutations: HistoryMutations) => new IntegrationExecution(
         contexts,
         queries,
-        createNodeIntegrationExecutionRuntime({ name: "kepler", version: cliVersion }),
+        createNodeIntegrationExecutionRuntime({ name: "kepler", version: cliVersion }, mutations.journals),
       ),
-      inject: [AuditContextResolver, ConstructionQueries],
+      inject: [AuditContextResolver, ConstructionQueries, HistoryMutations],
     },
     {
       provide: ConstructionLint,
@@ -374,14 +383,6 @@ const constructionMaterialReader = createNodeConstructionMaterialReader(createNo
           projects: { resolve: (project) => projects.resolve(project) },
           workspaces: createMissionWorkspacePreparation(workspaceRuntime),
           recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-          journals: {
-            create: (recordHome, missionId, journalId) => createEventJournal({
-              recordHome,
-              missionId,
-              journalId,
-              phase: CONSTRUCTION_PHASE,
-            }),
-          },
           identities: { next: randomUUID },
           now: () => new Date().toISOString(),
           producer: { name: "kepler", version: cliVersion },

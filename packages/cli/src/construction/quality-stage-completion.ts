@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import { hasRequesterParticipant } from "../audit/participants.js";
 import { validateStageStartAuthority } from "./stage-authority.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
-import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { runWithConstructionRevisionFence } from "./unit-control.js";
 import type { ConstructionMaterialReader, StageArtifactMaterial } from "./material-reader.js";
 import {
@@ -40,9 +40,7 @@ export interface QualityStageCompletionRuntime {
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
-  readonly journals: {
-    readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal;
-  };
+  readonly journals: ConstructionJournals;
 }
 
 export type QualityStageCompletionResult =
@@ -381,7 +379,7 @@ export class QualityRequirementsStageCompletion {
     if (!uuidV4(eventId) || !uuidV4(journalId) || eventId === journalId || existingIds.has(eventId) || existingIds.has(journalId)) {
       return failure("stage_completion_identity_failed", "Kepler could not allocate distinct unused event and journal identities.");
     }
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") {
       return failure("stage_completion_journal_identity_conflict", "The allocated stage journal identity already has a filesystem entry.", { journal_id: journalId });
     }
@@ -467,6 +465,7 @@ export class QualityRequirementsStageCompletion {
 export const createNodeQualityStageCompletionRuntime = (
   producer: { readonly name: string; readonly version: string },
   materialReader: ConstructionMaterialReader,
+  journals: ConstructionJournals,
 ): QualityStageCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
@@ -475,13 +474,6 @@ export const createNodeQualityStageCompletionRuntime = (
     identities: { next: randomUUID },
     now: () => new Date().toISOString(),
     producer,
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        journalId,
-        phase: CONSTRUCTION_PHASE,
-      }),
-    },
+    journals,
   };
 };
