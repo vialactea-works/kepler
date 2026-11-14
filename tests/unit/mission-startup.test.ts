@@ -1,3 +1,4 @@
+import * as Path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   MissionStartup,
@@ -7,7 +8,10 @@ import {
   type PreparedMissionRepository,
 } from "../../packages/cli/src/construction/mission-startup.js";
 import type { EventJournal } from "../../packages/cli/src/history/journal.js";
-import { collectHistory, type HistoryCollection } from "../../packages/cli/src/history/collection.js";
+import { collectHistory } from "../../packages/cli/src/history/collection.js";
+import type { MissionCoordinationLease } from "../../packages/cli/src/construction/mission-coordination.js";
+import { missionStartupResourceKey } from "../../packages/cli/src/construction/mission-startup-resource.js";
+import type { MissionStartupHistoryView } from "../../packages/cli/src/history/startup.js";
 import { missionIntegrationTargetKey, missionWorkspaceKey } from "../../packages/cli/src/construction/mission-workspace.js";
 
 const recordHomeCommonDirectory = "/record/.git";
@@ -21,6 +25,11 @@ const ids = [
   "20000000-0000-4000-8000-000000000002",
   "30000000-0000-4000-8000-000000000003",
   "40000000-0000-4000-8000-000000000004",
+  "50000000-0000-4000-8000-000000000005",
+  "60000000-0000-4000-8000-000000000006",
+  "70000000-0000-4000-8000-000000000007",
+  "80000000-0000-4000-8000-000000000008",
+  "90000000-0000-4000-8000-000000000009",
 ];
 
 const request = {
@@ -70,6 +79,25 @@ const prepared: PreparedMissionRepository = {
   workspacePath: canonicalWorkspacePath,
 };
 
+const testLease = (
+  missionId: string,
+  release: MissionCoordinationLease["release"] = async () => ({ kind: "released" }),
+): MissionCoordinationLease => {
+  const resourceKey = missionStartupResourceKey(recordHomeCommonDirectory, missionId);
+  return {
+    lockPath: Path.join(recordHomeCommonDirectory, "kepler", "missions", missionId, "coordination", resourceKey),
+    owner: {
+      token: "90000000-0000-4000-8000-000000000009",
+      machine_id: "mission-startup-test",
+      process_id: 1,
+      process_incarnation_id: "80000000-0000-4000-8000-000000000008",
+      mission_id: missionId,
+      resource_scope: "mission-startup",
+    },
+    release,
+  };
+};
+
 const createRuntime = (overrides: {
   readonly resolve?: () => Promise<unknown>;
   readonly inspect?: () => Promise<unknown>;
@@ -77,24 +105,48 @@ const createRuntime = (overrides: {
   readonly append?: (event: unknown) => Promise<unknown>;
   readonly reconcile?: () => Promise<unknown>;
   readonly loadIntent?: () => Promise<unknown | undefined>;
-  readonly readHistory?: () => Promise<HistoryCollection>;
+  readonly readHistory?: () => Promise<MissionStartupHistoryView>;
   readonly ids?: readonly string[];
 } = {}) => {
   const events: unknown[] = [];
   const effects: string[] = [];
   let savedIntent: unknown;
   let nextId = 0;
+  let generationId: string | undefined;
+  let historyVersion: string | undefined;
   const configuredIds = overrides.ids ?? ids;
   const journal: EventJournal = {
-    path: `/record/.kepler/missions/${configuredIds[0]}/history/construction/${configuredIds[1]}.jsonl`,
+    get path() {
+      return `/record/.kepler/missions/${configuredIds[0]}/history/generations/${generationId ?? configuredIds[4]}/construction/${configuredIds[1]}.jsonl`;
+    },
     read: async () => {
       throw new Error("not used");
     },
     append: async (event) => {
-      events.push(event);
+      if (!events.some((existing) => typeof existing === "object" && existing !== null && "id" in existing &&
+          typeof event === "object" && event !== null && "id" in event && existing.id === event.id)) events.push(event);
       effects.push("append");
       return overrides.append ? await overrides.append!(event) as never : { status: "appended", eventId: "event", line: events.length };
     },
+  };
+  const readHistory = async (_recordHome: string, missionId: string): Promise<MissionStartupHistoryView> => {
+    const first = events[0] as Record<string, unknown> | undefined;
+    const bytes = new TextEncoder().encode(events.map((event) => `${JSON.stringify(event)}\n`).join(""));
+    const history = collectHistory(missionId, first && generationId ? [{
+      sourceId: `${missionId}/${generationId}/construction/${String(first.journal_id)}`,
+      missionId,
+      generationId,
+      phase: "construction",
+      journalId: String(first.journal_id),
+      bytes,
+    }] : [], { completeness: "complete", ...(generationId ? { generationId } : {}) });
+    return {
+      mode: generationId ? "active" : "legacy",
+      ...(generationId ? { generationId } : {}),
+      ...(historyVersion ? { historyVersion } : {}),
+      pendingRecovery: false,
+      history,
+    };
   };
   const runtime: MissionStartupRuntime = {
     projects: {
@@ -128,25 +180,27 @@ const createRuntime = (overrides: {
       }),
     },
     recovery: {
-      acquireMission: async () => {
+      acquireMission: async (_commonDirectory, missionId) => {
         effects.push("acquireMission");
-        return {
-          kind: "acquired",
-          lease: { release: async () => ({ kind: "released" }) },
-        };
+        return { kind: "acquired", lease: testLease(missionId) };
       },
       saveIntent: async (_recordHome, _commonDirectory, _missionId, intent) => { savedIntent = structuredClone(intent); },
       loadIntent: overrides.loadIntent ?? (async () => structuredClone(savedIntent)),
-      readHistory: overrides.readHistory ?? (async (_recordHome, missionId) => {
-        const first = events[0] as Record<string, unknown> | undefined;
-        const bytes = new TextEncoder().encode(events.map((event) => `${JSON.stringify(event)}\n`).join(""));
-        return collectHistory(missionId, first ? [{
-          sourceId: `${missionId}/construction/${String(first.journal_id)}`,
-          missionId,
-          phase: "construction",
-          journalId: String(first.journal_id),
-          bytes,
-        }] : [], { completeness: "complete" });
+      readHistory: overrides.readHistory ?? readHistory,
+      withStartup: async (_recordHome, missionId, _lease, operation) => await operation({
+        read: async () => await readHistory(_recordHome, missionId),
+        createJournal: (journalId, requestedGenerationId) => {
+          if (journalId !== configuredIds[1] || (generationId !== undefined && generationId !== requestedGenerationId)) throw new Error("Startup test journal coordinates changed");
+          generationId = requestedGenerationId;
+          return journal;
+        },
+        initialize: async (intent, createdEvent) => {
+          if (generationId !== undefined && (generationId !== intent.generationId || historyVersion !== intent.control.id)) throw new Error("Startup test generation was superseded");
+          await journal.append(createdEvent);
+          generationId = intent.generationId;
+          historyVersion = intent.control.id;
+          return await readHistory(_recordHome, missionId);
+        },
       }),
     },
     journals: {
@@ -244,6 +298,21 @@ describe("MissionStartup", () => {
       expect(events).toHaveLength(1);
     },
   );
+
+  it("refuses a legacy saved startup intent without minting generation authority or changing history", async () => {
+    const { runtime, events, effects, intent, setIntent } = createRuntime({ prepare: async () => ({ kind: "failed", code: "workspace_preparation_failed", message: "interrupted", details: {}, recovery: "Retry." }) });
+    const startup = new MissionStartup(runtime);
+    await startup.execute(undefined, request);
+    const saved = intent() as Record<string, unknown>;
+    const legacy = { ...saved, format: "kepler.mission-startup-intent.v1" };
+    delete (legacy as Record<string, unknown>).startupHistory;
+    setIntent(legacy);
+    const before = [...events];
+    effects.splice(0);
+    expect(await startup.prepare(undefined, ids[0]!)).toMatchObject({ kind: "failed", code: "mission_startup_legacy_intent_unsupported" });
+    expect(events).toEqual(before);
+    expect(effects).toEqual([]);
+  });
 
   it("returns historical prepared facts without requiring local workspace identity", async () => {
     const { runtime, events, effects, clearIntent } = createRuntime();
@@ -437,15 +506,13 @@ describe("MissionStartup", () => {
       ...runtime,
       recovery: {
         ...runtime.recovery,
-        acquireMission: async () => ({
+        acquireMission: async (_commonDirectory, missionId) => ({
           kind: "acquired",
-          lease: {
-            release: async () => {
-              releases += 1;
-              if (releaseMode === "thrown") throw new Error("Mission owner probe failed");
-              return { kind: "failed", code: "mission_release_denied", message: "Mission owner changed", details: {}, recovery: "Keep the mission owner artifact." };
-            },
-          },
+          lease: testLease(missionId, async () => {
+            releases += 1;
+            if (releaseMode === "thrown") throw new Error("Mission owner probe failed");
+            return { kind: "failed", code: "mission_release_denied", message: "Mission owner changed", details: {}, recovery: "Keep the mission owner artifact." };
+          }),
         }),
       },
     });
@@ -476,16 +543,14 @@ describe("MissionStartup", () => {
       ...runtime,
       recovery: {
         ...runtime.recovery,
-        acquireMission: async () => {
+        acquireMission: async (_commonDirectory, missionId) => {
           acquisitions += 1;
           return {
             kind: "acquired",
-            lease: {
-              release: async () => {
-                releases += 1;
-                return { kind: "failed", code: "mission_release_denied", message: "Mission owner changed", details: {}, recovery: "Keep the mission owner artifact." };
-              },
-            },
+            lease: testLease(missionId, async () => {
+              releases += 1;
+              return { kind: "failed", code: "mission_release_denied", message: "Mission owner changed", details: {}, recovery: "Keep the mission owner artifact." };
+            }),
           };
         },
       },

@@ -2,17 +2,20 @@ import { missionStartupResourceKey } from "./mission-startup-resource.js";
 import { constants as FsConstants } from "node:fs";
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
-import { collectHistory, type HistoryJournalSource } from "../history/collection.js";
 import { parseStrictJson } from "../json/strict-json.js";
-import type { UnitQueryFileSystem } from "./unit-queries.js";
+import { createNodeHistoryAccess } from "../history/access-runtime.js";
+import { createEventJournal } from "../history/journal.js";
+import { publishMissionStartupHistory, readMissionStartupHistory } from "../history/startup.js";
+import type { MissionStartupHistoryJournalFactory, MissionStartupHistoryView } from "../history/startup.js";
 import type { MissionId } from "./events.js";
 import type { MissionStartupRecovery } from "./mission-startup.js";
 import type { MissionWorkspaceRuntime } from "./mission-workspace.js";
-import { createNodeUnitQueryFileSystem } from "./unit-queries-runtime.js";
 
 export interface MissionStartupIntentFileSystem {
   readonly open: (path: string, flags: number) => Promise<Awaited<ReturnType<typeof Fs.open>>>;
 }
+
+export type MissionStartupGenerationJournalFactory = MissionStartupHistoryJournalFactory;
 
 const nodeIntentFileSystem: MissionStartupIntentFileSystem = {
   open: (path, flags) => Fs.open(path, flags),
@@ -88,33 +91,27 @@ const locateIntentDirectory = async (commonDirectory: string, missionId: Mission
   return current;
 };
 
-const readHistorySources = async (
-  recordHome: string,
-  missionId: MissionId,
-  fileSystem: UnitQueryFileSystem,
-): Promise<HistoryJournalSource[]> => {
-  const historyRoot = Path.join(recordHome, ".kepler", "missions", missionId, "history");
-  const sources: HistoryJournalSource[] = [];
-  for (const phase of await fileSystem.directories(historyRoot, recordHome)) {
-    const phaseRoot = Path.join(historyRoot, phase);
-    for (const journalId of await fileSystem.journals(phaseRoot, recordHome)) {
-      sources.push({
-        sourceId: `${missionId}/${phase}/${journalId}`,
-        missionId,
-        phase,
-        journalId,
-        bytes: await fileSystem.read(Path.join(phaseRoot, `${journalId}.jsonl`), recordHome),
-      });
-    }
-  }
-  return sources;
-};
+const startupHistoryView = (view: Awaited<ReturnType<ReturnType<typeof createNodeHistoryAccess>["read"]>>): MissionStartupHistoryView => ({
+  mode: view.mode,
+  ...(view.generationId ? { generationId: view.generationId } : {}),
+  ...(view.historyVersion ? { historyVersion: view.historyVersion } : {}),
+  pendingRecovery: view.pendingRecovery,
+  history: view.history,
+});
 
 export const createNodeMissionStartupRecoveryRuntime = (
   workspace: MissionWorkspaceRuntime,
-  fileSystem: UnitQueryFileSystem = createNodeUnitQueryFileSystem(),
   intentFileSystem: MissionStartupIntentFileSystem = nodeIntentFileSystem,
-): MissionStartupRecovery => ({
+  journalFactory: MissionStartupGenerationJournalFactory = ({ recordHome, missionId, journalId, generationId }) => createEventJournal({
+    recordHome,
+    missionId,
+    phase: "construction",
+    journalId,
+    generationId,
+  }),
+): MissionStartupRecovery => {
+  const access = createNodeHistoryAccess(workspace);
+  return {
   saveIntent: async (recordHome, commonDirectory, missionId, intent) => {
     if (intent.missionId !== missionId || intent.recordHomeRoot !== recordHome ||
         intent.recordHomeCommonDirectory !== commonDirectory) {
@@ -174,8 +171,20 @@ export const createNodeMissionStartupRecoveryRuntime = (
     if (parsed.kind === "invalid") throw new Error(`Mission startup recovery intent is malformed: ${parsed.code} at ${parsed.pointer}`);
     return parsed.value;
   },
-  readHistory: async (recordHome, missionId) =>
-    collectHistory(missionId, await readHistorySources(recordHome, missionId, fileSystem), { completeness: "complete" }),
+  readHistory: async (recordHome, missionId) => startupHistoryView(await access.read(recordHome, missionId)),
+  withStartup: (recordHome, missionId, lease, operation) => access.withStartup(recordHome, missionId, lease, async (scope) => {
+    let retained: { readonly intent: Parameters<typeof publishMissionStartupHistory>[2]; readonly preparedEvent: Parameters<typeof publishMissionStartupHistory>[4] } | undefined;
+    return operation({
+      read: async () => retained
+        ? await readMissionStartupHistory(access, scope, retained.intent, retained.preparedEvent, journalFactory)
+        : startupHistoryView(await access.read(recordHome, missionId)),
+      createJournal: (journalId, generationId) => journalFactory({ recordHome, missionId, journalId, generationId }),
+      initialize: async (intent, createdEvent, preparedEvent) => {
+        retained = { intent, preparedEvent };
+        return publishMissionStartupHistory(access, scope, intent, createdEvent, preparedEvent, journalFactory);
+      },
+    });
+  }),
   acquireMission: async (commonDirectory, missionId) => {
     const resourceKey = missionStartupResourceKey(commonDirectory, missionId);
     const acquired = await workspace.coordination.acquire({
@@ -193,4 +202,5 @@ export const createNodeMissionStartupRecoveryRuntime = (
     if (acquired.kind === "failed") return acquired;
     return { kind: "acquired", lease: acquired.lease };
   },
-});
+  };
+};

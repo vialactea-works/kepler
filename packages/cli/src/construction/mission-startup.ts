@@ -7,6 +7,9 @@ import {
 } from "@vialactea-works/kepler-core";
 import type { EventJournal } from "../history/journal.js";
 import type { CollectedHistoryEvent, HistoryCollection } from "../history/collection.js";
+import { createMissionStartupHistoryIntent, validateMissionStartupHistoryIntent, type MissionStartupHistoryIntent, type MissionStartupHistoryScope, type MissionStartupHistoryView } from "../history/startup.js";
+import { HistoryError } from "../history/control.js";
+import type { MissionCoordinationLease } from "./mission-coordination.js";
 import type { ProjectSelectionResult } from "../cli/project-selection.js";
 import { missionIntegrationTargetKey, missionWorkspaceKey } from "./mission-workspace.js";
 import {
@@ -109,7 +112,9 @@ export type MissionWorkspacePreparationResult =
   | MissionStartupFailure;
 
 export interface MissionWorkspacePreparationContext {
+  readonly missionId: MissionId;
   readonly missionJournalPath: string;
+  readonly missionHistoryPaths: readonly string[];
 }
 
 export interface MissionRecordHomeIdentity {
@@ -139,7 +144,7 @@ export interface MissionWorkspacePreparation {
 }
 
 export interface MissionStartupIntent {
-  readonly format: "kepler.mission-startup-intent.v1";
+  readonly format: "kepler.mission-startup-intent.v2";
   readonly missionId: MissionId;
   readonly recordHomeRoot: string;
   readonly recordHomeRepositoryId: string;
@@ -149,6 +154,7 @@ export interface MissionStartupIntent {
   readonly repositories: readonly InspectedMissionRepository[];
   readonly createdEvent: EventEnvelope<unknown>;
   readonly preparedEvent: EventEnvelope<unknown>;
+  readonly startupHistory: MissionStartupHistoryIntent;
 }
 
 export interface MissionStartupRecovery {
@@ -163,13 +169,19 @@ export interface MissionStartupRecovery {
     commonDirectory: string,
     missionId: MissionId,
   ) => Promise<unknown | undefined>;
-  readonly readHistory: (recordHome: string, missionId: MissionId) => Promise<HistoryCollection>;
+  readonly readHistory: (recordHome: string, missionId: MissionId) => Promise<MissionStartupHistoryView>;
+  readonly withStartup: <T>(
+    recordHome: string,
+    missionId: MissionId,
+    lease: MissionCoordinationLease,
+    operation: (scope: MissionStartupHistoryScope) => Promise<T>,
+  ) => Promise<T>;
   readonly acquireMission: (
     commonDirectory: string,
     missionId: MissionId,
   ) => Promise<{
     readonly kind: "acquired";
-    readonly lease: { readonly release: () => Promise<{ readonly kind: "released" } | MissionStartupFailure> };
+    readonly lease: MissionCoordinationLease;
   } | MissionStartupFailure>;
 }
 
@@ -590,7 +602,7 @@ const validateStartupIntent = (
   missionId: MissionId,
   identity: MissionRecordHomeIdentity,
 ): MissionStartupIntent | undefined => {
-  if (!isRecord(value) || value.format !== "kepler.mission-startup-intent.v1" || value.missionId !== missionId ||
+  if (!isRecord(value) || value.format !== "kepler.mission-startup-intent.v2" || value.missionId !== missionId ||
       value.recordHomeRoot !== identity.root || value.recordHomeGitDirectory !== identity.gitDirectory ||
       value.recordHomeCommonDirectory !== identity.commonDirectory || !nonEmptyString(value.recordHomeRepositoryId)) return undefined;
   const requestValidation = validateMissionStartupRequest(value.request);
@@ -618,8 +630,20 @@ const validateStartupIntent = (
       preparedEvent.caused_by[0] !== createdEvent.id ||
       !sameJson(createdEvent.data, createdDataFor(requestValidation.request, missionId, repositories)) ||
       !sameJson(preparedEvent.data, preparedDataFor(missionId, repositories))) return undefined;
+  const startupHistory = validateMissionStartupHistoryIntent({
+    value: value.startupHistory,
+    request: requestValidation.request,
+    missionId,
+    journalId: createdEvent.journal_id,
+    createdEvent,
+    preparedEvent,
+  });
+  if (!startupHistory) return undefined;
+  const identities = [missionId, createdEvent.journal_id, createdEvent.id, preparedEvent.id, startupHistory.generationId,
+    startupHistory.control.journal_id, startupHistory.control.id, startupHistory.guard.journal_id, startupHistory.guard.id];
+  if (new Set(identities).size !== identities.length) return undefined;
   return {
-    format: "kepler.mission-startup-intent.v1",
+    format: "kepler.mission-startup-intent.v2",
     missionId,
     recordHomeRoot: identity.root,
     recordHomeRepositoryId: value.recordHomeRepositoryId,
@@ -629,6 +653,7 @@ const validateStartupIntent = (
     repositories,
     createdEvent,
     preparedEvent,
+    startupHistory,
   };
 };
 
@@ -666,56 +691,9 @@ const startupEventsAgree = (
     });
 };
 
-const singleUnterminatedStartupTail = (
-  history: HistoryCollection,
-  missionId: MissionId,
-): CollectedHistoryEvent | undefined => {
-  if (!history.sourceSetComplete || history.issues.length !== 1 || history.journals.length !== 1) return undefined;
-  const issue = history.issues[0];
-  const journal = history.journals[0];
-  const tail = journal?.scan.lines.at(-1);
-  const scanProblem = journal?.scan.problems[0];
-  if (!issue || issue.code !== "damaged-record" || issue.sourceId !== journal?.sourceId ||
-      issue.journalId !== journal?.journalId || issue.line === undefined || !issue.eventId ||
-      !journal || journal.missionId !== missionId || journal.phase !== CONSTRUCTION_PHASE ||
-      journal.scan.problems.length !== 1 || scanProblem?.code !== "unterminated-record" ||
-      scanProblem.line !== issue.line || !tail || tail.terminated || tail.line !== issue.line ||
-      tail.event?.id !== issue.eventId || tail.event.phase !== CONSTRUCTION_PHASE ||
-      tail.event.journal_id !== journal.journalId || tail.event.data.mission_id !== missionId) return undefined;
-  const candidate = journal.events.find((event) => event.line === issue.line && event.event?.id === issue.eventId);
-  if (!candidate || candidate.sourceId !== issue.sourceId || candidate.status !== "invalid" ||
-      candidate.constructionEvent !== undefined || candidate.issueCodes.length !== 1 ||
-      candidate.issueCodes[0] !== "damaged-record" ||
-      history.events.some((event) =>
-        !(event.sourceId === candidate.sourceId && event.journalId === candidate.journalId && event.line === candidate.line &&
-          event.event?.id === candidate.event?.id) &&
-        (event.status !== "valid" || event.constructionEvent === undefined || event.event === undefined))) return undefined;
-  const validation = validateConstructionEvent(tail.event);
-  if (validation.status !== "valid") return undefined;
-  if (tail.event.type === "construction.mission-created") {
-    return history.events.length === 1 && isMissionCreatedData(tail.event.data) &&
-      tail.event.caused_by.length === 0 ? candidate : undefined;
-  }
-  if (tail.event.type !== "construction.mission-workspaces-prepared" || history.events.length !== 2) return undefined;
-  const created = history.events.find((event) => event.event?.type === "construction.mission-created");
-  if (!created || created.status !== "valid" || created.constructionEvent === undefined || !created.event ||
-      created.line >= candidate.line || created.journalId !== candidate.journalId ||
-      history.events.filter((event) => event.event?.id === tail.event?.id).length !== 1 ||
-      !startupEventsAgree(created.event, tail.event, missionId)) return undefined;
-  return candidate;
-};
 
-const savedUnterminatedStartupTail = (
-  history: HistoryCollection,
-  intent: MissionStartupIntent,
-): EventEnvelope<unknown> | undefined => {
-  const candidate = singleUnterminatedStartupTail(history, intent.missionId);
-  if (!candidate?.event) return undefined;
-  if (sameJson(candidate.event, intent.createdEvent)) return intent.createdEvent;
-  if (!sameJson(candidate.event, intent.preparedEvent)) return undefined;
-  const created = history.events.find((event) => event.event?.type === "construction.mission-created");
-  return created?.event && sameJson(created.event, intent.createdEvent) ? intent.preparedEvent : undefined;
-};
+
+
 
 const preparedResultFromHistory = (
   missionId: MissionId,
@@ -742,6 +720,17 @@ const preparedResultFromHistory = (
   };
 };
 
+const legacyStartupHistoryFailure = (
+  missionId: MissionId,
+  recordHome: string,
+  history: HistoryCollection,
+): MissionStartupFailure => failure(
+  "mission_history_migration_required",
+  "Direct-phase startup journals are read-only migration inputs and cannot authorize a resumed startup write.",
+  { mission_id: missionId, journal_ids: history.journals.map((journal) => journal.journalId), issues: history.issues },
+  continueRecovery(missionId, recordHome, "Use the supported history migration or recovery operation before resuming startup; preserve the original direct-phase journals."),
+);
+
 const preparedResultFromCompleteHistory = (
   history: HistoryCollection,
   missionId: MissionId,
@@ -749,7 +738,6 @@ const preparedResultFromCompleteHistory = (
 ): MissionStartupPrepared | MissionStartupFailure | undefined => {
   if (!history.sourceSetComplete || history.issues.length > 0 ||
       history.events.some((entry) => entry.status !== "valid" || entry.constructionEvent === undefined || entry.event === undefined)) {
-    if (singleUnterminatedStartupTail(history, missionId)) return undefined;
     return historyProblem(history, missionId, recordHome);
   }
   const createdEvents = history.events.filter((entry) => entry.event?.type === "construction.mission-created");
@@ -937,15 +925,25 @@ export class MissionStartup {
     let journalId = "";
     let createdEventId = "";
     let preparedEventId = "";
+    let generationId = "";
+    let controlJournalId = "";
+    let controlEventId = "";
+    let guardJournalId = "";
+    let guardEventId = "";
     try {
       missionId = this.runtime.identities.next();
       journalId = this.runtime.identities.next();
       createdEventId = this.runtime.identities.next();
       preparedEventId = this.runtime.identities.next();
+      generationId = this.runtime.identities.next();
+      controlJournalId = this.runtime.identities.next();
+      controlEventId = this.runtime.identities.next();
+      guardJournalId = this.runtime.identities.next();
+      guardEventId = this.runtime.identities.next();
     } catch {
       return failure("identity_generation_failed", "Kepler could not allocate mission history identities.");
     }
-    const identities = [missionId, journalId, createdEventId, preparedEventId];
+    const identities = [missionId, journalId, createdEventId, preparedEventId, generationId, controlJournalId, controlEventId, guardJournalId, guardEventId];
     if (identities.some((identity) => !isUuidV4(identity)) || new Set(identities).size !== identities.length) {
       return failure("identity_generation_failed", "Mission identity generation returned invalid or reused UUIDv4 values.");
     }
@@ -1000,8 +998,29 @@ export class MissionStartup {
         "No Git workspaces were prepared. Correct the startup contract before retrying.",
       );
     }
+    let startupHistory: MissionStartupHistoryIntent;
+    try {
+      startupHistory = createMissionStartupHistoryIntent({
+        request: validated.request,
+        missionId: missionId as MissionId,
+        generationId,
+        journalId,
+        createdEvent: created,
+        controlJournalId,
+        controlEventId,
+        guardJournalId,
+        guardEventId,
+        recordedAt: this.runtime.now(),
+        producer: this.runtime.producer,
+      });
+    } catch (error) {
+      return failure("mission_history_initialization_invalid", "Kepler could not prepare the exact initial history selection before startup effects.", {
+        mission_id: missionId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
     const intent: MissionStartupIntent = {
-      format: "kepler.mission-startup-intent.v1",
+      format: "kepler.mission-startup-intent.v2",
       missionId: missionId as MissionId,
       recordHomeRoot: recordHomeIdentity.root,
       recordHomeRepositoryId: validated.request.recordHomeRepositoryId,
@@ -1011,6 +1030,7 @@ export class MissionStartup {
       repositories: confirmedInspected,
       createdEvent: created,
       preparedEvent,
+      startupHistory,
     };
     try {
       await this.runtime.recovery.saveIntent(
@@ -1060,18 +1080,22 @@ export class MissionStartup {
     }
     if ("kind" in identity) return startupFailure(identity, missionId, selectedProject.root);
 
-    let history: HistoryCollection;
+    let observedHistory: MissionStartupHistoryView | undefined;
+    let observedHistoryProblem: MissionStartupFailure | undefined;
+    let historyReadError: unknown;
     try {
-      history = await this.runtime.recovery.readHistory(identity.root, missionId);
+      observedHistory = await this.runtime.recovery.readHistory(identity.root, missionId);
     } catch (error) {
-      return failure("mission_history_read_failed", "Kepler could not read the complete mission history source set.", {
-        mission_id: missionId,
-        message: error instanceof Error ? error.message : String(error),
-      }, continueRecovery(missionId, identity.root, "Preserve all history files and resolve the reported storage error."));
+      historyReadError = error;
     }
-    const recoverableTailCandidate = singleUnterminatedStartupTail(history, missionId) !== undefined;
-    const historicalPrepared = preparedResultFromCompleteHistory(history, missionId, identity.root);
-    if (historicalPrepared !== undefined) return historicalPrepared;
+    if (observedHistory) {
+      const historicalPrepared = preparedResultFromCompleteHistory(observedHistory.history, missionId, identity.root);
+      if (historicalPrepared?.kind === "prepared") return historicalPrepared;
+      if (observedHistory.mode === "legacy" && observedHistory.history.journals.length > 0) {
+        return legacyStartupHistoryFailure(missionId, identity.root, observedHistory.history);
+      }
+      if (historicalPrepared !== undefined) observedHistoryProblem = historicalPrepared;
+    }
 
     let rawIntent: unknown | undefined;
     try {
@@ -1083,8 +1107,20 @@ export class MissionStartup {
         message: error instanceof Error ? error.message : String(error),
       }, continueRecovery(missionId, identity.root, "Preserve the local intent and Git common-directory paths; do not replace or repair them manually."));
     }
-    if (rawIntent === undefined && recoverableTailCandidate) {
-      return historyProblem(history, missionId, identity.root);
+    if (isRecord(rawIntent) && rawIntent.format === "kepler.mission-startup-intent.v1") {
+      return failure(
+        "mission_startup_legacy_intent_unsupported",
+        "This startup intent predates generation selection and cannot authorize a resumed write.",
+        { mission_id: missionId, intent_format: rawIntent.format, history_mode: observedHistory?.mode ?? null },
+        continueRecovery(missionId, identity.root, "Keep this legacy startup material unchanged. Inspect it and use the supported history migration or recovery operation before any further mutation."),
+      );
+    }
+    if (rawIntent === undefined && observedHistoryProblem !== undefined) return observedHistoryProblem;
+    if (rawIntent === undefined && historyReadError !== undefined) {
+      return failure("mission_history_read_failed", "Kepler could not read the complete mission history source set.", {
+        mission_id: missionId,
+        message: historyReadError instanceof Error ? historyReadError.message : String(historyReadError),
+      }, continueRecovery(missionId, identity.root, "Preserve all history files and resolve the reported storage error."));
     }
     if (rawIntent === undefined) {
       return failure("mission_recovery_material_missing", "The original mission has no saved startup recovery instructions.", {
@@ -1094,6 +1130,7 @@ export class MissionStartup {
       }, "This mission cannot be repaired safely from current refs or paths. Preserve all history and Git resources; do not create a replacement mission or guess its original selections.");
     }
     const intent = validateStartupIntent(rawIntent, missionId, identity);
+    if (!intent && observedHistoryProblem !== undefined) return observedHistoryProblem;
     if (!intent) {
       return failure("mission_recovery_intent_invalid", "Saved startup recovery material is malformed, unsupported, or bound to a different repository identity.", {
         mission_id: missionId,
@@ -1101,6 +1138,10 @@ export class MissionStartup {
         conflicting_facts: ["intent format", "record-home Git identity", "resolved workspace plan", "saved creation/preparation event envelopes"],
       }, continueRecovery(missionId, identity.root, "Preserve the intent and history. Resolve the listed identity or format conflict without overwriting recovery material."));
     }
+    if (observedHistory?.mode === "legacy" && observedHistory.history.journals.length > 0) {
+      return legacyStartupHistoryFailure(missionId, identity.root, observedHistory.history);
+    }
+    if (observedHistoryProblem && observedHistory && observedHistory.history.journals.length > 0 && !observedHistory.history.events.some((record) => record.status === "valid" && record.event?.id === intent.createdEvent.id && sameJson(record.event, intent.createdEvent))) return observedHistoryProblem;
     return await this.finish(intent, true);
   }
 
@@ -1118,12 +1159,19 @@ export class MissionStartup {
 
     let result: MissionStartupResult;
     try {
-      result = await this.finishUnderLease(intent, reconcile);
+      result = await this.runtime.recovery.withStartup(intent.recordHomeRoot, intent.missionId, acquired.lease,
+        (scope) => this.finishUnderLease(intent, reconcile, scope));
     } catch (error) {
-      result = failure("mission_preparation_failed", "Mission preparation stopped unexpectedly; saved intent and known resources remain in place.", {
-        mission_id: intent.missionId,
-        message: error instanceof Error ? error.message : String(error),
-      }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the journal, Git resources, and recovery intent; reconcile before retrying."));
+      result = failure(
+        error instanceof HistoryError ? error.code : "mission_preparation_failed",
+        error instanceof HistoryError ? error.message : "Mission preparation stopped unexpectedly; saved intent and known resources remain in place.",
+        {
+          mission_id: intent.missionId,
+          ...(error instanceof HistoryError ? error.details : {}),
+          message: error instanceof Error ? error.message : String(error),
+        },
+        continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve all journal, selector, binding, Git, and intent outputs; reconcile before retrying the same mission."),
+      );
     }
     let released: Awaited<ReturnType<typeof acquired.lease.release>>;
     try {
@@ -1150,7 +1198,7 @@ export class MissionStartup {
     return result;
   }
 
-  private async finishUnderLease(intent: MissionStartupIntent, reconcile: boolean): Promise<MissionStartupResult> {
+  private async finishUnderLease(intent: MissionStartupIntent, reconcile: boolean, startup: MissionStartupHistoryScope): Promise<MissionStartupResult> {
     let identity: MissionRecordHomeIdentity | MissionStartupFailure;
     try {
       identity = await this.runtime.workspaces.identifyRecordHome(intent.recordHomeRoot);
@@ -1188,25 +1236,35 @@ export class MissionStartup {
     }
 
     let history: HistoryCollection;
+    let retainedPreparationAppend = false;
     try {
-      history = await this.runtime.recovery.readHistory(intent.recordHomeRoot, intent.missionId);
+      const initialized = await startup.initialize(intent.startupHistory, intent.createdEvent, intent.preparedEvent);
+      history = initialized.history;
+      retainedPreparationAppend = initialized.retainedPreparationAppend === true;
     } catch (error) {
-      return failure("mission_history_read_failed", "Kepler could not read the complete mission history source set.", {
-        mission_id: intent.missionId,
-        message: error instanceof Error ? error.message : String(error),
-      }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve all history files and resolve the reported storage error."));
+      if (error instanceof HistoryError && error.code === "history_startup_creation_append_failed") return failure("mission_record_failed", "Kepler could not record the exact saved mission-creation event.", { mission_id: intent.missionId, event_id: intent.createdEvent.id, ...error.details }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the journal and resume this mission with the exact saved creation event."));
+      if (error instanceof HistoryError && error.code === "history_startup_creation_conflict") return failure("mission_history_conflict", "The recorded mission creation conflicts with its exact saved startup event.", { mission_id: intent.missionId, ...error.details }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve both facts and use explicit supported recovery; do not replace the recorded creation from saved intent."));
+      if (error instanceof HistoryError && error.code === "history_startup_existing_selection_invalid") return failure("mission_history_not_recoverable", "Current mission history is not the exact recoverable saved startup prefix.", { mission_id: intent.missionId, ...error.details }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve all history and use supported recovery; the saved startup intent cannot authorize replacement or repair of other bytes."));
+      return failure(
+        error instanceof HistoryError ? error.code : "mission_history_initialization_failed",
+        error instanceof HistoryError ? error.message : "Kepler could not establish the exact initial history selection.",
+        { mission_id: intent.missionId, ...(error instanceof HistoryError ? error.details : {}), message: error instanceof Error ? error.message : String(error) },
+        continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve all exact generation, control, guard, selector, and binding outputs; retry only this mission after reconciling their bytes."),
+      );
     }
     let journal: EventJournal | undefined;
     const openJournal = (): EventJournal | MissionStartupFailure => {
       if (journal) return journal;
       try {
-        const candidate = this.runtime.journals.create(intent.recordHomeRoot, intent.missionId, intent.createdEvent.journal_id);
+        const candidate = startup.createJournal(intent.createdEvent.journal_id, intent.startupHistory.generationId);
         const expectedJournalPath = Path.resolve(
           intent.recordHomeRoot,
           ".kepler",
           "missions",
           intent.missionId,
           "history",
+          "generations",
+          intent.startupHistory.generationId,
           CONSTRUCTION_PHASE,
           `${intent.createdEvent.journal_id}.jsonl`,
         );
@@ -1228,74 +1286,42 @@ export class MissionStartup {
     };
 
     let state = validatedStartupHistory(history, intent);
-    if ("kind" in state) {
-      const savedTail = savedUnterminatedStartupTail(history, intent);
-      if (!savedTail) return state;
-      const opened = openJournal();
-      if ("kind" in opened) return opened;
-      let appendResult: Awaited<ReturnType<EventJournal["append"]>>;
-      try {
-        appendResult = await opened.append(savedTail);
-      } catch (error) {
-        return failure("mission_history_recovery_failed", "Kepler could not recover the exact saved event at the unterminated journal tail.", {
-          mission_id: intent.missionId,
-          event_id: savedTail.id,
-          message: error instanceof Error ? error.message : String(error),
-        }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the journal bytes and resolve the tail before retrying."));
-      }
-      if (appendResult.status !== "recovered" && appendResult.status !== "duplicate") {
-        return failure("mission_history_recovery_failed", "The journal no longer has the exact saved event at its unterminated tail.", {
-          mission_id: intent.missionId,
-          event_id: savedTail.id,
-          append_status: appendResult.status,
-        }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the changed journal and resolve its history explicitly."));
-      }
-      try {
-        history = await this.runtime.recovery.readHistory(intent.recordHomeRoot, intent.missionId);
-      } catch (error) {
-        return failure("mission_history_read_failed", "Kepler could not re-collect history after the exact journal-tail recovery.", {
-          mission_id: intent.missionId,
-          event_id: savedTail.id,
-          message: error instanceof Error ? error.message : String(error),
-        }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the repaired journal and resolve history reading before retrying."));
-      }
-      state = validatedStartupHistory(history, intent);
-      if ("kind" in state) return state;
-    }
+    if ("kind" in state) return state;
+    if (!state.created) return failure("mission_creation_fact_missing", "The exact initial generation does not contain its validated mission-creation fact.", {
+      mission_id: intent.missionId,
+      event_id: intent.createdEvent.id,
+    }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the generation and startup intent; resolve the missing creation fact explicitly."));
     const opened = openJournal();
     if ("kind" in opened) return opened;
     journal = opened;
-
-    if (!state.created) {
-      try {
-        await journal.append(intent.createdEvent);
-      } catch (error) {
-        return failure("mission_record_failed", "Kepler could not append the exact saved mission creation event.", {
-          mission_id: intent.missionId,
-          event_id: intent.createdEvent.id,
-          message: error instanceof Error ? error.message : String(error),
-        }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the journal tail and retry the exact mission ID; Kepler will not infer creation from local intent."));
-      }
-      try {
-        history = await this.runtime.recovery.readHistory(intent.recordHomeRoot, intent.missionId);
-      } catch (error) {
-        return failure("mission_history_read_failed", "Kepler could not validate the creation append from the complete history source set.", {
-          mission_id: intent.missionId,
-          message: error instanceof Error ? error.message : String(error),
-        }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the exact appended event and resolve history reading before retrying."));
-      }
-      state = validatedStartupHistory(history, intent);
-      if ("kind" in state) return state;
-      if (!state.created) return failure("mission_creation_fact_missing", "The exact creation append did not become validated history.", {
-        mission_id: intent.missionId,
-        event_id: intent.createdEvent.id,
-      }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the journal and local intent; resolve the missing creation fact explicitly."));
-    }
     if (state.prepared) return preparedResultFromHistory(intent.missionId, intent.recordHomeRoot, state.prepared);
+    if (retainedPreparationAppend) {
+      try {
+        await journal.append(intent.preparedEvent);
+        const restored = await startup.read();
+        if (restored.mode !== "active" || restored.historyVersion !== intent.startupHistory.control.id || restored.pendingRecovery) return failure("mission_startup_history_changed", "The selected startup authority changed while its exact retained preparation tail was completed.", { mission_id: intent.missionId, event_id: intent.preparedEvent.id, history_version: restored.historyVersion ?? null }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the exact append and current selection; reconcile the changed authority before retrying."));
+        const confirmed = validatedStartupHistory(restored.history, intent);
+        if ("kind" in confirmed) return confirmed;
+        if (confirmed.prepared) return preparedResultFromHistory(intent.missionId, intent.recordHomeRoot, confirmed.prepared);
+        return failure("mission_preparation_fact_missing", "The retained preparation append was not confirmed through normal history validation.", { mission_id: intent.missionId, event_id: intent.preparedEvent.id }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the exact journal and saved instructions before retrying."));
+      } catch (error) {
+        return failure("workspace_preparation_record_failed", "Kepler could not complete and confirm the exact retained preparation tail.", { mission_id: intent.missionId, event_id: intent.preparedEvent.id, message: error instanceof Error ? error.message : String(error) }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the journal tail and prepared resources; resume the same saved event without repeating workspace effects."));
+      }
+    }
 
     let workspaceResult: MissionWorkspacePreparationResult;
     try {
-      const context = { missionJournalPath: journal.path };
+      const historyRoot = Path.join(intent.recordHomeRoot, ".kepler", "missions", intent.missionId, "history");
+      const context: MissionWorkspacePreparationContext = {
+        missionId: intent.missionId,
+        missionJournalPath: journal.path,
+        missionHistoryPaths: [
+          Path.join(historyRoot, "generations", intent.startupHistory.generationId, CONSTRUCTION_PHASE, `${intent.createdEvent.journal_id}.jsonl`),
+          Path.join(historyRoot, "control", "events", `${intent.startupHistory.control.journal_id}.jsonl`),
+          Path.join(historyRoot, "control", `${intent.startupHistory.guard.journal_id}.jsonl`),
+          Path.join(historyRoot, "control", "active.json"),
+        ],
+      };
       workspaceResult = reconcile
         ? await this.runtime.workspaces.reconcile(intent.recordHomeRoot, intent.missionId, intent.repositories, context)
         : await this.runtime.workspaces.prepare(intent.recordHomeRoot, intent.missionId, intent.repositories, context);
@@ -1332,7 +1358,18 @@ export class MissionStartup {
     }
 
     try {
-      history = await this.runtime.recovery.readHistory(intent.recordHomeRoot, intent.missionId);
+      const current = await startup.read();
+      if (current.mode !== "active" || current.historyVersion !== intent.startupHistory.control.id || current.pendingRecovery) {
+        return failure("mission_startup_history_changed", "The initial history selection changed while workspace effects were being reconciled.", {
+          mission_id: intent.missionId,
+          expected_history_version: intent.startupHistory.control.id,
+          actual_history_version: current.historyVersion ?? null,
+          mode: current.mode,
+          pending_recovery: current.pendingRecovery,
+          partial_effects: workspaceResult.repositories.map((repository) => ({ repository_id: repository.repositoryId, workspace_path: repository.workspacePath, state: "prepared" })),
+        }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve prepared resources and the current history selection; reconcile the changed authority before recording another event."));
+      }
+      history = current.history;
     } catch (error) {
       return failure("mission_history_read_failed", "Kepler could not recheck mission history at the prepared-event append boundary.", {
         mission_id: intent.missionId,
@@ -1369,7 +1406,19 @@ export class MissionStartup {
       }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Keep all prepared resources and the exact journal tail; retry this same mission without resetting or republishing Git state."));
     }
     try {
-      history = await this.runtime.recovery.readHistory(intent.recordHomeRoot, intent.missionId);
+      const current = await startup.read();
+      if (current.mode !== "active" || current.historyVersion !== intent.startupHistory.control.id || current.pendingRecovery) {
+        return failure("mission_startup_history_changed", "The selected history changed before the prepared event could be confirmed.", {
+          mission_id: intent.missionId,
+          event_id: intent.preparedEvent.id,
+          expected_history_version: intent.startupHistory.control.id,
+          actual_history_version: current.historyVersion ?? null,
+          mode: current.mode,
+          pending_recovery: current.pendingRecovery,
+          partial_effects: partialEffects,
+        }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve the exact prepared event, selected resources, and current history; reconcile before retrying."));
+      }
+      history = current.history;
     } catch (error) {
       return failure("mission_history_read_failed", "Kepler could not validate the exact preparation append.", {
         mission_id: intent.missionId,
