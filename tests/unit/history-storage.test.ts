@@ -30,6 +30,22 @@ describe("history storage contracts", () => {
     await expect(storage.read("/record", f.missionId)).rejects.toMatchObject({ code: "history_control_invalid" });
   });
 
+  it("includes startup instructions and all mission-owned local metadata without copying earlier archives", async () => {
+    const f = historyGenerationFixture();
+    const base = `kepler/missions/${f.missionId}`;
+    const records = new Map([
+      [`/git/${base}/startup/intent.json`, utf8("original startup envelopes")],
+      [`/git/${base}/startup.json`, utf8("retained local bootstrap")],
+      [`/git/${base}/future-pending/partial`, Uint8Array.from([255, 0])],
+      [`/git/${base}/recovery/archives/${randomUUID()}/original`, utf8("older archive remains separate")],
+      [`/git/kepler/missions/${randomUUID()}/startup/intent.json`, utf8("another mission")],
+    ]);
+    const snapshot = await memoryHistoryStorage(records).snapshot("/record", f.missionId);
+    expect(snapshot.files).toHaveLength(3);
+    expect(snapshot.files.map((file) => file.path)).toEqual(expect.arrayContaining([`${base}/startup/intent.json`, `${base}/startup.json`, `${base}/future-pending/partial`]));
+    expect(snapshot.files.every((file) => file.path.startsWith(`${base}/`) && !file.path.includes("/archives/"))).toBe(true);
+  });
+
   it("selects active journals before reading damaged excluded generations or legacy files", async () => {
     const f = historyGenerationFixture();
     const records = historyStorageEntries(f);

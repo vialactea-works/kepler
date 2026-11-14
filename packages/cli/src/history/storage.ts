@@ -50,7 +50,7 @@ export class HistoryStorage {
     for (const origin of context.origins) await walk(origin, missionPath(missionId));
     const runtime = origins.find((origin) => origin.id === "local-runtime")!;
     const localBase = `kepler/missions/${missionId}`;
-    for (const path of [`${localBase}/workspaces`, `${localBase}/recovery`, `${localBase}/coordination`]) await walk(runtime, path);
+    await walk(runtime, localBase);
     return { recordHome: context.recordHome, commonDirectory: context.commonDirectory, missionId, origins, files: files.sort((a, b) => compare(a.sourceId, b.sourceId)), unavailable: unavailable.sort((a, b) => compare(a.source_id, b.source_id)) };
   }
 
