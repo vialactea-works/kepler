@@ -311,8 +311,8 @@ export const captureStageCheckpoints = async (
   };
 };
 
-const currentAuthority = (
-  loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
+export const stageStartAuthority = (
+  loaded: Pick<Extract<AuditHistoryReadResult, { kind: "loaded" }>, "history" | "missionId" | "unit">,
   stage: ConstructionStage,
 ): { readonly kind: "valid"; readonly eventIds: readonly string[] } | {
   readonly kind: "failed";
@@ -475,7 +475,7 @@ export class StageStart {
     const stage = selectors.stage;
     const firstRead = await this.contexts.readUnit(selectors.unit, project);
     if (firstRead.kind === "failed") return propagateReadFailure(firstRead);
-    const firstAuthority = currentAuthority(firstRead, stage);
+    const firstAuthority = stageStartAuthority(firstRead, stage);
     if (firstAuthority.kind === "failed") return failure(firstAuthority.code, firstAuthority.message, firstAuthority.details);
     const commonDir = await commonDirectory(this.runtime, firstRead.root);
     if (!commonDir) return failure("stage_coordination_unavailable", "Git could not resolve the record home's common directory.", { repository_root: firstRead.root });
@@ -531,7 +531,7 @@ export class StageStart {
       history_issues: loaded.unit.historyIssues,
       projection_issues: loaded.unit.projectionIssues,
     });
-    const authority = currentAuthority(loaded, stage);
+    const authority = stageStartAuthority(loaded, stage);
     if (authority.kind === "failed") return failure(authority.code, authority.message, authority.details);
     const captured = await captureStageCheckpoints(this.runtime, loaded, commonDir);
     if (captured.kind === "failed") return failure(captured.code, captured.message, captured.details);
@@ -593,7 +593,7 @@ export class StageStart {
           authorization_event_id: barrier.authorizationEventId,
           affected_scopes: barrier.affectedScopes,
         }, "Stop and reconcile affected workers, apply the authorized cascade, then resume stage execution.");
-        const current = currentAuthority(latest, stage);
+        const current = stageStartAuthority(latest, stage);
         if (current.kind === "failed" || current.eventIds.join("\0") !== authority.eventIds.join("\0")) {
           return failure("stage_authority_changed", "Stage authority changed before the stage-start event could be appended.", {
             expected_authority_event_ids: authority.eventIds,

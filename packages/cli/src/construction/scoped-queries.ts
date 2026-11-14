@@ -245,7 +245,7 @@ const integratedFacts = (task: ConstructionTaskProjection | undefined): { readon
 
 export class ConstructionQueries {
   constructor(
-    private readonly units: UnitQueries,
+    private readonly units: Pick<UnitQueries, "readContext">,
     private readonly fileSystem: UnitQueryFileSystem,
   ) {}
 
