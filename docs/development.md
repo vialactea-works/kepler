@@ -50,6 +50,37 @@ Do not use `bun test`. Keep integration execution serial because packaging and o
 
 A passing unit or CLI test does not certify a host or agent. Smoke, load, stress, soak, performance, and chaos tests need separate approval and a defined question. Do not add them as routine documentation validation.
 
+### Run the extended Construction workflow in bounded parts
+
+The extended Integration-to-Deliver scenario has three ordered parts. Each part continues the same temporary repository and isolated home. It retains the CLI results and fixture bytes from the previous part; it does not replace them with synthetic history.
+
+Build the CLI, then choose one private checkpoint path for the run:
+
+```bash
+bun run build
+state_directory="$(mktemp -d)"
+export KEPLER_E2E_WORKFLOW_CHECKPOINT="$state_directory/extended-workflow.json"
+```
+
+Run each command separately, in order, with the same checkpoint path:
+
+```bash
+bun --bun vitest run --project e2e tests/e2e/stage-completion.test.ts --no-file-parallelism --testNamePattern='extended workflow part 1:'
+bun --bun vitest run --project e2e tests/e2e/stage-completion.test.ts --no-file-parallelism --testNamePattern='extended workflow part 2:'
+bun --bun vitest run --project e2e tests/e2e/stage-completion.test.ts --no-file-parallelism --testNamePattern='extended workflow part 3:'
+```
+
+A later part fails if its checkpoint is missing, out of order, or no longer matches the owned fixture. Do not edit the fixture or reuse a checkpoint from another checkout. The final part removes the fixture and checkpoint. A callback failure also removes the validated owned fixture; validation failures preserve uncertain data for inspection.
+
+After all three parts pass:
+
+```bash
+unset KEPLER_E2E_WORKFLOW_CHECKPOINT
+rmdir "$state_directory"
+```
+
+An unfiltered test-file run executes the same parts in order with a temporary checkpoint. A passing part alone does not prove that the full scenario passed.
+
 ## Native archive E2E
 
 `tests/e2e/release-archive.test.ts` is separate from the general E2E command. It requires the exact native target archive, its independently calculated SHA-256, the expected target, and the frozen source commit through `KEPLER_VERIFIED_ARCHIVE_PATH`, `KEPLER_VERIFIED_ARCHIVE_SHA256`, `KEPLER_EXPECTED_TARGET`, and `KEPLER_EXPECTED_SOURCE_COMMIT`. The test runs the extracted archive outside the checkout. It initializes a version-specific home, checks all packaged resources, and verifies that repeated setup preserves a settings edit and deleted resource. It also checks that missing `KEPLER_HOME` and unknown non-empty homes fail without creating fallback state.

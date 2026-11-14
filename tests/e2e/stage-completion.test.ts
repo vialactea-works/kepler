@@ -6,12 +6,21 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AuditCliDriver } from "./driver/audit-cli.js";
 import { StageCompletionCliDriver } from "./driver/stage-completion-cli.js";
 import { createE2EHarness, type E2EHarness } from "./harness.js";
-import { auditFixture, configureAuditFixture, createAuditHistory, resetAuditFixture, type AuditFixture } from "./fixtures/histories/audit.js";
+import { auditFixture, configureAuditFixture, createAuditHistory as createLegacyAuditHistory, resetAuditFixture, type AuditFixture } from "./fixtures/histories/audit.js";
+import { selectFixtureHistory } from "../support/history-consumers.js";
+import { fixtureHistorySelection } from "./driver.js";
+import { E2EWorkflow } from "./workflow-checkpoints.js";
 import { collectHistory as collectHistoryFromSources, type HistoryJournalSource } from "../../packages/cli/src/history/collection.js";
 import { projectConstruction } from "../../packages/cli/src/construction/projection.js";
 import { validateConstructionEvent } from "../../packages/cli/src/construction/events.js";
 
 const harnesses: E2EHarness[] = [];
+
+const createAuditHistory = async (...args: Parameters<typeof createLegacyAuditHistory>): Promise<string> => {
+  const original = await createLegacyAuditHistory(...args);
+  const selected = await selectFixtureHistory(args[0], auditFixture.missionId);
+  return Path.join(args[0], ".kepler", "missions", auditFixture.missionId, "history", "generations", selected.generationId, "construction", Path.basename(original));
+};
 let unitDirectory = `.kepler/missions/${auditFixture.missionId}/construction/units-of-work/${auditFixture.unitId}`;
 const repositoryId = "repo-main";
 const artifactIds = {
@@ -107,7 +116,7 @@ const appendStageStart = async (
     if (typeof authorityEventIds === "string") authorityIds.push(authorityEventIds);
     else authorityIds.push(...authorityEventIds);
   }
-  const historyDirectory = Path.join(harness.resources.repositoryDirectory, ".kepler", "missions", auditFixture.missionId, "history", "construction");
+  const historyDirectory = fixtureHistorySelection(harness.resources.repositoryDirectory, auditFixture.missionId).directory;
   await Fs.writeFile(Path.join(historyDirectory, `${journalId}.jsonl`), `${JSON.stringify({
     id: eventId,
     phase: "construction",
@@ -132,7 +141,7 @@ const appendStageStart = async (
 };
 
 const readConstructionSources = async (harness: E2EHarness): Promise<readonly HistoryJournalSource[]> => {
-  const historyDirectory = Path.join(harness.resources.repositoryDirectory, ".kepler", "missions", auditFixture.missionId, "history", "construction");
+  const historyDirectory = fixtureHistorySelection(harness.resources.repositoryDirectory, auditFixture.missionId).directory;
   const files = (await Fs.readdir(historyDirectory)).filter((name) => name.endsWith(".jsonl")).sort();
   return Promise.all(files.map(async (name) => {
     const journalId = name.slice(0, -".jsonl".length);
@@ -188,7 +197,7 @@ const appendTypedConstructionEvent = async (
   };
   const validation = validateConstructionEvent(candidate);
   if (validation.status !== "valid") throw new Error(`Invalid ${type} fixture: ${JSON.stringify(validation)}`);
-  const historyDirectory = Path.join(harness.resources.repositoryDirectory, ".kepler", "missions", auditFixture.missionId, "history", "construction");
+  const historyDirectory = fixtureHistorySelection(harness.resources.repositoryDirectory, auditFixture.missionId).directory;
   await Fs.writeFile(Path.join(historyDirectory, `${journalId}.jsonl`), `${JSON.stringify(validation.event)}\n`, "utf8");
   return validation.event;
 };
@@ -398,7 +407,7 @@ const appendForgedQualityCompletion = async (
   };
   const validation = validateConstructionEvent(candidate);
   if (validation.status !== "valid") throw new Error("Expected the forged completion to pass event-schema validation.");
-  const historyDirectory = Path.join(harness.resources.repositoryDirectory, ".kepler", "missions", auditFixture.missionId, "history", "construction");
+  const historyDirectory = fixtureHistorySelection(harness.resources.repositoryDirectory, auditFixture.missionId).directory;
   await Fs.writeFile(Path.join(historyDirectory, `${journalId}.jsonl`), `${JSON.stringify(validation.event)}\n`, "utf8");
 };
 
@@ -592,14 +601,7 @@ const planningCompletionRequest = (
 });
 
 const createAuditDriver = (harness: E2EHarness): AuditCliDriver => {
-  const historyDirectory = Path.join(
-    harness.resources.repositoryDirectory,
-    ".kepler",
-    "missions",
-    auditFixture.missionId,
-    "history",
-    "construction",
-  );
+  const historyDirectory = fixtureHistorySelection(harness.resources.repositoryDirectory, auditFixture.missionId).directory;
   return new AuditCliDriver(harness.cli, {
     journals: async () => {
       const names = (await Fs.readdir(historyDirectory)).sort();
@@ -611,7 +613,7 @@ const createAuditDriver = (harness: E2EHarness): AuditCliDriver => {
 
 const runCliWithExeca = (harness: E2EHarness, args: readonly string[]) => execa(
   process.execPath,
-  [Path.resolve(import.meta.dirname, "../../packages/cli/dist/cli/main.js"), ...args],
+  [Path.resolve(import.meta.dirname, "../../packages/cli/dist/cli/main.js"), ...harness.cli.freshMutationArguments(args)],
   {
     cwd: harness.resources.repositoryDirectory,
     env: harness.resources.environment(),
@@ -622,7 +624,7 @@ const runCliWithExeca = (harness: E2EHarness, args: readonly string[]) => execa(
 );
 
 const runCliThenInterruptCoordinator = (harness: E2EHarness, args: readonly string[], input?: string) => {
-  const cliInvocation = [Path.resolve(import.meta.dirname, "../../packages/cli/dist/cli/main.js"), ...args];
+  const cliInvocation = [Path.resolve(import.meta.dirname, "../../packages/cli/dist/cli/main.js"), ...harness.cli.freshMutationArguments(args)];
   const inputLiteral = input === undefined ? "undefined" : JSON.stringify(input);
   const script = [
     'const { spawnSync } = require("node:child_process");',
@@ -759,7 +761,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(completed.exitCode, JSON.stringify(completed.result)).toBe(0);
     const startArgs = ["workflow", "construction", "stage", "start", "--unit", auditFixture.unitId];
     const inputs = JSON.stringify({ inputs: [{ reference: "request:revision", purpose: "Requester adds a bundled authoring skill" }] });
-    const quality = harness.cli.run([...startArgs, "--stage", "quality-requirements", "--request", inputs]);
+    const quality = harness.cli.runFreshMutation([...startArgs, "--stage", "quality-requirements", "--request", inputs]);
     expect(quality.exitCode, quality.stdout).toBe(0);
     const request = JSON.stringify({
       orchestrator_decision: "Reopen Functional Design and all downstream stages",
@@ -768,13 +770,13 @@ describe("Functional Design stage completion CLI E2E", () => {
     });
     const reviseArgs = ["workflow", "construction", "revise", "--unit", auditFixture.unitId,
       "--stage", "functional-design", "--attempt", auditFixture.stageAttemptId];
-    const first = harness.cli.run(reviseArgs, { stdin: request });
+    const first = harness.cli.runFreshMutation(reviseArgs, { stdin: request });
     expect(first.exitCode, first.stdout).toBe(0);
     expect(JSON.parse(first.stdout)).toMatchObject({ status: "success", data: { status: "barrier_pending" } });
-    const second = harness.cli.run(reviseArgs, { stdin: request });
+    const second = harness.cli.runFreshMutation(reviseArgs, { stdin: request });
     expect(second.exitCode, second.stdout).toBe(0);
     expect(JSON.parse(second.stdout)).toMatchObject({ status: "success", data: { status: "barrier_complete" } });
-    const shown = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const shown = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     expect(shown.exitCode, shown.stdout).toBe(0);
     expect(JSON.parse(shown.stdout)).toMatchObject({ status: "success", data: { unit: {
       blocked: false,
@@ -784,12 +786,12 @@ describe("Functional Design stage completion CLI E2E", () => {
       ]),
     } } });
     const snapshot = await audit.journalSnapshot();
-    const retried = harness.cli.run(reviseArgs, { stdin: request });
+    const retried = harness.cli.runFreshMutation(reviseArgs, { stdin: request });
     expect(retried.exitCode, retried.stdout).toBe(0);
     expect(await audit.journalSnapshot()).toBe(snapshot);
-    const restarted = harness.cli.run([...startArgs, "--stage", "functional-design", "--request", inputs]);
+    const restarted = harness.cli.runFreshMutation([...startArgs, "--stage", "functional-design", "--request", inputs]);
     expect(restarted.exitCode, restarted.stdout).toBe(0);
-    const prematureQuality = harness.cli.run([...startArgs, "--stage", "quality-requirements", "--request", inputs]);
+    const prematureQuality = harness.cli.runFreshMutation([...startArgs, "--stage", "quality-requirements", "--request", inputs]);
     expect(prematureQuality.exitCode).toBe(1);
   }, 120_000);
 
@@ -916,9 +918,9 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(await audit.journalSnapshot()).toBe(before);
   }, 120_000);
 
-  it("recovers interrupted Integration through the CLI and completes Standard stages through Deliver", async () => {
-    const harness = await createE2EHarness({ application: "native" });
-    harnesses.push(harness);
+  const extendedWorkflow = new E2EWorkflow("construction-integration-to-deliver");
+
+  const prepareExtendedWorkflow = async (harness: E2EHarness) => {
     await createAuditHistory(harness.resources.repositoryDirectory, undefined, { includeImplementationFacts: false });
     const functionalMaterial = await createProjectArtifacts(harness);
     const audit = createAuditDriver(harness);
@@ -1043,7 +1045,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       status: "success",
       data: { stage: "implementation-planning", attempt_id: planningAttempt, graph_ref: planningMaterial.graphRef },
     });
-    const shown = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const shown = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     expect(shown.exitCode).toBe(0);
     expect(JSON.parse(shown.stdout).data.unit.stages).toContainEqual(expect.objectContaining({
       stage: "quality-requirements",
@@ -1178,6 +1180,27 @@ describe("Functional Design stage completion CLI E2E", () => {
       stage_attempt_id: previousImplementationStart.attemptId, revision_id: returnRevisionId,
       reason: "Open a new Implementation parent for the authorized return.",
     }, [previousImplementationEnded.id, returnAuthorization.id]);
+    return {
+      functionalMaterial, functionalCompletion, qualityMaterial, result, planningMaterial, planningResult,
+      implementationAuthority, implementationInputs, previousImplementationStart, integrationCheckCommands,
+      previousCodeGeneration: {
+        activityAttemptId: previousCodeGeneration.activityAttemptId,
+        evidenceIds: previousCodeGeneration.evidenceIds,
+      },
+      returnAuthorization, implementationReopened,
+    };
+  };
+
+  const completeExtendedImplementation = async (
+    harness: E2EHarness,
+    state: Awaited<ReturnType<typeof prepareExtendedWorkflow>>,
+  ) => {
+    const {
+      functionalMaterial, functionalCompletion, qualityMaterial, result, planningMaterial, planningResult,
+      implementationAuthority, implementationInputs, previousImplementationStart, integrationCheckCommands,
+      previousCodeGeneration, returnAuthorization, implementationReopened,
+    } = state;
+    const audit = createAuditDriver(harness);
     const implementationStart = await appendStageStart(harness,
       [...implementationAuthority, implementationReopened.id, returnAuthorization.id], "implementation");
     const implementationAttempt = implementationStart.attemptId;
@@ -1201,7 +1224,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(retainedAssessment.exitCode, JSON.stringify(retainedAssessment.result)).toBe(0);
     const retainedAssessmentEventId = String(retainedAssessment.result.data.id);
     const beforeUnknownPrerequisite = await audit.journalSnapshot();
-    const unknownPrerequisite = harness.cli.run([
+    const unknownPrerequisite = harness.cli.runFreshMutation([
       "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningTaskId,
       "--implementation-attempt", implementationAttempt, "--prerequisites",
       JSON.stringify({ prerequisite_evidence_ids: [randomUUID()] }),
@@ -1210,7 +1233,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(JSON.parse(unknownPrerequisite.stdout)).toMatchObject({ status: "failed", data: { code: "task_prerequisite_unverified" } });
     expect(await audit.journalSnapshot()).toBe(beforeUnknownPrerequisite);
     const beforeUnknownSecondReadiness = await audit.journalSnapshot();
-    const unknownSecondReadiness = harness.cli.run([
+    const unknownSecondReadiness = harness.cli.runFreshMutation([
       "workflow", "construction", "task", "ready", "--unit", auditFixture.unitId,
       "--task", planningSecondTaskId,
     ]);
@@ -1226,7 +1249,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       },
     });
     expect(await audit.journalSnapshot()).toBe(beforeUnknownSecondReadiness);
-    const missingSecondPrerequisiteAdmission = harness.cli.run([
+    const missingSecondPrerequisiteAdmission = harness.cli.runFreshMutation([
       "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
       "--implementation-attempt", implementationAttempt,
       "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [] }),
@@ -1254,7 +1277,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(prerequisiteEvidence.exitCode, JSON.stringify(prerequisiteEvidence.result)).toBe(0);
     const prerequisiteEvidenceId = String(prerequisiteEvidence.result.data.evidence_id);
     const beforeReadyWithEvidence = await audit.journalSnapshot();
-    const readyWithEvidence = harness.cli.run([
+    const readyWithEvidence = harness.cli.runFreshMutation([
       "workflow", "construction", "task", "ready", "--unit", auditFixture.unitId,
       "--task", planningSecondTaskId,
     ]);
@@ -1271,7 +1294,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     });
     expect(await audit.journalSnapshot()).toBe(beforeReadyWithEvidence);
     const badSecondPrerequisiteEvidenceId = randomUUID();
-    const badSecondPrerequisiteAdmission = harness.cli.run([
+    const badSecondPrerequisiteAdmission = harness.cli.runFreshMutation([
       "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
       "--implementation-attempt", implementationAttempt,
       "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [badSecondPrerequisiteEvidenceId] }),
@@ -1294,7 +1317,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     const firstAdmissionResult = JSON.parse(firstAdmissionProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
     const secondAdmissionResult = JSON.parse(secondAdmissionProcess.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
     expect(firstAdmissionProcess.exitCode, JSON.stringify(firstAdmissionResult)).toBe(0);
-    const stateBeforeSecondAdmission = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const stateBeforeSecondAdmission = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     const stateBeforeSecondAdmissionData = stateBeforeSecondAdmission.exitCode === 0
       ? JSON.parse(stateBeforeSecondAdmission.stdout).data.unit
       : { exitCode: stateBeforeSecondAdmission.exitCode, stderr: stateBeforeSecondAdmission.stderr };
@@ -1470,7 +1493,7 @@ describe("Functional Design stage completion CLI E2E", () => {
             expect(acceptanceEvents).toHaveLength(1);
             expect(activityCompletions).toHaveLength(0);
             expect(taskCompletions).toHaveLength(0);
-            const recoveredActivity = harness.cli.run([
+            const recoveredActivity = harness.cli.runFreshMutation([
               "workflow", "construction", "activity", "show", "--unit", auditFixture.unitId,
               "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
             ]);
@@ -1480,7 +1503,7 @@ describe("Functional Design stage completion CLI E2E", () => {
               data: { state: "running", current_attempt_id: activityAttemptId },
             });
             const beforeDuplicateStart = await audit.journalSnapshot();
-            const duplicateStart = harness.cli.run([
+            const duplicateStart = harness.cli.runFreshMutation([
               "workflow", "construction", "activity", "start", "--unit", auditFixture.unitId,
               "--task", taskId, "--activity", activity, "--implementation-attempt", implementationAttempt,
             ]);
@@ -1504,7 +1527,7 @@ describe("Functional Design stage completion CLI E2E", () => {
         if (activity === "code-validation") {
           const reviewerEvidence = activityEvidence.find((item) => item.check === "code-validation-independent-review");
           if (!reviewerEvidence || !("evidenceId" in reviewerEvidence)) throw new Error("The Validation independent-review evidence is missing.");
-          const historyDirectory = Path.join(harness.resources.repositoryDirectory, ".kepler", "missions", auditFixture.missionId, "history", "construction");
+          const historyDirectory = fixtureHistorySelection(harness.resources.repositoryDirectory, auditFixture.missionId).directory;
           let reviewerJournalPath: string | undefined;
           let reviewerJournalLines: string[] | undefined;
           let reviewerLineIndex = -1;
@@ -1635,7 +1658,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       },
     };
     const beforeImplementationWrongAttempt = await audit.journalSnapshot();
-    const implementationHistoryDirectory = Path.join(harness.resources.repositoryDirectory, ".kepler", "missions", auditFixture.missionId, "history", "construction");
+    const implementationHistoryDirectory = fixtureHistorySelection(harness.resources.repositoryDirectory, auditFixture.missionId).directory;
     let changedEvidencePath: string | undefined;
     let originalEvidenceJournal: string | undefined;
     for (const name of await Fs.readdir(implementationHistoryDirectory)) {
@@ -1765,7 +1788,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       unitProjectionIssues: afterImplementationUnit?.projectionIssues,
       invalidImplementationEvents,
     })).toBe(false);
-    const completedUnit = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const completedUnit = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     expect(completedUnit.exitCode).toBe(0);
     const completedUnitData = JSON.parse(completedUnit.stdout).data.unit;
     expect(completedUnitData.stages, JSON.stringify({
@@ -1776,6 +1799,24 @@ describe("Functional Design stage completion CLI E2E", () => {
       stage: "implementation",
       state: "completed",
     }));
+    return {
+      functionalCompletion, result, planningMaterial, planningResult, implementationInputs,
+      previousImplementationStart, implementationAttempt, prerequisiteEvidenceId, activityNames,
+      integrationEventId, secondIntegrationEventId, handoffArtifacts,
+    };
+  };
+
+  const deliverExtendedWorkflow = async (
+    harness: E2EHarness,
+    state: Awaited<ReturnType<typeof completeExtendedImplementation>>,
+  ) => {
+    const {
+      functionalCompletion, result, planningMaterial, planningResult, implementationInputs,
+      previousImplementationStart, implementationAttempt, prerequisiteEvidenceId, activityNames,
+      integrationEventId, secondIntegrationEventId, handoffArtifacts,
+    } = state;
+    const audit = createAuditDriver(harness);
+    const stageDriver = new StageCompletionCliDriver(harness.cli);
     const postCompletionRevisionRequest = {
       orchestrator_decision: "Reopen the completed Implementation for a new assessment",
       reason: "A final cross-check requests a new parent before Review and Deliver proceed.",
@@ -1809,7 +1850,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(cascadedRevisionEvents.filter((record) => record.type === "construction.stage-attempt-ended-by-revision")).toHaveLength(1);
     expect(cascadedRevisionEvents.filter((record) => record.type === "construction.stage-reopened")).toHaveLength(1);
     const beforeCascadeReplay = await audit.journalSnapshot();
-    const postCompletionCascade = harness.cli.run(postCompletionRevisionArgs, { stdin: postCompletionRevisionInput });
+    const postCompletionCascade = harness.cli.runFreshMutation(postCompletionRevisionArgs, { stdin: postCompletionRevisionInput });
     expect(postCompletionCascade.exitCode, postCompletionCascade.stdout).toBe(0);
     const postCompletionCascadeResult = JSON.parse(postCompletionCascade.stdout) as { readonly status: string; readonly data: Readonly<Record<string, unknown>> };
     expect(postCompletionCascadeResult).toMatchObject({ status: "success", data: { status: "barrier_complete", resumed_authorization: true } });
@@ -1824,7 +1865,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     expect(recoveredRevisionEvents).toHaveLength(2);
     expect(recoveredRevisionEvents.filter((record) => record.type === "construction.stage-attempt-ended-by-revision")).toHaveLength(1);
     expect(recoveredRevisionEvents.filter((record) => record.type === "construction.stage-reopened")).toHaveLength(1);
-    const postCompletionStageStart = harness.cli.run([
+    const postCompletionStageStart = harness.cli.runFreshMutation([
       "workflow", "construction", "stage", "start", "--unit", auditFixture.unitId, "--stage", "implementation",
       "--request", JSON.stringify({ inputs: implementationInputs }),
     ]);
@@ -1834,7 +1875,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     const postCompletionAttempt = String(postCompletionStageStartResult.data.attempt_id);
     const postCompletionStartEventId = String(postCompletionStageStartResult.data.id);
     const beforeOldPrerequisiteProofChecks = await audit.journalSnapshot();
-    const oldPrerequisiteReadiness = harness.cli.run([
+    const oldPrerequisiteReadiness = harness.cli.runFreshMutation([
       "workflow", "construction", "task", "ready", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
     ]);
     expect(oldPrerequisiteReadiness.exitCode, oldPrerequisiteReadiness.stdout).toBe(0);
@@ -1846,7 +1887,7 @@ describe("Functional Design stage completion CLI E2E", () => {
         blockers: expect.arrayContaining([`blocking-prerequisite-unverified:${planningSecondPrerequisite.description}`]),
       },
     });
-    const oldProofAdmission = harness.cli.run([
+    const oldProofAdmission = harness.cli.runFreshMutation([
       "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", planningSecondTaskId,
       "--implementation-attempt", postCompletionAttempt,
       "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: [prerequisiteEvidenceId] }),
@@ -1922,7 +1963,7 @@ describe("Functional Design stage completion CLI E2E", () => {
     const postCompletionPrerequisiteEvidenceId = String(postCompletionPrerequisiteEvidence.result.data.evidence_id);
     const postCompletionAdmissions = [] as Array<{ readonly taskId: string; readonly admissionId: string; readonly completionId: string; readonly integrationId: string }>;
     for (const taskId of [planningTaskId, planningSecondTaskId]) {
-      const admission = harness.cli.run([
+      const admission = harness.cli.runFreshMutation([
         "workflow", "construction", "task", "admit", "--unit", auditFixture.unitId, "--task", taskId,
         "--implementation-attempt", postCompletionAttempt, "--prerequisites", JSON.stringify({
           prerequisite_evidence_ids: taskId === planningSecondTaskId ? [postCompletionPrerequisiteEvidenceId] : [],
@@ -2078,7 +2119,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       status: "success",
       data: { stage: "unit-of-work-review", attempt_id: reviewStart.attemptId },
     });
-    const reviewedUnit = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const reviewedUnit = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     expect(reviewedUnit.exitCode).toBe(0);
     expect(JSON.parse(reviewedUnit.stdout).data.unit.stages).toContainEqual(expect.objectContaining({
       stage: "unit-of-work-review",
@@ -2189,7 +2230,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       status: "success",
       data: { stage: "deliver", attempt_id: deliveryStart.attemptId, outcome: "repository-handoff" },
     });
-    const deliveredUnit = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const deliveredUnit = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     expect(deliveredUnit.exitCode).toBe(0);
     const deliveredUnitData = JSON.parse(deliveredUnit.stdout).data.unit;
     expect(deliveredUnitData.blocked).toBe(false);
@@ -2240,7 +2281,19 @@ describe("Functional Design stage completion CLI E2E", () => {
     ));
     expect(completedParentProjection.projectionIssues.map((issue) => issue.code)).toContain("invalid-task-prerequisite-evidence");
     expect(completedParentProjection.units[0]?.blocked).toBe(true);
-  }, 600_000);
+  };
+
+  it("extended workflow part 1: prepare upstream authority", async () => {
+    await extendedWorkflow.start(prepareExtendedWorkflow);
+  }, 300_000);
+
+  it("extended workflow part 2: recover Integration and complete Implementation", async () => {
+    await extendedWorkflow.continue(2, completeExtendedImplementation);
+  }, 540_000);
+
+  it("extended workflow part 3: revise completed work, review, and deliver", async () => {
+    await extendedWorkflow.finish(3, deliverExtendedWorkflow);
+  }, 540_000);
 
   it("rejects a Quality Requirements attempt without Functional Design authority in completion and replay", async () => {
     const harness = await createE2EHarness({ application: "native" });
@@ -2282,7 +2335,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       qualityEvidence,
       qualityApproval,
     );
-    const shown = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const shown = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     expect(shown.exitCode).toBe(0);
     const projection = JSON.parse(shown.stdout).data.unit;
     expect(projection.blocked).toBe(true);
@@ -2345,7 +2398,7 @@ describe("Functional Design stage completion CLI E2E", () => {
       qualityApproval,
       { requestEventId: String(requestEvent.result.data.id), evidenceId: externalReviewEvidence },
     );
-    const shown = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
+    const shown = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", auditFixture.unitId]);
     expect(shown.exitCode).toBe(0);
     const projection = JSON.parse(shown.stdout).data.unit;
     expect(projection.blocked).toBe(true);
@@ -2394,7 +2447,7 @@ describe("Standard workflow CLI E2E", () => {
         integrationTarget: "refs/heads/main",
       }],
     };
-    const missionResult = harness.cli.run([
+    const missionResult = harness.cli.runFreshMutation([
       "mission", "create", "--project", root, "--request", JSON.stringify(missionRequest),
     ]);
     expect(missionResult.exitCode, missionResult.stdout).toBe(0);
@@ -2409,7 +2462,7 @@ describe("Standard workflow CLI E2E", () => {
       }),
     ]));
 
-    const unitResult = harness.cli.run([
+    const unitResult = harness.cli.runFreshMutation([
       "workflow", "construction", "unit", "create", "access-policy",
       "--mission", missionId, "--effort", "comprehensive", "--project", root,
     ]);
@@ -2433,7 +2486,7 @@ describe("Standard workflow CLI E2E", () => {
     configureAuditFixture(fixture);
     const audit = createAuditDriver(harness);
     const startStage = (stage: string, inputs: readonly { readonly reference: string; readonly purpose: string }[]) => {
-      const result = harness.cli.run([
+      const result = harness.cli.runFreshMutation([
         "workflow", "construction", "stage", "start", "--unit", unitId, "--stage", stage,
         "--request", JSON.stringify({ inputs }), "--project", root,
       ]);
@@ -2544,7 +2597,7 @@ describe("Standard workflow CLI E2E", () => {
         expect(proof.exitCode, proof.stdout).toBe(0);
         prerequisiteEvidenceIds.push(String(proof.result.data.evidence_id));
       }
-      const admission = harness.cli.run([
+      const admission = harness.cli.runFreshMutation([
         "workflow", "construction", "task", "admit", "--unit", unitId, "--task", taskId,
         "--implementation-attempt", implementationAttempt, "--prerequisites", JSON.stringify({ prerequisite_evidence_ids: prerequisiteEvidenceIds }), "--project", root,
       ]);
@@ -2552,7 +2605,7 @@ describe("Standard workflow CLI E2E", () => {
       const activityEvidenceIds: string[] = [];
       let integrationEventId = "";
       for (const activity of ["code-generation", "code-validation", "code-integration"] as const) {
-        const start = harness.cli.run([
+        const start = harness.cli.runFreshMutation([
           "workflow", "construction", "activity", "start", "--unit", unitId, "--task", taskId,
           "--activity", activity, "--implementation-attempt", implementationAttempt, "--project", root,
         ]);
@@ -2594,13 +2647,13 @@ describe("Standard workflow CLI E2E", () => {
             "--unit", unitId, "--task", taskId, "--activity", activity,
             "--implementation-attempt", implementationAttempt, "--attempt", activityAttempt,
           ];
-          const lock = harness.cli.run(["workflow", "construction", "integration", "lock", ...scope, "--project", root]);
+          const lock = harness.cli.runFreshMutation(["workflow", "construction", "integration", "lock", ...scope, "--project", root]);
           expect(lock.exitCode, lock.stdout).toBe(0);
           const lockData = (JSON.parse(lock.stdout) as { data: Record<string, unknown> }).data;
           const lockToken = String(lockData.lock_token);
           if (noCommit && taskId === taskIds[0]) {
             const beforeInvalidRevision = await audit.journalSnapshot();
-            const invalidRevision = harness.cli.run([
+            const invalidRevision = harness.cli.runFreshMutation([
               "workflow", "construction", "revise", "--unit", unitId, "--task", taskId,
               "--activity", "code-integration", "--implementation-attempt", implementationAttempt,
               "--attempt", activityAttempt, "--project", root,
@@ -2615,7 +2668,7 @@ describe("Standard workflow CLI E2E", () => {
             });
             expect(await audit.journalSnapshot()).toBe(beforeInvalidRevision);
           }
-          const prepare = harness.cli.run([
+          const prepare = harness.cli.runFreshMutation([
             "workflow", "construction", "integration", "prepare", ...scope, "--lock-token", lockToken,
             "--request", JSON.stringify({ captured_inputs: lockData.captured_inputs, candidate_checkpoints: checkpoints }), "--project", root,
           ]);
@@ -2654,7 +2707,7 @@ describe("Standard workflow CLI E2E", () => {
               output_refs: taskContract.outputs,
               conditions: selfReview ? ["Integration bindings match the accepted candidate and actual inputs.", ...taskContract.acceptance_criteria] : [],
             };
-            const recorded = harness.cli.run([
+            const recorded = harness.cli.runFreshMutation([
               "workflow", "construction", "integration", "evidence", ...scope, "--lock-token", lockToken,
               "--request", JSON.stringify(request), "--project", root,
             ]);
@@ -2662,7 +2715,7 @@ describe("Standard workflow CLI E2E", () => {
             if (request.result.status === "passed") evidenceIds.push(String((JSON.parse(recorded.stdout) as { data: Record<string, unknown> }).data.evidence_id));
           }
           if (noCommit && taskId === taskIds[0]) {
-            const rejected = harness.cli.run([
+            const rejected = harness.cli.runFreshMutation([
               "workflow", "construction", "integration", "accept", ...scope,
               "--lock-token", lockToken, "--prepared-event-id", preparedEventId, "--project", root,
             ]);
@@ -2678,7 +2731,7 @@ describe("Standard workflow CLI E2E", () => {
               timeout: 30_000,
             });
             expect(execution.exitCode, `${check}: ${execution.stderr}`).toBe(0);
-            const retry = harness.cli.run([
+            const retry = harness.cli.runFreshMutation([
               "workflow", "construction", "integration", "evidence", ...scope, "--lock-token", lockToken,
               "--request", JSON.stringify({
                 prepared_event_id: preparedEventId,
@@ -2694,14 +2747,14 @@ describe("Standard workflow CLI E2E", () => {
             expect(retry.exitCode, retry.stdout).toBe(0);
             evidenceIds.push(String((JSON.parse(retry.stdout) as { data: Record<string, unknown> }).data.evidence_id));
           }
-          const accepted = harness.cli.run([
+          const accepted = harness.cli.runFreshMutation([
             "workflow", "construction", "integration", "accept", ...scope,
             "--lock-token", lockToken, "--prepared-event-id", preparedEventId, "--project", root,
           ]);
           expect(accepted.exitCode, accepted.stdout).toBe(0);
           integrationEventId = String((JSON.parse(accepted.stdout) as { data: Record<string, unknown> }).data.integration_event_id);
         }
-        const complete = harness.cli.run([
+        const complete = harness.cli.runFreshMutation([
           "workflow", "construction", "activity", "complete", "--unit", unitId, "--task", taskId,
           "--activity", activity, "--implementation-attempt", implementationAttempt, "--attempt", activityAttempt,
           "--evidence", JSON.stringify({ evidence_ids: evidenceIds }), "--project", root,
@@ -2861,7 +2914,7 @@ describe("Standard workflow CLI E2E", () => {
     }, "deliver");
     expect(deliveryCompletion.exitCode, JSON.stringify(deliveryCompletion.result)).toBe(0);
 
-    const shown = harness.cli.run(["workflow", "construction", "unit", "show", "--unit", unitId, "--project", root]);
+    const shown = harness.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", unitId, "--project", root]);
     expect(shown.exitCode, shown.stdout).toBe(0);
     const unit = (JSON.parse(shown.stdout) as { data: { unit: Record<string, unknown> } }).data.unit;
     expect(unit.blocked).toBe(false);

@@ -10,6 +10,7 @@ export interface AuditScope {
   readonly activity?: string;
   readonly attempt?: string;
   readonly implementationAttempt?: string;
+  readonly historyVersion?: string;
 }
 
 export interface AuditListRequest extends AuditScope {
@@ -58,7 +59,8 @@ export class AuditCliDriver {
   record(kind: AuditRecordKind, scope: AuditScope, request: unknown): AuditCommandResult {
     const args = ["audit", "record", kind];
     addScope(args, scope);
-    return parse(this.cli.run(args, { stdin: JSON.stringify(request) }));
+    if (scope.historyVersion !== undefined) args.push("--history-version", scope.historyVersion);
+    return parse(this.cli.runFreshMutation(args, { stdin: JSON.stringify(request) }));
   }
 
   list(request: AuditListRequest): AuditCommandResult {

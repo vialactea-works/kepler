@@ -5,7 +5,7 @@ export class StageCompletionCliDriver {
   constructor(private readonly cli: KeplerCliDriver) {}
 
   assessRetainedScopes(unit: string, attempt: string, request: unknown): AuditCommandResult {
-    const result = this.cli.run([
+    const result = this.cli.runFreshMutation([
       "workflow",
       "construction",
       "stage",
@@ -26,7 +26,7 @@ export class StageCompletionCliDriver {
   }
 
   complete(unit: string, attempt: string, request: unknown, stage = "functional-design"): AuditCommandResult {
-    const result = this.cli.run([
+    const result = this.cli.runFreshMutation([
       "workflow",
       "construction",
       "stage",
