@@ -6,6 +6,7 @@ import { appendSelectorValue as appendRecoverySelectorValue } from "../scope-sel
 import { ProjectResolver } from "../project-selection.js";
 import { ResultReporter, type CliEnvelope } from "./result-reporter.js";
 import { parseRecoveryReadOptions } from "./recovery-options.js";
+import { RecoveryMigrateCommand, RecoveryResetCommand, RecoveryReconstructCommand, RecoveryPublishCommand } from "./recovery-mutation.command.js";
 
 export interface RecoveryInspectionRequest {
   readonly recordHome: string;
@@ -148,8 +149,8 @@ export class RecoveryStatusCommand extends CommandRunner {
 
 @Command({
   name: "recovery",
-  description: "Inspect mission history and recovery status",
-  subCommands: [RecoveryInspectCommand, RecoveryStatusCommand],
+  description: "Inspect, preserve, and recover mission history through exact approved operations",
+  subCommands: [RecoveryInspectCommand, RecoveryStatusCommand, RecoveryMigrateCommand, RecoveryResetCommand, RecoveryReconstructCommand, RecoveryPublishCommand],
 })
 export class RecoveryCommand extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) {
@@ -161,9 +162,9 @@ export class RecoveryCommand extends CommandRunner {
       status: "failed",
       data: {
         code: "invalid_arguments",
-        message: "recovery requires the inspect or status subcommand.",
+        message: "recovery requires a supported operation subcommand.",
         details: {},
-        recovery: "Run kepler recovery inspect or kepler recovery status with explicit selectors.",
+        recovery: "Select inspect, status, migrate, reset, reconstruct, or publish with explicit selectors.",
       },
     });
   }
