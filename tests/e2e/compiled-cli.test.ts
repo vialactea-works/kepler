@@ -609,10 +609,11 @@ describe("compiled CLI E2E", () => {
     await addProjectMarker(repository);
     await Fs.appendFile(Path.join(repository, ".git", "info", "exclude"), "\n/.kepler/\n/validation-package.md\n/integration-package.md\n/unit-review-package.md\n/overwrite-package.md\n/missing-object-package.md\n/environment-package.md\n");
     const fixture = await createDiffPackageHistory(e2e.resources);
+    const gitSnapshot = async () => (await snapshot(Path.join(repository, ".git"))).split("\n").filter((entry) => !entry.startsWith(`kepler/missions/${fixture.missionId}/coordination`)).join("\n");
     const statusBefore = e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all");
-    const gitBefore = await snapshot(Path.join(repository, ".git"));
+    const gitBefore = await gitSnapshot();
     const constructionBefore = await snapshot(Path.join(repository, ".kepler"));
-    const command = (kind: "validation" | "integration" | "unit-review", out: string) => [
+    const command = (kind: "validation" | "integration" | "unit-review", out: string, historyVersion: string | null = fixture.historyVersion) => [
       "git", "diff-package", kind,
       "--unit", fixture.unitId,
       ...(kind === "unit-review" ? [] : ["--task", fixture.taskId]),
@@ -620,8 +621,16 @@ describe("compiled CLI E2E", () => {
       ...(kind === "validation" ? ["--generation-attempt", fixture.generationAttemptId] : []),
       ...(kind === "integration" ? ["--integration-attempt", fixture.integrationAttemptId] : []),
       "--project", repository,
+      ...(historyVersion === null ? [] : ["--history-version", historyVersion]),
       "--out", out,
     ];
+    const beforeRejected = await snapshot(repository);
+    for (const version of [null, "70000000-0000-4000-8000-000000000007"]) {
+      const rejected = e2e.cli.run(command("validation", "missing-object-package.md", version));
+      expect(rejected.exitCode).toBe(1);
+      expect(envelope(rejected.stdout)).toMatchObject({ status: "failed", data: { code: version === null ? "history_version_required" : "history_version_mismatch" } });
+      expect(await snapshot(repository)).toBe(beforeRejected);
+    }
 
     for (const [kind, out] of [
       ["validation", "validation-package.md"],
@@ -635,6 +644,7 @@ describe("compiled CLI E2E", () => {
         data: {
           scope: kind,
           unit_id: fixture.unitId,
+          history_version: fixture.historyVersion,
           implementation_attempt_id: fixture.implementationAttemptId,
           output: Path.join(repository, out),
           fingerprint: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
@@ -650,7 +660,7 @@ describe("compiled CLI E2E", () => {
         expect(packageText).toContain(fixture.generationAttemptId);
         expect(packageText).toContain(fixture.generationEvidenceId);
       }
-      const gitAfter = await snapshot(Path.join(repository, ".git"));
+      const gitAfter = await gitSnapshot();
       expect(gitAfter).toBe(gitBefore);
       expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
       expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
@@ -666,7 +676,7 @@ describe("compiled CLI E2E", () => {
     });
     expect(poisonedGitEnvironment.exitCode, poisonedGitEnvironment.stdout).toBe(0);
     expect(envelope(poisonedGitEnvironment.stdout)).toMatchObject({ status: "success", data: { scope: "validation" } });
-    expect(await snapshot(Path.join(repository, ".git"))).toBe(gitBefore);
+    expect(await gitSnapshot()).toBe(gitBefore);
     expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
     expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
 
@@ -681,6 +691,7 @@ describe("compiled CLI E2E", () => {
       "git", "diff-package", "validation", "--unit", fixture.unitId, "--task", fixture.taskId,
       "--implementation-attempt", fixture.implementationAttemptId,
       "--generation-attempt", "70000000-0000-4000-8000-000000000007",
+      "--history-version", fixture.historyVersion,
       "--project", repository, "--out", "missing-object-package.md",
     ]);
     expect(mismatch.exitCode).toBe(1);
@@ -713,7 +724,7 @@ describe("compiled CLI E2E", () => {
       await Fs.utimes(objectsDirectory, objectsStat.atimeMs / 1_000, objectsStat.mtimeMs / 1_000);
     }
 
-    expect(await snapshot(Path.join(repository, ".git"))).toBe(gitBefore);
+    expect(await gitSnapshot()).toBe(gitBefore);
     expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
     expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
   }, 120_000);

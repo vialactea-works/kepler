@@ -4,6 +4,7 @@ import * as Path from "node:path";
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE, validateConstructionEvent } from "../../../../packages/cli/src/construction/events.js";
 import { missionWorkspaceKey } from "../../../../packages/cli/src/construction/mission-workspace.js";
 import type { E2EResources } from "../../resources.js";
+import { selectFixtureHistory } from "../../../support/history-consumers.js";
 
 export interface DiffPackageFixture {
   readonly missionId: string;
@@ -16,6 +17,7 @@ export interface DiffPackageFixture {
   readonly validationEvidenceId: string;
   readonly generationCompletionEventId: string;
   readonly historyPath: string;
+  readonly historyVersion: string;
   readonly base: string;
   readonly generation: string;
   readonly candidate: string;
@@ -460,6 +462,7 @@ export const createDiffPackageHistory = async (
     integration_target: "refs/heads/main",
     starting_checkpoint: { kind: "commit", commit: base },
   })}\n`, "utf8");
+  const selected = await selectFixtureHistory(repository, missionId);
   return {
     missionId,
     unitId,
@@ -470,7 +473,8 @@ export const createDiffPackageHistory = async (
     generationEvidenceId,
     validationEvidenceId,
     generationCompletionEventId: generationCompleted.id,
-    historyPath,
+    historyPath: Path.join(repository, ".kepler", "missions", missionId, "history", "generations", selected.generationId, CONSTRUCTION_PHASE, `${journalId}.jsonl`),
+    historyVersion: selected.historyVersion,
     base,
     generation,
     candidate,
