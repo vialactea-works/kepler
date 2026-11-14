@@ -34,6 +34,17 @@ describe("exact history operation intent", () => {
     expect(() => parseHistoryOperationIntent({ ...intent, ...change })).toThrow();
   });
 
+  it("retains only exact selector and binding replacement bytes, never arbitrary source exclusions", () => {
+    const { intent } = historyOperationFixture("publish");
+    const first = intent.replacement_inputs[0]!;
+    expect(() => parseHistoryOperationIntent({ ...intent, replacement_inputs: [] })).toThrow();
+    expect(() => parseHistoryOperationIntent({ ...intent, replacement_inputs: [{ ...first, bytes_base64: Buffer.from("different original bytes").toString("base64") }] })).toThrow();
+    expect(() => parseHistoryOperationIntent({ ...intent, replacement_inputs: [{ ...first, source_id: "foreign:input" }] })).toThrow();
+    expect(() => parseHistoryOperationIntent({ ...intent, replacement_inputs: [first, first] })).toThrow();
+    expect(() => parseHistoryOperationIntent({ ...intent, activation_input: historyDigest("another selector") })).toThrow();
+    expect(() => parseHistoryOperationIntent({ ...intent, binding_input: historyDigest("invented old binding") })).toThrow();
+  });
+
   it("rejects duplicate keys, non-JSON input and mismatched archive identity", () => {
     const { intent } = historyOperationFixture();
     expect(() => parseHistoryOperationIntent(canonicalJson(intent).replace('"version":1', '"version":2,"version":1'))).toThrow();

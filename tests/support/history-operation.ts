@@ -29,6 +29,9 @@ export const historyOperationFixture = (operation: HistoryOperation = "reset") =
   const guardRoot = operation === "publish" ? root : control;
   const guard = historyTestEvent("construction.history-generation-required", { mission_id: f.missionId, generation_id: f.generationId, control_event_id: guardRoot.id }, randomUUID(), [guardRoot.id]);
   const manifestHash = historyManifestDigest(manifest);
+  const activationPath = `.kepler/missions/${f.missionId}/history/control/active.json`;
+  const resetBytes = historyTestBytes([root]);
+  const originalSources = operation === "publish" ? [...original.source_inventory, { source_id: `current:${activationPath}`, origin: "current", path: activationPath, byte_length: resetBytes.length, content_version: historyDigest(resetBytes) }].sort((a, b) => a.source_id < b.source_id ? -1 : a.source_id > b.source_id ? 1 : 0) : original.source_inventory;
   const intent: HistoryOperationIntent = {
     format: "kepler.mission-history-operation", version: 1,
     key: historyOperationKey({ operation, missionId: f.missionId, generationId: f.generationId, manifestHash, requester: manifest.requester, decisionReference: decision }),
@@ -36,7 +39,7 @@ export const historyOperationFixture = (operation: HistoryOperation = "reset") =
     control, guard: parseHistoryGuard(guard, guardRoot), predecessor: operation === "publish" ? { event: root, bytes_base64: Buffer.from(historyTestBytes([root])).toString("base64") } : null,
     archive_index: archive,
     candidate_journals: operation === "reset" ? [] : f.manifest.candidate_journals.map((journal) => ({ ...journal, bytes_base64: Buffer.from(f.source.bytes).toString("base64") })),
-    original_sources: original.source_inventory, original_unavailable: [], activation_input: historyDigest(f.input.activation!), binding_input: null,
+    original_sources: originalSources, replacement_inputs: operation === "publish" ? [{ source_id: `current:${activationPath}`, bytes_base64: Buffer.from(resetBytes).toString("base64") }] : [], original_unavailable: [], activation_input: operation === "publish" ? historyDigest(resetBytes) : null, binding_input: null,
     checks: [{ reference: "receipt:verified-reconciliation", content_version: historyDigest("actual fixture receipt bytes") }],
   };
   return { f, manifest, intent, control, decision };

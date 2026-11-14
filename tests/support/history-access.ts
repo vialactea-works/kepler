@@ -41,6 +41,7 @@ export const historyAccessFixture = (f: ReturnType<typeof historyGenerationFixtu
       entries.delete(key);
       return "removed";
     },
+    removeEmptyDirectory: async (location) => [...entries.keys()].some((key) => key.startsWith(`${location.root}/${location.relative}/`)) ? "not-empty" : "missing",
   };
   const storage = memoryHistoryStorage(entries, files, context);
   const controls: { beforeAcquire?: (request: MissionCoordinationRequest) => void; failRelease: boolean } = { failRelease: false };

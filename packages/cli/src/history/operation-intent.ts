@@ -28,6 +28,7 @@ export interface HistoryOperationIntent {
   readonly archive_index: HistoryArchiveIndex;
   readonly candidate_journals: readonly HistoryPendingCandidate[];
   readonly original_sources: readonly HistorySourceEntry[];
+  readonly replacement_inputs: readonly { readonly source_id: string; readonly bytes_base64: string }[];
   readonly original_unavailable: HistorySnapshot["unavailable"];
   readonly activation_input: HistoryDigest | null;
   readonly binding_input: HistoryDigest | null;
@@ -49,6 +50,7 @@ const validate = new Ajv({ strict: true, allErrors: false }).compile<HistoryOper
   mission_id: uuid, generation_id: uuid, manifest_hash: digest, requester: text, decision_reference: text,
   control: jsonObject, guard: jsonObject, predecessor: nullable(object({ event: jsonObject, bytes_base64: { type: "string" } })),
   archive_index: jsonObject, candidate_journals: { type: "array", items: candidate }, original_sources: { type: "array", items: source },
+  replacement_inputs: { type: "array", items: object({ source_id: text, bytes_base64: { type: "string" } }) },
   original_unavailable: { type: "array", items: object({ source_id: text, path: text, kind: { enum: ["missing", "unreadable", "unsafe"] }, reason: text }) },
   activation_input: nullable(digest), binding_input: nullable(digest), checks: { type: "array", minItems: 1, items: object({ reference: text, content_version: digest }) },
 }));
@@ -103,8 +105,20 @@ export const parseHistoryOperationIntent = (input: unknown): HistoryOperationInt
     const raw = decodeBytes(journal.bytes_base64);
     if (raw.length !== journal.byte_length || historyDigest(raw) !== journal.content_version) fail("Retained candidate bytes have a different length or digest.");
   }
+  const activationPath = `.kepler/missions/${intent.mission_id}/history/control/active.json`;
+  const bindingPath = `kepler/missions/${intent.mission_id}/coordination/history-selection.json`;
+  const replaced = intent.original_sources.filter((source) => source.origin === intent.record_home_origin && source.path === activationPath || source.origin === "local-runtime" && source.path === bindingPath);
+  if (replaced.length !== intent.replacement_inputs.length || new Set(intent.replacement_inputs.map((input) => input.source_id)).size !== replaced.length) fail("Retained replacements must cover exactly the original selector and shared binding inputs.");
+  for (const source of replaced) {
+    const input = intent.replacement_inputs.find((input) => input.source_id === source.source_id);
+    const raw = input ? decodeBytes(input.bytes_base64) : undefined;
+    const expected = source.path === activationPath ? intent.activation_input : intent.binding_input;
+    if (!raw || raw.length !== source.byte_length || historyDigest(raw) !== source.content_version || source.content_version !== expected) fail("Retained replacement bytes must match their original inventory and compare-and-replace version.");
+  }
+  if (!replaced.some((source) => source.path === activationPath) && intent.activation_input !== null || !replaced.some((source) => source.path === bindingPath) && intent.binding_input !== null) fail("Absent original selectors or bindings require an absent compare-and-replace version.");
+  if (intent.operation === "publish" && (!intent.predecessor || intent.activation_input !== historyDigest(decodeBytes(intent.predecessor.bytes_base64)))) fail("Publication must retain the exact currently selected reset bytes before activation.");
   const sorted = [...intent.original_sources].sort((left, right) => left.source_id < right.source_id ? -1 : left.source_id > right.source_id ? 1 : left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  if (canonicalJson(sorted) !== canonicalJson(intent.original_sources) || new Set(intent.original_sources.map((entry) => entry.source_id)).size !== intent.original_sources.length) fail("Original source coordinates must be sorted and file-scoped.");
+  if (canonicalJson(sorted) !== canonicalJson(intent.original_sources) || new Set(intent.original_sources.map((entry) => entry.source_id)).size !== intent.original_sources.length || new Set(intent.original_sources.map((entry) => `${entry.origin}\u0000${entry.path}`)).size !== intent.original_sources.length) fail("Original source coordinates must be sorted and file-scoped.");
   if (intent.original_sources.some((entry) => !safeHistoryRelativePath(entry.path)) || intent.original_unavailable.some((entry) => !safeHistoryRelativePath(entry.path))) fail("Original operation coordinates must remain within their relative source roots.");
   return { ...intent, control, guard, archive_index: index, predecessor: predecessor && intent.predecessor ? { event: predecessor, bytes_base64: intent.predecessor.bytes_base64 } : null };
 };
