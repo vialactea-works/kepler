@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { parseLiveHistoryBinding } from "../../packages/cli/src/history/binding.js";
+import { HistoryArchives } from "../../packages/cli/src/history/archives.js";
 import { historyDigest, historyManifestDigest, type HistoryResetManifest } from "../../packages/cli/src/history/control.js";
 import { canonicalJson } from "../../packages/cli/src/history/journal.js";
 import { createNodeHistoryReconciliation, HISTORY_LEAD_RECONCILIATION_FORMAT, HISTORY_LEAD_RECONCILIATION_PURPOSE, historyLeadReconciliationSnapshotReference, serializeHistoryLeadReconciliationReport, type HistoryLeadReconciliationReport } from "../../packages/cli/src/history/reconciliation.js";
@@ -18,10 +20,33 @@ afterEach(async () => {
   }
 });
 
-const fixture = async () => {
+const fixture = async (options: { readonly homeSelector?: "damaged" | "missing"; readonly boundPeer?: boolean } = {}) => {
   const repository = await createHistoryRepository();
   roots.push(repository.parent);
   const { root, f, access } = repository;
+  const activePath = `.kepler/missions/${f.missionId}/history/control/active.json`;
+  const activeFile = Path.join(root, activePath);
+  const damagedSelector = encoder.encode("damaged record-home activation bytes\n");
+  let peerControl: { readonly path: string; readonly bytes: Uint8Array } | undefined;
+  if (options.boundPeer) {
+    repository.git(root, "add", ".kepler/marker");
+    repository.git(root, "commit", "-q", "-m", "Create isolated bound-loss fixture");
+    const peer = Path.join(repository.parent, "bound peer");
+    repository.git(root, "worktree", "add", "-q", "-b", "peer", peer);
+    const relative = `.kepler/missions/${f.missionId}/history/control/events/${randomUUID()}.jsonl`;
+    peerControl = { path: Path.join(peer, relative), bytes: encoder.encode("malformed peer control bytes\n") };
+    await Fs.mkdir(Path.dirname(peerControl.path), { recursive: true });
+    await Fs.writeFile(peerControl.path, peerControl.bytes);
+    const context = await access.storage.context(root);
+    const binding = {
+      format: "kepler.mission-history-binding", version: 1, mission_id: f.missionId,
+      generation_id: f.generationId, history_version: f.control.id, selection_hash: historyDigest(f.input.activation!),
+      origins: context.origins.map((origin) => origin.id).sort(),
+    };
+    await access.storage.files.write({ root: context.commonDirectory, relative: `kepler/missions/${f.missionId}/coordination/history-selection.json` }, encoder.encode(`${canonicalJson(binding)}\n`), { kind: "create" });
+  }
+  if (options.homeSelector === "damaged") await Fs.writeFile(activeFile, damagedSelector);
+  if (options.homeSelector === "missing") await Fs.unlink(activeFile);
   const targetGeneration = randomUUID();
   const evidencePath = `.kepler/missions/${f.missionId}/recovery/reconciliation/evidence.txt`;
   const reportPath = `.kepler/missions/${f.missionId}/recovery/reconciliation/reset-${targetGeneration}.json`;
@@ -43,7 +68,7 @@ const fixture = async () => {
       workflow: f.manifest.mission_binding.workflow,
       request_reference: f.manifest.mission_binding.request_reference,
     },
-    prior_history: { generation_id: f.generationId, history_version: f.control.id, content_version: historyDigest(active.bytes) },
+    prior_history: options.homeSelector ? null : { generation_id: f.generationId, history_version: f.control.id, content_version: historyDigest(active.bytes) },
     target_generation_id: targetGeneration,
     attribution: { orchestrator: "agent:lead", lead: "agent:lead" },
     original_inventory: historyInventory(beforeReport),
@@ -64,8 +89,9 @@ const fixture = async () => {
     ...f.resetManifest,
     archive_id: randomUUID(),
     generation_id: targetGeneration,
-    previous_control: { event_id: f.control.id, content_version: historyDigest(active.bytes) },
+    previous_control: { event_id: options.homeSelector ? null : f.control.id, content_version: active ? historyDigest(active.bytes) : null },
     source_inventory: historyInventory(snapshot),
+    known_missing_sources: snapshot.unavailable.filter((source) => source.kind === "missing").map((source) => ({ reference: source.source_id, reason: "This bound input is physically missing.", consequences: "The approved reset excludes the missing input from current history." })),
     reconciliation: {
       ...f.resetManifest.reconciliation,
       orchestrator: "agent:lead",
@@ -76,7 +102,7 @@ const fixture = async () => {
       ],
     },
   };
-  return { repository, evidenceBytes, evidenceFile, reportBytes, reportFile, reportReference, snapshot, manifest, request: { phase: "preview" as const, recordHome: root, manifest, snapshot, intent: null } };
+  return { repository, evidenceBytes, evidenceFile, reportBytes, reportFile, reportReference, snapshot, manifest, activePath, damagedSelector, peerControl, request: { phase: "preview" as const, recordHome: root, manifest, snapshot, intent: null } };
 };
 
 describe("real lead reconciliation evidence", () => {
@@ -105,6 +131,45 @@ describe("real lead reconciliation evidence", () => {
     expect(selected.pendingRecovery).toBe(false);
     expect(await recovery.operations.execute("reset", scope, input)).toMatchObject({ already_applied: true, receipt: result.receipt });
     expect(await Fs.readFile(t.evidenceFile)).toEqual(Buffer.from(t.evidenceBytes));
+  });
+
+  it.each(["damaged", "missing"] as const)("applies and retries with a %s home selector and exactly declared missing bound peer", async (homeSelector) => {
+    const t = await fixture({ homeSelector, boundPeer: true });
+    const scope = { recordHome: t.repository.root, missionId: t.repository.f.missionId };
+    const recovery = createNodeHistoryRecovery(scope, { name: "kepler", version: "fixture-current" });
+    expect(t.manifest.previous_control).toEqual({ event_id: null, content_version: homeSelector === "damaged" ? historyDigest(t.damagedSelector) : null });
+    const beforeContext = await recovery.access.storage.context(scope.recordHome);
+    const missingOrigins = [beforeContext.origins.find((origin) => origin.root === Path.join(t.repository.parent, "bound peer"))!.id];
+    if (homeSelector === "missing") missingOrigins.push(beforeContext.origins.find((origin) => origin.root === scope.recordHome)!.id);
+    expect(t.snapshot.unavailable.map(({ source_id, path, kind }) => ({ source_id, path, kind }))).toEqual(missingOrigins.sort().map((origin) => ({ source_id: `${origin}:${t.activePath}`, path: t.activePath, kind: "missing" })));
+    expect(await createNodeHistoryReconciliation(recovery.access)(t.request)).toMatchObject({ status: "valid" });
+    const input = { phase: "apply", manifest: t.manifest, approved_manifest_hash: historyManifestDigest(t.manifest), requester: t.manifest.requester, decision_reference: "decision:exact-bound-input-loss" };
+    const result = await recovery.operations.execute("reset", scope, input);
+    expect(result).toMatchObject({ mode: "recovering", already_applied: false });
+    expect(await recovery.operations.execute("reset", scope, input)).toMatchObject({ already_applied: true, receipt: result.receipt });
+    const current = await recovery.access.storage.snapshot(scope.recordHome, scope.missionId);
+    expect(current.unavailable).toEqual([]);
+    const context = await recovery.access.storage.context(scope.recordHome);
+    const binding = parseLiveHistoryBinding(await Fs.readFile(Path.join(context.commonDirectory, "kepler", "missions", scope.missionId, "coordination", "history-selection.json")));
+    expect(binding.origins).toEqual([context.origins.find((origin) => origin.root === scope.recordHome)!.id]);
+    expect(binding.history_version).toBe(result.history_version);
+    const archive = await new HistoryArchives(recovery.access.storage).verify(scope.recordHome, scope.missionId, t.manifest.archive_id);
+    expect(archive.index.source_inventory).toEqual(t.manifest.source_inventory);
+    expect(await Fs.readFile(t.peerControl!.path)).toEqual(Buffer.from(t.peerControl!.bytes));
+    expect(archive.files).toContainEqual(expect.objectContaining({ bytes: t.peerControl!.bytes }));
+    if (homeSelector === "damaged") expect(archive.files).toContainEqual(expect.objectContaining({ path: t.activePath, bytes: t.damagedSelector }));
+    expect(await Fs.readFile(t.evidenceFile)).toEqual(Buffer.from(t.evidenceBytes));
+  });
+
+  it("rejects undeclared bound loss before changing retained inputs", async () => {
+    const t = await fixture({ homeSelector: "damaged", boundPeer: true });
+    const scope = { recordHome: t.repository.root, missionId: t.repository.f.missionId };
+    const recovery = createNodeHistoryRecovery(scope, { name: "kepler", version: "fixture-current" });
+    const manifest = { ...t.manifest, known_missing_sources: [] };
+    await expect(recovery.operations.execute("reset", scope, { phase: "apply", manifest, approved_manifest_hash: historyManifestDigest(manifest), requester: manifest.requester, decision_reference: "decision:missing-loss-declaration" })).rejects.toMatchObject({ code: "history_archive_loss_undeclared" });
+    expect(historyInventory(await recovery.access.storage.snapshot(scope.recordHome, scope.missionId))).toEqual(t.manifest.source_inventory);
+    expect(await Fs.readFile(Path.join(scope.recordHome, t.activePath))).toEqual(Buffer.from(t.damagedSelector));
+    expect((await new HistoryArchives(recovery.access.storage).catalog(scope.recordHome, scope.missionId)).archives).toEqual([]);
   });
 
   it("rejects evidence changed after the captured source inventory", async () => {

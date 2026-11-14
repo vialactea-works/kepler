@@ -130,7 +130,9 @@ export class HistoryOperations {
           await this.access.storage.files.write({ root: fence.context.commonDirectory, relative: pendingPath(intent) }, bytes(intent), { kind: "create" });
           effects.push(pendingPath(intent));
         }
-        await this.check("apply", manifest, await this.access.snapshot(fence), intent);
+        const currentSnapshot = await this.access.snapshot(fence);
+        await this.originalSnapshot(intent, currentSnapshot);
+        await this.check("apply", manifest, { ...currentSnapshot, unavailable: intent.original_unavailable }, intent);
         step = "preserve-originals";
         const archive = manifest.format === "kepler.mission-history-rebuild" ? await this.archives.verify(fence.context.recordHome, target.missionId, manifest.archive_id, { manifestHash: intent.archive_index.manifest_hash, indexHash: manifest.archive_inventory_hash }) : await this.archives.preserve(manifest, intent.archive_index, snapshot);
         effects.push(`local-archive:${manifest.archive_id}`);
@@ -345,6 +347,81 @@ export class HistoryOperations {
     ];
   }
 
+  private async originalUnavailable(intent: HistoryOperationIntent, current: HistorySnapshot, outputs: readonly OwnedOutput[], archive?: PreservedHistoryArchive): Promise<HistorySnapshot["unavailable"]> {
+    const original = intent.original_unavailable;
+    const manifest = intent.control.data.manifest;
+    if (manifest.format !== "kepler.mission-history-reset" || !manifest.known_missing_sources.length || !archive) return original;
+    const path = bindingPath(intent.mission_id);
+    const sourceId = `local-runtime:${path}`;
+    const originalBinding = intent.original_sources.find((source) => source.source_id === sourceId && source.origin === "local-runtime" && source.path === path);
+    const bindingInput = intent.replacement_inputs.find((input) => input.source_id === sourceId);
+    const archivedBinding = archive.files.find((file) => file.source_id === sourceId && file.origin === "local-runtime" && file.path === path);
+    const currentBinding = current.files.find((file) => file.origin === "local-runtime" && file.path === path);
+    const bindingOutput = outputs.find((output) => output.origin === "local-runtime" && output.path === path);
+    if (!originalBinding || !bindingInput || !archivedBinding || !currentBinding || !bindingOutput || intent.binding_input === null) return original;
+    const previousBytes = new Uint8Array(Buffer.from(bindingInput.bytes_base64, "base64"));
+    if (previousBytes.length !== originalBinding.byte_length || historyDigest(previousBytes) !== originalBinding.content_version || historyDigest(previousBytes) !== intent.binding_input || !equal(previousBytes, archivedBinding.bytes) || !equal(currentBinding.bytes, bindingOutput.bytes)) return original;
+    let previousBinding: LiveHistoryBinding;
+    let publishedBinding: LiveHistoryBinding;
+    try {
+      previousBinding = parseLiveHistoryBinding(previousBytes);
+      publishedBinding = parseLiveHistoryBinding(currentBinding.bytes);
+    } catch { return original; }
+    if (previousBinding.mission_id !== intent.mission_id || publishedBinding.mission_id !== intent.mission_id || publishedBinding.history_version !== intent.control.id || publishedBinding.generation_id !== intent.generation_id || publishedBinding.selection_hash !== historyDigest(eventBytes(intent.control)) || publishedBinding.origins.length !== 1 || publishedBinding.origins[0] !== intent.record_home_origin) return original;
+    const context = await this.access.storage.context(current.recordHome);
+    if (context.recordHome !== current.recordHome || context.commonDirectory !== current.commonDirectory) throw new HistoryError("history_operation_context_changed", "The physical record home or Git common directory changed during recovery.");
+    const missionPath = `.kepler/missions/${intent.mission_id}`;
+    const activePath = `${missionPath}/history/control/active.json`;
+    const selectedActivation = archive.files.find((file) => previousBinding.origins.includes(file.origin) && file.path === activePath && historyDigest(file.bytes) === previousBinding.selection_hash);
+    if (intent.predecessor) {
+      const predecessorBytes = new Uint8Array(Buffer.from(intent.predecessor.bytes_base64, "base64"));
+      if (!selectedActivation || intent.predecessor.event.id !== previousBinding.history_version || intent.predecessor.event.data.generation_id !== previousBinding.generation_id || historyDigest(predecessorBytes) !== previousBinding.selection_hash) return original;
+    } else {
+      if (manifest.previous_control.event_id !== null || manifest.previous_control.content_version !== intent.activation_input) return original;
+      const homeSourceId = `${intent.record_home_origin}:${activePath}`;
+      if (intent.activation_input === null) {
+        const missingHomeSelector = original.find((source) => source.source_id === homeSourceId && source.path === activePath && source.kind === "missing");
+        if (!missingHomeSelector || !manifest.known_missing_sources.some((loss) => loss.reference === homeSourceId)) return original;
+      } else {
+        const selectorSource = intent.original_sources.find((source) => source.source_id === homeSourceId && source.origin === intent.record_home_origin && source.path === activePath);
+        const selectorInput = intent.replacement_inputs.find((input) => input.source_id === homeSourceId);
+        const archivedSelector = archive.files.find((file) => file.source_id === homeSourceId && file.origin === intent.record_home_origin && file.path === activePath);
+        const selectorBytes = selectorInput ? new Uint8Array(Buffer.from(selectorInput.bytes_base64, "base64")) : undefined;
+        if (!selectorSource || !selectorInput || !archivedSelector || !selectorBytes || selectorSource.content_version !== intent.activation_input || selectorBytes.length !== selectorSource.byte_length || historyDigest(selectorBytes) !== intent.activation_input || !equal(selectorBytes, archivedSelector.bytes)) return original;
+      }
+    }
+    const homeSourceId = `${intent.record_home_origin}:${activePath}`;
+    const activeOutput = outputs.find((output) => output.origin === intent.record_home_origin && output.path === activePath);
+    const activeOutputPresent = Boolean(activeOutput && current.files.some((file) => file.origin === intent.record_home_origin && file.path === activePath && equal(file.bytes, activeOutput.bytes)));
+    const released = new Set<string>();
+    for (const unavailable of original) {
+      if (unavailable.kind !== "missing" || !manifest.known_missing_sources.some((loss) => loss.reference === unavailable.source_id) || unavailable.path !== missionPath && unavailable.path !== activePath) continue;
+      const originId = previousBinding.origins.find((origin) => unavailable.source_id === `${origin}:${unavailable.path}`);
+      if (!originId) continue;
+      if (unavailable.source_id === homeSourceId && unavailable.path === activePath) {
+        if (!publishedBinding.origins.includes(originId) || !activeOutputPresent) continue;
+        if (current.unavailable.some((source) => source.source_id === unavailable.source_id)) throw new HistoryError("history_source_changed", "The approved home selector remains unavailable after its exact replacement.", { source_id: unavailable.source_id });
+        released.add(unavailable.source_id);
+        continue;
+      }
+      if (current.unavailable.some((source) => source.source_id === unavailable.source_id) || publishedBinding.origins.includes(originId)) continue;
+      const origin = context.origins.find((candidate) => candidate.id === originId);
+      const snapshotOrigin = current.origins.find((candidate) => candidate.id === originId);
+      if (!origin || !snapshotOrigin) continue;
+      if (origin.root !== snapshotOrigin.root) throw new HistoryError("history_operation_context_changed", "A previously bound source now resolves to another physical origin.", { origin_id: originId });
+      let stillMissing: boolean;
+      try {
+        const missions = await this.access.storage.files.list({ root: origin.root, relative: ".kepler/missions" });
+        const mission = missions.find((entry) => entry.name === intent.mission_id);
+        stillMissing = unavailable.path === missionPath ? mission === undefined : mission?.kind === "directory" && await this.access.storage.files.read({ root: origin.root, relative: activePath }) === undefined;
+      } catch (error) {
+        throw new HistoryError("history_source_changed", "An approved missing bound source could not be confirmed absent.", { source_id: unavailable.source_id, reason: message(error) });
+      }
+      if (stillMissing) released.add(unavailable.source_id);
+    }
+    return original.filter((source) => !released.has(source.source_id));
+  }
+
   private async originalSnapshot(intent: HistoryOperationIntent, current: HistorySnapshot, preserved?: PreservedHistoryArchive): Promise<HistorySnapshot> {
     let archive = preserved;
     if (!archive) {
@@ -374,7 +451,8 @@ export class HistoryOperations {
       if ((!output && !retired) || !archived) throw new HistoryError("history_source_changed", "An approved original source is unavailable outside its exact retained steps.", { source_id: source.source_id });
       originals.push({ sourceId: source.source_id, origin: source.origin, path: source.path, bytes: new Uint8Array(archived.bytes) });
     }
-    if (canonicalJson(current.unavailable) !== canonicalJson(intent.original_unavailable)) throw new HistoryError("history_source_changed", "Known unavailable source conditions changed after approval.");
+    const expectedUnavailable = await this.originalUnavailable(intent, current, outputs, archive);
+    if (canonicalJson(current.unavailable) !== canonicalJson(expectedUnavailable)) throw new HistoryError("history_source_changed", "Known unavailable source conditions changed after approval.");
     return { ...current, files: originals, unavailable: intent.original_unavailable };
   }
 

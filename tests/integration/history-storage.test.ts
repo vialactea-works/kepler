@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
@@ -6,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createNodeMissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace-runtime.js";
 import { createNodeHistoryFiles } from "../../packages/cli/src/history/files-runtime.js";
 import { createHistoryRepositories } from "../../packages/cli/src/history/repositories-runtime.js";
+import { historyDigest } from "../../packages/cli/src/history/control.js";
 import { HistoryStorage, historyInventory } from "../../packages/cli/src/history/storage.js";
 import { historyGenerationFixture } from "../support/history-generation.js";
 import { historyStorageEntries } from "../support/history-storage.js";
@@ -69,5 +71,45 @@ describe("history repository and filesystem collaboration", () => {
     expect(primary.origins.find((origin) => origin.root === peer)?.id).toBe(secondary.origins.find((origin) => origin.root === peer)?.id);
     expect(primary.unavailableOrigins).toEqual([]);
     expect(secondary.unavailableOrigins).toEqual([]);
+  });
+
+  it("reports only missing inputs for bound worktrees and retains unparsable peer control bytes", async () => {
+    const { parent, root, git } = await fixture();
+    git(root, "add", ".kepler/marker");
+    git(root, "commit", "-q", "-m", "Create isolated history fixture");
+    const boundPeer = Path.join(parent, "bound-peer");
+    const missingMission = Path.join(parent, "missing-mission-peer");
+    const unjoined = Path.join(parent, "unjoined-peer");
+    git(root, "worktree", "add", "-q", "-b", "bound-peer", boundPeer);
+    git(root, "worktree", "add", "-q", "-b", "missing-mission-peer", missingMission);
+    git(root, "worktree", "add", "-q", "-b", "unjoined-peer", unjoined);
+    const repositories = createHistoryRepositories(createNodeMissionWorkspaceRuntime({ cwd: root }));
+    const context = await repositories.resolve(root);
+    const originAt = (path: string) => context.origins.find((origin) => origin.root === path)!;
+    const current = originAt(root);
+    const bound = originAt(boundPeer);
+    const lost = originAt(missingMission);
+    const unrelated = originAt(unjoined);
+    const files = createNodeHistoryFiles();
+    const f = historyGenerationFixture();
+    for (const [path, bytes] of historyStorageEntries(f, root)) await files.write({ root, relative: Path.relative(root, path).split(Path.sep).join("/") }, bytes, { kind: "create" });
+    const malformed = Buffer.from("damaged peer control bytes");
+    const malformedRelative = `.kepler/missions/${f.missionId}/history/control/events/${randomUUID()}.jsonl`;
+    await Fs.mkdir(Path.dirname(Path.join(boundPeer, malformedRelative)), { recursive: true });
+    await Fs.writeFile(Path.join(boundPeer, malformedRelative), malformed);
+    const binding = {
+      format: "kepler.mission-history-binding", version: 1, mission_id: f.missionId,
+      generation_id: f.generationId, history_version: f.control.id, selection_hash: historyDigest(f.input.activation!),
+      origins: [current.id, bound.id, lost.id].sort(),
+    };
+    const bindingRelative = `kepler/missions/${f.missionId}/coordination/history-selection.json`;
+    await files.write({ root: context.commonDirectory, relative: bindingRelative }, Buffer.from(`${JSON.stringify(binding)}\n`), { kind: "create" });
+    const snapshot = await new HistoryStorage(files, repositories).snapshot(root, f.missionId);
+    expect(snapshot.unavailable.map(({ source_id, path, kind }) => ({ source_id, path, kind }))).toEqual([
+      { source_id: `${bound.id}:.kepler/missions/${f.missionId}/history/control/active.json`, path: `.kepler/missions/${f.missionId}/history/control/active.json`, kind: "missing" },
+      { source_id: `${lost.id}:.kepler/missions/${f.missionId}`, path: `.kepler/missions/${f.missionId}`, kind: "missing" },
+    ].sort((left, right) => left.source_id < right.source_id ? -1 : left.source_id > right.source_id ? 1 : 0));
+    expect(snapshot.unavailable.some((source) => source.source_id.startsWith(`${unrelated.id}:`))).toBe(false);
+    expect(snapshot.files).toContainEqual(expect.objectContaining({ sourceId: `${bound.id}:${malformedRelative}`, bytes: malformed }));
   });
 });

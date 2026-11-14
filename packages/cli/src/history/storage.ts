@@ -1,3 +1,4 @@
+import { parseLiveHistoryBinding } from "./binding.js";
 import { HistoryError, historyDigest, parseHistoryControl, type HistorySourceEntry } from "./control.js";
 import type { HistoryJournalSource } from "./collection.js";
 import type { HistoryFiles, HistoryLocation, HistoryOrigin, HistoryRepositories, HistoryRepositoryContext, HistorySnapshot, HistorySnapshotFile } from "./files.js";
@@ -51,6 +52,29 @@ export class HistoryStorage {
     const runtime = origins.find((origin) => origin.id === "local-runtime")!;
     const localBase = `kepler/missions/${missionId}`;
     await walk(runtime, localBase);
+    const bindingPath = `${localBase}/coordination/history-selection.json`;
+    const rawBinding = files.find((file) => file.sourceId === `local-runtime:${bindingPath}`);
+    let boundOrigins = new Set<string>();
+    try {
+      const binding = rawBinding ? parseLiveHistoryBinding(rawBinding.bytes) : undefined;
+      if (binding?.mission_id === missionId) boundOrigins = new Set(binding.origins);
+    } catch { boundOrigins = new Set(); }
+    const activePath = `${missionPath(missionId)}/history/control/active.json`;
+    for (const origin of context.origins) {
+      if (!boundOrigins.has(origin.id)) continue;
+      const missions = await this.files.list({ root: origin.root, relative: ".kepler/missions" }).catch(() => undefined);
+      if (!missions) continue;
+      const mission = missions.find((entry) => entry.name === missionId);
+      if (!mission) {
+        unavailable.push({ source_id: `${origin.id}:${missionPath(missionId)}`, path: missionPath(missionId), kind: "missing", reason: "The bound working copy is missing its mission directory." });
+        continue;
+      }
+      if (mission.kind !== "directory") continue;
+      const sourceId = `${origin.id}:${activePath}`;
+      if (files.some((file) => file.sourceId === sourceId) || unavailable.some((source) => source.source_id === sourceId)) continue;
+      const unavailableAncestor = unavailable.some((source) => source.source_id.startsWith(`${origin.id}:`) && source.kind !== "missing" && (source.path === activePath || activePath.startsWith(`${source.path}/`)));
+      if (!unavailableAncestor) unavailable.push({ source_id: sourceId, path: activePath, kind: "missing", reason: "The bound working copy is missing its active history selection." });
+    }
     return { recordHome: context.recordHome, commonDirectory: context.commonDirectory, missionId, origins, files: files.sort((a, b) => compare(a.sourceId, b.sourceId)), unavailable: unavailable.sort((a, b) => compare(a.source_id, b.source_id)) };
   }
 

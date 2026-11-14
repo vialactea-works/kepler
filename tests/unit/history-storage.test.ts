@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createHistoryControl, historyDigest } from "../../packages/cli/src/history/control.js";
 import type { HistoryRepositoryContext } from "../../packages/cli/src/history/files.js";
 import { historyInventory } from "../../packages/cli/src/history/storage.js";
+import { historyAccessFixture } from "../support/history-access.js";
 import { historyGenerationFixture, historyTestBytes, historyTestEvent } from "../support/history-generation.js";
 import { historyStorageEntries, memoryHistoryStorage } from "../support/history-storage.js";
 
@@ -139,5 +140,46 @@ describe("history storage contracts", () => {
     const snapshot = await storage.snapshot("/record", f.missionId);
     expect(snapshot.unavailable).toContainEqual(expect.objectContaining({ kind: "unreadable", reason: "Permission denied" }));
     expect(snapshot.files).toHaveLength(3);
+  });
+
+  it("reports exact missing paths only for current bound origins", async () => {
+    const f = historyGenerationFixture();
+    const context: HistoryRepositoryContext = {
+      recordHome: "/record", commonDirectory: "/git",
+      origins: [
+        { id: "current", label: "record-home", root: "/record" },
+        { id: "missing-active", label: "bound peer", root: "/missing-active" },
+        { id: "missing-mission", label: "bound peer", root: "/missing-mission" },
+        { id: "unjoined", label: "unjoined peer", root: "/unjoined" },
+      ],
+      unavailableOrigins: [],
+    };
+    const h = historyAccessFixture(f, { context });
+    const malformedPeerControl = utf8("malformed peer control bytes");
+    const malformedPath = `/missing-active/.kepler/missions/${f.missionId}/history/control/events/${randomUUID()}.jsonl`;
+    h.entries.set(malformedPath, malformedPeerControl);
+    h.entries.set(h.bindingPath, h.encode({ ...h.binding, origins: ["current", "missing-active", "missing-mission"] }));
+    const snapshot = await h.storage.snapshot("/record", f.missionId);
+    expect(snapshot.unavailable).toEqual(expect.arrayContaining([
+      { source_id: `missing-active:.kepler/missions/${f.missionId}/history/control/active.json`, path: `.kepler/missions/${f.missionId}/history/control/active.json`, kind: "missing", reason: "The bound working copy is missing its active history selection." },
+      { source_id: `missing-mission:.kepler/missions/${f.missionId}`, path: `.kepler/missions/${f.missionId}`, kind: "missing", reason: "The bound working copy is missing its mission directory." },
+    ]));
+    expect(snapshot.unavailable.some((source) => source.source_id.startsWith("unjoined:"))).toBe(false);
+    expect(snapshot.files).toContainEqual(expect.objectContaining({ sourceId: `missing-active:.kepler/missions/${f.missionId}/history/control/events/${malformedPath.split("/").at(-1)}`, bytes: malformedPeerControl }));
+  });
+
+  it("keeps a damaged binding raw without trusting its origin list", async () => {
+    const f = historyGenerationFixture();
+    const context: HistoryRepositoryContext = {
+      recordHome: "/record", commonDirectory: "/git",
+      origins: [{ id: "current", label: "record-home", root: "/record" }, { id: "unjoined", label: "unjoined peer", root: "/unjoined" }],
+      unavailableOrigins: [],
+    };
+    const h = historyAccessFixture(f, { context });
+    const rawBinding = h.encode({ ...h.binding, version: 2, origins: ["current", "unjoined"] });
+    h.entries.set(h.bindingPath, rawBinding);
+    const snapshot = await h.storage.snapshot("/record", f.missionId);
+    expect(snapshot.files).toContainEqual(expect.objectContaining({ sourceId: `local-runtime:kepler/missions/${f.missionId}/coordination/history-selection.json`, bytes: rawBinding }));
+    expect(snapshot.unavailable).toEqual([]);
   });
 });
