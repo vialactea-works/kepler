@@ -93,7 +93,7 @@ const propagateReadFailure = (result: Extract<AuditHistoryReadResult, { kind: "f
   failure(result.code, result.message, result.details, result.recovery);
 
 const commonDirectory = async (
-  runtime: StageStartRuntime,
+  runtime: Pick<StageStartRuntime, "workspace">,
   repositoryRoot: string,
 ): Promise<string | undefined> => {
   const result = await runtime.workspace.git.run(repositoryRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
@@ -121,8 +121,8 @@ const sameStartingCheckpoint = (
   (actual.kind === "no-commit" || expected.commit === actual.commit);
 
 export const captureStageCheckpoints = async (
-  runtime: StageStartRuntime,
-  loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
+  runtime: Pick<StageStartRuntime, "workspace">,
+  loaded: Pick<Extract<AuditHistoryReadResult, { kind: "loaded" }>, "history" | "missionId">,
   commonDir: string,
 ): Promise<CapturedCheckpoints> => {
   const fail = (code: string, message: string, details: Readonly<Record<string, unknown>> = {}): CapturedCheckpoints => ({
