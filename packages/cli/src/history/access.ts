@@ -269,18 +269,24 @@ export class HistoryAccess {
   }
 
   private async pending(context: HistoryRepositoryContext, view: MissionHistoryView): Promise<readonly HistoryPendingSource[]> {
-    const relative = `${base(view.missionId)}/recovery/pending`;
-    const covered = view.controlReceipts.flatMap((control) => control.type === "mission.history-reset" && control.data.manifest.format === "kepler.mission-history-reset" ? control.data.manifest.source_inventory : []);
+    const selected = view.control;
+    const resetId = selected?.type === "mission.history-rebuilt" && selected.data.manifest.format === "kepler.mission-history-rebuild" ? selected.data.manifest.reset_event_id : undefined;
+    const root = resetId ? view.controlReceipts.find((control) => control.id === resetId) : selected;
+    const covered = root?.type === "mission.history-reset" && root.data.manifest.format === "kepler.mission-history-reset" ? root.data.manifest.source_inventory : [];
     const result: HistoryPendingSource[] = [];
-    for (const entry of await this.storage.files.list({ root: context.commonDirectory, relative })) {
-      const path = `${relative}/${entry.name}`;
-      const source_id = `local-runtime:${path}`;
-      const contents = entry.kind === "file" ? await this.storage.files.read({ root: context.commonDirectory, relative: path }).catch(() => undefined) : undefined;
-      const hash = contents ? historyDigest(contents) : undefined;
-      const superseded = contents !== undefined && covered.some((item) => item.source_id === source_id && item.path === path && item.byte_length === contents.length && item.content_version === hash);
-      result.push({ source_id, path, ...(hash ? { content_version: hash, byte_length: contents!.length } : {}), status: superseded ? "superseded" : "pending" });
-    }
-    return result;
+    const walk = async (relative: string): Promise<void> => {
+      for (const entry of await this.storage.files.list({ root: context.commonDirectory, relative })) {
+        const path = `${relative}/${entry.name}`;
+        if (entry.kind === "directory") { await walk(path); continue; }
+        const source_id = `local-runtime:${path}`;
+        const contents = entry.kind === "file" ? await this.storage.files.read({ root: context.commonDirectory, relative: path }).catch(() => undefined) : undefined;
+        const hash = contents ? historyDigest(contents) : undefined;
+        const superseded = contents !== undefined && covered.some((item) => item.source_id === source_id && item.origin === "local-runtime" && item.path === path && item.byte_length === contents.length && item.content_version === hash);
+        result.push({ source_id, path, ...(hash ? { content_version: hash, byte_length: contents!.length } : {}), status: superseded ? "superseded" : "pending" });
+      }
+    };
+    await walk(`${base(view.missionId)}/recovery/pending`);
+    return result.sort((left, right) => compare(left.path, right.path));
   }
 
   private async acquire(context: HistoryRepositoryContext, missionId: string, operation: string): Promise<MissionCoordinationLease> {

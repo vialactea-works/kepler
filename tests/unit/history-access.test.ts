@@ -172,6 +172,40 @@ describe("history access and admission", () => {
     expect((await h.access.read("/record", f.missionId)).pendingSources[0]?.status).toBe("pending");
   });
 
+  it("binds nested old pending files to the selected reset without hiding their bytes", async () => {
+    const f = historyGenerationFixture();
+    const h = historyAccessFixture(f);
+    const path = `kepler/missions/${f.missionId}/recovery/pending/older/nested.json`;
+    const contents = h.encode({ original: "nested intent" });
+    h.entries.set(`/git/${path}`, contents);
+    const source: HistorySourceEntry = { source_id: `local-runtime:${path}`, origin: "local-runtime", path, byte_length: contents.length, content_version: historyDigest(contents) };
+    const reset = createHistoryControl({ id: randomUUID(), journalId: randomUUID(), recordedAt: f.control.recorded_at, producer: f.control.producer, manifest: { ...f.resetManifest, generation_id: randomUUID(), source_inventory: [source] }, decisionReference: "decision:reset", causes: [] });
+    installControl(h, f, reset);
+    const view = await h.access.read("/record", f.missionId);
+    expect(view.pendingRecovery).toBe(false);
+    expect(view.pendingSources).toContainEqual({ source_id: source.source_id, path, byte_length: contents.length, content_version: historyDigest(contents), status: "superseded" });
+    expect(h.entries.get(`/git/${path}`)).toEqual(contents);
+  });
+
+  it("does not reuse a predecessor reset's pending-byte approval after a new reset", async () => {
+    const f = historyGenerationFixture();
+    const h = historyAccessFixture(f);
+    const path = `kepler/missions/${f.missionId}/recovery/pending/original.json`;
+    const original = h.encode({ original: 1 });
+    const changed = h.encode({ original: 2 });
+    const row = (contents: Uint8Array): HistorySourceEntry => ({ source_id: `local-runtime:${path}`, origin: "local-runtime", path, byte_length: contents.length, content_version: historyDigest(contents) });
+    h.entries.set(`/git/${path}`, original);
+    const first = createHistoryControl({ id: randomUUID(), journalId: randomUUID(), recordedAt: f.control.recorded_at, producer: f.control.producer, manifest: { ...f.resetManifest, generation_id: randomUUID(), source_inventory: [row(original)] }, decisionReference: "decision:first-reset", causes: [] });
+    installControl(h, f, first);
+    h.entries.set(`/git/${path}`, changed);
+    const next = createHistoryControl({ id: randomUUID(), journalId: randomUUID(), recordedAt: f.control.recorded_at, producer: f.control.producer, manifest: { ...f.resetManifest, generation_id: randomUUID(), previous_control: { event_id: first.id, content_version: historyDigest(historyTestBytes([first])) }, source_inventory: [row(changed)] }, decisionReference: "decision:next-reset", causes: [first.id] });
+    installControl(h, f, next);
+    h.entries.set(`/git/${path}`, original);
+    const view = await h.access.read("/record", f.missionId);
+    expect(view.pendingRecovery).toBe(true);
+    expect(view.pendingSources).toContainEqual({ source_id: `local-runtime:${path}`, path, byte_length: original.length, content_version: historyDigest(original), status: "pending" });
+  });
+
   it("keeps unjoined phase additions out of current state and refuses implicit import", async () => {
     const f = historyGenerationFixture();
     const context = { recordHome: "/record", commonDirectory: "/git", origins: [{ id: "current", label: "record-home", root: "/record" }, { id: "peer", label: "peer", root: "/peer" }], unavailableOrigins: [] };
