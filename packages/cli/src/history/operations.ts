@@ -121,8 +121,8 @@ export class HistoryOperations {
           snapshot = await this.originalSnapshot(intent, snapshot);
         } else {
           const selected = await this.validate(manifest, snapshot);
-          const check = await this.check("apply", manifest, snapshot, null);
           const candidates = await this.candidates(manifest, snapshot);
+          const check = await this.check("apply", manifest, snapshot, null);
           const index = await this.index(manifest, snapshot);
           intent = this.author(manifest, snapshot, selected, key, request.decision_reference!, index, check, candidates);
           retainedIntent = intent;
