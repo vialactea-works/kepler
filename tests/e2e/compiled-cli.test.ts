@@ -173,7 +173,7 @@ describe("compiled CLI E2E", () => {
     const help = e2e.cli.run(["--help"]);
     expect(help.exitCode).toBe(0);
     expect(help.stderr).toBe("");
-    for (const command of ["setup", "uuid", "workbench", "git", "lint", "audit", "workflow"]) {
+    for (const command of ["setup", "uuid", "workbench", "recovery", "git", "lint", "audit", "workflow"]) {
       expect(help.stdout).toContain(command);
     }
     const constructionHelp = e2e.cli.run(["workflow", "construction", "--help"]);
