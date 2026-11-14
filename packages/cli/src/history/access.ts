@@ -6,9 +6,21 @@ import { missionStartupResourceKey } from "../construction/mission-startup-resou
 import { parseStrictJson } from "../json/strict-json.js";
 import { assertHistoryVersion, HistoryError, historyDigest, parseHistoryControl, type HistoryControl, type HistoryDigest, type HistorySourceEntry } from "./control.js";
 import type { HistoryLocation, HistoryRepositoryContext, HistorySnapshot } from "./files.js";
-import type { MissionHistoryView } from "./gateway.js";
+import { selectMissionHistory, type HistoryGatewayInput, type HistoryGenerationSource, type MissionHistoryView } from "./gateway.js";
 import { canonicalJson } from "./journal.js";
 import { HistoryStorage } from "./storage.js";
+
+export interface SettledHistoryJournal {
+  readonly phase: "construction";
+  readonly journal_id: string;
+  readonly byte_length: number;
+  readonly content_version: HistoryDigest;
+}
+
+export interface SettledHistorySource {
+  readonly origin_id: string;
+  readonly journals: readonly SettledHistoryJournal[];
+}
 
 export interface LiveHistoryBinding {
   readonly format: "kepler.mission-history-binding";
@@ -18,6 +30,7 @@ export interface LiveHistoryBinding {
   readonly history_version: string;
   readonly selection_hash: HistoryDigest;
   readonly origins: readonly string[];
+  readonly settled_sources?: readonly SettledHistorySource[];
 }
 
 export interface HistoryPendingSource {
@@ -38,6 +51,10 @@ export interface HistoryMutationRequest {
   readonly recordHome: string;
   readonly missionId: string;
   readonly historyVersion?: string;
+}
+
+export interface HistoryJoinRequest extends HistoryMutationRequest {
+  readonly transferOriginIds?: readonly string[];
 }
 
 export interface HistoryWriterLease {
@@ -77,6 +94,14 @@ const currentOrigin = (context: HistoryRepositoryContext): string => {
 };
 const validateMission = (missionId: string): void => { if (!uuid.test(missionId)) throw new HistoryError("history_scope_invalid", "History coordination requires a full lowercase mission UUIDv4."); };
 const immutableContext = (context: HistoryRepositoryContext): HistoryRepositoryContext => Object.freeze({ ...context, origins: Object.freeze(context.origins.map((origin) => Object.freeze({ ...origin }))), unavailableOrigins: Object.freeze(context.unavailableOrigins.map((origin) => Object.freeze({ ...origin }))) });
+const sameContext = (left: HistoryRepositoryContext, right: HistoryRepositoryContext): boolean => canonicalJson(left) === canonicalJson(right);
+const sourceOwner = (source: HistoryGenerationSource, origins: readonly string[]): string => {
+  const owner = [...origins].sort((left, right) => right.length - left.length).find((origin) => source.sourceId.startsWith(`${origin}:`));
+  if (!owner) throw new HistoryError("history_source_invalid", "A selected journal has no exact current origin identity.", { source_id: source.sourceId });
+  return owner;
+};
+const sourceSnapshot = (sources: readonly HistoryGenerationSource[]): readonly Readonly<Record<string, unknown>>[] => sources.map((source) => ({ source_id: source.sourceId, phase: source.phase, journal_id: source.journalId, generation_id: source.generationId, byte_length: source.bytes.length, content_version: historyDigest(source.bytes) })).sort((left, right) => compare(String(left.source_id), String(right.source_id)));
+const equalBytes = (left: Uint8Array | undefined, right: Uint8Array | undefined): boolean => left === undefined ? right === undefined : right !== undefined && left.length === right.length && left.every((byte, index) => byte === right[index]);
 
 export const historyAdmissionResourceKey = (commonDirectory: string, missionId: string): string => createHash("sha256").update(`mission-history-admission\0${commonDirectory}\0${missionId}`).digest("hex");
 
@@ -88,10 +113,25 @@ export const parseLiveHistoryBinding = (input: Uint8Array): LiveHistoryBinding =
     value = parsed.value;
   } catch (error) { throw new HistoryError("history_binding_invalid", "The shared history binding is damaged. Use raw recovery inspection.", { message: message(error) }); }
   const keys = ["format", "version", "mission_id", "generation_id", "history_version", "selection_hash", "origins"];
-  if (!record(value) || Object.keys(value).length !== keys.length || !keys.every((key) => Object.hasOwn(value, key)) || value.format !== "kepler.mission-history-binding" || value.version !== 1 || ![value.mission_id, value.generation_id, value.history_version].every((id) => typeof id === "string" && uuid.test(id)) || typeof value.selection_hash !== "string" || !digest.test(value.selection_hash) || !Array.isArray(value.origins) || !value.origins.length || !value.origins.every((id: unknown) => typeof id === "string" && id.trim().length > 0)) throw new HistoryError("history_binding_invalid", "The shared history binding has unsupported fields or identities.");
+  if (!record(value) || ![keys.length, keys.length + 1].includes(Object.keys(value).length) || !keys.every((key) => Object.hasOwn(value, key)) || Object.keys(value).some((key) => !keys.includes(key) && key !== "settled_sources") || value.format !== "kepler.mission-history-binding" || value.version !== 1 || ![value.mission_id, value.generation_id, value.history_version].every((id) => typeof id === "string" && uuid.test(id)) || typeof value.selection_hash !== "string" || !digest.test(value.selection_hash) || !Array.isArray(value.origins) || !value.origins.length || !value.origins.every((id: unknown) => typeof id === "string" && id.trim().length > 0 && id.trim() === id)) throw new HistoryError("history_binding_invalid", "The shared history binding has unsupported fields or identities.");
   const origins = value.origins as string[];
   if (new Set(origins).size !== origins.length || canonicalJson([...origins].sort(compare)) !== canonicalJson(origins)) throw new HistoryError("history_binding_invalid", "Shared history origins must be unique and sorted.");
-  return { format: "kepler.mission-history-binding", version: 1, mission_id: String(value.mission_id), generation_id: String(value.generation_id), history_version: String(value.history_version), selection_hash: value.selection_hash as HistoryDigest, origins };
+  let settled_sources: SettledHistorySource[] | undefined;
+  if (Object.hasOwn(value, "settled_sources")) {
+    if (!Array.isArray(value.settled_sources) || value.settled_sources.length !== origins.length) throw new HistoryError("history_binding_invalid", "Settled source proof must cover every bound origin exactly once.");
+    const parsedSources: SettledHistorySource[] = value.settled_sources.map((source: unknown) => {
+      if (!record(source) || Object.keys(source).length !== 2 || !Object.hasOwn(source, "origin_id") || !Object.hasOwn(source, "journals") || typeof source.origin_id !== "string" || !origins.includes(source.origin_id) || !Array.isArray(source.journals)) throw new HistoryError("history_binding_invalid", "Settled source proof contains an unsupported origin or shape.");
+      const journals: SettledHistoryJournal[] = source.journals.map((journal: unknown) => {
+        if (!record(journal) || Object.keys(journal).length !== 4 || !Object.hasOwn(journal, "phase") || !Object.hasOwn(journal, "journal_id") || !Object.hasOwn(journal, "byte_length") || !Object.hasOwn(journal, "content_version") || journal.phase !== "construction" || typeof journal.journal_id !== "string" || !uuid.test(journal.journal_id) || !Number.isSafeInteger(journal.byte_length) || Number(journal.byte_length) < 0 || typeof journal.content_version !== "string" || !digest.test(journal.content_version)) throw new HistoryError("history_binding_invalid", "Settled journal proof has an unsupported identity, length, or digest.");
+        return { phase: "construction", journal_id: journal.journal_id, byte_length: Number(journal.byte_length), content_version: journal.content_version as HistoryDigest };
+      });
+      if (new Set(journals.map((journal) => journal.journal_id)).size !== journals.length || canonicalJson([...journals].sort((left, right) => compare(left.phase, right.phase) || compare(left.journal_id, right.journal_id))) !== canonicalJson(journals)) throw new HistoryError("history_binding_invalid", "Settled journal proof must be unique and sorted.");
+      return { origin_id: source.origin_id, journals };
+    });
+    if (new Set(parsedSources.map((source) => source.origin_id)).size !== origins.length || canonicalJson([...parsedSources].sort((left, right) => compare(left.origin_id, right.origin_id))) !== canonicalJson(parsedSources) || canonicalJson(parsedSources.map((source) => source.origin_id)) !== canonicalJson(origins)) throw new HistoryError("history_binding_invalid", "Settled source proof must exactly match the sorted bound origins.");
+    settled_sources = parsedSources;
+  }
+  return { format: "kepler.mission-history-binding", version: 1, mission_id: String(value.mission_id), generation_id: String(value.generation_id), history_version: String(value.history_version), selection_hash: value.selection_hash as HistoryDigest, origins: [...origins], ...(settled_sources ? { settled_sources } : {}) };
 };
 
 export class HistoryAccess {
@@ -147,6 +187,15 @@ export class HistoryAccess {
       if (confirmed.commonDirectory !== commonDirectory || confirmed.recordHome !== selectedRoot || currentOrigin(confirmed) !== origin) throw new HistoryError("history_selection_changed", "The repository identity changed before writer admission.");
       const token = this.runtime.next();
       if (!uuid.test(token)) throw new HistoryError("history_identity_invalid", "The writer identity source did not return a fresh UUIDv4.");
+      const bindingTarget = bindingLocation(confirmed, request.missionId);
+      const retainedBinding = await this.storage.files.read(bindingTarget);
+      if (!retainedBinding) throw new HistoryError("history_binding_required", "Writer admission requires the exact shared history binding.");
+      const parsedBinding = parseLiveHistoryBinding(retainedBinding);
+      if (parsedBinding.history_version !== view.historyVersion || parsedBinding.generation_id !== view.generationId || parsedBinding.selection_hash !== view.selectionHash) throw new HistoryError("history_selection_changed", "The shared binding changed before writer admission.");
+      if (parsedBinding.settled_sources) {
+        const { settled_sources: _settledSources, ...unsettledBinding } = parsedBinding;
+        await this.storage.files.write(bindingTarget, bytes(unsettledBinding), { kind: "replace", expected: historyDigest(retainedBinding) });
+      }
       const location = { root: commonDirectory, relative: `${base(request.missionId)}/coordination/history-writers/${token}.json` };
       const contents = bytes({ format: "kepler.mission-history-writer", version: 1, mission_id: request.missionId, history_version: view.historyVersion, generation_id: view.generationId, origin_id: origin, token, owner: this.runtime.identity });
       const output = await this.storage.files.write(location, contents, { kind: "create" });
@@ -189,41 +238,142 @@ export class HistoryAccess {
     return value as T;
   }
 
-  public async join(input: HistoryMutationRequest, verifyOwnership: (view: CoordinatedHistory, context: HistoryRepositoryContext) => Promise<void>): Promise<CoordinatedHistory> {
+  public async join(input: HistoryJoinRequest, verifyOwnership: (view: CoordinatedHistory, context: HistoryRepositoryContext) => Promise<void>): Promise<CoordinatedHistory> {
+    const requestedTransfers = input.transferOriginIds === undefined ? [] : input.transferOriginIds;
+    if (!Array.isArray(requestedTransfers) || requestedTransfers.some((origin) => typeof origin !== "string" || !origin.trim() || origin.trim() !== origin) || new Set(requestedTransfers).size !== requestedTransfers.length) throw new HistoryError("history_transfer_invalid", "Origin transfer requires unique exact prior origin IDs.");
+    const transferOriginIds = [...requestedTransfers].sort(compare);
     const request = Object.freeze({ recordHome: input.recordHome, missionId: input.missionId, historyVersion: input.historyVersion });
-    const before = await this.read(request.recordHome, request.missionId);
-    assertHistoryVersion(before.control, request.historyVersion);
-    if (before.pendingRecovery) throw new HistoryError("history_recovery_pending", "Finish or supersede the retained recovery intent before joining this history.");
     const context = await this.storage.context(request.recordHome);
+    const target = bindingLocation(context, request.missionId);
+    const initialRaw = await this.storage.files.read(target);
+    const initialBinding = initialRaw ? parseLiveHistoryBinding(initialRaw) : undefined;
+    const before = await this.joinSnapshot(context, request.missionId, initialBinding, transferOriginIds);
+    assertHistoryVersion(before.view.control, request.historyVersion);
+    if (before.view.pendingRecovery) throw new HistoryError("history_recovery_pending", "Finish or supersede the retained recovery intent before joining this history.");
     const admission = await this.acquire(context, request.missionId, "join");
     let failure: { readonly error: unknown } | undefined;
     try {
-      const view = await this.read(context.recordHome, request.missionId);
-      assertHistoryVersion(view.control, request.historyVersion);
-      if (view.pendingRecovery) throw new HistoryError("history_recovery_pending", "Recovery became pending before this working copy could join.");
-      const raw = await this.storage.files.read(bindingLocation(context, request.missionId));
+      const lockedContext = await this.storage.context(request.recordHome);
+      if (!sameContext(context, lockedContext)) throw new HistoryError("history_selection_changed", "The physical repository scope changed before join admission.");
+      const raw = await this.storage.files.read(target);
+      if (!equalBytes(raw, initialRaw)) throw new HistoryError("history_selection_changed", "The shared binding changed before join admission.");
       const existing = raw ? parseLiveHistoryBinding(raw) : undefined;
-      if (existing && view.coordination === "unjoined") {
-        const incoming = await this.storage.input(context.recordHome, request.missionId, { sharedHistoryVersion: existing.history_version, originIds: new Set(existing.origins), includeCurrentOrigin: true });
-        const origin = currentOrigin(context);
-        for (const source of incoming.generationSources.filter((item) => item.sourceId.startsWith(`${origin}:`))) {
-          const known = view.sources.find((item) => item.phase === source.phase && item.journalId === source.journalId);
-          if (!known || !prefix(source.bytes, known.bytes)) throw new HistoryError("history_handoff_unaccepted_facts", "A joining copy contains phase facts that its known current sources do not establish.", { source_id: source.sourceId });
-        }
-      }
-      const target = bindingLocation(context, request.missionId);
-      const selectedRoot = context.recordHome;
-      const origin = currentOrigin(context);
-      const binding: LiveHistoryBinding = { format: "kepler.mission-history-binding", version: 1, mission_id: request.missionId, generation_id: view.generationId!, history_version: view.historyVersion!, selection_hash: view.selectionHash!, origins: [...new Set([...(existing?.origins ?? []), origin])].sort(compare) };
-      await verifyOwnership(Object.freeze({ ...view }), immutableContext(context));
-      const confirmed = await this.storage.context(selectedRoot);
-      const activation = await this.storage.files.read({ root: selectedRoot, relative: `.kepler/missions/${request.missionId}/history/control/active.json` });
-      if (confirmed.recordHome !== selectedRoot || confirmed.commonDirectory !== target.root || currentOrigin(confirmed) !== origin || !activation || historyDigest(activation) !== binding.selection_hash) throw new HistoryError("history_selection_changed", "Ownership verification changed its bound repository or activation input.");
+      const state = await this.joinSnapshot(lockedContext, request.missionId, existing, transferOriginIds);
+      assertHistoryVersion(state.view.control, request.historyVersion);
+      if (state.view.pendingRecovery) throw new HistoryError("history_recovery_pending", "Recovery became pending before this working copy could join.");
+      const writersBefore = await this.writerEntries(lockedContext, request.missionId);
+      if (transferOriginIds.length) {
+        if (writersBefore.length) throw new HistoryError("history_writers_active", "Origin transfer requires no registered, partial, or unrecognized writer entries.");
+        this.assertTransferSources(existing!, transferOriginIds, state.origin, lockedContext, state.input);
+      } else this.assertIncomingFacts(state.view, state.origin, state.input);
+      const observedSources = canonicalJson(sourceSnapshot(state.input.generationSources));
+      await verifyOwnership(Object.freeze(structuredClone(state.view)), immutableContext(lockedContext));
+      const confirmed = await this.storage.context(request.recordHome);
+      if (!sameContext(lockedContext, confirmed)) throw new HistoryError("history_selection_changed", "Ownership verification changed the physical repository scope.");
+      const confirmedRaw = await this.storage.files.read(target);
+      if (!equalBytes(confirmedRaw, raw)) throw new HistoryError("history_selection_changed", "Ownership verification changed the shared history binding.");
+      const after = await this.joinSnapshot(confirmed, request.missionId, existing, transferOriginIds);
+      assertHistoryVersion(after.view.control, request.historyVersion);
+      if (after.view.pendingRecovery) throw new HistoryError("history_recovery_pending", "Recovery became pending during ownership verification.");
+      if (canonicalJson(sourceSnapshot(after.input.generationSources)) !== observedSources) throw new HistoryError("history_selection_changed", "A selected source changed during ownership verification.");
+      if (transferOriginIds.length) this.assertTransferSources(existing!, transferOriginIds, after.origin, confirmed, after.input);
+      else this.assertIncomingFacts(after.view, after.origin, after.input);
+      const writersAfter = await this.writerEntries(confirmed, request.missionId);
+      if (transferOriginIds.length && writersAfter.length) throw new HistoryError("history_writers_active", "An ordinary or unrecognized writer appeared before origin transfer publication.");
+      const activation = await this.storage.files.read({ root: confirmed.recordHome, relative: `.kepler/missions/${request.missionId}/history/control/active.json` });
+      if (!activation || historyDigest(activation) !== after.view.selectionHash) throw new HistoryError("history_selection_changed", "The selected activation changed before join publication.");
+      const replaced = new Set(transferOriginIds);
+      const origins = [...new Set([...(existing?.origins ?? []).filter((origin) => !replaced.has(origin)), after.origin])].sort(compare);
+      const binding: LiveHistoryBinding = {
+        format: "kepler.mission-history-binding", version: 1, mission_id: request.missionId,
+        generation_id: after.view.generationId!, history_version: after.view.historyVersion!, selection_hash: after.view.selectionHash!, origins,
+        ...(writersBefore.length === 0 && writersAfter.length === 0 ? { settled_sources: this.settledInventory(origins, after.input.generationSources, confirmed.origins.map((origin) => origin.id)) } : {}),
+      };
       await this.storage.files.write(target, bytes(binding), { kind: "replace", expected: raw ? historyDigest(raw) : null });
     } catch (error) { failure = { error }; }
     await this.releaseAdmission(admission, failure);
     if (failure) throw failure.error;
     return this.read(context.recordHome, request.missionId);
+  }
+
+  private async joinSnapshot(context: HistoryRepositoryContext, missionId: string, binding: LiveHistoryBinding | undefined, transferOriginIds: readonly string[]): Promise<{ readonly view: CoordinatedHistory; readonly input: HistoryGatewayInput; readonly origin: string }> {
+    const origin = currentOrigin(context);
+    this.assertTransferOrigins(context, binding, origin, transferOriginIds);
+    const selectedOrigins = new Set([...(binding?.origins ?? []).filter((id) => !transferOriginIds.includes(id)), origin]);
+    const input = await this.storage.input(context.recordHome, missionId, { ...(binding ? { sharedHistoryVersion: binding.history_version } : {}), originIds: selectedOrigins, includeCurrentOrigin: true });
+    const selected = selectMissionHistory(input);
+    if (binding && (binding.mission_id !== missionId || selected.historyVersion !== binding.history_version || selected.generationId !== binding.generation_id || !input.activation || historyDigest(input.activation) !== binding.selection_hash)) throw new HistoryError("history_binding_conflict", "The selected control does not match the exact shared binding.");
+    let view: CoordinatedHistory;
+    if (transferOriginIds.length) {
+      const pendingSources = await this.pending(context, selected);
+      view = { ...selected, coordination: binding!.origins.includes(origin) ? "bound" : "unjoined", selectionHash: historyDigest(input.activation!), pendingSources, pendingRecovery: pendingSources.some((source) => source.status === "pending") };
+    } else {
+      view = await this.read(context.recordHome, missionId);
+      if (view.historyVersion !== selected.historyVersion || view.generationId !== selected.generationId || view.selectionHash !== (input.activation ? historyDigest(input.activation) : undefined)) throw new HistoryError("history_selection_changed", "The selected history changed while its join inputs were read.");
+      this.assertIncomingFacts(view, origin, input);
+    }
+    return { view, input, origin };
+  }
+
+  private assertTransferOrigins(context: HistoryRepositoryContext, binding: LiveHistoryBinding | undefined, origin: string, transferOriginIds: readonly string[]): void {
+    if (!transferOriginIds.length) return;
+    if (!binding) throw new HistoryError("history_transfer_invalid", "Origin transfer requires an existing shared binding.");
+    if (!binding.settled_sources) throw new HistoryError("history_transfer_unproven", "The existing seven-field binding has no complete settled source inventory.");
+    if (transferOriginIds.includes(origin) || transferOriginIds.some((id) => !binding.origins.includes(id))) throw new HistoryError("history_transfer_invalid", "Transfer IDs must name prior bound origins other than the current record home.");
+    const available = new Set(context.origins.map((candidate) => candidate.id));
+    const missing = binding.origins.filter((id) => !available.has(id)).sort(compare);
+    const unsafe = context.unavailableOrigins.filter((item) => binding.origins.includes(item.id) && item.kind !== "missing");
+    if (unsafe.length) throw new HistoryError("history_transfer_unsafe_origin", "Unreadable or unsafe existing origins cannot be treated as moved or missing.", { origins: unsafe.map((item) => item.id) });
+    const reportedMissing = context.unavailableOrigins.filter((item) => binding.origins.includes(item.id) && item.kind === "missing").map((item) => item.id);
+    if (reportedMissing.some((id) => available.has(id))) throw new HistoryError("history_transfer_unsafe_origin", "An existing origin cannot be both available and reported missing.");
+    if (!missing.length || canonicalJson(missing) !== canonicalJson(transferOriginIds) || reportedMissing.some((id) => !transferOriginIds.includes(id))) throw new HistoryError("history_transfer_invalid", "Explicit transfer IDs must exactly cover all unavailable bound origins.");
+  }
+
+  private assertIncomingFacts(view: CoordinatedHistory, origin: string, input: HistoryGatewayInput): void {
+    if (view.coordination !== "unjoined") return;
+    for (const source of input.generationSources.filter((item) => item.sourceId.startsWith(`${origin}:`))) {
+      const known = view.sources.find((item) => item.phase === source.phase && item.journalId === source.journalId);
+      if (!known || !prefix(source.bytes, known.bytes)) throw new HistoryError("history_handoff_unaccepted_facts", "A joining copy contains phase facts that its known current sources do not establish.", { source_id: source.sourceId });
+    }
+  }
+
+  private assertTransferSources(binding: LiveHistoryBinding, transferOriginIds: readonly string[], origin: string, context: HistoryRepositoryContext, input: HistoryGatewayInput): void {
+    const current = input.generationSources.filter((source) => sourceOwner(source, context.origins.map((item) => item.id)) === origin);
+    const witnesses = input.generationSources.filter((source) => {
+      const sourceOrigin = sourceOwner(source, context.origins.map((item) => item.id));
+      return sourceOrigin !== origin && binding.origins.includes(sourceOrigin) && !transferOriginIds.includes(sourceOrigin);
+    });
+    const proofByKey = new Map<string, SettledHistoryJournal[]>();
+    for (const sourceId of transferOriginIds) {
+      const proof = binding.settled_sources?.find((item) => item.origin_id === sourceId);
+      if (!proof) throw new HistoryError("history_transfer_unproven", "A transferred origin has no settled journal inventory.", { origin_id: sourceId });
+      for (const journal of proof.journals) {
+        const key = `${journal.phase}\0${journal.journal_id}`;
+        proofByKey.set(key, [...(proofByKey.get(key) ?? []), journal]);
+        const matches = current.filter((source) => source.phase === journal.phase && source.journalId === journal.journal_id);
+        if (matches.length !== 1) throw new HistoryError("history_transfer_incomplete", "The incoming record home does not contain exactly one full settled journal.", { origin_id: sourceId, journal_id: journal.journal_id });
+        const incoming = matches[0]!;
+        const knownPrefix = incoming.bytes.subarray(0, journal.byte_length);
+        if (incoming.bytes.length < journal.byte_length || historyDigest(knownPrefix) !== journal.content_version) throw new HistoryError("history_transfer_incomplete", "An incoming journal is truncated or differs from its settled full bytes.", { origin_id: sourceId, journal_id: journal.journal_id });
+        if (incoming.bytes.length > journal.byte_length && !witnesses.some((source) => source.phase === journal.phase && source.journalId === journal.journal_id && prefix(incoming.bytes, source.bytes))) throw new HistoryError("history_handoff_unaccepted_facts", "Incoming facts after a settled journal prefix are not established by another current member.", { source_id: incoming.sourceId });
+      }
+    }
+    for (const incoming of current) {
+      const key = `${incoming.phase}\0${incoming.journalId}`;
+      if (proofByKey.has(key)) continue;
+      if (!witnesses.some((source) => source.phase === incoming.phase && source.journalId === incoming.journalId && prefix(incoming.bytes, source.bytes))) throw new HistoryError("history_handoff_unaccepted_facts", "An incoming journal outside the settled inventories is not established by another current member.", { source_id: incoming.sourceId });
+    }
+  }
+
+  private async writerEntries(context: HistoryRepositoryContext, missionId: string): Promise<readonly { readonly name: string }[]> {
+    return this.storage.files.list({ root: context.commonDirectory, relative: `${base(missionId)}/coordination/history-writers` });
+  }
+
+  private settledInventory(origins: readonly string[], sources: readonly HistoryGenerationSource[], knownOrigins: readonly string[]): readonly SettledHistorySource[] {
+    if (origins.some((origin) => !knownOrigins.includes(origin)) || sources.some((source) => source.phase !== "construction")) throw new HistoryError("history_source_invalid", "The selected history inventory contains an unknown origin or phase.");
+    const inventory = sources.map((source) => ({ origin_id: sourceOwner(source, knownOrigins), phase: source.phase, journal_id: source.journalId, byte_length: source.bytes.length, content_version: historyDigest(source.bytes) }));
+    if (inventory.some((item) => !origins.includes(item.origin_id)) || new Set(inventory.map((item) => `${item.origin_id}\0${item.phase}\0${item.journal_id}`)).size !== inventory.length) throw new HistoryError("history_source_invalid", "The selected history contains duplicate or unbound origin/journal identities.");
+    return [...origins].sort(compare).map((origin_id) => ({ origin_id, journals: inventory.filter((item) => item.origin_id === origin_id).map(({ journal_id, byte_length, content_version }) => ({ phase: "construction" as const, journal_id, byte_length, content_version })).sort((left, right) => compare(left.phase, right.phase) || compare(left.journal_id, right.journal_id)) }));
   }
 
   public async withRecovery<T>(recordHome: string, missionId: string, operation: (scope: HistoryExclusiveScope) => Promise<T>): Promise<T> {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { missionStartupResourceKey } from "../../packages/cli/src/construction/mission-startup-resource.js";
 import { historyAdmissionResourceKey, parseLiveHistoryBinding, type HistoryExclusiveScope } from "../../packages/cli/src/history/access.js";
+import type { HistoryRepositoryContext } from "../../packages/cli/src/history/files.js";
 import { createHistoryControl, historyDigest, type HistorySourceEntry } from "../../packages/cli/src/history/control.js";
 import { historyInventory } from "../../packages/cli/src/history/storage.js";
 import { historyAccessFixture } from "../support/history-access.js";
@@ -9,6 +10,16 @@ import { historyGenerationFixture, historyTestBytes, historyTestEvent } from "..
 import { historyStorageEntries } from "../support/history-storage.js";
 
 const writerEntries = (entries: ReadonlyMap<string, Uint8Array>): readonly string[] => [...entries.keys()].filter((key) => key.includes("/history-writers/"));
+const missingOriginFixture = (f: ReturnType<typeof historyGenerationFixture>, options: { readonly proofBytes?: Uint8Array; readonly includeProof?: boolean; readonly unavailableOrigins?: HistoryRepositoryContext["unavailableOrigins"] } = {}) => {
+  const originId = "prior-worktree";
+  const context: HistoryRepositoryContext = { recordHome: "/record", commonDirectory: "/git", origins: [{ id: "current-worktree", label: "record-home", root: "/record" }], unavailableOrigins: options.unavailableOrigins ?? [] };
+  const h = historyAccessFixture(f, { context });
+  const proofBytes = options.proofBytes ?? f.source.bytes;
+  const settled_sources = options.includeProof === false ? undefined : [{ origin_id: originId, journals: [{ phase: "construction", journal_id: f.journalId, byte_length: proofBytes.length, content_version: historyDigest(proofBytes) }] }];
+  h.entries.set(h.bindingPath, h.encode({ ...h.binding, origins: [originId], ...(settled_sources ? { settled_sources } : {}) }));
+  const sourcePath = `/record/.kepler/missions/${f.missionId}/history/generations/${f.generationId}/construction/${f.journalId}.jsonl`;
+  return { h, originId, sourcePath };
+};
 const installControl = (h: ReturnType<typeof historyAccessFixture>, f: ReturnType<typeof historyGenerationFixture>, control: ReturnType<typeof createHistoryControl>) => {
   const activation = historyTestBytes([control]);
   const guard = historyTestEvent("construction.history-generation-required", { mission_id: f.missionId, generation_id: control.data.generation_id, control_event_id: control.id }, randomUUID(), [control.id]);
@@ -35,6 +46,34 @@ describe("shared history binding", () => {
     expect(historyAdmissionResourceKey("/git", f.missionId)).not.toBe(historyAdmissionResourceKey("/git", randomUUID()));
   });
 
+  it("parses complete optional inventories while preserving old seven-field bindings as unproved", () => {
+    const h = historyAccessFixture(historyGenerationFixture());
+    const settled = [
+      { origin_id: "current", journals: [{ phase: "construction", journal_id: randomUUID(), byte_length: 0, content_version: historyDigest(new Uint8Array()) }] },
+      { origin_id: "peer", journals: [] },
+    ];
+    const binding = { ...h.binding, origins: ["current", "peer"], settled_sources: settled };
+    expect(parseLiveHistoryBinding(h.encode(h.binding)).settled_sources).toBeUndefined();
+    expect(parseLiveHistoryBinding(h.encode(binding)).settled_sources).toEqual(settled);
+  });
+
+  it.each([
+    { settled_sources: [{ origin_id: "foreign", journals: [] }] },
+    { settled_sources: [] },
+    { settled_sources: [{ origin_id: "current", journals: [], extra: true }] },
+    { settled_sources: [{ origin_id: "current", journals: [{ phase: "other", journal_id: randomUUID(), byte_length: 0, content_version: historyDigest(new Uint8Array()) }] }] },
+    { settled_sources: [{ origin_id: "current", journals: [{ phase: "construction", journal_id: "invalid", byte_length: 0, content_version: historyDigest(new Uint8Array()) }] }] },
+    { settled_sources: [{ origin_id: "current", journals: [{ phase: "construction", journal_id: randomUUID(), byte_length: -1, content_version: historyDigest(new Uint8Array()) }] }] },
+    { settled_sources: [{ origin_id: "current", journals: [{ phase: "construction", journal_id: randomUUID(), byte_length: 0, content_version: "sha256:bad" }] }] },
+    { settled_sources: [{ origin_id: "current", journals: [{ phase: "construction", journal_id: "10000000-0000-4000-8000-000000000001", byte_length: 0, content_version: historyDigest(new Uint8Array()) }, { phase: "construction", journal_id: "10000000-0000-4000-8000-000000000001", byte_length: 0, content_version: historyDigest(new Uint8Array()) }] }] },
+    { settled_sources: [{ origin_id: "current", journals: [{ phase: "construction", journal_id: "10000000-0000-4000-8000-000000000002", byte_length: 0, content_version: historyDigest(new Uint8Array()) }, { phase: "construction", journal_id: "10000000-0000-4000-8000-000000000001", byte_length: 0, content_version: historyDigest(new Uint8Array()) }] }] },
+    { settled_sources: [{ origin_id: "current", journals: [] }, { origin_id: "current", journals: [] }] },
+    { settled_sources: [{ origin_id: "current", journals: [] }, { origin_id: "other", journals: [] }] },
+  ])("rejects malformed settled source proof %j", (change) => {
+    const h = historyAccessFixture(historyGenerationFixture());
+    expect(() => parseLiveHistoryBinding(h.encode({ ...h.binding, ...change }))).toThrowError(expect.objectContaining({ code: "history_binding_invalid" }));
+  });
+
   it.each([
     { version: 2 }, { mission_id: "partial" }, { generation_id: "INVALID" }, { selection_hash: "sha256:wrong" },
     { origins: [] }, { origins: ["duplicate", "duplicate"] }, { origins: ["z", "a"] }, { unknown: true },
@@ -59,6 +98,7 @@ describe("history access and admission", () => {
     await expect(h.access.beginMutation({ ...h.request, historyVersion: randomUUID() })).rejects.toMatchObject({ code: "history_version_mismatch" });
     await expect(h.access.beginMutation({ ...h.request, historyVersion: "short" })).rejects.toMatchObject({ code: "history_version_invalid" });
     expect(h.acquired).toEqual([]);
+    expect(h.entries.get(h.bindingPath)).toEqual(h.encode(h.binding));
     const unbound = historyAccessFixture(f, { bound: false });
     expect((await unbound.access.read("/record", f.missionId)).coordination).toBe("unbound");
     await expect(unbound.access.beginMutation(unbound.request)).rejects.toMatchObject({ code: "history_binding_required" });
@@ -85,14 +125,40 @@ describe("history access and admission", () => {
     const f = historyGenerationFixture();
     const h = historyAccessFixture(f, { bound: false });
     const joined = await h.access.join(h.request, async (view, context) => {
-      try { (view as { historyVersion: string }).historyVersion = randomUUID(); } catch {}
-      try { (context as { commonDirectory: string }).commonDirectory = "/unrelated"; } catch {}
+      expect(() => { (view as { historyVersion: string }).historyVersion = randomUUID(); }).toThrow();
+      expect(() => { (context as { commonDirectory: string }).commonDirectory = "/unrelated"; }).toThrow();
     });
     expect(joined.historyVersion).toBe(f.control.id);
     expect(joined.coordination).toBe("bound");
     expect(h.context.commonDirectory).toBe("/git");
     expect([...h.entries.keys()].some((key) => key.startsWith("/unrelated/"))).toBe(false);
     expect(parseLiveHistoryBinding(h.entries.get(h.bindingPath)!).history_version).toBe(f.control.id);
+  });
+
+  it("invalidates settled proof before a writer callback and refreshes only on a later no-writer join", async () => {
+    const f = historyGenerationFixture();
+    const h = historyAccessFixture(f);
+    await h.access.join(h.request, async () => undefined);
+    expect(parseLiveHistoryBinding(h.entries.get(h.bindingPath)!).settled_sources).toHaveLength(1);
+    const path = `/record/.kepler/missions/${f.missionId}/history/generations/${f.generationId}/construction/${f.journalId}.jsonl`;
+    const original = h.entries.get(path)!;
+    const event = historyTestEvent("construction.interaction-recorded", { mission_id: f.missionId, unit_id: f.unitId, participants: ["requester"], content: "Appended after publication", references: [] }, f.journalId, [f.unit.id]);
+    let proofDuringCallback: unknown;
+    await h.access.withMutation(h.request, async (_view, writer) => {
+      proofDuringCallback = parseLiveHistoryBinding(h.entries.get(h.bindingPath)!).settled_sources;
+      await writer.assertHeld();
+      const appended = historyTestBytes([event]);
+      const complete = new Uint8Array(original.length + appended.length);
+      complete.set(original);
+      complete.set(appended, original.length);
+      h.entries.set(path, complete);
+    });
+    expect(proofDuringCallback).toBeUndefined();
+    expect(parseLiveHistoryBinding(h.entries.get(h.bindingPath)!).settled_sources).toBeUndefined();
+    const refreshed = await h.access.join(h.request, async () => undefined);
+    const inventory = parseLiveHistoryBinding(h.entries.get(h.bindingPath)!).settled_sources;
+    expect(inventory?.[0]?.journals).toContainEqual({ phase: "construction", journal_id: f.journalId, byte_length: original.length + historyTestBytes([event]).length, content_version: historyDigest(h.entries.get(path)!) });
+    expect(refreshed.history.events.some((item) => item.event?.id === event.id)).toBe(true);
   });
 
   it("admits independent ordinary writers together and excludes recovery until both finish", async () => {
@@ -204,6 +270,97 @@ describe("history access and admission", () => {
     const view = await h.access.read("/record", f.missionId);
     expect(view.pendingRecovery).toBe(true);
     expect(view.pendingSources).toContainEqual({ source_id: `local-runtime:${path}`, path, byte_length: original.length, content_version: historyDigest(original), status: "pending" });
+  });
+
+  it("keeps seven-field bindings readable but refuses to infer transfer proof from publication prefixes", async () => {
+    const f = historyGenerationFixture();
+    const { h, originId } = missingOriginFixture(f, { includeProof: false });
+    const original = h.entries.get(h.bindingPath)!;
+    expect(parseLiveHistoryBinding(original).settled_sources).toBeUndefined();
+    await expect(h.access.read("/record", f.missionId)).rejects.toMatchObject({ code: "history_source_incomplete" });
+    let verified = false;
+    await expect(h.access.join({ ...h.request, transferOriginIds: [originId] }, async () => { verified = true; })).rejects.toMatchObject({ code: "history_transfer_unproven" });
+    expect(verified).toBe(false);
+    expect(h.entries.get(h.bindingPath)).toEqual(original);
+  });
+
+  it("replaces only an explicitly transferred missing origin after proving the complete settled bytes", async () => {
+    const f = historyGenerationFixture();
+    const { h, originId } = missingOriginFixture(f);
+    const result = await h.access.join({ ...h.request, transferOriginIds: [originId] }, async (view) => {
+      expect(view.coordination).toBe("unjoined");
+      expect(view.history.events).toHaveLength(3);
+    });
+    const binding = parseLiveHistoryBinding(h.entries.get(h.bindingPath)!);
+    expect(binding.origins).toEqual(["current-worktree"]);
+    expect(binding.settled_sources?.[0]?.journals).toEqual([{ phase: "construction", journal_id: f.journalId, byte_length: f.source.bytes.length, content_version: historyDigest(f.source.bytes) }]);
+    expect(result.coordination).toBe("bound");
+  });
+
+  it("rejects a copy longer than initial settled bytes unless another current member proves the append", async () => {
+    const f = historyGenerationFixture();
+    const { h, originId, sourcePath } = missingOriginFixture(f);
+    const event = historyTestEvent("construction.interaction-recorded", { mission_id: f.missionId, unit_id: f.unitId, participants: ["requester"], content: "Unsettled append", references: [] }, f.journalId, [f.unit.id]);
+    const appended = new Uint8Array([...f.source.bytes, ...historyTestBytes([event])]);
+    h.entries.set(sourcePath, appended);
+    const binding = h.entries.get(h.bindingPath)!;
+    await expect(h.access.join({ ...h.request, transferOriginIds: [originId] }, async () => undefined)).rejects.toMatchObject({ code: "history_handoff_unaccepted_facts" });
+    expect(h.entries.get(h.bindingPath)).toEqual(binding);
+  });
+
+  it("rejects an incoming journal outside the settled inventory when no current member establishes it", async () => {
+    const f = historyGenerationFixture();
+    const { h, originId } = missingOriginFixture(f);
+    const extraJournalId = randomUUID();
+    const extra = historyTestEvent("construction.interaction-recorded", { mission_id: f.missionId, unit_id: f.unitId, participants: ["requester"], content: "Unsettled journal", references: [] }, extraJournalId, [f.unit.id]);
+    const extraPath = `/record/.kepler/missions/${f.missionId}/history/generations/${f.generationId}/construction/${extraJournalId}.jsonl`;
+    h.entries.set(extraPath, historyTestBytes([extra]));
+    const binding = h.entries.get(h.bindingPath)!;
+    await expect(h.access.join({ ...h.request, transferOriginIds: [originId] }, async () => undefined)).rejects.toMatchObject({ code: "history_handoff_unaccepted_facts" });
+    expect(h.entries.get(h.bindingPath)).toEqual(binding);
+    expect(h.entries.get(extraPath)).toEqual(historyTestBytes([extra]));
+  });
+
+  it("rejects truncated current history, stale heads, pending recovery and unsafe origins without binding changes", async () => {
+    const f = historyGenerationFixture();
+    const full = new Uint8Array([...f.source.bytes, ...historyTestBytes([historyTestEvent("construction.interaction-recorded", { mission_id: f.missionId, unit_id: f.unitId, participants: ["requester"], content: "Settled append", references: [] }, f.journalId, [f.unit.id])])]);
+    const { h, originId, sourcePath } = missingOriginFixture(f, { proofBytes: full });
+    h.entries.set(sourcePath, f.source.bytes);
+    const binding = h.entries.get(h.bindingPath)!;
+    await expect(h.access.join({ ...h.request, transferOriginIds: [originId] }, async () => undefined)).rejects.toMatchObject({ code: "history_transfer_incomplete" });
+    const dirty = new Uint8Array(full);
+    dirty[dirty.length - 2] ^= 1;
+    const mismatched = missingOriginFixture(f, { proofBytes: full });
+    mismatched.h.entries.set(mismatched.sourcePath, dirty);
+    await expect(mismatched.h.access.join({ ...mismatched.h.request, transferOriginIds: [mismatched.originId] }, async () => undefined)).rejects.toMatchObject({ code: "history_transfer_incomplete" });
+    await expect(h.access.join({ ...h.request, historyVersion: randomUUID(), transferOriginIds: [originId] }, async () => undefined)).rejects.toMatchObject({ code: "history_version_mismatch" });
+    h.entries.set(`/git/kepler/missions/${f.missionId}/recovery/pending/retained.json`, h.encode({ pending: true }));
+    await expect(h.access.join({ ...h.request, transferOriginIds: [originId] }, async () => undefined)).rejects.toMatchObject({ code: "history_recovery_pending" });
+    expect(h.entries.get(h.bindingPath)).toEqual(binding);
+    const unsafe = missingOriginFixture(f, { unavailableOrigins: [{ id: originId, path: "/prior", kind: "unsafe", reason: "symlink" }] });
+    await expect(unsafe.h.access.join({ ...unsafe.h.request, transferOriginIds: [originId] }, async () => undefined)).rejects.toMatchObject({ code: "history_transfer_unsafe_origin" });
+  });
+
+  it("requires transfer settlement with no writer entries and drops proof when a regular join sees writers", async () => {
+    const f = historyGenerationFixture();
+    const { h, originId } = missingOriginFixture(f);
+    const writerPath = `/git/kepler/missions/${f.missionId}/coordination/history-writers/unrecognized.partial`;
+    h.entries.set(writerPath, new Uint8Array([255]));
+    const original = h.entries.get(h.bindingPath)!;
+    await expect(h.access.join({ ...h.request, transferOriginIds: [originId] }, async () => undefined)).rejects.toMatchObject({ code: "history_writers_active" });
+    expect(h.entries.get(h.bindingPath)).toEqual(original);
+    expect(h.entries.get(writerPath)).toEqual(new Uint8Array([255]));
+  });
+
+  it("leaves membership conservatively unproved while writer entries exist", async () => {
+    const f = historyGenerationFixture();
+    const h = historyAccessFixture(f);
+    await h.access.join(h.request, async () => undefined);
+    expect(parseLiveHistoryBinding(h.entries.get(h.bindingPath)!).settled_sources).toBeDefined();
+    h.entries.set(`/git/kepler/missions/${f.missionId}/coordination/history-writers/partial.json`, new Uint8Array([255]));
+    const result = await h.access.join(h.request, async () => undefined);
+    expect(result.coordination).toBe("bound");
+    expect(parseLiveHistoryBinding(h.entries.get(h.bindingPath)!).settled_sources).toBeUndefined();
   });
 
   it("keeps unjoined phase additions out of current state and refuses implicit import", async () => {
