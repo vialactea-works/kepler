@@ -449,6 +449,29 @@ export const createHistoryControl = (input: {
   });
 };
 
+export interface HistoryGenerationGuard extends EventEnvelope {
+  readonly phase: "construction";
+  readonly type: "construction.history-generation-required";
+  readonly data: { readonly mission_id: string; readonly generation_id: string; readonly control_event_id: string };
+}
+
+export const parseHistoryGuard = (input: unknown, root: HistoryControl): HistoryGenerationGuard => {
+  const control = parseHistoryControl(root);
+  if (control.type === "mission.history-rebuilt") throw new HistoryError("history_guard_invalid", "Compatibility guards belong to initial or reset controls.");
+  let value = input;
+  if (typeof value === "string") {
+    const parsed = parseStrictJson(value);
+    if (parsed.kind !== "parsed") throw new HistoryError("history_guard_invalid", "The compatibility guard must be one strict JSON event.");
+    value = parsed.value;
+  }
+  const validated = validateEventEnvelope(value);
+  if (validated.status !== "valid") throw new HistoryError("history_guard_invalid", "The compatibility guard envelope is invalid or unsupported.");
+  const event = validated.event;
+  const data = event.data;
+  if (event.id === control.id || ![event.id, event.journal_id, ...event.caused_by].every((id) => uuidPattern.test(id)) || event.phase !== "construction" || event.type !== "construction.history-generation-required" || event.event_version !== 1 || canonicalJson(event.caused_by) !== canonicalJson([control.id]) || !record(data) || !exact(data, ["mission_id", "generation_id", "control_event_id"]) || data.mission_id !== control.data.mission_id || data.generation_id !== control.data.generation_id || data.control_event_id !== control.id) throw new HistoryError("history_guard_invalid", "The compatibility guard does not match its exact initial or reset control.");
+  return { ...event, phase: "construction", type: "construction.history-generation-required", data: { mission_id: control.data.mission_id, generation_id: control.data.generation_id, control_event_id: control.id } };
+};
+
 export const historyMode = (control: HistoryControl): HistoryMode => control.type === "mission.history-reset" ? "recovering" : "active";
 
 export const assertHistoryVersion = (control: HistoryControl | undefined, expected: string | undefined): void => {

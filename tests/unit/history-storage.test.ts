@@ -49,6 +49,21 @@ describe("history storage contracts", () => {
     expect(selected.sources[0]?.generationId).toBe(f.generationId);
   });
 
+  it("verifies the control boundary without loading a damaged selected phase", async () => {
+    const f = historyGenerationFixture();
+    const records = historyStorageEntries(f);
+    const base = memoryHistoryStorage(records);
+    const storage = memoryHistoryStorage(records, { list: async (location) => {
+      if (location.relative.includes(`/generations/${f.generationId}`)) throw new Error("Selected phase must not be loaded for control inspection");
+      return base.files.list(location);
+    } });
+    const selected = await storage.selection("/record", f.missionId);
+    expect(selected.historyVersion).toBe(f.control.id);
+    expect(selected.rootControl?.id).toBe(f.control.id);
+    expect(selected.mode).toBe("active");
+    await expect(storage.read("/record", f.missionId)).rejects.toThrow("Selected phase must not be loaded");
+  });
+
   it("reports recovery mode without loading an incomplete candidate", async () => {
     const f = historyGenerationFixture();
     const reset = createHistoryControl({ id: randomUUID(), journalId: randomUUID(), recordedAt: "2026-11-13T00:00:01Z", producer: { name: "kepler", version: "3.1.0" }, manifest: f.resetManifest, decisionReference: "decision:reset", causes: [] });
@@ -90,6 +105,8 @@ describe("history storage contracts", () => {
     const f = historyGenerationFixture();
     const storage = memoryHistoryStorage(historyStorageEntries(f));
     await expect(storage.read("/record", f.missionId, { sharedHistoryVersion: randomUUID() })).rejects.toMatchObject({ code: "history_stale_checkout" });
+    await expect(storage.selection("/record", f.missionId, { sharedHistoryVersion: randomUUID() })).rejects.toMatchObject({ code: "history_stale_checkout" });
+    await expect(storage.selection("/record", "short-id")).rejects.toMatchObject({ code: "history_scope_invalid" });
     await expect(storage.read("/record", f.missionId, { originIds: new Set(["missing-peer"]) })).rejects.toMatchObject({ code: "history_source_incomplete" });
     await expect(storage.snapshot("/record", "short-id")).rejects.toMatchObject({ code: "history_scope_invalid" });
     expect((await storage.read("/record", f.missionId, { pendingRecovery: true })).pendingRecovery).toBe(true);

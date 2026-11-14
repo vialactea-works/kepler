@@ -1,7 +1,7 @@
 import { HistoryError, historyDigest, parseHistoryControl, type HistorySourceEntry } from "./control.js";
 import type { HistoryJournalSource } from "./collection.js";
 import type { HistoryFiles, HistoryLocation, HistoryOrigin, HistoryRepositories, HistoryRepositoryContext, HistorySnapshot, HistorySnapshotFile } from "./files.js";
-import { selectHistoryControl, selectMissionHistory, type HistoryControlJournal, type HistoryGatewayInput, type HistoryGenerationSource, type MissionHistoryView } from "./gateway.js";
+import { selectHistoryControl, selectMissionHistory, type HistoryControlJournal, type HistoryControlSelection, type HistoryGatewayInput, type HistoryGenerationSource, type MissionHistoryView } from "./gateway.js";
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -54,28 +54,15 @@ export class HistoryStorage {
     return { recordHome: context.recordHome, commonDirectory: context.commonDirectory, missionId, origins, files: files.sort((a, b) => compare(a.sourceId, b.sourceId)), unavailable: unavailable.sort((a, b) => compare(a.source_id, b.source_id)) };
   }
 
+  public async selection(recordHome: string, missionId: string, options: HistoryReadOptions = {}): Promise<HistoryControlSelection> {
+    return selectHistoryControl((await this.header(recordHome, missionId, options)).header);
+  }
+
   public async input(recordHome: string, missionId: string, options: HistoryReadOptions = {}): Promise<HistoryGatewayInput> {
-    validateMission(missionId);
-    const context = await this.repositories.resolve(recordHome);
-    const historyRoot = `${missionPath(missionId)}/history`;
-    const activation = await this.files.read({ root: context.recordHome, relative: `${historyRoot}/control/active.json` }) ?? null;
-    const localEntries = await this.files.list({ root: context.recordHome, relative: historyRoot });
-    let generationEvidence = localEntries.some((entry) => ["control", "generations"].includes(entry.name));
-    const controlJournals = await this.controlJournals({ root: context.recordHome, relative: `${historyRoot}/control/events` });
-    const guardJournals = await this.controlJournals({ root: context.recordHome, relative: `${historyRoot}/control` });
+    const { context, historyRoot, header } = await this.header(recordHome, missionId, options);
+    const activation = header.activation;
     const generationSources: HistoryGenerationSource[] = [];
     const legacySources: HistoryJournalSource[] = [];
-    const originIds = new Set(context.origins.map((origin) => origin.id));
-    let complete = options.originIds === undefined ? context.unavailableOrigins.length === 0 : [...options.originIds].every((id) => originIds.has(id));
-    if (!activation) {
-      for (const origin of context.origins) {
-        try {
-          const peerEntries = origin.root === context.recordHome ? localEntries : await this.files.list({ root: origin.root, relative: historyRoot });
-          if (peerEntries.some((entry) => ["control", "generations"].includes(entry.name))) generationEvidence = true;
-        } catch { complete = false; }
-      }
-    }
-    const header: HistoryGatewayInput = { missionId, activation, controlJournals, guardJournals, generationSources: [], legacySources: [], generationEvidence, complete, pendingRecovery: options.pendingRecovery ?? false, ...(options.sharedHistoryVersion ? { sharedHistoryVersion: options.sharedHistoryVersion } : {}) };
     const selection = selectHistoryControl(header);
     const selected = selection.control;
     if (selected && selection.mode === "active") {
@@ -107,6 +94,28 @@ export class HistoryStorage {
   }
 
   public async context(recordHome: string): Promise<HistoryRepositoryContext> { return this.repositories.resolve(recordHome); }
+
+  private async header(recordHome: string, missionId: string, options: HistoryReadOptions): Promise<{ readonly context: HistoryRepositoryContext; readonly historyRoot: string; readonly header: HistoryGatewayInput }> {
+    validateMission(missionId);
+    const context = await this.repositories.resolve(recordHome);
+    const historyRoot = `${missionPath(missionId)}/history`;
+    const activation = await this.files.read({ root: context.recordHome, relative: `${historyRoot}/control/active.json` }) ?? null;
+    const localEntries = await this.files.list({ root: context.recordHome, relative: historyRoot });
+    let generationEvidence = localEntries.some((entry) => ["control", "generations"].includes(entry.name));
+    const controlJournals = await this.controlJournals({ root: context.recordHome, relative: `${historyRoot}/control/events` });
+    const guardJournals = await this.controlJournals({ root: context.recordHome, relative: `${historyRoot}/control` });
+    const originIds = new Set(context.origins.map((origin) => origin.id));
+    let complete = options.originIds === undefined ? context.unavailableOrigins.length === 0 : [...options.originIds].every((id) => originIds.has(id));
+    if (!activation) {
+      for (const origin of context.origins) {
+        try {
+          const peerEntries = origin.root === context.recordHome ? localEntries : await this.files.list({ root: origin.root, relative: historyRoot });
+          if (peerEntries.some((entry) => ["control", "generations"].includes(entry.name))) generationEvidence = true;
+        } catch { complete = false; }
+      }
+    }
+    return { context, historyRoot, header: { missionId, activation, controlJournals, guardJournals, generationSources: [], legacySources: [], generationEvidence, complete, pendingRecovery: options.pendingRecovery ?? false, ...(options.sharedHistoryVersion ? { sharedHistoryVersion: options.sharedHistoryVersion } : {}) } };
+  }
 
   private async controlJournals(location: HistoryLocation): Promise<HistoryControlJournal[]> {
     const result: HistoryControlJournal[] = [];

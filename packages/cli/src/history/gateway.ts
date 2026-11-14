@@ -2,7 +2,7 @@ import type { EventEnvelope } from "@vialactea-works/kepler-core";
 import { projectConstruction } from "../construction/projection.js";
 import { parseStrictJson } from "../json/strict-json.js";
 import { collectHistory, type HistoryCollection, type HistoryJournalSource } from "./collection.js";
-import { HistoryError, historyDigest, historyMode, parseHistoryControl, type HistoryControl } from "./control.js";
+import { HistoryError, historyDigest, historyMode, parseHistoryControl, parseHistoryGuard, type HistoryControl } from "./control.js";
 import { canonicalJson, scanJournalBytes } from "./journal.js";
 
 export interface HistoryControlJournal {
@@ -86,9 +86,7 @@ const verifyGuard = (input: HistoryGatewayInput, root: HistoryControl): void => 
     } catch { return false; }
   });
   if (matches.length !== 1) throw new HistoryError("history_guard_missing", "The required older-reader guard is missing or ambiguous.", { control_event_id: root.id });
-  const event = envelopeFromJournal(matches[0]!);
-  const data = event.data;
-  if (event.phase !== "construction" || event.type !== "construction.history-generation-required" || event.event_version !== 1 || canonicalJson(event.caused_by) !== canonicalJson([root.id]) || Object.keys(data).length !== 3 || data.mission_id !== input.missionId || data.generation_id !== root.data.generation_id || data.control_event_id !== root.id) throw new HistoryError("history_guard_invalid", "The older-reader guard does not match its selected history root.");
+  parseHistoryGuard(envelopeFromJournal(matches[0]!), root);
 };
 
 export interface HistoryControlSelection extends Omit<MissionHistoryView, "sources" | "history"> {
