@@ -26,6 +26,8 @@ export interface MissionStartupHistoryView {
   readonly historyVersion?: string;
   readonly pendingRecovery: boolean;
   readonly history: CoordinatedHistory["history"];
+  readonly coordination?: CoordinatedHistory["coordination"];
+  readonly selectionHash?: CoordinatedHistory["selectionHash"];
   readonly retainedPreparationAppend?: true;
 }
 

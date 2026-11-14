@@ -50,7 +50,7 @@ afterEach(async () => {
 });
 
 describe.each(["native", "docker"] as const)("recovery commands (%s)", (application) => {
-  it("previews, rejects missing approval, applies and retries an exact reset through the public CLI", async () => {
+  it("recovers and joins reconstructed history through exact public CLI decisions", async () => {
     const harness = await createE2EHarness({ application });
     harnesses.push(harness);
     const root = harness.resources.repositoryDirectory;
@@ -140,6 +140,23 @@ describe.each(["native", "docker"] as const)("recovery commands (%s)", (applicat
     expect(publication.exitCode).toBe(0);
     const published = envelope(publication.stdout).data.history_version as string;
     const publishedSelector = await Fs.readFile(activePath);
+    const archivedPath = Path.join(root, ".git", "kepler", "missions", id, "recovery", "archives", manifest.archive_id);
+    const preservedElsewhere = Path.join(Path.dirname(root), "retained-archive");
+    await Fs.rename(archivedPath, preservedElsewhere);
+    try {
+      const joinArgs = ["mission", "prepare", "--project", root, "--mission", id, "--history-version", published];
+      await Fs.writeFile(Path.join(root, authorityPath), "Changed retained material\n");
+      const rejectedJoin = harness.cli.run(joinArgs);
+      expect(envelope(rejectedJoin.stdout), rejectedJoin.stdout).toMatchObject({ status: "failed", data: { code: "history_material_changed" } });
+      expect(rejectedJoin.exitCode).toBe(1);
+      expect(await Fs.readFile(activePath)).toEqual(publishedSelector);
+      await Fs.writeFile(Path.join(root, authorityPath), authorityBytes);
+      const joined = harness.cli.run(joinArgs);
+      expect(envelope(joined.stdout), joined.stdout).toMatchObject({ status: "success", data: { execution_started: false, history: { history_version: published, generation_id: target, coordination: "bound" } } });
+      expect(joined.exitCode).toBe(0);
+    } finally {
+      await Fs.rename(preservedElsewhere, archivedPath);
+    }
     const oldRetry = harness.cli.run(args, { stdin: approved });
     expect(oldRetry.exitCode).toBe(0);
     expect(envelope(oldRetry.stdout)).toMatchObject({ data: { already_applied: true, history_version: published, receipt: { history_version: resetControl.id } } });

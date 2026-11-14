@@ -15,7 +15,10 @@ import { createNodeMissionWorkspaceRuntime } from "../../packages/cli/src/constr
 import type { MissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace.js";
 import { createNodeMissionStartupRecoveryRuntime, type MissionStartupGenerationJournalFactory, type MissionStartupIntentFileSystem } from "../../packages/cli/src/construction/mission-startup-recovery-runtime.js";
 import { createNodeHistoryAccess } from "../../packages/cli/src/history/access-runtime.js";
+import { parseLiveHistoryBinding } from "../../packages/cli/src/history/access.js";
+import { HistoryMutations } from "../../packages/cli/src/history/mutations.js";
 import { createEventJournal, type EventJournal } from "../../packages/cli/src/history/journal.js";
+import { historyTestEvent } from "../support/history-generation.js";
 import { ProjectResolver } from "../../packages/cli/src/cli/project-selection.js";
 import { createProjectSelectionRuntime } from "../../packages/cli/src/cli/project-selection-runtime.js";
 
@@ -356,6 +359,174 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     expect(await Fs.readFile(activationPath)).toEqual(await Fs.readFile(Path.join(historyRoot, "control", "events", `${activation.journal_id}.jsonl`)));
     expect(await Fs.access(Path.join(historyRoot, CONSTRUCTION_PHASE)).then(() => true, () => false)).toBe(false);
     expect(await Fs.access(await historyPhaseDirectory(repository, result.missionId)).then(() => true, () => false)).toBe(true);
+  });
+
+  it("joins and settles one explicit history version, refreshes after a later append, and admits writers", async () => {
+    const environment = await createEnvironment("history-handoff-refresh");
+    const repository = await createRepository(environment, "record-home");
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const startup = createStartupWithRuntime(repository, workspaceRuntime);
+    const created = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository)));
+    expect(created).toMatchObject({ kind: "prepared" });
+    if (created.kind !== "prepared") return;
+    const access = createNodeHistoryAccess(workspaceRuntime);
+    const current = await withGitEnvironment(environment, () => access.read(repository, created.missionId));
+    const historyVersion = current.historyVersion;
+    if (!historyVersion) throw new Error("Expected an active mission history version");
+
+    const joined = await withGitEnvironment(environment, () => startup.prepare(repository, created.missionId, { historyVersion }));
+    expect(joined).toMatchObject({ kind: "prepared", history: { mode: "active", historyVersion, generationId: current.generationId, coordination: "bound" } });
+    const context = await access.storage.context(repository);
+    const bindingPath = Path.join(context.commonDirectory, "kepler", "missions", created.missionId, "coordination", "history-selection.json");
+    const initialBinding = parseLiveHistoryBinding(await Fs.readFile(bindingPath));
+    expect(initialBinding.settled_sources).toEqual(expect.arrayContaining([expect.objectContaining({ origin_id: expect.any(String), journals: [expect.objectContaining({ phase: "construction", journal_id: expect.any(String), byte_length: expect.any(Number), content_version: expect.any(String) })] })]));
+    const writer = await withGitEnvironment(environment, () => access.beginMutation({ recordHome: repository, missionId: created.missionId, historyVersion }));
+    await withGitEnvironment(environment, () => writer.release());
+
+    const historyEvents = await readEvents(repository, created.missionId);
+    const journalId = String(historyEvents[0]?.journal_id);
+    const preparedEvent = historyEvents.find((event) => event.type === "construction.mission-workspaces-prepared");
+    if (!preparedEvent || typeof preparedEvent.id !== "string") throw new Error("Expected a prepared-workspace event");
+    const appended = historyTestEvent("construction.interaction-recorded", {
+      mission_id: created.missionId,
+      unit_id: randomUUID(),
+      participants: ["requester"],
+      content: "History advanced after publication",
+      references: [],
+    }, journalId, [preparedEvent.id]);
+    const mutations = new HistoryMutations(access);
+    await withGitEnvironment(environment, () => mutations.execute({ recordHome: repository, missionId: created.missionId, historyVersion }, async () => {
+      await mutations.journals.create(repository, created.missionId, journalId).append(appended);
+    }));
+    expect(parseLiveHistoryBinding(await Fs.readFile(bindingPath)).settled_sources).toBeUndefined();
+
+    const refreshed = await withGitEnvironment(environment, () => startup.prepare(repository, created.missionId, { historyVersion }));
+    expect(refreshed).toMatchObject({ kind: "prepared", history: { historyVersion, coordination: "bound" } });
+    const refreshedBinding = parseLiveHistoryBinding(await Fs.readFile(bindingPath));
+    const generation = await historyGeneration(repository, created.missionId);
+    const journalPath = Path.join(repository, ".kepler", "missions", created.missionId, "history", "generations", generation, CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalBytes = await Fs.readFile(journalPath);
+    expect(refreshedBinding.settled_sources?.flatMap((source) => source.journals).find((journal) => journal.journal_id === journalId)).toMatchObject({ byte_length: journalBytes.length });
+    expect((await withGitEnvironment(environment, () => access.read(repository, created.missionId))).history.events.some((event) => event.event?.id === appended.id)).toBe(true);
+  });
+
+  it("rejects unaccepted facts and writers in a copied origin, then joins its complete current history", async () => {
+    const environment = await createEnvironment("history-handoff-copy");
+    const repository = await createRepository(environment, "record-home");
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const startup = createStartupWithRuntime(repository, workspaceRuntime);
+    const created = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository)));
+    expect(created).toMatchObject({ kind: "prepared" });
+    if (created.kind !== "prepared") return;
+    const history = await withGitEnvironment(environment, () => createNodeHistoryAccess(workspaceRuntime).read(repository, created.missionId));
+    const historyVersion = history.historyVersion;
+    if (!historyVersion) throw new Error("Expected an active mission history version");
+    const peer = Path.join(environment.parent, "peer-copy");
+    git(repository, environment, "worktree", "add", "-q", "-b", "history-handoff-peer", peer);
+    const sourceHistory = Path.join(repository, ".kepler", "missions", created.missionId, "history");
+    const peerMissionDirectory = Path.join(peer, ".kepler", "missions", created.missionId);
+    const peerHistory = Path.join(peerMissionDirectory, "history");
+    await Fs.mkdir(peerMissionDirectory, { recursive: true });
+    await Fs.cp(sourceHistory, peerHistory, { recursive: true });
+    const access = createNodeHistoryAccess(workspaceRuntime);
+    const peerView = await withGitEnvironment(environment, () => access.read(peer, created.missionId));
+    expect(peerView.coordination).toBe("unjoined");
+    await expect(withGitEnvironment(environment, () => access.beginMutation({ recordHome: peer, missionId: created.missionId, historyVersion }))).rejects.toMatchObject({ code: "history_binding_required" });
+
+    const events = await readEvents(repository, created.missionId);
+    const journalId = String(events[0]?.journal_id);
+    const preparedEvent = events.find((event) => event.type === "construction.mission-workspaces-prepared");
+    if (!preparedEvent || typeof preparedEvent.id !== "string") throw new Error("Expected a prepared-workspace event");
+    const unaccepted = historyTestEvent("construction.interaction-recorded", {
+      mission_id: created.missionId,
+      unit_id: randomUUID(),
+      participants: ["requester"],
+      content: "Unaccepted copied fact",
+      references: [],
+    }, journalId, [preparedEvent.id]);
+    const generation = await historyGeneration(peer, created.missionId);
+    await createEventJournal({ recordHome: peer, missionId: created.missionId, phase: CONSTRUCTION_PHASE, journalId, generationId: generation }).append(unaccepted);
+    const rejected = await withGitEnvironment(environment, () => startup.prepare(peer, created.missionId, { historyVersion }));
+    expect(rejected).toMatchObject({ kind: "failed", code: "history_handoff_unaccepted_facts" });
+
+    await Fs.rm(peerHistory, { recursive: true, force: true });
+    await Fs.cp(sourceHistory, peerHistory, { recursive: true });
+    const joined = await withGitEnvironment(environment, () => startup.prepare(peer, created.missionId, { historyVersion }));
+    expect(joined).toMatchObject({ kind: "prepared", recordHome: peer, history: { mode: "active", historyVersion, coordination: "bound" } });
+    const writer = await withGitEnvironment(environment, () => access.beginMutation({ recordHome: peer, missionId: created.missionId, historyVersion }));
+    await withGitEnvironment(environment, () => writer.release());
+  });
+
+  it("transfers a moved history collector only after complete source verification and retains prepared workspace ownership", async () => {
+    const environment = await createEnvironment("history-handoff-transfer");
+    const anchor = await createRepository(environment, "anchor");
+    const recordHome = Path.join(environment.parent, "record-home-original");
+    const movedRecordHome = Path.join(environment.parent, "record-home-moved");
+    const codeRepository = await createRepository(environment, "application");
+    git(anchor, environment, "worktree", "add", "-q", "-b", "record-home", recordHome);
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const startup = createStartupWithRuntime(recordHome, workspaceRuntime);
+    const created = await withGitEnvironment(environment, () => startup.execute(recordHome, makeRequest("application", codeRepository)));
+    expect(created).toMatchObject({ kind: "prepared" });
+    if (created.kind !== "prepared" || !created.repositories[0]?.localWorkspaceKey) return;
+    const access = createNodeHistoryAccess(workspaceRuntime);
+    const initial = await withGitEnvironment(environment, () => access.read(recordHome, created.missionId));
+    const historyVersion = initial.historyVersion;
+    if (!historyVersion) throw new Error("Expected an active mission history version");
+    const settled = await withGitEnvironment(environment, () => startup.prepare(recordHome, created.missionId, { historyVersion }));
+    expect(settled).toMatchObject({ kind: "prepared" });
+    const oldContext = await access.storage.context(recordHome);
+    const priorOrigin = oldContext.origins.find((origin) => origin.root === recordHome)?.id;
+    if (!priorOrigin) throw new Error("Expected the original history collector origin");
+    const attachmentPath = Path.join(oldContext.commonDirectory, "kepler", "missions", created.missionId, "workspaces", `${created.repositories[0].localWorkspaceKey}.json`);
+    const attachmentBefore = await Fs.readFile(attachmentPath);
+
+    git(anchor, environment, "worktree", "move", "--force", recordHome, movedRecordHome);
+    const phaseDirectory = await historyPhaseDirectory(movedRecordHome, created.missionId);
+    const journalName = (await Fs.readdir(phaseDirectory)).find((name) => name.endsWith(".jsonl"));
+    if (!journalName) throw new Error("Expected the current generation journal");
+    const journalPath = Path.join(phaseDirectory, journalName);
+    const originalBytes = await Fs.readFile(journalPath);
+    await Fs.writeFile(journalPath, originalBytes.subarray(0, originalBytes.length - 1));
+    const truncated = await withGitEnvironment(environment, () => startup.prepare(movedRecordHome, created.missionId, { historyVersion, transferOriginIds: [priorOrigin] }));
+    expect(truncated.kind).toBe("failed");
+    expect(parseLiveHistoryBinding(await Fs.readFile(Path.join(oldContext.commonDirectory, "kepler", "missions", created.missionId, "coordination", "history-selection.json"))).origins).toContain(priorOrigin);
+    await Fs.writeFile(journalPath, originalBytes);
+
+    const transferred = await withGitEnvironment(environment, () => startup.prepare(movedRecordHome, created.missionId, { historyVersion, transferOriginIds: [priorOrigin] }));
+    expect(transferred).toMatchObject({ kind: "prepared", recordHome: movedRecordHome, history: { mode: "active", historyVersion, coordination: "bound" } });
+    const movedContext = await access.storage.context(movedRecordHome);
+    const movedOrigin = movedContext.origins.find((origin) => origin.root === movedRecordHome)?.id;
+    expect(movedOrigin).toBeDefined();
+    const binding = parseLiveHistoryBinding(await Fs.readFile(Path.join(movedContext.commonDirectory, "kepler", "missions", created.missionId, "coordination", "history-selection.json")));
+    expect(binding.origins).toEqual([movedOrigin]);
+    expect(binding.origins).not.toContain(priorOrigin);
+    expect(await Fs.readFile(attachmentPath)).toEqual(attachmentBefore);
+    expect(await Fs.realpath(codeRepository)).toBe(codeRepository);
+  });
+
+  it("does not settle a history when its actual prepared workspace owner is unavailable", async () => {
+    const environment = await createEnvironment("history-handoff-owner-missing");
+    const repository = await createRepository(environment, "record-home");
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const startup = createStartupWithRuntime(repository, workspaceRuntime);
+    const created = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository)));
+    expect(created).toMatchObject({ kind: "prepared" });
+    if (created.kind !== "prepared" || !created.repositories[0]?.localWorkspaceKey) return;
+    const access = createNodeHistoryAccess(workspaceRuntime);
+    const history = await withGitEnvironment(environment, () => access.read(repository, created.missionId));
+    const historyVersion = history.historyVersion;
+    if (!historyVersion) throw new Error("Expected an active mission history version");
+    const context = await access.storage.context(repository);
+    const attachmentPath = Path.join(context.commonDirectory, "kepler", "missions", created.missionId, "workspaces", `${created.repositories[0].localWorkspaceKey}.json`);
+    const bindingPath = Path.join(context.commonDirectory, "kepler", "missions", created.missionId, "coordination", "history-selection.json");
+    const bindingBefore = await Fs.readFile(bindingPath);
+    await Fs.rm(attachmentPath);
+
+    const rejected = await withGitEnvironment(environment, () => startup.prepare(repository, created.missionId, { historyVersion }));
+
+    expect(rejected).toMatchObject({ kind: "failed", code: "stage_workspace_attachment_missing" });
+    expect(await Fs.readFile(bindingPath)).toEqual(bindingBefore);
   });
 
   it("reports retained pending recovery instead of historical preparation without changing its sources", async () => {

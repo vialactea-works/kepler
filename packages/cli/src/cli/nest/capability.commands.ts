@@ -124,6 +124,13 @@ const missionStartupSuccess = (result: MissionStartupPrepared) => ({
       starting_checkpoint: repository.startingCheckpoint,
     })),
     ...(result.historical ? { historical: true } : {}),
+    ...(result.history ? { history: {
+      mode: result.history.mode,
+      history_version: result.history.historyVersion,
+      generation_id: result.history.generationId,
+      coordination: result.history.coordination,
+      ...(result.history.selectionHash ? { selection_hash: result.history.selectionHash } : {}),
+    } } : {}),
     execution_started: false,
   },
 });
@@ -352,6 +359,30 @@ export class AuditRecordCommandGroup extends CommandRunner {
   async run(): Promise<void> { this.reporter.report(missingOperation("audit record")); }
 }
 
+const transferOriginValues = (options: Readonly<Record<string, unknown>>): string[] | FailurePayload => {
+  const raw = options.transferOrigin;
+  if (raw === undefined) return [];
+  const values = Array.isArray(raw) ? raw : [raw];
+  if (values.length === 0 || values.some((value) => typeof value !== "string" || value.length === 0 || value.trim() !== value)) {
+    return {
+      code: "invalid_transfer_origin",
+      message: "--transfer-origin requires non-empty exact prior-origin IDs.",
+      details: { selector: "transferOrigin" },
+      recovery: "Provide each exact prior origin ID without leading or trailing whitespace.",
+    };
+  }
+  const origins = values as string[];
+  if (new Set(origins).size !== origins.length) {
+    return {
+      code: "duplicate_transfer_origin",
+      message: "--transfer-origin cannot repeat a prior origin ID.",
+      details: { selector: "transferOrigin", transfer_origin_ids: origins },
+      recovery: "Provide each exact prior origin ID once.",
+    };
+  }
+  return origins;
+};
+
 const optionValue = (options: Readonly<Record<string, unknown>>, key: string): string | undefined | FailurePayload => {
   const raw = options[key];
   if (raw === undefined) return undefined;
@@ -533,15 +564,45 @@ export class MissionPrepareCommand extends CommandRunner {
     return appendSelectorValue(value, previous);
   }
 
+  @Option({ flags: "--history-version <control-event-id>", description: "Join one exact current mission history version" })
+  parseHistoryVersion(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  @Option({ flags: "--transfer-origin <exact-prior-origin-id>", description: "Explicitly transfer one unavailable prior history origin" })
+  parseTransferOrigin(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
   async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
-    const selected = projectSelector(options);
+    const values = options ?? {};
+    const selected = projectSelector(values);
     if (selected.kind === "failed") {
       reportFailure(this.reporter, selected);
       return;
     }
-    const mission = optionValue(options ?? {}, "mission");
-    if (typeof mission !== "string") {
-      reportFailure(this.reporter, typeof mission === "object" ? mission : {
+    const selectors = parseScopeSelectors(values, { missionScoped: true, required: ["mission"] });
+    if (selectors.kind === "failed") {
+      reportSelectorFailure(this.reporter, selectors, "Provide one exact --mission UUIDv4 and, when joining, one exact --history-version.");
+      return;
+    }
+    const transferOriginIds = transferOriginValues(values);
+    if (!Array.isArray(transferOriginIds)) {
+      reportFailure(this.reporter, transferOriginIds);
+      return;
+    }
+    if (selectors.selectors.historyVersion === undefined && transferOriginIds.length > 0) {
+      reportFailure(this.reporter, {
+        code: "history_version_required",
+        message: "Origin transfer requires an explicit --history-version.",
+        details: { transfer_origin_ids: transferOriginIds },
+        recovery: "Provide the exact current control-event ID before requesting any origin transfer.",
+      });
+      return;
+    }
+    const mission = selectors.selectors.mission;
+    if (!mission) {
+      reportFailure(this.reporter, {
         code: "required_selector_missing",
         message: "Mission preparation requires exactly one --mission UUIDv4 value.",
         details: { required: ["mission"] },
@@ -549,7 +610,9 @@ export class MissionPrepareCommand extends CommandRunner {
       });
       return;
     }
-    const result = await this.startup.prepare(selected.project, mission);
+    const result = await this.startup.prepare(selected.project, mission, selectors.selectors.historyVersion === undefined
+      ? undefined
+      : { historyVersion: selectors.selectors.historyVersion, transferOriginIds });
     if (result.kind === "failed") {
       reportFailure(this.reporter, result);
       return;

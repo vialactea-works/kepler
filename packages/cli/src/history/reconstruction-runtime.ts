@@ -25,7 +25,7 @@ export const historyCheckpointMaterialReference = (checkpoint: RepositoryCheckpo
 };
 
 export interface NodeReconstructionChecks extends Pick<ReconstructionDependencies, "verifyAuthority" | "verifyMaterial" | "verifyContinuation"> {
-  readonly readMaterial: (reference: string, archive: ReconstructionArchive, history?: ReconstructionMaterialRequest["history"]) => Promise<ResolvedHistoryMaterial>;
+  readonly readMaterial: (reference: string, archive?: ReconstructionArchive, history?: ReconstructionMaterialRequest["history"]) => Promise<ResolvedHistoryMaterial>;
 }
 
 export const createNodeReconstructionChecks = (access: HistoryAccess, scope: { readonly recordHome: string; readonly missionId: string }, workspace: MissionWorkspaceRuntime = createNodeMissionWorkspaceRuntime()): NodeReconstructionChecks => {
@@ -59,9 +59,9 @@ export const createNodeReconstructionChecks = (access: HistoryAccess, scope: { r
     }
     const archived = reference.match(/^local-archive:([0-9a-f-]{36})\/source\/([0-9a-f]{64})\.bin$/);
     if (archived && uuid.test(archived[1]!)) {
-      if (proposedArchive.index.mission_id !== target.missionId) throw new HistoryError("history_material_scope_invalid", "Archived material belongs to another mission.");
-      const same = archived[1] === proposedArchive.index.archive_id;
-      const actual = await archives.verify(target.recordHome, target.missionId, archived[1]!, same ? { indexHash: historyArchiveIndexDigest(proposedArchive.index), manifestHash: proposedArchive.index.manifest_hash } : {});
+      if (proposedArchive && proposedArchive.index.mission_id !== target.missionId) throw new HistoryError("history_material_scope_invalid", "Archived material belongs to another mission.");
+      const same = proposedArchive !== undefined && archived[1] === proposedArchive.index.archive_id;
+      const actual = await archives.verify(target.recordHome, target.missionId, archived[1]!, same && proposedArchive ? { indexHash: historyArchiveIndexDigest(proposedArchive.index), manifestHash: proposedArchive.index.manifest_hash } : {});
       const file = actual.files.find((file) => historyDigest(file.source_id).slice(7) === archived[2]);
       if (!file) throw new HistoryError("history_material_missing", "The exact archived source identity is unavailable.");
       return { reference, content_version: historyDigest(file.bytes), bytes: new Uint8Array(file.bytes), source_path: file.path };

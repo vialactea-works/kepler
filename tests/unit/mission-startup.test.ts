@@ -5,6 +5,7 @@ import {
   validateMissionStartupRequest,
   type InspectedMissionRepository,
   type MissionStartupRuntime,
+  type MissionStartupHistoryJoinSelection,
   type PreparedMissionRepository,
 } from "../../packages/cli/src/construction/mission-startup.js";
 import type { EventJournal } from "../../packages/cli/src/history/journal.js";
@@ -106,6 +107,7 @@ const createRuntime = (overrides: {
   readonly reconcile?: () => Promise<unknown>;
   readonly loadIntent?: () => Promise<unknown | undefined>;
   readonly readHistory?: () => Promise<MissionStartupHistoryView>;
+  readonly joinHistory?: MissionStartupRuntime["recovery"]["joinHistory"];
   readonly ids?: readonly string[];
 } = {}) => {
   const events: unknown[] = [];
@@ -187,6 +189,12 @@ const createRuntime = (overrides: {
       saveIntent: async (_recordHome, _commonDirectory, _missionId, intent) => { savedIntent = structuredClone(intent); },
       loadIntent: overrides.loadIntent ?? (async () => structuredClone(savedIntent)),
       readHistory: overrides.readHistory ?? readHistory,
+      joinHistory: overrides.joinHistory ?? (async (_recordHome, missionId, _selection, verifyHistory) => {
+        effects.push("joinHistory");
+        const view = await readHistory(_recordHome, missionId);
+        await verifyHistory(view);
+        return { ...view, coordination: "bound", selectionHash: `sha256:${"a".repeat(64)}` };
+      }),
       withStartup: async (_recordHome, missionId, _lease, operation) => await operation({
         read: async () => await readHistory(_recordHome, missionId),
         createJournal: (journalId, requestedGenerationId) => {
@@ -237,6 +245,42 @@ describe("mission startup request validation", () => {
 });
 
 describe("MissionStartup", () => {
+  it("captures origin transfer selectors before asynchronous project resolution", async () => {
+    const origins = ["worktree:original"];
+    let captured: readonly string[] | undefined;
+    const { runtime } = createRuntime({
+      resolve: async () => {
+        origins[0] = "worktree:changed";
+        return { kind: "resolved", root: "/record" };
+      },
+      joinHistory: async (_root, _mission, selection) => {
+        captured = [...selection.transferOriginIds];
+        throw new Error("Stop after the captured request");
+      },
+    });
+    await new MissionStartup(runtime).prepare(undefined, ids[0]!, { historyVersion: ids[3]!, transferOriginIds: origins });
+    expect(captured).toEqual(["worktree:original"]);
+  });
+
+  it.each([
+    { historyVersion: "not-a-uuid" },
+    { historyVersion: ids[3], transferOriginIds: [" worktree:origin"] },
+    { historyVersion: ids[3], transferOriginIds: ["worktree:origin", "worktree:origin"] },
+    { transferOriginIds: ["worktree:origin"] },
+    { historyVersion: [ids[3], ids[4]] },
+  ])("rejects malformed, duplicate, or unversioned handoff selectors before resolving projects", async (selection) => {
+    let resolutions = 0;
+    const { runtime, events, effects } = createRuntime({ resolve: async () => {
+      resolutions += 1;
+      return { kind: "resolved", root: "/record" };
+    } });
+    const result = await new MissionStartup(runtime).prepare(undefined, ids[0]!, selection as unknown as MissionStartupHistoryJoinSelection);
+    expect(result).toMatchObject({ kind: "failed" });
+    expect(resolutions).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(effects).toEqual([]);
+  });
+
   it.each(["", "not-a-uuid", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"])(
     "rejects invalid prepare selectors before resolving projects or touching mission state (%s)",
     async (missionId) => {
@@ -309,6 +353,78 @@ describe("MissionStartup", () => {
     expect(await startup.prepare(undefined, ids[0]!)).toMatchObject({ kind: "failed", code: "mission_startup_legacy_intent_unsupported" });
     expect(events).toEqual(before);
     expect(effects).toEqual([]);
+  });
+
+  it("joins one explicit history version without replaying startup or stage effects", async () => {
+    const { runtime, events, effects, intent } = createRuntime();
+    const startup = new MissionStartup(runtime);
+    expect(await startup.execute(undefined, request)).toMatchObject({ kind: "prepared" });
+    const saved = intent() as { startupHistory: { control: { id: string }; generationId: string } };
+    effects.splice(0);
+
+    const joined = await startup.prepare(undefined, ids[0]!, { historyVersion: saved.startupHistory.control.id });
+
+    expect(joined).toMatchObject({
+      kind: "prepared",
+      missionId: ids[0],
+      history: {
+        mode: "active",
+        historyVersion: saved.startupHistory.control.id,
+        generationId: saved.startupHistory.generationId,
+        coordination: "bound",
+        selectionHash: `sha256:${"a".repeat(64)}`,
+      },
+    });
+    expect(effects).toEqual(["joinHistory"]);
+    expect(events).toHaveLength(2);
+  });
+
+  it("passes a stale explicit history version unchanged without reading for a replacement", async () => {
+    const { runtime, events, intent } = createRuntime();
+    const startup = new MissionStartup(runtime);
+    expect(await startup.execute(undefined, request)).toMatchObject({ kind: "prepared" });
+    const originalRead = runtime.recovery.readHistory;
+    let reads = 0;
+    let requested: unknown;
+    const explicit = new MissionStartup({
+      ...runtime,
+      recovery: {
+        ...runtime.recovery,
+        readHistory: async (recordHome, missionId) => {
+          reads += 1;
+          return originalRead(recordHome, missionId);
+        },
+        joinHistory: async (_recordHome, _missionId, selection) => {
+          requested = selection;
+          throw new Error("selected history version is stale");
+        },
+      },
+    });
+    const saved = intent() as { startupHistory: { control: { id: string } } };
+    const staleVersion = ids[8]!;
+
+    const result = await explicit.prepare(undefined, ids[0]!, { historyVersion: staleVersion });
+
+    expect(result).toMatchObject({ kind: "failed", code: "mission_history_join_failed" });
+    expect(requested).toEqual({ historyVersion: staleVersion, transferOriginIds: [] });
+    expect(saved.startupHistory.control.id).not.toBe(staleVersion);
+    expect(reads).toBe(0);
+    expect(events).toHaveLength(2);
+  });
+
+  it("accepts causally ordered reconstructed startup facts in distinct journals", async () => {
+    const { runtime } = createRuntime();
+    const created = await new MissionStartup(runtime).execute(undefined, request);
+    if (created.kind !== "prepared") throw new Error("Expected prepared fixture");
+    const view = await runtime.recovery.readHistory("/record", created.missionId);
+    const facts = view.history.events.flatMap((record) => record.event ? [record.event] : []);
+    const history = collectHistory(created.missionId, facts.map((event, index) => {
+      const journalId = index === 0 ? event.journal_id : "90000000-0000-4000-8000-000000000099";
+      return { sourceId: `reconstructed:${index}`, missionId: created.missionId, phase: "construction", journalId, generationId: view.generationId, bytes: new TextEncoder().encode(`${JSON.stringify({ ...event, journal_id: journalId })}\n`) };
+    }), { completeness: "complete", generationId: view.generationId });
+    expect(history.issues).toEqual([]);
+    const restored = new MissionStartup({ ...runtime, recovery: { ...runtime.recovery, loadIntent: async () => undefined, readHistory: async () => ({ ...view, history }) } });
+    expect(await restored.prepare(undefined, created.missionId)).toMatchObject({ kind: "prepared", historical: true });
   });
 
   it("returns historical prepared facts without requiring local workspace identity", async () => {

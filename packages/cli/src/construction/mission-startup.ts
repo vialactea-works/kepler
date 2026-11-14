@@ -157,6 +157,19 @@ export interface MissionStartupIntent {
   readonly startupHistory: MissionStartupHistoryIntent;
 }
 
+export interface MissionStartupHistoryJoinSelection {
+  readonly historyVersion?: string;
+  readonly transferOriginIds?: readonly string[];
+}
+
+export interface MissionStartupSelectedHistory {
+  readonly mode: "active";
+  readonly historyVersion: string;
+  readonly generationId: string;
+  readonly coordination: "bound";
+  readonly selectionHash?: string;
+}
+
 export interface MissionStartupRecovery {
   readonly saveIntent: (
     recordHome: string,
@@ -170,6 +183,12 @@ export interface MissionStartupRecovery {
     missionId: MissionId,
   ) => Promise<unknown | undefined>;
   readonly readHistory: (recordHome: string, missionId: MissionId) => Promise<MissionStartupHistoryView>;
+  readonly joinHistory: (
+    recordHome: string,
+    missionId: MissionId,
+    selection: { readonly historyVersion: string; readonly transferOriginIds: readonly string[] },
+    verifyHistory: (view: MissionStartupHistoryView) => Promise<void>,
+  ) => Promise<MissionStartupHistoryView>;
   readonly withStartup: <T>(
     recordHome: string,
     missionId: MissionId,
@@ -209,6 +228,7 @@ export interface MissionStartupPrepared {
   readonly recordHome: string;
   readonly historical: boolean;
   readonly repositories: readonly MissionStartupPreparedRepository[];
+  readonly history?: MissionStartupSelectedHistory;
 }
 
 export type MissionStartupResult = MissionStartupPrepared | MissionStartupFailure;
@@ -666,7 +686,7 @@ const startupEventsAgree = (
 ): boolean => {
   if (createdEvent.type !== "construction.mission-created" || preparedEvent.type !== "construction.mission-workspaces-prepared" ||
       createdEvent.data.mission_id !== missionId || preparedEvent.data.mission_id !== missionId ||
-      createdEvent.journal_id !== preparedEvent.journal_id || createdEvent.caused_by.length !== 0 ||
+      createdEvent.caused_by.length !== 0 ||
       preparedEvent.caused_by.length !== 1 || preparedEvent.caused_by[0] !== createdEvent.id) return false;
   if (!isMissionCreatedData(createdEvent.data) || !isMissionWorkspacePreparedData(preparedEvent.data)) return false;
   const preparedById = new Map(preparedEvent.data.repositories.map((repository) => [repository.repository_id, repository]));
@@ -820,6 +840,35 @@ const validatedStartupHistory = (
     }, continueRecovery(intent.missionId, intent.recordHomeRoot, "Preserve history and resolve the missing preparation authority explicitly."));
   }
   return { ...(created ? { created } : {}), ...(prepared ? { prepared } : {}) };
+};
+
+type MissionStartupHistorySelectionResult =
+  | { readonly kind: "ordinary" }
+  | { readonly kind: "join"; readonly historyVersion: string; readonly transferOriginIds: readonly string[] }
+  | MissionStartupFailure;
+
+const validateMissionStartupHistorySelection = (value: unknown): MissionStartupHistorySelectionResult => {
+  if (value === undefined) return { kind: "ordinary" };
+  if (!isRecord(value) || Object.keys(value).some((key) => !["historyVersion", "transferOriginIds"].includes(key))) {
+    return failure("invalid_history_selector", "History handoff accepts only an exact history version and prior origin IDs.", {}, "Provide one --history-version and only the --transfer-origin values required for that exact history.");
+  }
+  const historyVersion = value.historyVersion;
+  const rawOrigins = value.transferOriginIds;
+  if (historyVersion !== undefined && (typeof historyVersion !== "string" || !isUuidV4(historyVersion))) {
+    return failure("invalid_history_version", "History handoff requires one full lowercase control-event UUIDv4.", { history_version: historyVersion ?? null }, "Provide the exact current control-event ID; Kepler will not infer or refresh a history version.");
+  }
+  if (rawOrigins !== undefined && (!Array.isArray(rawOrigins) || rawOrigins.some((origin) => typeof origin !== "string" || origin.length === 0 || origin.trim() !== origin))) {
+    return failure("invalid_transfer_origin", "Transferred history origins must be non-empty exact prior-origin IDs.", {}, "Copy each exact prior origin ID without leading or trailing whitespace.");
+  }
+  const transferOriginIds = rawOrigins === undefined ? [] : rawOrigins as string[];
+  if (new Set(transferOriginIds).size !== transferOriginIds.length) {
+    return failure("duplicate_transfer_origin", "A prior origin can be transferred only once.", { transfer_origin_ids: transferOriginIds }, "Provide each exact prior origin ID once.");
+  }
+  if (historyVersion === undefined) {
+    if (transferOriginIds.length > 0) return failure("history_version_required", "Origin transfer requires an explicit history version.", { transfer_origin_ids: transferOriginIds }, "Provide the exact --history-version for the selected activation before requesting origin transfer.");
+    return { kind: "ordinary" };
+  }
+  return Object.freeze({ kind: "join", historyVersion, transferOriginIds: Object.freeze([...transferOriginIds]) });
 };
 
 const startupFailure = (
@@ -1041,12 +1090,18 @@ export class MissionStartup {
     return await this.finish(intent, false);
   }
 
-  async prepare(project: string | undefined, missionIdValue: string): Promise<MissionStartupResult> {
+  async prepare(
+    project: string | undefined,
+    missionIdValue: string,
+    historySelection?: MissionStartupHistoryJoinSelection,
+  ): Promise<MissionStartupResult> {
     if (!isUuidV4(missionIdValue)) {
       return failure("invalid_mission_id", "Mission preparation requires a full lowercase UUIDv4.", {
         mission_id: missionIdValue,
       }, "Provide the exact mission ID from the prior mission create result; no history or workspace was changed.");
     }
+    const selectedHistory = validateMissionStartupHistorySelection(historySelection);
+    if (selectedHistory.kind === "failed") return selectedHistory;
     const missionId = missionIdValue as MissionId;
     let selectedProject: ProjectSelectionResult;
     try {
@@ -1070,6 +1125,7 @@ export class MissionStartup {
       }, `Preserve mission history and resolve the original record home, then run ${continuationCommand(missionId, selectedProject.root)}.`);
     }
     if ("kind" in identity) return startupFailure(identity, missionId, selectedProject.root);
+    if (selectedHistory.kind === "join") return await this.joinSelectedHistory(identity, missionId, selectedHistory);
 
     let observedHistory: MissionStartupHistoryView | undefined;
     let observedHistoryProblem: MissionStartupFailure | undefined;
@@ -1140,6 +1196,71 @@ export class MissionStartup {
     }
     if (observedHistoryProblem && observedHistory && observedHistory.history.journals.length > 0 && !observedHistory.history.events.some((record) => record.status === "valid" && record.event?.id === intent.createdEvent.id && sameJson(record.event, intent.createdEvent))) return observedHistoryProblem;
     return await this.finish(intent, true);
+  }
+
+  private async joinSelectedHistory(
+    identity: MissionRecordHomeIdentity,
+    missionId: MissionId,
+    selection: Extract<MissionStartupHistorySelectionResult, { readonly kind: "join" }>,
+  ): Promise<MissionStartupResult> {
+    const verifyHistory = async (view: MissionStartupHistoryView): Promise<void> => {
+      if (view.mode !== "active" || view.historyVersion !== selection.historyVersion || view.pendingRecovery) {
+        throw new HistoryError("history_join_selection_invalid", "Only the exact active, unblocked selected history can be joined.", {
+          expected_history_version: selection.historyVersion,
+          actual_history_version: view.historyVersion ?? null,
+          mode: view.mode,
+          pending_recovery: view.pendingRecovery,
+        });
+      }
+      const prepared = preparedResultFromCompleteHistory(view.history, missionId, identity.root);
+      if (prepared === undefined) throw new HistoryError("mission_preparation_missing", "The selected history has no complete prepared-workspace fact.", { mission_id: missionId });
+      if (prepared.kind === "failed") throw new HistoryError(prepared.code, prepared.message, prepared.details);
+    };
+    let joined: MissionStartupHistoryView;
+    try {
+      joined = await this.runtime.recovery.joinHistory(identity.root, missionId, {
+        historyVersion: selection.historyVersion,
+        transferOriginIds: selection.transferOriginIds,
+      }, verifyHistory);
+    } catch (error) {
+      const historyError = error instanceof HistoryError ? error : undefined;
+      return failure(
+        historyError?.code ?? "mission_history_join_failed",
+        historyError?.message ?? "Kepler could not validate and join the selected mission history.",
+        {
+          ...(historyError?.details ?? {}),
+          mission_id: missionId,
+          history_version: selection.historyVersion,
+          effects_uncertain: true,
+        },
+        continueRecovery(missionId, identity.root, "Joining may have published a shared history binding before the reported failure. Preserve all history and workspace files, inspect the exact binding, then retry only the same explicit history version after ownership is confirmed."),
+      );
+    }
+    if (joined.mode !== "active" || joined.historyVersion !== selection.historyVersion || !joined.generationId ||
+        joined.pendingRecovery || joined.coordination !== "bound") {
+      return failure("history_join_unconfirmed", "The selected mission history did not return a confirmed current binding after join.", {
+        mission_id: missionId,
+        expected_history_version: selection.historyVersion,
+        actual_history_version: joined.historyVersion ?? null,
+        generation_id: joined.generationId ?? null,
+        mode: joined.mode,
+        coordination: joined.coordination ?? null,
+        pending_recovery: joined.pendingRecovery,
+      }, continueRecovery(missionId, identity.root, "Preserve the selected history and local workspace ownership, inspect the shared binding, and retry only with its exact current control-event ID."));
+    }
+    const prepared = preparedResultFromCompleteHistory(joined.history, missionId, identity.root);
+    if (prepared === undefined) return failure("mission_preparation_missing", "The selected history has no complete prepared-workspace fact.", { mission_id: missionId }, continueRecovery(missionId, identity.root, "Preserve history and resolve the missing preparation fact through the approved recovery operation."));
+    if (prepared.kind === "failed") return prepared;
+    return {
+      ...prepared,
+      history: {
+        mode: joined.mode,
+        historyVersion: joined.historyVersion,
+        generationId: joined.generationId,
+        coordination: "bound",
+        ...(joined.selectionHash ? { selectionHash: joined.selectionHash } : {}),
+      },
+    };
   }
 
   private async finish(intent: MissionStartupIntent, reconcile: boolean): Promise<MissionStartupResult> {
