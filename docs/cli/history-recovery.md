@@ -159,7 +159,7 @@ A completed retry returns its original `receipt` separately from the current `hi
 
 Read the validated selected version and pass it explicitly as `--history-version <control-event-id>` for ordinary mission mutations, including audit, stage/task/Activity operations, revision, Integration, and project diff-package output. Preserve that version with the request's original inputs. Do not refresh an old request's version implicitly after recovery.
 
-All normal readers select control before loading phase bytes. Legacy history is read-only. Recovery and unresolved pending instructions fence mutations. A copied record home must complete a validated ownership/history join before it can write. Full-current source settlement and explicit missing-origin transfer are separate from copying an initial publication prefix. They do not relocate prepared workspace ownership.
+All normal readers select control before loading phase bytes. Legacy history is read-only. Recovery and unresolved pending instructions fence mutations. A copied record home must complete a validated ownership/history join before it can write. Use [`mission prepare --history-version`](mission.md#join-or-settle-selected-history) to join or settle the exact selected history. Add repeatable `--transfer-origin` values only for exact unavailable bound origins. Full-current source settlement and explicit missing-origin transfer are separate from copying an initial publication prefix. They do not relocate prepared workspace ownership.
 
 ## Contract sources
 

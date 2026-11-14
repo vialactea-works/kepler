@@ -274,9 +274,12 @@ Save the resolved startup instructions before creation append or Git changes und
 
 ```text
 kepler mission prepare --mission <mission-id> [--project <path>]
+  [--history-version <control-event-id>] [--transfer-origin <exact-prior-origin-id>...]
 ```
 
-Select the original record-home working-tree root under the shared project-selection rules. This command takes no replacement mission request and does not allocate a new mission identity or start a stage.
+Select the record-home working-tree root under the shared project-selection rules. This command takes no replacement mission request and does not allocate a new mission identity or start a stage.
+
+Under [SH127](authoring_progress.md#completed-shared-decisions), an explicit `--history-version` selects a validated current-history join instead of saved-startup replay. Verify actual prepared-workspace ownership and necessary material before confirming the binding. Repeated `--transfer-origin` values require that version and exact complete settled proof for every unavailable bound origin. Reject unaccepted facts and unknown ownership. Do not relocate prepared workspace attachments. Return selected generation/version and binding metadata without dispatch. Apply the following startup-retry rules when no history version is supplied.
 
 Read and validate the complete mission history before using local recovery material. A valid recorded preparation returns `success`, `data.historical: true`, and the recorded repository bindings. Omit local `workspace_id` and `workspace_path` fields from this historical result. It needs no local startup intent or attachment and makes no workspace changes. It does not establish current execution readiness or recreate missing attachments.
 

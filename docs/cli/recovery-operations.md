@@ -60,7 +60,7 @@ With `jq`, extract those inputs from the original stage-start response saved as 
 
 ```bash
 jq '{inputs:.data.inputs}' stage-start.json > stage-resume.json
-kepler workflow construction stage resume --unit "$UNIT" --stage implementation --attempt "$IMPL" \
+kepler workflow construction stage resume --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage implementation --attempt "$IMPL" \
   --request "$(cat stage-resume.json)" --project "$PROJECT"
 ```
 

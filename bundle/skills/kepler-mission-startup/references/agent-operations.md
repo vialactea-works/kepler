@@ -15,6 +15,8 @@ Before unit creation, read `kepler recovery inspect --mission <mission-id> --pro
 
 Pass the captured version as `--history-version <control-event-id>` to every mission mutation: unit creation/effort, audit recording, stage/task/Activity transitions, pause/resume, revision, Integration, and diff-package project output. Do not obtain a fresh version implicitly for an old request. Normal journal appends keep the selected version; recovery can change it. A stale worker must stop and reconcile rather than attach its result to the new selection.
 
+Use `kepler mission prepare --mission <mission-id> --project <record-home> --history-version <control-event-id>` to join or settle that exact history. It checks actual workspace ownership and required material without replaying old startup effects. Before a history collector moves, settle the complete current inventory with no active writers. For explicit missing-origin transfer, add one `--transfer-origin <exact-prior-origin-id>` per unavailable bound origin. Do not infer IDs, import an initial prefix as complete current history, or rewrite workspace attachments. Missing actual workspaces or evidence block the join.
+
 A legacy layout is read-only. Hand deprecated formats to `kepler-lifecycle-migration`; its planned guide does not permit migration. Raw `recovery inspect` and `recovery status` do not require a valid projection. Reset, reconstruction, and publication need their own exact requester decisions, retained proof, and supported CLI. Do not use ordinary resume authority or hand-edited records to perform them.
 
 ## Record only real facts

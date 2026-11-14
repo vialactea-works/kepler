@@ -123,14 +123,14 @@ Stage completion accepts `--unit`, `--stage`, `--attempt`, `--request`, and opti
 ### `stage pause`
 
 ```text
-kepler workflow construction stage pause --unit <unit-id> --stage <stage>
+kepler workflow construction stage pause --history-version <control-event-id> --unit <unit-id> --stage <stage>
   --attempt <attempt-id> --request <json> [--project <path>]
 ```
 
 Request a pause:
 
 ```bash
-kepler workflow construction stage pause --unit "$UNIT" --stage functional-design --attempt "$ATTEMPT" \
+kepler workflow construction stage pause --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage functional-design --attempt "$ATTEMPT" \
   --request '{"phase":"request","reason":"Inspect an interrupted worker."}' --project "$PROJECT"
 ```
 
@@ -145,7 +145,7 @@ Both attestation booleans must be true. Supply a non-empty run reference and dis
 ### `stage resume`
 
 ```text
-kepler workflow construction stage resume --unit <unit-id> --stage <stage>
+kepler workflow construction stage resume --history-version <control-event-id> --unit <unit-id> --stage <stage>
   --attempt <attempt-id> --request <json> [--project <path>]
 ```
 
@@ -153,7 +153,7 @@ Retain the original start response as `stage-start.json`. With `jq`, copy its ex
 
 ```bash
 jq '{inputs:.data.inputs}' stage-start.json > stage-resume.json
-kepler workflow construction stage resume --unit "$UNIT" --stage functional-design --attempt "$ATTEMPT" \
+kepler workflow construction stage resume --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage functional-design --attempt "$ATTEMPT" \
   --request "$(cat stage-resume.json)" --project "$PROJECT"
 ```
 
@@ -164,12 +164,12 @@ Pause and resume help also lists `--task`, `--activity`, and `--implementation-a
 ### `stage assess-retained-scopes`
 
 ```text
-kepler workflow construction stage assess-retained-scopes --unit <unit-id>
+kepler workflow construction stage assess-retained-scopes --history-version <control-event-id> --unit <unit-id>
   --stage implementation --attempt <implementation-attempt-id> --request <json> [--project <path>]
 ```
 
 ```bash
-kepler workflow construction stage assess-retained-scopes --unit "$UNIT" \
+kepler workflow construction stage assess-retained-scopes --history-version "$HISTORY_VERSION" --unit "$UNIT" \
   --stage implementation --attempt "$IMPL" --request "$(cat retained-scopes.json)" --project "$PROJECT"
 ```
 
@@ -295,16 +295,16 @@ Code Validation uses a non-author executor and separate worker context. Code Int
 ### `activity pause` and `activity resume`
 
 ```text
-kepler workflow construction activity pause --unit <unit-id> --task <task-id>
+kepler workflow construction activity pause --history-version <control-event-id> --unit <unit-id> --task <task-id>
   --activity <activity> --implementation-attempt <attempt-id> --attempt <activity-attempt-id>
   --request <json> [--project <path>]
-kepler workflow construction activity resume --unit <unit-id> --task <task-id>
+kepler workflow construction activity resume --history-version <control-event-id> --unit <unit-id> --task <task-id>
   --activity <activity> --implementation-attempt <attempt-id> --attempt <activity-attempt-id>
   --request <json> [--project <path>]
 ```
 
 ```bash
-kepler workflow construction activity pause --unit "$UNIT" --task "$TASK" \
+kepler workflow construction activity pause --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" \
   --activity code-generation --implementation-attempt "$IMPL" --attempt "$ATTEMPT" \
   --request '{"phase":"request","reason":"Inspect the worker."}' --project "$PROJECT"
 ```
@@ -315,7 +315,7 @@ Copy the exact inputs from this Activity's saved start response. The current tas
 
 ```bash
 jq '{inputs:.data.inputs}' activity-start.json > activity-resume.json
-kepler workflow construction activity resume --unit "$UNIT" --task "$TASK" \
+kepler workflow construction activity resume --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" \
   --activity code-generation --implementation-attempt "$IMPL" --attempt "$ATTEMPT" \
   --request "$(cat activity-resume.json)" --project "$PROJECT"
 ```

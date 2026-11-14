@@ -28,6 +28,8 @@ When normal history loading is blocked, use `kepler recovery inspect --mission <
 
 For ordinary mutations, retain the exact validated `history_version` and pass `--history-version <control-event-id>` with the original request. Carry the selected generation and version in worker handoffs. Stop on a changed version, recovering selection, pending instructions, or an unjoined copy. Do not refresh an old request to bypass a guard.
 
+For a copied history or unsettled current inventory, use `kepler mission prepare --mission <mission-id> --project <record-home> --history-version <control-event-id>`. Use repeatable `--transfer-origin` only for exact unavailable bound origins backed by complete settled proof. This validates actual workspace ownership and required material; it does not relocate a prepared workspace or replay startup effects. Preserve blocked owner or material conditions.
+
 A damaged-history reset or reconstruction is a separate requester-owned operation. Report the raw evidence and required decisions, then use only the compatible CLI's exact preview, approved manifest, retained proof, and retry contracts. This navigator does not infer recovery authority from the original work request. Keep planned lifecycle migration separate.
 
 ## Resume safely when requested

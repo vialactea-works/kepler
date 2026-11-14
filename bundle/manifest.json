@@ -37,7 +37,7 @@
     "skills/kepler-lifecycle-migration/SKILL.md": "sha256:52bd46d55d78c66ecb3b8f56509b20a95466b395339f90a22a154f2448c906c1",
     "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md": "sha256:5f39b88c9c0e7de86315e29001179367f234e2cac240ec09f363efe07edad99e",
     "skills/kepler-mission-startup/SKILL.md": "sha256:9f4a17b08ee36e56de3ad9e825334d6bdff9577b66d51e197b7e8ecbaa27fe33",
-    "skills/kepler-mission-startup/references/agent-operations.md": "sha256:ae69d3962b062956c11b4e2b2043992cd6ea6057be65e39c40e010f4b758137a",
+    "skills/kepler-mission-startup/references/agent-operations.md": "sha256:bfabb865fd54d7c6176d4726bc5afc5cc0989fe5b999f0a22a278ca47d4ab1c4",
     "skills/kepler-mission-startup/references/standard-cli-walkthrough.md": "sha256:0cf7321a3c75f982e0a711ff629e71c1224846957b5c68c275703c1580d3a718",
     "skills/kepler-orchestrate/SKILL.md": "sha256:37c3274726e523a4313c61b53a5bb0d31632eeae38bad759120f74dc6029b963",
     "skills/kepler-plan/SKILL.md": "sha256:1480191a9981c241862cfe1f7c5c844ca61b1eb07bef7fb34b3e0a1f3503f1cd",
@@ -45,7 +45,7 @@
     "skills/kepler-quality/SKILL.md": "sha256:9c8efe4fdf25b953762d0ac2885f0be77d54ac5eee33da4be958af8767277bd1",
     "skills/kepler-research/NOTICE": "sha256:71168255d925d0deb29bacc2f5e6f456b121b31aa9dd493ef660bee4675880cb",
     "skills/kepler-research/SKILL.md": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
-    "skills/kepler-resume/SKILL.md": "sha256:48fc4132ec1e20d4e0a2eed71f90b16843f42b4d662c09baf4857a08520f09e3",
+    "skills/kepler-resume/SKILL.md": "sha256:addd8836ece5a6917013ff3362ef15d445fc05b70929d5129c9fe3217b6bf8d6",
     "skills/kepler-review/SKILL.md": "sha256:25aa756d7269409c95e8484a5c09a2b0812fa9585aacb7e561c66f5c39a32019",
     "templates/README.md": "sha256:8b50f5559320bafa83c596d5b54b2bd32afbef97e0614f8232db168c5dbb38d1",
     "templates/critique.md": "sha256:1cd7886f18cb6879699e87dc8f3f855714091b9d42ac520e6ce670b86d3d36fe",
@@ -70,7 +70,7 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "resource_digest": "sha256:8feb4ee06162b8d72a9325b839355cb81ae0fdd89a184169afe7f04a5b465765",
+  "resource_digest": "sha256:cb0aad5cebd0531b23e112d104d542e9e70ea98ca981202bfa782034d9e9c255",
   "skills": [
     {
       "id": "kepler-init",
@@ -139,7 +139,7 @@
     },
     {
       "id": "kepler-resume",
-      "digest": "sha256:48fc4132ec1e20d4e0a2eed71f90b16843f42b4d662c09baf4857a08520f09e3",
+      "digest": "sha256:addd8836ece5a6917013ff3362ef15d445fc05b70929d5129c9fe3217b6bf8d6",
       "required": false
     },
     {
