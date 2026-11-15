@@ -1,6 +1,6 @@
 {
   "manifest_format_version": 3,
-  "kepler_release": "3.1.0",
+  "kepler_release": "3.2.0",
   "files": {
     "agents/claude-code/v1/kepler-architect.md": "sha256:dd2e24cd50ef0946f088f6673e8793cc2ccb16dffc6815436bca09dccbc64866",
     "agents/claude-code/v1/kepler-coder.md": "sha256:7b64ae6c2efdaa5dfb049352ac086f688351508c1bf3b63725c45ee4dfb5b0ae",
@@ -70,7 +70,7 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "resource_digest": "sha256:083c81e33b91d93e0ef884bc6f1b96d0fd53f4d226b463e01d0df50f82547a8d",
+  "resource_digest": "sha256:76ae2e274b48a10ba483887b2d412a0387d1df0995c319d438754767f0b5157e",
   "skills": [
     {
       "id": "kepler-init",
