@@ -88,7 +88,8 @@ describe("healthy migration through a matched compiled CLI", () => {
     expect(JSON.parse(identityResult.stdout)).toEqual(fixture.identity);
     expect(fixture.identity.source.kind).toBe("development");
     expect(await Fs.readFile(fixture.sourceGuidePath, "utf8")).toContain("status: planned\navailable_in: null");
-    expect(Buffer.from(fixture.guideBytes).toString("utf8")).toContain("status: released\navailable_in: 3.1.0");
+    const releasedGuide = Buffer.from(fixture.guideBytes).toString("utf8");
+    expect(releasedGuide).toContain(`status: released\navailable_in: ${fixture.identity.kepler_release}`);
 
     await Fs.mkdir(Path.join(repository, ".kepler"), { recursive: true });
     await Fs.writeFile(Path.join(repository, ".kepler", "marker"), "v3\n");
@@ -266,7 +267,9 @@ describe("healthy migration through a matched compiled CLI", () => {
       decision_reference: "decision:migration-cli-positive-e2e",
     });
     const originalPackageGuide = Buffer.from(await Fs.readFile(fixture.guidePath));
-    await Fs.writeFile(fixture.guidePath, Buffer.from(fixture.guideBytes).toString("utf8").replace("available_in: 3.1.0", "available_in: 3.1.1"));
+    const mismatchedGuide = releasedGuide.replace(`available_in: ${fixture.identity.kepler_release}`, "available_in: null");
+    expect(mismatchedGuide).not.toBe(releasedGuide);
+    await Fs.writeFile(fixture.guidePath, mismatchedGuide);
     const beforePackageFailure = await snapshotTree(repository);
     const mismatchedPackage = await run(migrationArgs, approved);
     expect(mismatchedPackage.exitCode).toBe(1);
