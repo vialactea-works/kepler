@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { HistoryAccess, parseLiveHistoryBinding } from "../../packages/cli/src/history/access.js";
 import { createHistoryControl, historyDigest, historyManifestDigest, parseHistoryGuard, type HistoryInitializationManifest, type HistoryRebuildManifest, type HistoryResetManifest } from "../../packages/cli/src/history/control.js";
+import { HISTORY_CLIENT_COMPATIBILITY_FORMAT, HISTORY_CLIENT_COMPATIBILITY_PURPOSE, HISTORY_CLIENT_GENERATION_PROTOCOL, serializeHistoryClientCompatibilityDocument, type HistoryClientCompatibilityDocument } from "../../packages/cli/src/history/client-compatibility.js";
 import { canonicalJson, serializeJournalEvent } from "../../packages/cli/src/history/journal.js";
 import { createHistoryReconciliationEvidenceReader, createNodeHistoryReconciliation, HISTORY_LEAD_RECONCILIATION_PURPOSE, HISTORY_LEAD_RECONCILIATION_FORMAT, historyLeadReconciliationSnapshotReference, parseHistoryLeadReconciliationReport, serializeHistoryLeadReconciliationReport, type HistoryLeadReconciliationReport, type HistoryReconciliationRequest } from "../../packages/cli/src/history/reconciliation.js";
 import { HistoryReset, type HistoryResetRuntime } from "../../packages/cli/src/history/reset.js";
@@ -24,21 +25,61 @@ const fixture = async (options: {
   readonly boundOrigins?: readonly string[];
   readonly additionalFiles?: (missionId: string) => ReadonlyMap<string, Uint8Array>;
   readonly missingFiles?: (missionId: string) => readonly string[];
+  readonly compatibility?: (document: HistoryClientCompatibilityDocument) => unknown;
 } = {}) => {
   const generation = historyGenerationFixture();
   const targetGeneration = randomUUID();
-  const evidence = options.evidence ?? encoder.encode("The lead checked the affected scope.\n");
+  const evidence = options.evidence ?? encoder.encode("The lead checked the affected client and working-copy scope.\n");
   const evidencePath = `.kepler/missions/${generation.missionId}/recovery/reconciliation/evidence.txt`;
+  const compatibilityPath = `.kepler/missions/${generation.missionId}/recovery/reconciliation/client-compatibility-reset-${targetGeneration}.json`;
   const reportPath = `.kepler/missions/${generation.missionId}/recovery/reconciliation/reset-${targetGeneration}.json`;
   const history = historyAccessFixture(generation, { extraEntries: new Map([[`/record/${evidencePath}`, evidence]]), ...(options.context ? { context: options.context } : {}) });
   for (const [path, bytes] of options.additionalFiles?.(generation.missionId) ?? []) history.entries.set(path, bytes);
   for (const path of options.missingFiles?.(generation.missionId) ?? []) history.entries.delete(path);
   if (options.boundOrigins) history.entries.set(history.bindingPath, history.encode({ ...history.binding, origins: [...options.boundOrigins].sort() }));
   const initial = await history.storage.snapshot("/record", generation.missionId);
+  const context = await history.storage.context("/record");
+  const recordHomeOrigin = context.origins.find((origin) => origin.root === "/record")!;
   const evidenceSource = initial.files.find((file) => file.path === evidencePath)!;
   const evidenceReference = historyLeadReconciliationSnapshotReference(evidenceSource.sourceId);
-  const active = initial.files.find((file) => file.path.endsWith("/history/control/active.json"));
+  const originalBindingFile = initial.files.find((file) => file.origin === "local-runtime" && file.path.endsWith("/coordination/history-selection.json"));
+  let priorOrigins: readonly string[] = [];
+  try { priorOrigins = originalBindingFile ? parseLiveHistoryBinding(originalBindingFile.bytes).origins : []; } catch {}
+  const originIds = [...new Set([...context.origins.map((origin) => origin.id), ...context.unavailableOrigins.map((origin) => origin.id), ...priorOrigins])].sort();
+  const compatibilityReference = historyLeadReconciliationSnapshotReference(`${recordHomeOrigin.id}:${compatibilityPath}`);
+  const baseCompatibility: HistoryClientCompatibilityDocument = {
+    format: HISTORY_CLIENT_COMPATIBILITY_FORMAT,
+    version: 1,
+    mission_binding: generation.manifest.mission_binding,
+    generation_id: targetGeneration,
+    operation: "reset",
+    required_protocol: HISTORY_CLIENT_GENERATION_PROTOCOL,
+    confirmed_by: "agent:lead",
+    scope_complete: true,
+    external_client_references: [],
+    clients: [{
+      reference: "client:recovery-lead",
+      kind: "interactive",
+      run_references: [...(options.workers ?? [])].sort(),
+      origin_ids: originIds,
+      protocol_status: "compatible",
+      operational_state: "stopped",
+      client_identity: "Kepler unit-test adapter build test-commit",
+      evidence: [{ reference: evidenceReference, content_version: historyDigest(evidence) }],
+    }],
+    unresolved_clients: [],
+    source_material: [{ reference: evidenceReference, content_version: historyDigest(evidence) }],
+  };
+  const compatibilityValue = options.compatibility ? options.compatibility(baseCompatibility) : baseCompatibility;
+  const compatibilityBytes = options.compatibility ? encoder.encode(`${canonicalJson(compatibilityValue)}\n`) : serializeHistoryClientCompatibilityDocument(compatibilityValue);
+  history.entries.set(`/record/${compatibilityPath}`, compatibilityBytes);
+  const reportInput = await history.storage.snapshot("/record", generation.missionId);
+  const active = reportInput.files.find((file) => file.path.endsWith("/history/control/active.json"));
   const workerReferences = [...(options.workers ?? [])].sort();
+  const materials = [
+    { reference: compatibilityReference, purpose: HISTORY_CLIENT_COMPATIBILITY_PURPOSE, content_version: historyDigest(compatibilityBytes) },
+    { reference: evidenceReference, purpose: "lead reconciliation evidence", content_version: historyDigest(evidence) },
+  ].sort((left, right) => left.reference.localeCompare(right.reference));
   const baseReport: HistoryLeadReconciliationReport = {
     format: HISTORY_LEAD_RECONCILIATION_FORMAT,
     version: 1,
@@ -51,22 +92,21 @@ const fixture = async (options: {
     prior_history: active ? { generation_id: generation.generationId, history_version: generation.control.id, content_version: historyDigest(active.bytes) } : null,
     target_generation_id: targetGeneration,
     attribution: { orchestrator: "agent:lead", lead: "agent:lead" },
-    original_inventory: historyInventory(initial),
-    original_inventory_hash: historyDigest(canonicalJson(historyInventory(initial))),
-    scope_evidence_references: [evidenceReference],
+    original_inventory: historyInventory(reportInput),
+    original_inventory_hash: historyDigest(canonicalJson(historyInventory(reportInput))),
+    scope_evidence_references: materials.map((material) => material.reference),
     affected_workers: workerReferences.map((run_reference) => ({
       run_reference,
       terminal_confirmation: { outcome: "terminated", confirmed_by: "agent:lead", evidence_references: [evidenceReference] },
     })),
-    materials: [{ reference: evidenceReference, purpose: "lead reconciliation evidence", content_version: historyDigest(evidence) }],
+    materials,
     effects: { files: [], repositories: [], external: [], local_claims: { outcome: "clear" } },
     unresolved_items: [],
     unknown_items: [],
   };
   const reportValue = options.report ? options.report(baseReport) : baseReport;
   const reportBytes = !options.report && evidence.length > 0 ? serializeHistoryLeadReconciliationReport(reportValue) : encoder.encode(`${canonicalJson(reportValue)}\n`);
-  const reportSourceId = `current:${reportPath}`;
-  const reportReference = historyLeadReconciliationSnapshotReference(reportSourceId);
+  const reportReference = historyLeadReconciliationSnapshotReference(`${recordHomeOrigin.id}:${reportPath}`);
   history.entries.set(`/record/${reportPath}`, reportBytes);
   const snapshot = await history.storage.snapshot("/record", generation.missionId);
   const inventory = historyInventory(snapshot);
@@ -82,14 +122,14 @@ const fixture = async (options: {
       run_references: workerReferences,
       references: [
         { reference: reportReference, purpose: HISTORY_LEAD_RECONCILIATION_PURPOSE },
-        { reference: evidenceReference, purpose: "lead reconciliation evidence" },
+        ...materials.map(({ reference, purpose }) => ({ reference, purpose })),
       ],
     },
   };
   const request: HistoryReconciliationRequest = { phase: "preview", recordHome: "/record", manifest, snapshot, intent: null };
   const verify = createNodeHistoryReconciliation(history.access);
   const verifyScope: HistoryResetRuntime["verifyScope"] = verify;
-  return { generation, history, evidencePath, evidence, reportPath, reportBytes, reportReference, evidenceReference, snapshot, manifest, request, verify, verifyScope };
+  return { generation, history, evidencePath, evidence, compatibilityPath, compatibilityBytes, compatibilityReference, reportPath, reportBytes, reportReference, evidenceReference, snapshot, manifest, request, verify, verifyScope };
 };
 
 const boundPeerLoss = async (homeSelector: "healthy" | "damaged" | "missing" = "healthy") => {
@@ -153,6 +193,43 @@ const applyAndRetryBoundReset = async (t: Awaited<ReturnType<typeof boundPeerLos
   return { result, intent, archive };
 };
 
+const clientCompatibilityFor = (input: {
+  readonly missionBinding: HistoryClientCompatibilityDocument["mission_binding"];
+  readonly generationId: string;
+  readonly operation: HistoryClientCompatibilityDocument["operation"];
+  readonly evidenceSource: { readonly sourceId: string; readonly origin: string };
+  readonly evidence: Uint8Array;
+  readonly originIds: readonly string[];
+}) => {
+  const evidenceReference = historyLeadReconciliationSnapshotReference(input.evidenceSource.sourceId);
+  const path = `.kepler/missions/${input.missionBinding.mission_id}/recovery/reconciliation/client-compatibility-${input.operation}-${input.generationId}.json`;
+  const reference = historyLeadReconciliationSnapshotReference(`${input.evidenceSource.origin}:${path}`);
+  const document: HistoryClientCompatibilityDocument = {
+    format: HISTORY_CLIENT_COMPATIBILITY_FORMAT,
+    version: 1,
+    mission_binding: input.missionBinding,
+    generation_id: input.generationId,
+    operation: input.operation,
+    required_protocol: HISTORY_CLIENT_GENERATION_PROTOCOL,
+    confirmed_by: "agent:lead",
+    scope_complete: true,
+    external_client_references: [],
+    clients: [{
+      reference: "client:recovery-lead",
+      kind: "interactive",
+      run_references: [],
+      origin_ids: [...input.originIds].sort(),
+      protocol_status: "compatible",
+      operational_state: "stopped",
+      client_identity: "Kepler unit-test adapter build test-commit",
+      evidence: [{ reference: evidenceReference, content_version: historyDigest(input.evidence) }],
+    }],
+    unresolved_clients: [],
+    source_material: [{ reference: evidenceReference, content_version: historyDigest(input.evidence) }],
+  };
+  return { path, reference, document, bytes: serializeHistoryClientCompatibilityDocument(document), evidenceReference };
+};
+
 const reportFor = (input: {
   readonly mission: HistoryLeadReconciliationReport["mission"];
   readonly targetGeneration: string;
@@ -160,8 +237,14 @@ const reportFor = (input: {
   readonly inventory: ReturnType<typeof historyInventory>;
   readonly evidenceSource: { readonly sourceId: string };
   readonly evidence: Uint8Array;
+  readonly compatibilityReference: string;
+  readonly compatibilityBytes: Uint8Array;
 }): { readonly report: HistoryLeadReconciliationReport; readonly evidenceReference: string } => {
   const evidenceReference = historyLeadReconciliationSnapshotReference(input.evidenceSource.sourceId);
+  const materials = [
+    { reference: input.compatibilityReference, purpose: HISTORY_CLIENT_COMPATIBILITY_PURPOSE, content_version: historyDigest(input.compatibilityBytes) },
+    { reference: evidenceReference, purpose: "lead reconciliation evidence", content_version: historyDigest(input.evidence) },
+  ].sort((left, right) => left.reference < right.reference ? -1 : left.reference > right.reference ? 1 : 0);
   const report: HistoryLeadReconciliationReport = {
     format: HISTORY_LEAD_RECONCILIATION_FORMAT,
     version: 1,
@@ -171,9 +254,9 @@ const reportFor = (input: {
     attribution: { orchestrator: "agent:lead", lead: "agent:lead" },
     original_inventory: input.inventory,
     original_inventory_hash: historyDigest(canonicalJson(input.inventory)),
-    scope_evidence_references: [evidenceReference],
+    scope_evidence_references: materials.map((material) => material.reference),
     affected_workers: [],
-    materials: [{ reference: evidenceReference, purpose: "lead reconciliation evidence", content_version: historyDigest(input.evidence) }],
+    materials,
     effects: { files: [], repositories: [], external: [], local_claims: { outcome: "clear" } },
     unresolved_items: [],
     unknown_items: [],
@@ -201,16 +284,20 @@ describe("provider-neutral lead reconciliation evidence", () => {
     const evidencePath = `.kepler/missions/${t.f.missionId}/recovery/reconciliation/publication-evidence.txt`;
     const evidence = encoder.encode("The lead checked the published reconstruction scope.\n");
     t.h.entries.set(`/record/${evidencePath}`, evidence);
+    const beforeCompatibility = await t.h.storage.snapshot("/record", t.f.missionId);
+    const evidenceSource = beforeCompatibility.files.find((file) => file.path === evidencePath)!;
+    const context = await t.h.storage.context("/record");
+    const compatibility = clientCompatibilityFor({ missionBinding: t.f.manifest.mission_binding, generationId: t.plan.generation_id, operation: "publish", evidenceSource, evidence, originIds: context.origins.map((origin) => origin.id) });
+    t.h.entries.set(`/record/${compatibility.path}`, compatibility.bytes);
     const initial = await t.h.storage.snapshot("/record", t.f.missionId);
-    const evidenceSource = initial.files.find((file) => file.path === evidencePath)!;
     const active = initial.files.find((file) => file.path.endsWith("/control/active.json"))!;
     const reportPath = `.kepler/missions/${t.f.missionId}/recovery/reconciliation/publish-${t.plan.generation_id}.json`;
     const reportReference = historyLeadReconciliationSnapshotReference(`current:${reportPath}`);
-    const preparedReport = reportFor({ mission: { mission_id: t.f.missionId, record_home_repository_id: "record-home", workflow: "standard", request_reference: "request:original" }, targetGeneration: t.plan.generation_id, prior: { generation_id: t.plan.generation_id, history_version: t.reset.id, content_version: historyDigest(active.bytes) }, inventory: historyInventory(initial), evidenceSource, evidence });
+    const preparedReport = reportFor({ mission: { mission_id: t.f.missionId, record_home_repository_id: "record-home", workflow: "standard", request_reference: "request:original" }, targetGeneration: t.plan.generation_id, prior: { generation_id: t.plan.generation_id, history_version: t.reset.id, content_version: historyDigest(active.bytes) }, inventory: historyInventory(initial), evidenceSource, evidence, compatibilityReference: compatibility.reference, compatibilityBytes: compatibility.bytes });
     const reportBytes = serializeHistoryLeadReconciliationReport(preparedReport.report);
     t.h.entries.set(`/record/${reportPath}`, reportBytes);
-    const references = [{ reference: reportReference, purpose: HISTORY_LEAD_RECONCILIATION_PURPOSE }, { reference: preparedReport.evidenceReference, purpose: "lead reconciliation evidence" }];
-    const plan = { ...t.plan, reconciliation: { ...t.plan.reconciliation, orchestrator: "agent:lead", references }, required_material: { ...t.plan.required_material, evidence: [{ reference: reportReference, content_version: historyDigest(reportBytes) }, { reference: preparedReport.evidenceReference, content_version: historyDigest(evidence) }] } };
+    const references = [{ reference: reportReference, purpose: HISTORY_LEAD_RECONCILIATION_PURPOSE }, ...preparedReport.report.materials.map(({ reference, purpose }) => ({ reference, purpose }))];
+    const plan = { ...t.plan, reconciliation: { ...t.plan.reconciliation, orchestrator: "agent:lead", references }, required_material: { ...t.plan.required_material, evidence: [{ reference: reportReference, content_version: historyDigest(reportBytes) }, { reference: compatibility.reference, content_version: historyDigest(compatibility.bytes) }, { reference: preparedReport.evidenceReference, content_version: historyDigest(evidence) }] } };
     const prepared = await t.drafts.prepare(t.scope, { ...t.request, plan });
     const manifest = prepared.manifest as HistoryRebuildManifest;
     const operations = new HistoryOperations({ access: t.h.access, archives: new HistoryArchives(t.h.storage), next: randomUUID, clock: () => new Date(), producer: { name: "kepler", version: "fixture-publication" }, verifyScope: createNodeHistoryReconciliation(t.h.access), verifyCandidate: (scope, candidate) => t.drafts.verify(scope, candidate) });
@@ -356,6 +443,47 @@ describe("provider-neutral lead reconciliation evidence", () => {
     await expect(wrongMission.verify(wrongMission.request)).resolves.toMatchObject({ status: "invalid" });
   });
 
+  it("requires exact client compatibility scope, multi-run and shared-origin coverage", async () => {
+    const context: HistoryRepositoryContext = {
+      recordHome: "/record", commonDirectory: "/git",
+      origins: [{ id: "current", label: "record-home", root: "/record" }, { id: "peer", label: "registered peer", root: "/peer" }],
+      unavailableOrigins: [],
+    };
+    const multiple = await fixture({
+      context,
+      boundOrigins: ["current", "peer"],
+      additionalFiles: (missionId) => new Map([[`/peer/.kepler/missions/${missionId}/recovery/reconciliation/peer-origin-evidence.txt`, encoder.encode("The peer origin is in the scoped repository set.\n")]]),
+      workers: ["run:worker-a", "run:worker-b"],
+      compatibility: (document) => ({
+        ...document,
+        clients: [
+          { ...document.clients[0]!, reference: "client:worker-a", run_references: ["run:worker-a"], origin_ids: ["current"] },
+          { ...document.clients[0]!, reference: "client:worker-b", run_references: ["run:worker-b"], origin_ids: ["current", "peer"] },
+        ],
+      }),
+    });
+    const manifest = { ...multiple.manifest, known_missing_sources: multiple.request.snapshot.unavailable.map((source) => ({ reference: source.source_id, reason: "The registered peer input is missing.", consequences: "The lead reviewed the exact scope loss." })) };
+    const multipleRequest = { ...multiple.request, manifest };
+    const multipleResult = await multiple.verify(multipleRequest);
+    expect(multipleResult, JSON.stringify(multipleResult)).toMatchObject({ status: "valid" });
+    const wrongOperation = await fixture({ compatibility: (document) => ({ ...document, operation: "publish" }) });
+    await expect(wrongOperation.verify(wrongOperation.request)).resolves.toMatchObject({ status: "invalid" });
+    const wrongBinding = await fixture({ compatibility: (document) => ({ ...document, mission_binding: { ...document.mission_binding, request_reference: "request:other" } }) });
+    await expect(wrongBinding.verify(wrongBinding.request)).resolves.toMatchObject({ status: "invalid" });
+    const missingRun = await fixture({ workers: ["run:worker-a"], compatibility: (document) => ({ ...document, clients: [{ ...document.clients[0]!, run_references: [] }] }) });
+    await expect(missingRun.verify(missingRun.request)).resolves.toMatchObject({ status: "invalid" });
+  });
+
+  it("rejects changed client compatibility bytes and unsupported client claims", async () => {
+    const changed = await fixture();
+    changed.history.entries.set(`/record/${changed.compatibilityPath}`, encoder.encode("changed compatibility bytes\n"));
+    await expect(changed.verify(changed.request)).resolves.toMatchObject({ status: "invalid" });
+    const unresolved = await fixture({ compatibility: (document) => ({ ...document, unresolved_clients: ["client:unknown"] }) });
+    await expect(unresolved.verify(unresolved.request)).resolves.toMatchObject({ status: "invalid" });
+    const legacy = await fixture({ compatibility: (document) => ({ ...document, clients: [{ ...document.clients[0]!, client_identity: "Kepler CLI 3.1.0 d2a9f5037c227765818e220443f426303bef4b45", protocol_status: "compatible" }] }) });
+    await expect(legacy.verify(legacy.request)).resolves.toMatchObject({ status: "invalid" });
+  });
+
   it("rejects duplicate JSON keys before schema validation", () => {
     expect(() => parseHistoryLeadReconciliationReport('{"format":"kepler.history-lead-reconciliation","format":"kepler.history-lead-reconciliation"}')).toThrow();
   });
@@ -386,8 +514,19 @@ describe("provider-neutral lead reconciliation evidence", () => {
     history.entries.delete(history.bindingPath);
     history.entries.set(`/record/${legacyPath}`, generation.source.bytes);
     history.entries.set(`/record/${evidencePath}`, evidence);
+    const beforeCompatibility = await history.storage.snapshot("/record", generation.missionId);
+    const evidenceSource = beforeCompatibility.files.find((file) => file.path === evidencePath)!;
+    const context = await history.storage.context("/record");
+    const compatibility = clientCompatibilityFor({
+      missionBinding: generation.manifest.mission_binding,
+      generationId: targetGeneration,
+      operation: "migrate",
+      evidenceSource,
+      evidence,
+      originIds: context.origins.map((origin) => origin.id),
+    });
+    history.entries.set(`/record/${compatibility.path}`, compatibility.bytes);
     const initial = await history.storage.snapshot("/record", generation.missionId);
-    const evidenceSource = initial.files.find((file) => file.path === evidencePath)!;
     const preparedReport = reportFor({
       mission: {
         mission_id: generation.missionId,
@@ -395,7 +534,7 @@ describe("provider-neutral lead reconciliation evidence", () => {
         workflow: generation.manifest.mission_binding.workflow,
         request_reference: generation.manifest.mission_binding.request_reference,
       },
-      targetGeneration, prior: null, inventory: historyInventory(initial), evidenceSource, evidence,
+      targetGeneration, prior: null, inventory: historyInventory(initial), evidenceSource, evidence, compatibilityReference: compatibility.reference, compatibilityBytes: compatibility.bytes,
     });
     history.entries.set(`/record/${reportPath}`, encoder.encode(`${canonicalJson(preparedReport.report)}\n`));
     const snapshot = await history.storage.snapshot("/record", generation.missionId);
@@ -442,8 +581,19 @@ describe("provider-neutral lead reconciliation evidence", () => {
     const evidencePath = `.kepler/missions/${generation.missionId}/recovery/reconciliation/evidence.txt`;
     const reportPath = `.kepler/missions/${generation.missionId}/recovery/reconciliation/publish-${targetGeneration}.json`;
     history.entries.set(`/record/${evidencePath}`, evidence);
+    const beforeCompatibility = await history.storage.snapshot("/record", generation.missionId);
+    const evidenceSource = beforeCompatibility.files.find((file) => file.path === evidencePath)!;
+    const context = await history.storage.context("/record");
+    const compatibility = clientCompatibilityFor({
+      missionBinding: generation.manifest.mission_binding,
+      generationId: targetGeneration,
+      operation: "publish",
+      evidenceSource,
+      evidence,
+      originIds: context.origins.map((origin) => origin.id),
+    });
+    history.entries.set(`/record/${compatibility.path}`, compatibility.bytes);
     const initial = await history.storage.snapshot("/record", generation.missionId);
-    const evidenceSource = initial.files.find((file) => file.path === evidencePath)!;
     const active = initial.files.find((file) => file.path.endsWith("/history/control/active.json"))!;
     const preparedReport = reportFor({
       mission: {
@@ -454,7 +604,7 @@ describe("provider-neutral lead reconciliation evidence", () => {
       },
       targetGeneration,
       prior: { generation_id: targetGeneration, history_version: resetControl.id, content_version: historyDigest(active.bytes) },
-      inventory: historyInventory(initial), evidenceSource, evidence,
+      inventory: historyInventory(initial), evidenceSource, evidence, compatibilityReference: compatibility.reference, compatibilityBytes: compatibility.bytes,
     });
     const reportBytes = encoder.encode(`${canonicalJson(preparedReport.report)}\n`);
     history.entries.set(`/record/${reportPath}`, reportBytes);
@@ -477,6 +627,7 @@ describe("provider-neutral lead reconciliation evidence", () => {
       candidate_journals: [{ phase: "construction", journal_id: candidateJournalId, byte_length: candidateBytes.length, content_version: historyDigest(candidateBytes), reference: `candidate:${targetGeneration}/construction/${candidateJournalId}` }],
       required_material: { artifact_bindings: [], checkpoints: [], evidence: [
         { reference: reportReference, content_version: historyDigest(reportBytes) },
+        { reference: compatibility.reference, content_version: historyDigest(compatibility.bytes) },
         { reference: preparedReport.evidenceReference, content_version: historyDigest(evidence) },
       ] },
       expected_state: {}, continuation: { operation: "continue", unresolved_work: [], required_approvals: [] }, requester: "Requester",
@@ -484,7 +635,7 @@ describe("provider-neutral lead reconciliation evidence", () => {
         ...generation.resetManifest.reconciliation, orchestrator: "agent:lead", run_references: [],
         references: [
           { reference: reportReference, purpose: HISTORY_LEAD_RECONCILIATION_PURPOSE },
-          { reference: preparedReport.evidenceReference, purpose: "lead reconciliation evidence" },
+          ...preparedReport.report.materials.map(({ reference, purpose }) => ({ reference, purpose })),
         ],
       },
     };

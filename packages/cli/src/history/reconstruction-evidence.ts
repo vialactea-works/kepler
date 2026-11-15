@@ -9,6 +9,7 @@ import { HistoryError, historyDigest, parseHistoryControl, type HistoryMaterial 
 import { historyState } from "./gateway.js";
 import { canonicalJson, scanJournalBytes } from "./journal.js";
 import { parseHistoryArchiveIndex } from "./archive-index.js";
+import { verifyOriginalRequestMaterial } from "./original-request.js";
 import { parseReconstructionPlan, type ReconstructionArchive, type ReconstructionAuthorityRequest, type ReconstructionCheck, type ReconstructionMaterialRequest, type ReconstructionPlanAction } from "./reconstruction.js";
 
 export interface HistoryAuthorityDocument {
@@ -309,6 +310,16 @@ export class ReconstructionEvidence {
       for (const checkpoint of required.checkpoints) if (!(await this.runtime.checkpoint(clone(checkpoint), null, this.copyHistory(history, plan.generation_id))).exists) return invalid("A required commit is unavailable in its actual prepared repository.");
       const evidence: ResolvedHistoryMaterial[] = [];
       for (const material of required.evidence) evidence.push(await this.read(material.reference, archive, material.content_version, this.copyHistory(history, plan.generation_id)));
+      const originalRequest = await verifyOriginalRequestMaterial({
+        reset,
+        plan,
+        archive,
+        required_material: required,
+        evidence,
+        history,
+        readMaterial: (reference, expected) => this.read(reference, archive, expected, this.copyHistory(history, plan.generation_id)),
+      });
+      if (originalRequest.status !== "valid") return originalRequest;
       const executionIdentities = history.events.flatMap((record) => record.event ? [record.event.id] : []);
       for (const collected of history.events) {
         const event = collected.constructionEvent;

@@ -4,6 +4,7 @@ import * as Path from "node:path";
 import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
 import { historyDigest, historyManifestDigest, parseHistoryControl, parseHistoryGuard, type HistoryInitializationManifest, type HistorySourceEntry } from "../../packages/cli/src/history/control.js";
+import { HISTORY_CLIENT_COMPATIBILITY_FORMAT, HISTORY_CLIENT_COMPATIBILITY_PURPOSE, HISTORY_CLIENT_GENERATION_PROTOCOL, type HistoryClientCompatibilityDocument } from "../../packages/cli/src/history/client-compatibility.js";
 import { parseHistoryArchiveIndex } from "../../packages/cli/src/history/archive-index.js";
 import { collectHistory, type HistoryJournalSource } from "../../packages/cli/src/history/collection.js";
 import { canonicalJson } from "../../packages/cli/src/history/journal.js";
@@ -123,6 +124,10 @@ describe("healthy migration through a matched compiled CLI", () => {
 
     const targetGeneration = randomUUID();
     const archiveId = randomUUID();
+    const evidencePath = `${missionRoot}/recovery/reconciliation/client-scope.txt`;
+    const evidenceBytes = Buffer.from("The migration lead inventoried and stopped the affected test client scope.\n");
+    await Fs.mkdir(Path.dirname(Path.join(repository, evidencePath)), { recursive: true });
+    await Fs.writeFile(Path.join(repository, evidencePath), evidenceBytes);
     const baseInspectionBefore = await snapshotTree(repository);
     const baseInspection = await run(["recovery", "inspect", "--project", repository, "--mission", missionId]);
     expect(baseInspection.exitCode, baseInspection.stderr || baseInspection.stdout).toBe(0);
@@ -138,6 +143,27 @@ describe("healthy migration through a matched compiled CLI", () => {
     });
     expect(directSources).toHaveLength(1);
     const directSource = directSources[0]!;
+    const evidenceSource = baseInventory.find((source) => source.path === evidencePath)!;
+    const evidenceReference = historyLeadReconciliationSnapshotReference(evidenceSource.source_id);
+    const compatibilityPath = `${missionRoot}/recovery/reconciliation/client-compatibility-migrate-${targetGeneration}.json`;
+    const compatibilityReference = historyLeadReconciliationSnapshotReference(`${evidenceSource.origin}:${compatibilityPath}`);
+    const compatibility: HistoryClientCompatibilityDocument = {
+      format: HISTORY_CLIENT_COMPATIBILITY_FORMAT,
+      version: 1,
+      mission_binding: initialManifest.mission_binding,
+      generation_id: targetGeneration,
+      operation: "migrate",
+      required_protocol: HISTORY_CLIENT_GENERATION_PROTOCOL,
+      confirmed_by: "agent:lead",
+      scope_complete: true,
+      external_client_references: [],
+      clients: [{ reference: "client:migration-lead", kind: "interactive", run_references: [], origin_ids: [evidenceSource.origin], protocol_status: "compatible", operational_state: "stopped", client_identity: "Kepler migration CLI fixture adapter build test-commit", evidence: [{ reference: evidenceReference, content_version: historyDigest(evidenceBytes) }] }],
+      unresolved_clients: [],
+      source_material: [{ reference: evidenceReference, content_version: historyDigest(evidenceBytes) }],
+    };
+    const compatibilityBytes = Buffer.from(`${canonicalJson(compatibility)}\n`);
+    await Fs.writeFile(Path.join(repository, compatibilityPath), compatibilityBytes);
+    const reportInventory = envelope((await run(["recovery", "inspect", "--project", repository, "--mission", missionId])).stdout).data.source_inventory as HistorySourceEntry[];
     const beforeProjection = historyState(collectHistory(missionId, [{ sourceId: directSource.source_id, missionId, phase: initialJournal.phase, journalId: initialJournal.journal_id, bytes: phaseBytes }], { completeness: "complete" }));
     expect(beforeProjection).toEqual(initialManifest.expected_state);
 
@@ -156,11 +182,15 @@ describe("healthy migration through a matched compiled CLI", () => {
       prior_history: null,
       target_generation_id: targetGeneration,
       attribution: { orchestrator: "agent:lead", lead: "agent:lead" },
-      original_inventory: baseInventory,
-      original_inventory_hash: historyDigest(canonicalJson(baseInventory)),
-      scope_evidence_references: [reportReference],
+      original_inventory: reportInventory,
+      original_inventory_hash: historyDigest(canonicalJson(reportInventory)),
+      scope_evidence_references: [reportReference, compatibilityReference, evidenceReference].sort(),
       affected_workers: [],
-      materials: [{ reference: reportReference, purpose: "The isolated migration fixture has no active workers or unresolved effects", content_version: reportSource.content_version }],
+      materials: [
+        { reference: reportReference, purpose: "The isolated migration fixture has no active workers or unresolved effects", content_version: reportSource.content_version },
+        { reference: compatibilityReference, purpose: HISTORY_CLIENT_COMPATIBILITY_PURPOSE, content_version: historyDigest(compatibilityBytes) },
+        { reference: evidenceReference, purpose: "Client inventory and stopped-state evidence", content_version: historyDigest(evidenceBytes) },
+      ].sort((left, right) => left.reference < right.reference ? -1 : left.reference > right.reference ? 1 : 0),
       effects: { files: [], repositories: [], external: [], local_claims: { outcome: "clear" } },
       unresolved_items: [],
       unknown_items: [],

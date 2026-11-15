@@ -29,6 +29,7 @@ An installed skill or newer CLI version does not prove that a particular migrati
 A `planned` guide permits inspection and planning only. Stop before migration writes, even if the requester wants to apply it.
 A `released` guide must identify its supporting release and exact executable procedure.
 Verify those capabilities in the selected CLI. A matching version string alone is insufficient.
+For generation-based mission history, verify the actual build or adapter supports `mission-history-generations/v1`, selected-generation reads, captured-version mutations, whole-invocation fencing, and verified preparation. An older-reader guard does not make an unsupported executable safe.
 
 Ask for software installation or version-selection authority when necessary. Do not install a CLI or change a loaded resource home implicitly.
 Keep earlier change-based `workbench` records separate. Do not treat them as mission history without an applicable released guide.
@@ -37,6 +38,8 @@ Keep earlier change-based `workbench` records separate. Do not treat them as mis
 
 Confirm affected workers have stopped. Reconcile locks, file changes, checkpoints, pending writes, and external effects.
 Preserve uncertain bytes. Silence, elapsed time, or a failed command does not prove that work stopped.
+
+For generation-based history, inventory ordinary clients, SDK adapters, automations, affected runs, and known working copies, including external or offline copies. Stop incompatible or unverified clients through their supported controls. Retain the guide's exact compatibility evidence and source material. Keep those clients stopped until an actual compatible client can complete verified preparation. Do not invent an origin ID for an external copy or claim that static evidence detects a client restarted outside Kepler.
 
 Use the guide's read-only inspection and preview procedure.
 Prepare a manifest that binds the guide hash, source inventory, target format, exact operations, backup, and expected results.
@@ -49,6 +52,7 @@ A contract approval, release announcement, or previous migration approval does n
 
 Apply only a released guide through its supported operations and within the approved scope.
 Recheck the source inventory, guide hash, ownership, and approved plan before the first change.
+Repeat the real client-state check before apply or resumed publication. Retained evidence bytes do not prove a stopped client stayed stopped. An exact completed historical retry must not stop later valid work or reactivate an old selection.
 Verify the retained backup before moving or replacing any deprecated source.
 
 Use CLI-owned operations for journal, control, and lifecycle changes. Do not rewrite, truncate, or move journals by hand.

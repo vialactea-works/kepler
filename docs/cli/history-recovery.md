@@ -37,6 +37,16 @@ Both commands inspect raw mission material without a workflow projection prerequ
 
 Inspection does not acquire a mutation claim, prepare a recovery, change selection, or start execution. A local selector is not authority until the gateway validates its receipts, guard, generation, and shared binding. An inspection report is advisory; the operation must recheck its inputs under its own fence.
 
+## Compatible clients
+
+Before migration, reset activation, or reconstruction publication, inventory affected clients, adapters, automations, runs, and known working copies. Stop incompatible or unverified clients through their supported controls. Confirm terminal runs, reconcile effects, and repeat the real client-state check before apply. Static evidence cannot detect an unsupported client restarted outside Kepler.
+
+The lead report must retain exactly one `kepler.history-client-compatibility` document with purpose `history-client-compatibility`, plus exact supporting source hashes. Reset and publication bind those references through their existing reconciliation fields. Publication also binds them in required evidence. Migration uses its fixed lead-report path and approved source inventory; initialization gains no new field. See [Client compatibility evidence](../recovery-client-compatibility.md) for the full strict contract.
+
+Protocol status and operational state are separate. A compatible client can be stopped. A client with an unknown build stays unverified and stopped with a null identity; a placeholder or version label cannot establish support. External references can coexist with known run or origin associations. Unregistered quiescent copies need explicit retained scope evidence, not invented physical origins or write authority.
+
+The pinned legacy Kepler 3.1.0 build `d2a9f5037c227765818e220443f426303bef4b45` does not enforce the generation guard. It can return an incorrect empty projection or append deprecated journals. Keep it stopped; another build cannot be classified from `3.1.0` alone. Only an actual compatible client can use verified preparation and captured-version fencing.
+
 ## Manifest preview and approval
 
 `migrate`, `reset`, and `publish` use the same request envelope. Put a complete operation-specific manifest in the `manifest` field.
@@ -129,7 +139,9 @@ The plan binds the selected reset, computed complete archive index, every histor
 
 Retain original events byte for byte. Give replacements and additions fresh identities, explicit authority, and actual proof where their owner requires it. Do not invent passed checks, approved artifacts, completed work, causal links, or acceptance from a summary. A consistent projection alone does not prove that a check ran.
 
-A clean restart must reconfirm the mission selections and preserve the known unit identities and order. Its generated bootstrap facts require a retained exact clean-restart decision. The `HistoryAuthorityDocument` binds the requester, decision, exact action or clean-restart input hash, and supporting material. Place that document and its exact hash in `required_material.evidence`. Do not create an approval document without the requester's actual decision.
+A clean restart must reconfirm the mission selections and preserve the known unit identities. Its generated bootstrap facts require a retained exact clean-restart decision. The `HistoryAuthorityDocument` binds the requester, decision, exact action or clean-restart input hash, and supporting material. Place that document and its exact hash in `required_material.evidence`. Do not create an approval document without the requester's actual decision.
+
+Preserve the exact original request string. An unchanged context or event alias is not text proof. A supported creation in verified raw archived bytes can establish the text without a healthy old projection. If the original is unavailable or conflicting records need correction, include the strict `HistoryOriginalRequestDocument` and its exact hash in required evidence. Its `decision_reference` must resolve to the canonical requester statement and exact source hash defined in [Original-request evidence](../recovery-reconstruction-evidence.md#exact-original-request). Generic action or restart approval is insufficient. Rendering the statement supplies no requester consent or authentication. Independent draft replay repeats this check before publication.
 
 Required material must resolve to actual snapshot bytes, a verified archive source, or a repository-qualified committed blob. Required commits and artifact content must exist in the actual prepared repositories. Missing proof remains a failed check; no permissive production verifier supplies a success receipt.
 
@@ -168,4 +180,6 @@ All normal readers select control before loading phase bytes. Legacy history is 
 - [Reconstruction plan](../../packages/cli/src/history/reconstruction.ts): `ReconstructionPlan`.
 - [Lead reconciliation report](../../packages/cli/src/history/reconciliation.ts): `HistoryLeadReconciliationReport`.
 - [Retained action and progress proof](../../packages/cli/src/history/reconstruction-evidence.ts): `HistoryAuthorityDocument` and owner proof contracts.
+- [Client compatibility evidence](../recovery-client-compatibility.md) and [strict client types](../../packages/cli/src/history/client-compatibility.ts).
+- [Original-request evidence](../recovery-reconstruction-evidence.md#exact-original-request) and [strict assertion/statement contract](../../packages/cli/src/history/original-request.ts).
 - [Strict CLI envelopes](../../packages/cli/src/cli/recovery-execution.ts) and [operation requests](../../packages/cli/src/history/operations.ts).

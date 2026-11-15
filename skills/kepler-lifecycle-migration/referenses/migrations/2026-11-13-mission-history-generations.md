@@ -47,7 +47,7 @@ Target layout:
 ```
 
 The reserved `control/` and `generations/` directories are not phases.
-The control directory contains activation records, control-event receipts, and required older-reader guards.
+The control directory contains activation records, control-event receipts, and the generation-protocol guard. That guard informs clients that understand it. It does not make unsupported older executables reject the records.
 Guard files belong to control handling. They must not recreate a deprecated phase directory.
 
 The directory supplies generation identity without changing retained event bytes.
@@ -58,9 +58,10 @@ The migration must preserve event identities, content, causes, and original jour
 
 1. Confirm the exact record home, mission ID, source layout, selected CLI, and matching resources.
 2. Verify that a released operation implements this migration and the target reader is available.
-3. Confirm affected workers have stopped and reconcile ownership, pending writes, checkpoints, and external effects.
-4. Identify every available source, known loss, conflicting copy, and required piece of evidence.
-5. Obtain approval for the exact migration manifest, including local preservation and retirement of deprecated paths.
+3. Inventory affected clients, adapters, automations, runs, and known working copies, including external or offline copies. Establish actual `mission-history-generations/v1` support, stop incompatible or unverified clients through supported controls, and retain the required compatibility evidence.
+4. Confirm affected workers have stopped and reconcile ownership, pending writes, checkpoints, and external effects. Unconfirmed client state blocks eligibility; a quiet or offline copy is not proof of termination.
+5. Identify every available source, known loss, conflicting copy, and required piece of evidence. Compatibility inventory does not turn an unjoined copy into a missing history source.
+6. Obtain approval for the exact migration manifest, including local preservation and retirement of deprecated paths.
 
 While this guide remains planned, stop after inspection and planning. Do not execute the remaining target procedure.
 
@@ -73,7 +74,9 @@ Confirm that the selected release provides `kepler recovery inspect` and `kepler
 In the supporting release, `migrate` reads one strict JSON request on stdin. Preview uses `{ "phase": "preview", "manifest": <complete manifest> }`. Apply uses `"phase": "apply"` with `approved_manifest_hash`, the exact `requester`, and a retained `decision_reference`. The manifest binds the resource reference `resource:skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md` and its actual guide hash. The CLI must verify the matched resource package, released status, and supporting version before migration.
 
 Prepare a manifest that binds this guide's hash, source inventory, target generation, archive, and expected workflow state.
-Include the proposed control records, older-reader protection, source retirement, and all known limitations.
+Include the proposed control records, compatible-client gate, generation-protocol guard, source retirement, and all known limitations.
+The supporting operation must validate one `kepler.history-client-compatibility` document through the retained lead report and exact source hashes. Migration uses its existing fixed report location and approved source inventory; it adds no `reconciliation.references` field to initialization.
+Keep protocol status separate from observed client state. Unknown clients and externally identified quiescent copies can remain stopped without claiming a compatible executable or inventing an origin ID. Only an actual compatible client can later complete verified preparation.
 
 The requester must see which files will move and which current facts will remain unchanged.
 A healthy format migration must preserve the derived workflow state. It must not infer new approvals or completed work.
@@ -103,7 +106,8 @@ Under shared coordination, recheck the approved inputs and actual ownership.
 Publish the exact control records and activation selection through the supported operation.
 Verify that normal readers select only the new generation.
 
-Verify the required older-reader protection. Do not assume that an unknown phase makes an old reader stop.
+Repeat the real client-state check before publication or a resumed apply. Retained evidence alone does not prove that a stopped client stayed stopped.
+Verify the compatible-client gate and selected-generation behavior. The pinned legacy Kepler 3.1.0 build `d2a9f5037c227765818e220443f426303bef4b45` is unsupported; a different build cannot be classified from the version string alone. The control guard does not fence that old executable, and static evidence cannot detect an unsupported client restarted outside Kepler's controls.
 Do not install, select, or invoke unsupported older software against live records as a test.
 
 ### 5. Retire direct phase directories
@@ -134,7 +138,7 @@ Use `kepler recovery status --mission <mission-id> --project <record-home>` to i
 
 A published generation with unfinished source retirement is a partial migration.
 A retry must verify its original archive and finish only the missing approved steps.
-Changed inputs require a new plan and approval. A completed retry must not reactivate an older generation.
+Changed inputs require a new plan and approval. A completed historical retry must not stop later valid work or reactivate an older generation. Keep stale or offline copies stopped until they use an actual compatible client and complete verified preparation.
 
 Preserve conflicting copies and damaged bytes. If format-only preservation is impossible, propose the separate history-recovery procedure.
 Migration does not authorize reset, reconstruction of decisions, rollback of code, or deletion of unrelated files.

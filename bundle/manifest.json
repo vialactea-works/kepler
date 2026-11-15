@@ -34,8 +34,8 @@
     "skills/kepler-grilling/NOTICE": "sha256:7af7889fb3cc4b435ba61637f254e47798ccd35ca937c6ef6dba88cc0b5dfe1c",
     "skills/kepler-grilling/SKILL.md": "sha256:1b75fed8480a06e8165b52f8c04d5e824006842859844965a47c9cdc6ad26410",
     "skills/kepler-init/SKILL.md": "sha256:62cc81b1b6282d0f7228b2237f4717bd89a27c7e8b84be60474fc56471213ed1",
-    "skills/kepler-lifecycle-migration/SKILL.md": "sha256:52bd46d55d78c66ecb3b8f56509b20a95466b395339f90a22a154f2448c906c1",
-    "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md": "sha256:5f39b88c9c0e7de86315e29001179367f234e2cac240ec09f363efe07edad99e",
+    "skills/kepler-lifecycle-migration/SKILL.md": "sha256:dd76e60e5c8a3ffeed2a933a05ed1be6e6549e8556a87a93a41d4b69f904540e",
+    "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md": "sha256:a6196b3a69921c3c0166bd990935d5640f2b5b7691411229d9d965a4c551a8ff",
     "skills/kepler-mission-startup/SKILL.md": "sha256:9f4a17b08ee36e56de3ad9e825334d6bdff9577b66d51e197b7e8ecbaa27fe33",
     "skills/kepler-mission-startup/references/agent-operations.md": "sha256:bfabb865fd54d7c6176d4726bc5afc5cc0989fe5b999f0a22a278ca47d4ab1c4",
     "skills/kepler-mission-startup/references/standard-cli-walkthrough.md": "sha256:0cf7321a3c75f982e0a711ff629e71c1224846957b5c68c275703c1580d3a718",
@@ -70,7 +70,7 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "resource_digest": "sha256:cb0aad5cebd0531b23e112d104d542e9e70ea98ca981202bfa782034d9e9c255",
+  "resource_digest": "sha256:083c81e33b91d93e0ef884bc6f1b96d0fd53f4d226b463e01d0df50f82547a8d",
   "skills": [
     {
       "id": "kepler-init",
@@ -144,7 +144,7 @@
     },
     {
       "id": "kepler-lifecycle-migration",
-      "digest": "sha256:52bd46d55d78c66ecb3b8f56509b20a95466b395339f90a22a154f2448c906c1",
+      "digest": "sha256:dd76e60e5c8a3ffeed2a933a05ed1be6e6549e8556a87a93a41d4b69f904540e",
       "required": false
     }
   ],

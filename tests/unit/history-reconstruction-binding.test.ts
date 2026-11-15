@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { collectHistory } from "../../packages/cli/src/history/collection.js";
-import { missionBindingMatchesCreation, validateCandidateMissionBinding } from "../../packages/cli/src/history/reconstruction-binding.js";
+import { missionBindingMatchesCreation, missionBindingReferencesCreation, validateCandidateMissionIdentity } from "../../packages/cli/src/history/reconstruction-binding.js";
 import { historyGenerationFixture, historyTestBytes, historyTestEvent } from "../support/history-generation.js";
 
 const candidate = (f: ReturnType<typeof historyGenerationFixture>, events = [f.creation, f.prepared, f.unit]) => {
@@ -10,10 +10,14 @@ const candidate = (f: ReturnType<typeof historyGenerationFixture>, events = [f.c
 };
 
 describe("reset-bound candidate mission identity", () => {
-  it("accepts literal, creation-event and context request references", () => {
+  it("keeps strict creation-reference matching separate from literal request text", () => {
     const f = historyGenerationFixture();
     const binding = f.resetManifest.mission_binding;
     expect(missionBindingMatchesCreation(binding, f.creation)).toBe(true);
+    const literalOnly = { ...f.creation, data: { ...f.creation.data, contexts: [] } };
+    const literalBinding = { ...binding, request_reference: "Implement the selected work" };
+    expect(missionBindingMatchesCreation(literalBinding, literalOnly)).toBe(true);
+    expect(missionBindingReferencesCreation(literalBinding, literalOnly)).toBe(false);
     expect(missionBindingMatchesCreation({ ...binding, request_reference: `event:${f.creation.id}` }, f.creation)).toBe(true);
     const contextual = { ...f.creation, data: { ...f.creation.data, contexts: [{ reference: "request:original-context", purpose: "Original request" }] } };
     expect(missionBindingMatchesCreation({ ...binding, request_reference: "request:original-context" }, contextual)).toBe(true);
@@ -37,15 +41,15 @@ describe("reset-bound candidate mission identity", () => {
     const f = historyGenerationFixture();
     const binding = f.resetManifest.mission_binding;
     const history = candidate(f);
-    expect(() => validateCandidateMissionBinding(binding, history, "history_reconstruction_binding_mismatch")).not.toThrow();
+    expect(() => validateCandidateMissionIdentity(binding, history, "history_reconstruction_binding_mismatch")).not.toThrow();
     for (const changed of [
       { ...binding, unit_ids: [] },
       { ...binding, unit_ids: [...binding.unit_ids, "2026-11-14-extra"] },
-      { ...binding, request_reference: "request:another-request" },
       { ...binding, record_home_repository_id: "another-repository" },
-    ]) expect(() => validateCandidateMissionBinding(changed, history, "history_reconstruction_binding_mismatch")).toThrow(expect.objectContaining({ code: "history_reconstruction_binding_mismatch" }));
-    expect(() => validateCandidateMissionBinding(binding, { ...history, events: history.events.filter((entry) => entry.constructionEvent?.type !== "construction.mission-created") }, "history_reconstruction_binding_mismatch")).toThrow(expect.objectContaining({ code: "history_reconstruction_binding_mismatch" }));
-    expect(() => validateCandidateMissionBinding(binding, { ...history, events: [...history.events, history.events[0]!] }, "history_reconstruction_binding_mismatch")).toThrow(expect.objectContaining({ code: "history_reconstruction_binding_mismatch" }));
+    ]) expect(() => validateCandidateMissionIdentity(changed, history, "history_reconstruction_binding_mismatch")).toThrow(expect.objectContaining({ code: "history_reconstruction_binding_mismatch" }));
+    expect(() => validateCandidateMissionIdentity({ ...binding, request_reference: "request:another-request" }, history, "history_reconstruction_binding_mismatch")).not.toThrow();
+    expect(() => validateCandidateMissionIdentity(binding, { ...history, events: history.events.filter((entry) => entry.constructionEvent?.type !== "construction.mission-created") }, "history_reconstruction_binding_mismatch")).toThrow(expect.objectContaining({ code: "history_reconstruction_binding_mismatch" }));
+    expect(() => validateCandidateMissionIdentity(binding, { ...history, events: [...history.events, history.events[0]!] }, "history_reconstruction_binding_mismatch")).toThrow(expect.objectContaining({ code: "history_reconstruction_binding_mismatch" }));
   });
 
   it("accepts the exact unit identity set in either manifest order", () => {
@@ -54,7 +58,7 @@ describe("reset-bound candidate mission identity", () => {
     const units = ids.map((id) => historyTestEvent("construction.unit-created", { ...f.unit.data, unit_id: id, directory: `construction/units-of-work/${id}` }, f.journalId, [f.prepared.id]));
     const history = candidate(f, [f.creation, f.prepared, ...units]);
     for (const unit_ids of [ids, [...ids].reverse()]) {
-      expect(() => validateCandidateMissionBinding({ ...f.resetManifest.mission_binding, unit_ids }, history, "history_reconstruction_binding_mismatch")).not.toThrow();
+      expect(() => validateCandidateMissionIdentity({ ...f.resetManifest.mission_binding, unit_ids }, history, "history_reconstruction_binding_mismatch")).not.toThrow();
     }
   });
 });

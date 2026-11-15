@@ -4,7 +4,7 @@ import { parseStrictJson } from "../json/strict-json.js";
 import { collectHistory, type HistoryCollection, type HistoryJournalSource } from "./collection.js";
 import { HistoryError, historyDigest, historyMode, parseHistoryControl, parseHistoryGuard, type HistoryControl } from "./control.js";
 import { canonicalJson, scanJournalBytes } from "./journal.js";
-import { missionBindingMatchesCreation, validateCandidateMissionBinding } from "./reconstruction-binding.js";
+import { missionBindingMatchesCreation, validateCandidateMissionIdentity } from "./reconstruction-binding.js";
 
 export interface HistoryControlJournal {
   readonly journalId: string;
@@ -158,7 +158,7 @@ export const selectMissionHistory = (input: HistoryGatewayInput): MissionHistory
       if (!root || root.type !== "mission.history-reset" || resetManifest?.format !== "kepler.mission-history-reset") {
         throw new HistoryError("history_rebuilt_binding_mismatch", "A rebuilt selection requires its selected reset binding.");
       }
-      validateCandidateMissionBinding(resetManifest.mission_binding, published, "history_rebuilt_binding_mismatch");
+      validateCandidateMissionIdentity(resetManifest.mission_binding, published, "history_rebuilt_binding_mismatch");
     }
     if (control.type === "mission.history-initialized" && manifest.format === "kepler.mission-history-initialization") {
       const creation = published.events.find((item) => item.event?.id === control.caused_by[0] && item.status === "valid")?.constructionEvent;

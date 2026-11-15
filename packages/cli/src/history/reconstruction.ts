@@ -32,7 +32,7 @@ import { historyArchiveIndexDigest, parseHistoryArchiveIndex, type HistoryArchiv
 import { collectHistory, type HistoryCollection } from "./collection.js";
 import { historyState } from "./gateway.js";
 import { canonicalJson, scanJournalBytes, serializeJournalEvent } from "./journal.js";
-import { validateCandidateMissionBinding } from "./reconstruction-binding.js";
+import { validateCandidateMissionIdentity } from "./reconstruction-binding.js";
 
 export interface ReconstructionPlanAction {
   readonly id: string;
@@ -1256,7 +1256,7 @@ export const prepareReconstruction = async (input: {
   const history = collectHistory(plan.mission_id, candidateSources, { completeness: "complete", generationId: plan.generation_id });
   if (history.issues.length) fail("history_reconstruction_history_invalid", "The complete candidate has damaged records, invalid identities, or missing/uncertain causes.", { issues: history.issues });
   const state = historyState(history);
-  validateCandidateMissionBinding(resetManifest.mission_binding, history, "history_reconstruction_binding_mismatch");
+  validateCandidateMissionIdentity(resetManifest.mission_binding, history, "history_reconstruction_binding_mismatch");
 
   const requiredMaterial = cloneJson(plan.required_material);
   const candidateHistorySnapshot = (): HistoryCollection => collectHistory(plan.mission_id, candidateJournals.map((journal) => ({

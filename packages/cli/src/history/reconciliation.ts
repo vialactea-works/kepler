@@ -1,5 +1,6 @@
 import { Ajv, type AnySchemaObject } from "ajv";
 import { HistoryAccess, parseLiveHistoryBinding } from "./access.js";
+import { HISTORY_CLIENT_COMPATIBILITY_PURPOSE, parseHistoryClientCompatibilityDocument, validateHistoryClientCompatibility } from "./client-compatibility.js";
 import { HistoryArchives } from "./archives.js";
 import { historyArchiveIndexDigest } from "./archive-index.js";
 import {
@@ -587,6 +588,30 @@ const missionBinding = (manifest: HistoryManifest, priorControl?: ReturnType<typ
   };
 };
 
+const clientMissionBinding = (manifest: HistoryManifest, priorControl?: ReturnType<typeof parseHistoryControl>) => {
+  if (manifest.format !== "kepler.mission-history-rebuild") return manifest.mission_binding;
+  const priorManifest = priorControl?.data.manifest;
+  if (!priorManifest || priorManifest.format === "kepler.mission-history-rebuild") return fail("Publication has no verified mission binding in its selected reset.");
+  return priorManifest.mission_binding;
+};
+
+const originalPriorOriginIds = (request: HistoryReconciliationRequest, missionId: string): readonly string[] => {
+  const bindingPath = `${runtimeBase(missionId)}/coordination/history-selection.json`;
+  let bytes: Uint8Array | undefined;
+  if (request.intent) {
+    const source = request.intent.original_sources.find((entry) => entry.origin === "local-runtime" && entry.path === bindingPath);
+    const input = source ? request.intent.replacement_inputs.find((entry) => entry.source_id === source.source_id) : undefined;
+    if (input) bytes = new Uint8Array(Buffer.from(input.bytes_base64, "base64"));
+  } else {
+    bytes = request.snapshot.files.find((file) => file.origin === "local-runtime" && file.path === bindingPath)?.bytes;
+  }
+  if (!bytes) return [];
+  try {
+    const binding = parseLiveHistoryBinding(bytes);
+    return binding.mission_id === missionId ? binding.origins : [];
+  } catch { return []; }
+};
+
 const reportReference = (request: HistoryReconciliationRequest, context: HistoryRepositoryContext): string => {
   const missionId = historyManifestMission(request.manifest);
   const expectedPath = resetReportPath(missionId, request.manifest);
@@ -685,6 +710,7 @@ const verifyReport = async (access: HistoryAccess, request: HistoryReconciliatio
     verifyReportReferences(request, reference, report);
     const sourceEntries = new Map(report.original_inventory.map((entry) => [snapshotReference(entry.source_id), entry]));
     const readEvidence = createHistoryReconciliationEvidenceReader(access, request.recordHome, request.snapshot);
+    const materialBytes = new Map<string, Uint8Array>();
     for (const material of report.materials) {
       const evidenceSourceId = sourceReference(material.reference);
       if (!evidenceSourceId) return fail("Retained evidence must use portable snapshot source identities.");
@@ -695,7 +721,35 @@ const verifyReport = async (access: HistoryAccess, request: HistoryReconciliatio
       if (!entry || sourceKey(entry) !== sourceKey(inventoryEntry(evidenceFile)) || entry.byte_length !== evidenceFile.bytes.length || entry.content_version !== material.content_version || evidenceFile.bytes.length === 0) return fail("Retained evidence bytes do not match the report's original inventory and content hash.");
       const retained = await readEvidence(material.reference);
       if (retained.content_version !== material.content_version || !equalBytes(retained.bytes, evidenceFile.bytes)) return fail("Retained evidence bytes are missing or changed.");
+      materialBytes.set(material.reference, retained.bytes);
     }
+    const compatibilityMaterials = report.materials.filter((material) => material.purpose === HISTORY_CLIENT_COMPATIBILITY_PURPOSE);
+    if (compatibilityMaterials.length !== 1) return fail("The lead report must retain exactly one client compatibility document.");
+    const compatibilityMaterial = compatibilityMaterials[0]!;
+    const compatibilityBytes = materialBytes.get(compatibilityMaterial.reference);
+    if (!compatibilityBytes) return fail("The retained client compatibility document is missing.");
+    const compatibility = parseHistoryClientCompatibilityDocument(decoder.decode(compatibilityBytes));
+    const operation = manifest.format === "kepler.mission-history-rebuild" ? "publish" : manifest.format === "kepler.mission-history-reset" ? "reset" : manifest.operation;
+    if (operation === "create") return fail("New startup initialization has no client compatibility gate.");
+    const originIds = [...new Set([
+      ...context.origins.map((origin) => origin.id),
+      ...context.unavailableOrigins.map((origin) => origin.id),
+      ...originalPriorOriginIds(request, missionId),
+    ])];
+    validateHistoryClientCompatibility(compatibility, {
+      mission_binding: clientMissionBinding(manifest, priorControl),
+      generation_id: manifest.generation_id,
+      operation,
+      lead: report.attribution.lead,
+      run_references: report.affected_workers.map((worker) => worker.run_reference),
+      origin_ids: originIds,
+    }, {
+      reference: compatibilityMaterial.reference,
+      content_version: historyDigest(compatibilityBytes),
+      report_reference: reference,
+      materials: report.materials,
+      scope_evidence_references: report.scope_evidence_references,
+    });
     for (const effect of report.effects.files) {
       const unavailable = context.unavailableOrigins.some((origin) => origin.id === effect.origin && origin.kind === "missing" && request.snapshot.unavailable.some((source) => source.source_id === `${origin.id}:${missionBase(missionId)}` && source.path === missionBase(missionId) && source.kind === "missing"));
       if (!origins.has(effect.origin) && !unavailable) return fail("A file effect names an origin outside the verified repository scope.");

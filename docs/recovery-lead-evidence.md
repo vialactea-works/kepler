@@ -35,6 +35,16 @@ Use `kepler.history-lead-reconciliation`, version `1`. Store one canonical JSON 
 
 All object fields are required; unknown fields, duplicate JSON keys, duplicate source identities, duplicate references, and noncanonical report bytes are rejected. Every evidence reference in a worker or effect must name an entry in `materials`, and every material must support at least one report assertion. The report does not carry check results or imply that code checks passed.
 
+## Compatible-client gate
+
+Before migration, reset activation, or reconstruction publication, retain one `history-client-compatibility` material under the contract in [Recovery client compatibility evidence](recovery-client-compatibility.md). Its reference and exact hash must appear once in `materials` and in `scope_evidence_references`. The document's `source_material` items must each appear once in report materials with the same hash, a nonblank purpose, and a scope-evidence use. Each client evidence item resolves to one of those source materials with the same hash. The compatibility document cannot cite itself or this lead report.
+
+The lead inventories actual clients and known working copies, including stopped or offline copies that may later resume. It establishes protocol support from evidence for the actual build or adapter, stops incompatible or unverified clients, confirms every affected run is terminal, reconciles effects, and ensures only compatible clients can resume or join after verified preparation. `scope_complete` is the lead's explicit completeness statement, not a backend query or authenticated fact.
+
+Client run-reference union must equal the report's affected run set. Origin-ID union must equal fresh resolved origins, known unavailable origins, and strict prior membership retained in the approved inputs. Apply and resumed publication use the operation intent's exact original selector bytes for prior membership rather than the new producer selection. Each client entry must associate with a run, an origin, or a declared external reference. External references identify additional affected clients or copies without fabricating origin IDs; they grant no membership or write authority. A quiescent copy is stopped, unverified, identity-unknown, and has no run references.
+
+For reset and publication, the manifest's existing reconciliation references remain exactly the report and its materials. Publication's existing required evidence binds the report and every material by hash. Migration initialization has no `reconciliation.references` field; keep the fixed report path and bind all retained material in its source inventory instead. No startup field is added. Kepler validates bytes and consistency; the lead must repeat real client-state checks before apply or resumed publication because unchanged evidence does not prove a client stayed stopped.
+
 ## Portable references
 
 The only material-reference form is:

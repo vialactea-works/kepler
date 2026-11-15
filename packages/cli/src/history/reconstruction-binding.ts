@@ -10,18 +10,29 @@ const candidateFact = (value: unknown): CandidateFact | null => {
   return value as CandidateFact;
 };
 
-export const missionBindingMatchesCreation = (binding: MissionHistoryBinding, value: unknown): boolean => {
+export const missionBindingMatchesCreationIdentity = (binding: MissionHistoryBinding, value: unknown): boolean => {
   const event = candidateFact(value);
   if (!event || event.type !== "construction.mission-created") return false;
   const home = event.data.record_home;
-  const contexts = event.data.contexts;
   return event.data.mission_id === binding.mission_id && record(home) && home.repository_id === binding.record_home_repository_id &&
-    event.data.workflow === binding.workflow &&
-    (event.data.request === binding.request_reference || `event:${event.id}` === binding.request_reference ||
-      Array.isArray(contexts) && contexts.some((context: unknown) => record(context) && context.reference === binding.request_reference));
+    event.data.workflow === binding.workflow;
 };
 
-export const validateCandidateMissionBinding = (
+export const missionBindingReferencesCreation = (binding: MissionHistoryBinding, value: unknown): boolean => {
+  const event = candidateFact(value);
+  if (!event || event.type !== "construction.mission-created" || !missionBindingMatchesCreationIdentity(binding, event)) return false;
+  const contexts = event.data.contexts;
+  return `event:${event.id}` === binding.request_reference ||
+    Array.isArray(contexts) && contexts.some((context: unknown) => record(context) && context.reference === binding.request_reference);
+};
+
+export const missionBindingMatchesCreation = (binding: MissionHistoryBinding, value: unknown): boolean => {
+  const event = candidateFact(value);
+  return event?.type === "construction.mission-created" && missionBindingMatchesCreationIdentity(binding, event) &&
+    (event.data.request === binding.request_reference || missionBindingReferencesCreation(binding, event));
+};
+
+export const validateCandidateMissionIdentity = (
   binding: MissionHistoryBinding,
   history: HistoryCollection,
   errorCode: string,
@@ -30,8 +41,8 @@ export const validateCandidateMissionBinding = (
     const event = candidateFact(entry.constructionEvent);
     return entry.status === "valid" && event?.type === "construction.mission-created" ? [event] : [];
   });
-  if (creations.length !== 1 || !missionBindingMatchesCreation(binding, creations[0])) {
-    throw new HistoryError(errorCode, "The candidate mission creation does not match the selected reset binding.", {
+  if (creations.length !== 1 || !missionBindingMatchesCreationIdentity(binding, creations[0])) {
+    throw new HistoryError(errorCode, "The candidate mission creation does not match the selected reset identity.", {
       mission_id: binding.mission_id,
       creation_count: creations.length,
     });

@@ -330,7 +330,7 @@ describe("pure history reconstruction compiler", () => {
     await reconstructionError(run(f, plan), "history_reconstruction_binding_mismatch");
   });
 
-  it("rejects clean-restart request changes outside the original binding aliases", async () => {
+  it("delegates clean-restart request text to material verification", async () => {
     const f = fixture();
     const repository = {
       repository_id: "record-home", context: { kind: "existing" as const }, branch: { kind: "current" as const },
@@ -345,7 +345,10 @@ describe("pure history reconstruction compiler", () => {
         units: [{ unit_id: f.base.unitId, directory: `construction/units-of-work/${f.base.unitId}`, initial_effort: { default: "standard", stage_overrides: {}, selected_by: "Requester" } }],
       },
     };
-    await reconstructionError(run(f, plan), "history_reconstruction_binding_mismatch");
+    const checks = dependencies();
+    checks.verifyMaterial.mockResolvedValue({ status: "invalid", reason: "The exact original request was not verified" });
+    await reconstructionError(run(f, plan, checks), "history_reconstruction_material_invalid");
+    expect(checks.verifyMaterial).toHaveBeenCalledTimes(1);
   });
 
   it("creates a clean restart only from typed requester-confirmed bootstrap context", async () => {

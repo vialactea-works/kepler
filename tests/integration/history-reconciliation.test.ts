@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { parseLiveHistoryBinding } from "../../packages/cli/src/history/binding.js";
 import { HistoryArchives } from "../../packages/cli/src/history/archives.js";
 import { historyDigest, historyManifestDigest, type HistoryResetManifest } from "../../packages/cli/src/history/control.js";
+import { HISTORY_CLIENT_COMPATIBILITY_FORMAT, HISTORY_CLIENT_COMPATIBILITY_PURPOSE, HISTORY_CLIENT_GENERATION_PROTOCOL, type HistoryClientCompatibilityDocument } from "../../packages/cli/src/history/client-compatibility.js";
 import { canonicalJson } from "../../packages/cli/src/history/journal.js";
 import { createNodeHistoryReconciliation, HISTORY_LEAD_RECONCILIATION_FORMAT, HISTORY_LEAD_RECONCILIATION_PURPOSE, historyLeadReconciliationSnapshotReference, serializeHistoryLeadReconciliationReport, type HistoryLeadReconciliationReport } from "../../packages/cli/src/history/reconciliation.js";
 import { historyInventory } from "../../packages/cli/src/history/storage.js";
@@ -20,7 +21,7 @@ afterEach(async () => {
   }
 });
 
-const fixture = async (options: { readonly homeSelector?: "damaged" | "missing"; readonly boundPeer?: boolean } = {}) => {
+const fixture = async (options: { readonly homeSelector?: "damaged" | "missing"; readonly boundPeer?: boolean; readonly compatibility?: (document: HistoryClientCompatibilityDocument) => unknown; readonly compatibilityMaterials?: "missing" | "duplicate" } = {}) => {
   const repository = await createHistoryRepository();
   roots.push(repository.parent);
   const { root, f, access } = repository;
@@ -49,16 +50,47 @@ const fixture = async (options: { readonly homeSelector?: "damaged" | "missing";
   if (options.homeSelector === "missing") await Fs.unlink(activeFile);
   const targetGeneration = randomUUID();
   const evidencePath = `.kepler/missions/${f.missionId}/recovery/reconciliation/evidence.txt`;
+  const compatibilityPath = `.kepler/missions/${f.missionId}/recovery/reconciliation/client-compatibility-reset-${targetGeneration}.json`;
   const reportPath = `.kepler/missions/${f.missionId}/recovery/reconciliation/reset-${targetGeneration}.json`;
   const reportFile = Path.join(root, reportPath);
   const evidenceFile = Path.join(root, evidencePath);
+  const compatibilityFile = Path.join(root, compatibilityPath);
   await Fs.mkdir(Path.dirname(reportFile), { recursive: true });
-  const evidenceBytes = encoder.encode("The stage lead recorded the scope review.\n");
+  const evidenceBytes = encoder.encode("The stage lead recorded the affected client and working-copy scope.\n");
   await Fs.writeFile(evidenceFile, evidenceBytes);
-  const beforeReport = await access.storage.snapshot(root, f.missionId);
-  const evidenceSource = beforeReport.files.find((file) => file.path === evidencePath)!;
+  const beforeCompatibility = await access.storage.snapshot(root, f.missionId);
+  const evidenceSource = beforeCompatibility.files.find((file) => file.path === evidencePath)!;
   const evidenceReference = historyLeadReconciliationSnapshotReference(evidenceSource.sourceId);
+  const context = await access.storage.context(root);
+  const bindingFile = beforeCompatibility.files.find((file) => file.origin === "local-runtime" && file.path.endsWith("/coordination/history-selection.json"));
+  let priorOrigins: readonly string[] = [];
+  try { priorOrigins = bindingFile ? parseLiveHistoryBinding(bindingFile.bytes).origins : []; } catch {}
+  const originIds = [...new Set([...context.origins.map((origin) => origin.id), ...context.unavailableOrigins.map((origin) => origin.id), ...priorOrigins])].sort();
+  const recordHomeOrigin = context.origins.find((origin) => origin.root === root)!;
+  const compatibilityReference = historyLeadReconciliationSnapshotReference(`${recordHomeOrigin.id}:${compatibilityPath}`);
+  const compatibilityValue: HistoryClientCompatibilityDocument = {
+    format: HISTORY_CLIENT_COMPATIBILITY_FORMAT,
+    version: 1,
+    mission_binding: f.manifest.mission_binding,
+    generation_id: targetGeneration,
+    operation: "reset",
+    required_protocol: HISTORY_CLIENT_GENERATION_PROTOCOL,
+    confirmed_by: "agent:lead",
+    scope_complete: true,
+    external_client_references: [],
+    clients: [{ reference: "client:recovery-lead", kind: "interactive", run_references: [], origin_ids: originIds, protocol_status: "compatible", operational_state: "stopped", client_identity: "Kepler integration-test adapter build test-commit", evidence: [{ reference: evidenceReference, content_version: historyDigest(evidenceBytes) }] }],
+    unresolved_clients: [],
+    source_material: [{ reference: evidenceReference, content_version: historyDigest(evidenceBytes) }],
+  };
+  const compatibilityInput = options.compatibility ? options.compatibility(compatibilityValue) : compatibilityValue;
+  const compatibilityBytes = encoder.encode(`${canonicalJson(compatibilityInput)}\n`);
+  await Fs.writeFile(compatibilityFile, compatibilityBytes);
+  const beforeReport = await access.storage.snapshot(root, f.missionId);
   const active = beforeReport.files.find((file) => file.path.endsWith("/history/control/active.json"))!;
+  const retainedMaterials = [
+    { reference: compatibilityReference, purpose: HISTORY_CLIENT_COMPATIBILITY_PURPOSE, content_version: historyDigest(compatibilityBytes) },
+    { reference: evidenceReference, purpose: options.compatibilityMaterials === "duplicate" ? HISTORY_CLIENT_COMPATIBILITY_PURPOSE : "lead reconciliation evidence", content_version: historyDigest(evidenceBytes) },
+  ].filter((item) => options.compatibilityMaterials !== "missing" || item.reference !== compatibilityReference).sort((left, right) => left.reference < right.reference ? -1 : left.reference > right.reference ? 1 : 0);
   const report: HistoryLeadReconciliationReport = {
     format: HISTORY_LEAD_RECONCILIATION_FORMAT,
     version: 1,
@@ -73,9 +105,9 @@ const fixture = async (options: { readonly homeSelector?: "damaged" | "missing";
     attribution: { orchestrator: "agent:lead", lead: "agent:lead" },
     original_inventory: historyInventory(beforeReport),
     original_inventory_hash: historyDigest(canonicalJson(historyInventory(beforeReport))),
-    scope_evidence_references: [evidenceReference],
+    scope_evidence_references: retainedMaterials.map((item) => item.reference),
     affected_workers: [],
-    materials: [{ reference: evidenceReference, purpose: "lead reconciliation evidence", content_version: historyDigest(evidenceBytes) }],
+    materials: retainedMaterials,
     effects: { files: [], repositories: [], external: [], local_claims: { outcome: "clear" } },
     unresolved_items: [],
     unknown_items: [],
@@ -98,11 +130,11 @@ const fixture = async (options: { readonly homeSelector?: "damaged" | "missing";
       run_references: [],
       references: [
         { reference: reportReference, purpose: HISTORY_LEAD_RECONCILIATION_PURPOSE },
-        { reference: evidenceReference, purpose: "lead reconciliation evidence" },
+        ...report.materials.map(({ reference, purpose }) => ({ reference, purpose })),
       ],
     },
   };
-  return { repository, evidenceBytes, evidenceFile, reportBytes, reportFile, reportReference, snapshot, manifest, activePath, damagedSelector, peerControl, request: { phase: "preview" as const, recordHome: root, manifest, snapshot, intent: null } };
+  return { repository, evidenceBytes, evidenceFile, compatibilityBytes, compatibilityFile, compatibilityReference, reportBytes, reportFile, reportReference, snapshot, manifest, activePath, damagedSelector, peerControl, request: { phase: "preview" as const, recordHome: root, manifest, snapshot, intent: null } };
 };
 
 describe("real lead reconciliation evidence", () => {
@@ -170,6 +202,42 @@ describe("real lead reconciliation evidence", () => {
     expect(historyInventory(await recovery.access.storage.snapshot(scope.recordHome, scope.missionId))).toEqual(t.manifest.source_inventory);
     expect(await Fs.readFile(Path.join(scope.recordHome, t.activePath))).toEqual(Buffer.from(t.damagedSelector));
     expect((await new HistoryArchives(recovery.access.storage).catalog(scope.recordHome, scope.missionId)).archives).toEqual([]);
+  });
+
+  it("blocks invalid compatibility evidence before archive or activation effects", async () => {
+    const t = await fixture({ compatibility: (document) => ({ ...document, operation: "publish" }) });
+    const scope = { recordHome: t.repository.root, missionId: t.repository.f.missionId };
+    const recovery = createNodeHistoryRecovery(scope, { name: "kepler", version: "fixture-current" });
+    const before = await recovery.access.storage.snapshot(scope.recordHome, scope.missionId);
+    const input = { phase: "apply", manifest: t.manifest, approved_manifest_hash: historyManifestDigest(t.manifest), requester: t.manifest.requester, decision_reference: "decision:invalid-client-compatibility" };
+    await expect(recovery.operations.execute("reset", scope, input)).rejects.toMatchObject({ code: "history_scope_verification_failed" });
+    const after = await recovery.access.storage.snapshot(scope.recordHome, scope.missionId);
+    expect(historyInventory(after)).toEqual(historyInventory(before));
+    expect(await new HistoryArchives(recovery.access.storage).catalog(scope.recordHome, scope.missionId)).toMatchObject({ archives: [] });
+    expect(after.files.filter((file) => file.origin === "local-runtime" && file.path.includes("/recovery/pending/")).map((file) => file.path)).toEqual([]);
+    expect(await Fs.readFile(t.compatibilityFile)).toEqual(Buffer.from(t.compatibilityBytes));
+  });
+
+  it.each(["missing", "duplicate"] as const)("blocks %s compatibility material before archive, pending, or activation effects", async (compatibilityMaterials) => {
+    const t = await fixture({ compatibilityMaterials });
+    const scope = { recordHome: t.repository.root, missionId: t.repository.f.missionId };
+    const recovery = createNodeHistoryRecovery(scope, { name: "kepler", version: "fixture-current" });
+    const before = await recovery.access.storage.snapshot(scope.recordHome, scope.missionId);
+    expect(await createNodeHistoryReconciliation(recovery.access)(t.request)).toMatchObject({ status: "invalid", reason: "The lead report must retain exactly one client compatibility document." });
+    await expect(recovery.operations.execute("reset", scope, { phase: "apply", manifest: t.manifest, approved_manifest_hash: historyManifestDigest(t.manifest), requester: t.manifest.requester, decision_reference: `decision:${compatibilityMaterials}-client-gate` })).rejects.toMatchObject({ code: "history_scope_verification_failed" });
+    const after = await recovery.access.storage.snapshot(scope.recordHome, scope.missionId);
+    expect(historyInventory(after)).toEqual(historyInventory(before));
+    expect(await new HistoryArchives(recovery.access.storage).catalog(scope.recordHome, scope.missionId)).toMatchObject({ archives: [] });
+    expect(after.files.filter((file) => file.origin === "local-runtime" && file.path.includes("/recovery/pending/"))).toEqual([]);
+    expect(await Fs.readFile(t.compatibilityFile)).toEqual(Buffer.from(t.compatibilityBytes));
+  });
+
+  it("rejects compatibility material changed after the captured source inventory", async () => {
+    const t = await fixture();
+    const verify = createNodeHistoryReconciliation(t.repository.access);
+    expect(await verify(t.request)).toMatchObject({ status: "valid" });
+    await Fs.writeFile(t.compatibilityFile, "changed client evidence\n");
+    expect(await verify(t.request)).toMatchObject({ status: "invalid" });
   });
 
   it("rejects evidence changed after the captured source inventory", async () => {
