@@ -5,8 +5,9 @@ import type {
   ConstructionHistoryFact,
   ConstructionTaskProjection,
 } from "./projection.js";
+import type { HistoryReaderMetadata } from "../history/reader.js";
 
-export type DiffPackageScope =
+export type DiffPackageScope = { readonly historyVersion?: string } & (
   | {
       readonly kind: "validation";
       readonly unitId: string;
@@ -25,7 +26,8 @@ export type DiffPackageScope =
       readonly kind: "unit-review";
       readonly unitId: string;
       readonly implementationAttemptId: string;
-    };
+    }
+);
 
 export type DiffPackageCheckpoint =
   | { readonly repositoryId: string; readonly commit: string }
@@ -60,6 +62,9 @@ export interface DiffPackageResolvedSource {
   readonly scope: DiffPackageScope;
   readonly projectRoot: string;
   readonly missionId: string;
+  readonly historyVersion: string | null;
+  readonly generationId: string | null;
+  readonly historyMetadata: HistoryReaderMetadata;
   readonly recordHomeRepositoryId: string;
   readonly workspaceRepositories: readonly DiffPackageWorkspaceRepositoryBinding[];
   readonly comparisons: readonly DiffPackageComparisonBinding[];
@@ -239,12 +244,51 @@ const uniqueByEventId = (events: readonly ConstructionEventRecord[]): Constructi
 const isFailure = (value: unknown): value is DiffPackageSourceFailure =>
   typeof value === "object" && value !== null && "kind" in value && value.kind === "failed";
 
+const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 export class ConstructionDiffPackageSources {
   constructor(private readonly contexts: Pick<AuditContextResolver, "readUnit">) {}
 
   async resolve(scope: DiffPackageScope, project?: string): Promise<DiffPackageSourceResult> {
+    if (scope.historyVersion !== undefined && !uuidV4Pattern.test(scope.historyVersion)) {
+      return failed("diff_package_history_version_invalid", "The selected history version must be a full lowercase UUIDv4 control-event id.", { requested_history_version: scope.historyVersion });
+    }
     const read = await this.contexts.readUnit(scope.unitId, project);
     if (read.kind === "failed") return read;
+
+    const metadata = read.historyMetadata;
+    if (scope.historyVersion !== undefined && scope.historyVersion !== metadata.history_version) {
+      return failed("diff_package_history_version_stale", "The requested history version is not the selected version for this unit.", {
+        mission_id: read.missionId,
+        requested_history_version: scope.historyVersion,
+        selected_history_version: metadata.history_version,
+        history_metadata: metadata,
+      });
+    }
+    if (metadata.mode === "recovering" || metadata.pending_recovery === true) {
+      return failed("diff_package_history_recovery_pending", "Diff-package source is unavailable while mission history is recovering or has pending recovery work.", {
+        mission_id: read.missionId,
+        history_metadata: metadata,
+      }, "Resolve the selected history recovery before inspecting or writing a diff package.");
+    }
+    if (metadata.mode === "active" && (metadata.pending_recovery !== false || metadata.migration_required !== false || !metadata.history_version || !metadata.generation_id)) {
+      return failed("diff_package_history_selection_unavailable", "The selected active history lacks a complete stable history-version and generation binding.", {
+        mission_id: read.missionId,
+        history_metadata: metadata,
+      });
+    }
+    if (metadata.mode === "legacy" && (metadata.migration_required !== true || metadata.pending_recovery !== false)) {
+      return failed("diff_package_history_selection_unavailable", "Legacy history cannot establish a safe read-only diff-package source.", {
+        mission_id: read.missionId,
+        history_metadata: metadata,
+      });
+    }
+    if (metadata.mode !== "active" && metadata.mode !== "legacy") {
+      return failed("diff_package_history_selection_unavailable", "Diff-package source cannot be established from the selected history state.", {
+        mission_id: read.missionId,
+        history_metadata: metadata,
+      });
+    }
 
     const unit = read.unit;
     const implementation = unit.stages.find((stage) => stage.stage === "implementation");
@@ -835,6 +879,9 @@ export class ConstructionDiffPackageSources {
         scope,
         projectRoot: read.root,
         missionId: read.missionId,
+        historyVersion: metadata.history_version,
+        generationId: metadata.generation_id,
+        historyMetadata: metadata,
         recordHomeRepositoryId,
         workspaceRepositories,
         comparisons,

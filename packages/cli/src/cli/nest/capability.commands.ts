@@ -3,7 +3,10 @@ import { GitAuthorLookup } from "../git-author.js";
 import { GitDiffPackageCommand } from "./diff-package.commands.js";
 import { MetadataLinter } from "../metadata-lint.js";
 import { parseProjectSelector, ProjectResolver } from "../project-selection.js";
-import { appendSelectorValue, parseScopeSelectors, type ScopeSelectorFailure } from "../scope-selectors.js";
+import { appendSelectorValue, parseScopeSelectors, type ScopeSelectorFailure, type ScopeSelectors } from "../scope-selectors.js";
+import { MissionMutations } from "../mission-mutations.js";
+import { HistoryError } from "../../history/control.js";
+import type { HistoryReaderMetadata } from "../../history/reader.js";
 import { generateUuid } from "../uuid.js";
 import { parseStrictJson } from "../../json/strict-json.js";
 import { MissionStartup, type MissionStartupPrepared } from "../../construction/mission-startup.js";
@@ -27,7 +30,7 @@ import { Revision } from "../../construction/revision.js";
 import { AuditRecording, type AuditRecordKind } from "../../audit/recording.js";
 import { AuditRequestInput } from "../../audit/request-input.js";
 import { AuditQueries } from "../../audit/queries.js";
-import { ResultReporter } from "./result-reporter.js";
+import { ResultReporter, type CliEnvelope } from "./result-reporter.js";
 
 const missingOperation = (name: string) => ({
   status: "failed" as const,
@@ -44,6 +47,7 @@ type FailurePayload = {
   readonly message: string;
   readonly details: Readonly<Record<string, unknown>>;
   readonly recovery: string;
+  readonly history_metadata?: HistoryReaderMetadata;
 };
 
 const reportFailure = (
@@ -57,6 +61,7 @@ const reportFailure = (
       message: failure.message,
       details: failure.details,
       recovery: failure.recovery,
+      ...(failure.history_metadata ? { history_metadata: failure.history_metadata } : {}),
     },
   });
 };
@@ -76,6 +81,33 @@ const reportSelectorFailure = (
   recovery,
 });
 
+abstract class HistoryMutationCommand extends CommandRunner {
+  constructor(protected readonly mutations: MissionMutations) { super(); }
+
+  @Option({ flags: "--history-version <control-event-id>", description: "Bind this mutation to one explicit current history version" })
+  parseHistoryVersion(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  protected async mutate(
+    reporter: ResultReporter,
+    selectors: ScopeSelectors,
+    project: string | undefined,
+    operation: () => Promise<CliEnvelope>,
+  ): Promise<void> {
+    try {
+      const result = await this.mutations.execute(selectors, project, operation);
+      reporter.report({ ...result.value, data: { ...result.value.data, ...result.history } });
+    } catch (error) {
+      if (!(error instanceof HistoryError)) throw error;
+      reportFailure(reporter, {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        recovery: "Preserve affected output and inspect recovery status before retrying this exact history version.",
+      });
+    }
+  }
+}
+
 const missionStartupSuccess = (result: MissionStartupPrepared) => ({
   status: "success" as const,
   data: {
@@ -92,6 +124,13 @@ const missionStartupSuccess = (result: MissionStartupPrepared) => ({
       starting_checkpoint: repository.startingCheckpoint,
     })),
     ...(result.historical ? { historical: true } : {}),
+    ...(result.history ? { history: {
+      mode: result.history.mode,
+      history_version: result.history.historyVersion,
+      generation_id: result.history.generationId,
+      coordination: result.history.coordination,
+      ...(result.history.selectionHash ? { selection_hash: result.history.selectionHash } : {}),
+    } } : {}),
     execution_started: false,
   },
 });
@@ -219,14 +258,15 @@ export class MetadataLintCommand extends CommandRunner {
   }
 }
 
-abstract class AuditRecordCommand extends CommandRunner {
+abstract class AuditRecordCommand extends HistoryMutationCommand {
   constructor(
     protected readonly reporter: ResultReporter,
     private readonly recording: AuditRecording,
     private readonly input: AuditRequestInput,
     private readonly kind: AuditRecordKind,
+    mutations: MissionMutations,
   ) {
-    super();
+    super(mutations);
   }
 
   @Option({ flags: "--unit <unit-id>", description: "Select a Unit of Work" })
@@ -281,29 +321,31 @@ abstract class AuditRecordCommand extends CommandRunner {
       });
       return;
     }
-    const result = await this.recording.execute(this.kind, selected.selectors, parsed.value, project.project);
-    this.reporter.report({ status: result.kind, data: result.data });
+    await this.mutate(this.reporter, selected.selectors, project.project, async () => {
+      const result = await this.recording.execute(this.kind, selected.selectors, parsed.value, project.project);
+      return { status: result.kind, data: result.data };
+    });
   }
 }
 
 @SubCommand({ name: "evidence", description: "Record a check or review result" })
 export class AuditRecordEvidenceCommand extends AuditRecordCommand {
-  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
-    super(reporter, recording, input, "evidence");
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput, mutations: MissionMutations) {
+    super(reporter, recording, input, "evidence", mutations);
   }
 }
 
 @SubCommand({ name: "approval", description: "Record an explicit requester decision" })
 export class AuditRecordApprovalCommand extends AuditRecordCommand {
-  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
-    super(reporter, recording, input, "approval");
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput, mutations: MissionMutations) {
+    super(reporter, recording, input, "approval", mutations);
   }
 }
 
 @SubCommand({ name: "interaction", description: "Record an interaction or effort selection" })
 export class AuditRecordInteractionCommand extends AuditRecordCommand {
-  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput) {
-    super(reporter, recording, input, "interaction");
+  constructor(reporter: ResultReporter, recording: AuditRecording, input: AuditRequestInput, mutations: MissionMutations) {
+    super(reporter, recording, input, "interaction", mutations);
   }
 }
 
@@ -316,6 +358,30 @@ export class AuditRecordCommandGroup extends CommandRunner {
   constructor(private readonly reporter: ResultReporter) { super(); }
   async run(): Promise<void> { this.reporter.report(missingOperation("audit record")); }
 }
+
+const transferOriginValues = (options: Readonly<Record<string, unknown>>): string[] | FailurePayload => {
+  const raw = options.transferOrigin;
+  if (raw === undefined) return [];
+  const values = Array.isArray(raw) ? raw : [raw];
+  if (values.length === 0 || values.some((value) => typeof value !== "string" || value.length === 0 || value.trim() !== value)) {
+    return {
+      code: "invalid_transfer_origin",
+      message: "--transfer-origin requires non-empty exact prior-origin IDs.",
+      details: { selector: "transferOrigin" },
+      recovery: "Provide each exact prior origin ID without leading or trailing whitespace.",
+    };
+  }
+  const origins = values as string[];
+  if (new Set(origins).size !== origins.length) {
+    return {
+      code: "duplicate_transfer_origin",
+      message: "--transfer-origin cannot repeat a prior origin ID.",
+      details: { selector: "transferOrigin", transfer_origin_ids: origins },
+      recovery: "Provide each exact prior origin ID once.",
+    };
+  }
+  return origins;
+};
 
 const optionValue = (options: Readonly<Record<string, unknown>>, key: string): string | undefined | FailurePayload => {
   const raw = options[key];
@@ -498,15 +564,45 @@ export class MissionPrepareCommand extends CommandRunner {
     return appendSelectorValue(value, previous);
   }
 
+  @Option({ flags: "--history-version <control-event-id>", description: "Join one exact current mission history version" })
+  parseHistoryVersion(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
+  @Option({ flags: "--transfer-origin <exact-prior-origin-id>", description: "Explicitly transfer one unavailable prior history origin" })
+  parseTransferOrigin(value: string, previous: string[] = []): string[] {
+    return appendSelectorValue(value, previous);
+  }
+
   async run(_passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
-    const selected = projectSelector(options);
+    const values = options ?? {};
+    const selected = projectSelector(values);
     if (selected.kind === "failed") {
       reportFailure(this.reporter, selected);
       return;
     }
-    const mission = optionValue(options ?? {}, "mission");
-    if (typeof mission !== "string") {
-      reportFailure(this.reporter, typeof mission === "object" ? mission : {
+    const selectors = parseScopeSelectors(values, { missionScoped: true, required: ["mission"] });
+    if (selectors.kind === "failed") {
+      reportSelectorFailure(this.reporter, selectors, "Provide one exact --mission UUIDv4 and, when joining, one exact --history-version.");
+      return;
+    }
+    const transferOriginIds = transferOriginValues(values);
+    if (!Array.isArray(transferOriginIds)) {
+      reportFailure(this.reporter, transferOriginIds);
+      return;
+    }
+    if (selectors.selectors.historyVersion === undefined && transferOriginIds.length > 0) {
+      reportFailure(this.reporter, {
+        code: "history_version_required",
+        message: "Origin transfer requires an explicit --history-version.",
+        details: { transfer_origin_ids: transferOriginIds },
+        recovery: "Provide the exact current control-event ID before requesting any origin transfer.",
+      });
+      return;
+    }
+    const mission = selectors.selectors.mission;
+    if (!mission) {
+      reportFailure(this.reporter, {
         code: "required_selector_missing",
         message: "Mission preparation requires exactly one --mission UUIDv4 value.",
         details: { required: ["mission"] },
@@ -514,7 +610,9 @@ export class MissionPrepareCommand extends CommandRunner {
       });
       return;
     }
-    const result = await this.startup.prepare(selected.project, mission);
+    const result = await this.startup.prepare(selected.project, mission, selectors.selectors.historyVersion === undefined
+      ? undefined
+      : { historyVersion: selectors.selectors.historyVersion, transferOriginIds });
     if (result.kind === "failed") {
       reportFailure(this.reporter, result);
       return;
@@ -539,7 +637,7 @@ export class MissionCommand extends CommandRunner {
 }
 
 @SubCommand({ name: "complete", description: "Complete a guarded Construction stage attempt" })
-export class ConstructionStageCompleteCommand extends CommandRunner {
+export class ConstructionStageCompleteCommand extends HistoryMutationCommand {
   constructor(
     private readonly reporter: ResultReporter,
     private readonly functionalDesignCompletion: FunctionalDesignStageCompletion,
@@ -548,8 +646,9 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
     private readonly implementationCompletion: ImplementationStageCompletion,
     private readonly unitOfWorkReviewCompletion: UnitOfWorkReviewStageCompletion,
     private readonly deliverCompletion: DeliverStageCompletion,
+    mutations: MissionMutations,
   ) {
-    super();
+    super(mutations);
   }
 
   @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
@@ -614,14 +713,18 @@ export class ConstructionStageCompleteCommand extends CommandRunner {
       });
       return;
     }
-    const result = await completion.execute(selectors.selectors, parsed.value, selectedProject.project);
-    this.reporter.report({ status: result.kind, data: result.data });
+    await this.mutate(this.reporter, selectors.selectors, selectedProject.project, async () => {
+      const result = await completion.execute(selectors.selectors, parsed.value, selectedProject.project);
+      return { status: result.kind, data: result.data };
+    });
   }
 }
 
 @SubCommand({ name: "assess-retained-scopes", description: "Assess completed Activities retained from an earlier Implementation attempt" })
-export class ConstructionStageAssessRetainedScopesCommand extends CommandRunner {
-  constructor(private readonly reporter: ResultReporter, private readonly assessment: ImplementationRetainedScopeAssessment) { super(); }
+export class ConstructionStageAssessRetainedScopesCommand extends HistoryMutationCommand {
+  constructor(private readonly reporter: ResultReporter, private readonly assessment: ImplementationRetainedScopeAssessment,
+    mutations: MissionMutations,
+  ) { super(mutations); }
 
   @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
@@ -658,14 +761,18 @@ export class ConstructionStageAssessRetainedScopesCommand extends CommandRunner 
       });
       return;
     }
-    const result = await this.assessment.execute(selectors.selectors, parsed.value, selectedProject.project);
-    this.reporter.report({ status: result.kind, data: result.data });
+    await this.mutate(this.reporter, selectors.selectors, selectedProject.project, async () => {
+      const result = await this.assessment.execute(selectors.selectors, parsed.value, selectedProject.project);
+      return { status: result.kind, data: result.data };
+    });
   }
 }
 
 @SubCommand({ name: "start", description: "Start a new Construction stage attempt" })
-export class ConstructionStageStartCommand extends CommandRunner {
-  constructor(private readonly reporter: ResultReporter, private readonly start: StageStart) { super(); }
+export class ConstructionStageStartCommand extends HistoryMutationCommand {
+  constructor(private readonly reporter: ResultReporter, private readonly start: StageStart,
+    mutations: MissionMutations,
+  ) { super(mutations); }
 
   @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
@@ -701,18 +808,21 @@ export class ConstructionStageStartCommand extends CommandRunner {
       });
       return;
     }
-    const result = await this.start.execute(selectors.selectors, parsed.value, selectedProject.project);
-    this.reporter.report({ status: result.kind, data: result.data });
+    await this.mutate(this.reporter, selectors.selectors, selectedProject.project, async () => {
+      const result = await this.start.execute(selectors.selectors, parsed.value, selectedProject.project);
+      return { status: result.kind, data: result.data };
+    });
   }
 }
 
 @SubCommand({ name: "revise", description: "Authorize a scoped Construction revision" })
-export class ConstructionReviseCommand extends CommandRunner {
+export class ConstructionReviseCommand extends HistoryMutationCommand {
   constructor(
     private readonly reporter: ResultReporter,
     private readonly revision: Revision,
     private readonly input: AuditRequestInput,
-  ) { super(); }
+    mutations: MissionMutations,
+  ) { super(mutations); }
 
   @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
@@ -751,8 +861,10 @@ export class ConstructionReviseCommand extends CommandRunner {
       });
       return;
     }
-    const result = await this.revision.execute(selectors.selectors, parsed.value, selectedProject.project);
-    this.reporter.report({ status: result.kind, data: result.data });
+    await this.mutate(this.reporter, selectors.selectors, selectedProject.project, async () => {
+      const result = await this.revision.execute(selectors.selectors, parsed.value, selectedProject.project);
+      return { status: result.kind, data: result.data };
+    });
   }
 }
 
@@ -780,13 +892,14 @@ export class ConstructionStageShowCommand extends CommandRunner {
   }
 }
 
-abstract class ConstructionPauseResumeCommand extends CommandRunner {
+abstract class ConstructionPauseResumeCommand extends HistoryMutationCommand {
   constructor(
     protected readonly reporter: ResultReporter,
     private readonly control: ConstructionPauseResume,
     private readonly operation: "pause" | "resume",
     private readonly scope: "stage" | "activity",
-  ) { super(); }
+    mutations: MissionMutations,
+  ) { super(mutations); }
 
   @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--stage <stage>" }) parseStage(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
@@ -831,33 +944,35 @@ abstract class ConstructionPauseResumeCommand extends CommandRunner {
       });
       return;
     }
-    const result = this.operation === "pause"
-      ? await this.control.pause(parsed.selectors, request.value, selected.project)
-      : await this.control.resume(parsed.selectors, request.value, selected.project);
-    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
-      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
-    } });
+    await this.mutate(this.reporter, parsed.selectors, selected.project, async () => {
+      const result = this.operation === "pause"
+        ? await this.control.pause(parsed.selectors, request.value, selected.project)
+        : await this.control.resume(parsed.selectors, request.value, selected.project);
+      return { status: result.kind, data: result.kind === "success" ? result.data : {
+        code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+      } };
+    });
   }
 }
 
 @SubCommand({ name: "pause", description: "Request pause or acknowledge after exact-run termination and effects reconciliation" })
 export class ConstructionStagePauseCommand extends ConstructionPauseResumeCommand {
-  constructor(reporter: ResultReporter, control: ConstructionPauseResume) { super(reporter, control, "pause", "stage"); }
+  constructor(reporter: ResultReporter, control: ConstructionPauseResume, mutations: MissionMutations) { super(reporter, control, "pause", "stage", mutations); }
 }
 
 @SubCommand({ name: "resume", description: "Resume one exact paused stage attempt" })
 export class ConstructionStageResumeCommand extends ConstructionPauseResumeCommand {
-  constructor(reporter: ResultReporter, control: ConstructionPauseResume) { super(reporter, control, "resume", "stage"); }
+  constructor(reporter: ResultReporter, control: ConstructionPauseResume, mutations: MissionMutations) { super(reporter, control, "resume", "stage", mutations); }
 }
 
 @SubCommand({ name: "pause", description: "Request pause or acknowledge after exact-run termination and effects reconciliation" })
 export class ConstructionActivityPauseCommand extends ConstructionPauseResumeCommand {
-  constructor(reporter: ResultReporter, control: ConstructionPauseResume) { super(reporter, control, "pause", "activity"); }
+  constructor(reporter: ResultReporter, control: ConstructionPauseResume, mutations: MissionMutations) { super(reporter, control, "pause", "activity", mutations); }
 }
 
 @SubCommand({ name: "resume", description: "Resume one exact paused Activity attempt" })
 export class ConstructionActivityResumeCommand extends ConstructionPauseResumeCommand {
-  constructor(reporter: ResultReporter, control: ConstructionPauseResume) { super(reporter, control, "resume", "activity"); }
+  constructor(reporter: ResultReporter, control: ConstructionPauseResume, mutations: MissionMutations) { super(reporter, control, "resume", "activity", mutations); }
 }
 
 @SubCommand({
@@ -935,8 +1050,10 @@ export class ConstructionTaskReadyCommand extends CommandRunner {
 }
 
 @SubCommand({ name: "admit", description: "Admit one ready task under the current Implementation attempt" })
-export class ConstructionTaskAdmitCommand extends CommandRunner {
-  constructor(private readonly reporter: ResultReporter, private readonly admission: TaskAdmission) { super(); }
+export class ConstructionTaskAdmitCommand extends HistoryMutationCommand {
+  constructor(private readonly reporter: ResultReporter, private readonly admission: TaskAdmission,
+    mutations: MissionMutations,
+  ) { super(mutations); }
   @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--implementation-attempt <attempt-id>" }) parseImplementationAttempt(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
@@ -964,10 +1081,12 @@ export class ConstructionTaskAdmitCommand extends CommandRunner {
       }
       request = parsed.value;
     }
-    const result = await this.admission.execute(selectors.selectors, request, selected.project);
-    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
-      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
-    } });
+    await this.mutate(this.reporter, selectors.selectors, selected.project, async () => {
+      const result = await this.admission.execute(selectors.selectors, request, selected.project);
+      return { status: result.kind, data: result.kind === "success" ? result.data : {
+        code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+      } };
+    });
   }
 }
 
@@ -1000,8 +1119,10 @@ export class ConstructionActivityShowCommand extends CommandRunner {
   }
 }
 
-abstract class ConstructionActivityExecutionCommand extends CommandRunner {
-  constructor(protected readonly reporter: ResultReporter, private readonly execution: ActivityExecution, private readonly operation: "start" | "complete") { super(); }
+abstract class ConstructionActivityExecutionCommand extends HistoryMutationCommand {
+  constructor(protected readonly reporter: ResultReporter, private readonly execution: ActivityExecution, private readonly operation: "start" | "complete",
+    mutations: MissionMutations,
+  ) { super(mutations); }
   @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
@@ -1030,23 +1151,25 @@ abstract class ConstructionActivityExecutionCommand extends CommandRunner {
       }
       request = result.value;
     }
-    const result = this.operation === "start"
-      ? await this.execution.start(parsed.selectors, selected.project)
-      : await this.execution.complete(parsed.selectors, request, selected.project);
-    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
-      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
-    } });
+    await this.mutate(this.reporter, parsed.selectors, selected.project, async () => {
+      const result = this.operation === "start"
+        ? await this.execution.start(parsed.selectors, selected.project)
+        : await this.execution.complete(parsed.selectors, request, selected.project);
+      return { status: result.kind, data: result.kind === "success" ? result.data : {
+        code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+      } };
+    });
   }
 }
 
 @SubCommand({ name: "start", description: "Start the next task-scoped Construction Activity" })
 export class ConstructionActivityStartCommand extends ConstructionActivityExecutionCommand {
-  constructor(reporter: ResultReporter, execution: ActivityExecution) { super(reporter, execution, "start"); }
+  constructor(reporter: ResultReporter, execution: ActivityExecution, mutations: MissionMutations) { super(reporter, execution, "start", mutations); }
 }
 
 @SubCommand({ name: "complete", description: "Complete a task-scoped Construction Activity with recorded evidence" })
 export class ConstructionActivityCompleteCommand extends ConstructionActivityExecutionCommand {
-  constructor(reporter: ResultReporter, execution: ActivityExecution) { super(reporter, execution, "complete"); }
+  constructor(reporter: ResultReporter, execution: ActivityExecution, mutations: MissionMutations) { super(reporter, execution, "complete", mutations); }
 }
 
 @SubCommand({ name: "activity", description: "Read and execute task-scoped Construction Activities", subCommands: [ConstructionActivityShowCommand, ConstructionActivityStartCommand, ConstructionActivityCompleteCommand, ConstructionActivityPauseCommand, ConstructionActivityResumeCommand] })
@@ -1055,8 +1178,10 @@ export class ConstructionActivityCommand extends CommandRunner {
   async run(): Promise<void> { this.reporter.report(missingOperation("workflow construction activity")); }
 }
 
-abstract class ConstructionIntegrationExecutionCommand extends CommandRunner {
-  constructor(protected readonly reporter: ResultReporter, private readonly execution: IntegrationExecution, private readonly operation: "lock" | "prepare" | "evidence" | "accept" | "release") { super(); }
+abstract class ConstructionIntegrationExecutionCommand extends HistoryMutationCommand {
+  constructor(protected readonly reporter: ResultReporter, private readonly execution: IntegrationExecution, private readonly operation: "lock" | "prepare" | "evidence" | "accept" | "release",
+    mutations: MissionMutations,
+  ) { super(mutations); }
   @Option({ flags: "--unit <unit-id>" }) parseUnit(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--task <task-id>" }) parseTask(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
   @Option({ flags: "--activity <activity>" }) parseActivity(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
@@ -1088,44 +1213,46 @@ abstract class ConstructionIntegrationExecutionCommand extends CommandRunner {
     }
     const preparedEventId = optionValue(values, "preparedEventId");
     if (typeof preparedEventId === "object") { reportFailure(this.reporter, preparedEventId); return; }
-    const result = this.operation === "lock"
-      ? await this.execution.lock(parsed.selectors, selected.project)
-      : this.operation === "prepare"
-        ? await this.execution.prepare(parsed.selectors, typeof token === "string" ? token : undefined, request, selected.project)
-        : this.operation === "evidence"
-          ? await this.execution.recordEvidence(parsed.selectors, typeof token === "string" ? token : undefined, request, selected.project)
-          : this.operation === "accept"
-            ? await this.execution.accept(parsed.selectors, typeof token === "string" ? token : undefined, typeof preparedEventId === "string" ? preparedEventId : undefined, selected.project)
-            : await this.execution.release(parsed.selectors, typeof token === "string" ? token : undefined, selected.project);
-    this.reporter.report({ status: result.kind, data: result.kind === "success" ? result.data : {
-      code: result.code, message: result.message, details: result.details, recovery: result.recovery,
-    } });
+    await this.mutate(this.reporter, parsed.selectors, selected.project, async () => {
+      const result = this.operation === "lock"
+        ? await this.execution.lock(parsed.selectors, selected.project)
+        : this.operation === "prepare"
+          ? await this.execution.prepare(parsed.selectors, typeof token === "string" ? token : undefined, request, selected.project)
+          : this.operation === "evidence"
+            ? await this.execution.recordEvidence(parsed.selectors, typeof token === "string" ? token : undefined, request, selected.project)
+            : this.operation === "accept"
+              ? await this.execution.accept(parsed.selectors, typeof token === "string" ? token : undefined, typeof preparedEventId === "string" ? preparedEventId : undefined, selected.project)
+              : await this.execution.release(parsed.selectors, typeof token === "string" ? token : undefined, selected.project);
+      return { status: result.kind, data: result.kind === "success" ? result.data : {
+        code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+      } };
+    });
   }
 }
 
 @SubCommand({ name: "lock", description: "Acquire and capture the unit Integration lock" })
 export class ConstructionIntegrationLockCommand extends ConstructionIntegrationExecutionCommand {
-  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "lock"); }
+  constructor(reporter: ResultReporter, execution: IntegrationExecution, mutations: MissionMutations) { super(reporter, execution, "lock", mutations); }
 }
 
 @SubCommand({ name: "prepare", description: "Record the immutable Integration candidate and actual input set" })
 export class ConstructionIntegrationPrepareCommand extends ConstructionIntegrationExecutionCommand {
-  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "prepare"); }
+  constructor(reporter: ResultReporter, execution: IntegrationExecution, mutations: MissionMutations) { super(reporter, execution, "prepare", mutations); }
 }
 
 @SubCommand({ name: "evidence", description: "Record repository-qualified Integration checks and self-review" })
 export class ConstructionIntegrationEvidenceCommand extends ConstructionIntegrationExecutionCommand {
-  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "evidence"); }
+  constructor(reporter: ResultReporter, execution: IntegrationExecution, mutations: MissionMutations) { super(reporter, execution, "evidence", mutations); }
 }
 
 @SubCommand({ name: "accept", description: "Accept the checked Integration candidate and release its lock" })
 export class ConstructionIntegrationAcceptCommand extends ConstructionIntegrationExecutionCommand {
-  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "accept"); }
+  constructor(reporter: ResultReporter, execution: IntegrationExecution, mutations: MissionMutations) { super(reporter, execution, "accept", mutations); }
 }
 
 @SubCommand({ name: "release", description: "Abort incomplete Integration work and release only if the target is unchanged" })
 export class ConstructionIntegrationReleaseCommand extends ConstructionIntegrationExecutionCommand {
-  constructor(reporter: ResultReporter, execution: IntegrationExecution) { super(reporter, execution, "release"); }
+  constructor(reporter: ResultReporter, execution: IntegrationExecution, mutations: MissionMutations) { super(reporter, execution, "release", mutations); }
 }
 
 @SubCommand({ name: "integration", description: "Execute the checked Construction Integration lifecycle", subCommands: [ConstructionIntegrationLockCommand, ConstructionIntegrationPrepareCommand, ConstructionIntegrationEvidenceCommand, ConstructionIntegrationAcceptCommand, ConstructionIntegrationReleaseCommand] })
@@ -1152,20 +1279,23 @@ export class ConstructionLintCommand extends CommandRunner {
     if (result.kind === "invalid") {
       reportFailure(this.reporter, {
         code: "construction_lint_failed",
+        ...(result.history_metadata ? { history_metadata: result.history_metadata } : {}),
         message: "Construction graph validation found structural issues.",
         details: { findings: result.findings },
         recovery: "Correct the reported plan or graph findings without replacing the canonical mission-owned files.",
       });
       return;
     }
-    this.reporter.report({ status: "success", data: { findings: result.findings } });
+    this.reporter.report({ status: "success", data: { findings: result.findings, ...(result.history_metadata ? { history_metadata: result.history_metadata } : {}) } });
   }
 }
 
 @SubCommand({ name: "create", arguments: "<slug>", description: "Create one Unit of Work" })
-export class ConstructionUnitCreateCommand extends CommandRunner {
-  constructor(private readonly reporter: ResultReporter, private readonly unitCreate: UnitCreate) {
-    super();
+export class ConstructionUnitCreateCommand extends HistoryMutationCommand {
+  constructor(private readonly reporter: ResultReporter, private readonly unitCreate: UnitCreate,
+    mutations: MissionMutations,
+  ) {
+    super(mutations);
   }
 
   @Option({ flags: "--mission <mission-id>" })
@@ -1182,30 +1312,35 @@ export class ConstructionUnitCreateCommand extends CommandRunner {
 
   async run(passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
     const values = options ?? {};
-    const result = await this.unitCreate.execute({
-      slug: passedParams[0],
-      mission: values.mission,
-      effort: values.effort,
-      stageEffort: values.stageEffort,
-      project: values.project,
-    });
-    if (result.kind === "failed") {
-      reportFailure(this.reporter, result);
-      return;
-    }
-    this.reporter.report({
-      status: "success",
-      data: {
-        unit_id: result.unitId,
-        mission_id: result.missionId,
-        record_home: result.recordHome,
-        directory: result.directory,
-        workflow: result.workflow,
-        effort: { default: result.effort.default, stage_overrides: result.effort.stageOverrides },
-        journal_id: result.journalId,
-        id: result.eventId,
-        execution_started: false,
-      },
+    const scope = parseScopeSelectors(values, { missionScoped: true, required: ["mission"] });
+    if (scope.kind === "failed") { reportSelectorFailure(this.reporter, scope, "Provide one exact mission and history version."); return; }
+    const selectedProject = projectSelector(values);
+    if (selectedProject.kind === "failed") { reportFailure(this.reporter, selectedProject); return; }
+    await this.mutate(this.reporter, scope.selectors, selectedProject.project, async () => {
+      const result = await this.unitCreate.execute({
+        slug: passedParams[0],
+        mission: values.mission,
+        effort: values.effort,
+        stageEffort: values.stageEffort,
+        project: values.project,
+      });
+      if (result.kind === "failed") return { status: "failed" as const, data: {
+        code: result.code, message: result.message, details: result.details, recovery: result.recovery,
+      } };
+      return {
+        status: "success",
+        data: {
+          unit_id: result.unitId,
+          mission_id: result.missionId,
+          record_home: result.recordHome,
+          directory: result.directory,
+          workflow: result.workflow,
+          effort: { default: result.effort.default, stage_overrides: result.effort.stageOverrides },
+          journal_id: result.journalId,
+          id: result.eventId,
+          execution_started: false,
+        },
+      };
     });
   }
 }
@@ -1222,7 +1357,7 @@ export class ConstructionUnitListCommand extends CommandRunner {
     if (selected.kind === "failed") { reportFailure(this.reporter, selected); return; }
     const result = await this.queries.list(selected.project);
     if (result.kind === "failed") { reportFailure(this.reporter, result); return; }
-    this.reporter.report({ status: "success", data: { record_home: result.recordHome, units: result.units } });
+    this.reporter.report({ status: "success", data: { record_home: result.recordHome, units: result.units, history_metadata: result.history_metadata } });
   }
 }
 

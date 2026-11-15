@@ -29,7 +29,7 @@ Every package requires exact recorded scope. There is no implicit current attemp
 ```text
 kepler git diff-package validation --unit <unit-id> --task <task-id>
   --implementation-attempt <attempt-id> --generation-attempt <activity-attempt-id>
-  [--out <path>] [--project <path>]
+  [--history-version <control-event-id>] [--out <path>] [--project <path>]
 ```
 
 ```bash
@@ -44,7 +44,7 @@ Uses the recorded task admission and Code Generation completion. It packages the
 ```text
 kepler git diff-package integration --unit <unit-id> --task <task-id>
   --implementation-attempt <attempt-id> --integration-attempt <activity-attempt-id>
-  [--out <path>] [--project <path>]
+  [--history-version <control-event-id>] [--out <path>] [--project <path>]
 ```
 
 ```bash
@@ -58,12 +58,12 @@ Uses recorded captured inputs and prepared candidate checkpoints. It preserves t
 
 ```text
 kepler git diff-package unit-review --unit <unit-id> --implementation-attempt <attempt-id>
-  [--out <path>] [--project <path>]
+  [--history-version <control-event-id>] [--out <path>] [--project <path>]
 ```
 
 ```bash
 kepler git diff-package unit-review --unit "$UNIT" --implementation-attempt "$IMPL" \
-  --out review-package.md --project "$PROJECT"
+  --history-version "$HISTORY_VERSION" --out review-package.md --project "$PROJECT"
 ```
 
 Uses the unit's original Review baseline and recorded Implementation completion. It preserves cumulative scope and supporting task/Integration provenance. It accepts no task, generation-attempt, or integration-attempt selector.
@@ -77,16 +77,19 @@ Uses the unit's original Review baseline and recorded Implementation completion.
 | `--implementation-attempt <attempt-id>` | Required parent UUIDv4. |
 | `--generation-attempt <attempt-id>` | Required only for Validation. |
 | `--integration-attempt <attempt-id>` | Required only for Integration. |
-| `--out <path>` | Optional new output file. See path rules below. |
+| `--history-version <control-event-id>` | Optional exact selected version for temporary inspection; required with `--out`. A stale version fails. |
+| `--out <path>` | Optional new output file. Requires an active, joined history and an explicit history version. |
 | `--project <path>` | Optional selected record home. |
 
 Without `--out`, Kepler creates a new temporary package directory and reports its `package.md` path. Retain or remove only your own derived output when you no longer need it.
 
-With `--out`, select a new untracked file inside the record home. Its parent directory must already exist and remain inside that project. The path must be outside Git metadata and the entire `.kepler/missions/` tree. Existing files, tracked content, symlink escapes, and unsafe parents are rejected. The command does not overwrite a prior package.
+With `--out`, first read the selected version through `kepler recovery inspect`. Pass that exact version with `--history-version`. A recovering history, pending recovery, legacy layout, stale version, or unjoined copy cannot authorize project output. Admission registers a writer before source, Git, or output operations. Private coordination can change even when source resolution fails; settle the current source inventory again before a later origin transfer.
 
-Success returns `scope`, unit/mission/attempt identities, applicable task/Activity identities, `source_bindings`, `source_event_ids`, `output`, `fingerprint`, and `empty`. The fingerprint binds the preceding complete package content. An empty diff is a valid package result.
+Select a new untracked file inside the record home. Its parent directory must already exist and remain inside that project. The path must be outside Git metadata and the entire `.kepler/missions/` tree. Existing files, tracked content, symlink escapes, and unsafe parents are rejected. The command does not overwrite a prior package.
 
-The operation reads Git and history, then writes only derived inspection output. It creates no workflow attempt, evidence, approval, rerun, or transition. A package does not prove that tests passed or that the material remains applicable to a later scope.
+Success returns `scope`, unit/mission/attempt identities, applicable task/Activity identities, `history_version`, `generation_id`, `history_metadata`, `source_bindings`, `source_event_ids`, `output`, `fingerprint`, and `empty`. The fingerprint binds the complete package content and selected history metadata. Temporary inspection of legacy history reports `migration_required`; it does not authorize a project output file. An empty diff is a valid package result.
+
+The operation reads Git and history, then writes derived inspection output. Project output also uses private history coordination; it does not change Git refs, objects, index, or selected workflow journals. It creates no workflow attempt, evidence, approval, rerun, or transition. A package does not prove that tests passed or that the material remains applicable to a later scope.
 
 ### Failures
 

@@ -3,6 +3,7 @@ import { validateConstructionArtifact } from "./artifacts.js";
 import { readTaskGraph, type TaskGraphDiagnostic } from "./task-graph.js";
 import { validateTaskGraphPathOperands } from "./task-graph-paths.js";
 import type { UnitQueryFileSystem, UnitQueryFailure } from "./unit-queries.js";
+import type { HistoryReaderMetadata } from "../history/reader.js";
 import { UnitQueries } from "./unit-queries.js";
 
 export interface ConstructionLintFinding {
@@ -13,8 +14,8 @@ export interface ConstructionLintFinding {
 }
 
 export type ConstructionLintResult =
-  | { readonly kind: "valid"; readonly findings: readonly [] }
-  | { readonly kind: "invalid"; readonly findings: readonly ConstructionLintFinding[] }
+  | { readonly kind: "valid"; readonly findings: readonly []; readonly history_metadata?: HistoryReaderMetadata }
+  | { readonly kind: "invalid"; readonly findings: readonly ConstructionLintFinding[]; readonly history_metadata?: HistoryReaderMetadata }
   | UnitQueryFailure;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -51,9 +52,10 @@ const artifactFindings = (
   message: diagnostic.message,
 }));
 
-const invalid = (findings: readonly ConstructionLintFinding[]): ConstructionLintResult => ({
+const invalid = (findings: readonly ConstructionLintFinding[], historyMetadata?: HistoryReaderMetadata): ConstructionLintResult => ({
   kind: "invalid",
   findings,
+  ...(historyMetadata ? { history_metadata: historyMetadata } : {}),
 });
 
 export class ConstructionLint {
@@ -65,6 +67,7 @@ export class ConstructionLint {
   async execute(unitId: string, project?: string): Promise<ConstructionLintResult> {
     const context = await this.units.readContext(unitId, project);
     if (context.kind === "failed") return context;
+    const historyMetadata = context.historyMetadata;
     const relativeUnitRoot = `.kepler/missions/${context.missionId}/construction/units-of-work/${unitId}`;
     const planPath = Path.join(relativeUnitRoot, "plan.md");
     const relativeGraphPath = Path.join(relativeUnitRoot, "tasks-dag.json");
@@ -86,7 +89,7 @@ export class ConstructionLint {
           message: "The unit plan must identify its artifact and owning unit before graph validation.",
         });
       }
-      return invalid(findings);
+      return invalid(findings, historyMetadata);
     }
     if (planArtifact.metadata.type !== "implementation-plan") {
       findings.push({
@@ -102,13 +105,14 @@ export class ConstructionLint {
           typeof event.data.record_home.repository_id !== "string") return [];
       return [event.data.record_home.repository_id];
     });
-    if (recordHomeRepositoryIds.length !== 1) {
+      if (recordHomeRepositoryIds.length !== 1) {
       return {
         kind: "failed",
         code: "mission_record_home_unavailable",
         message: "The selected mission does not have one readable record-home repository binding.",
         details: { mission_id: context.missionId },
         recovery: "Resolve the mission's recorded record-home binding before linting its canonical graph.",
+        ...(historyMetadata ? { history_metadata: historyMetadata } : {}),
       };
     }
     const recordHomeRepositoryId = recordHomeRepositoryIds[0];
@@ -119,6 +123,7 @@ export class ConstructionLint {
         message: "The selected mission does not have one readable record-home repository binding.",
         details: { mission_id: context.missionId },
         recovery: "Resolve the mission's recorded record-home binding before linting its canonical graph.",
+        ...(historyMetadata ? { history_metadata: historyMetadata } : {}),
       };
     }
     const pathDiagnostics = await validateTaskGraphPathOperands(
@@ -126,7 +131,7 @@ export class ConstructionLint {
       [{ repositoryId: recordHomeRepositoryId, basePath: ".", path: relativeGraphPath, pointer: "" }],
     );
     findings.push(...pathDiagnostics.map((diagnostic) => graphFinding(relativeGraphPath, diagnostic)));
-    if (pathDiagnostics.length > 0) return invalid(findings);
+    if (pathDiagnostics.length > 0) return invalid(findings, historyMetadata);
     let graphSource: string;
     try {
       graphSource = new TextDecoder().decode(await this.fileSystem.read(graphPath, context.recordHome));
@@ -137,7 +142,7 @@ export class ConstructionLint {
         code: "task-graph-unavailable",
         message: "The canonical mission-owned task graph cannot be read.",
       });
-      return invalid(findings);
+      return invalid(findings, historyMetadata);
     }
     const executionIdentities = [...new Set(context.history.events.flatMap((record) => record.event ? [record.event.id] : []))];
     const graph = readTaskGraph(graphSource, {
@@ -147,6 +152,8 @@ export class ConstructionLint {
       executionIdentities,
     });
     if (graph.kind === "invalid") findings.push(...graph.diagnostics.map((diagnostic) => graphFinding(Path.join(relativeUnitRoot, "tasks-dag.json"), diagnostic)));
-    return findings.length > 0 ? invalid(findings) : { kind: "valid", findings: [] };
+    return findings.length > 0
+      ? invalid(findings, historyMetadata)
+      : { kind: "valid", findings: [], ...(historyMetadata ? { history_metadata: historyMetadata } : {}) };
   }
 }

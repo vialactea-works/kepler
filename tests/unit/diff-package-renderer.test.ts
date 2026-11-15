@@ -4,10 +4,23 @@ import type { DiffPackageResolvedSource } from "../../packages/cli/src/construct
 import { renderGitDiffPackage } from "../../packages/cli/src/workbench/diff-package.js";
 import type { GitDiffPackageComparison } from "../../packages/cli/src/workbench/git-diff-package.js";
 
+const historyVersion = "30000000-0000-4000-8000-000000000001";
+const generationId = "40000000-0000-4000-8000-000000000001";
 const source: DiffPackageResolvedSource = {
   scope: { kind: "unit-review", unitId: "unit-1", implementationAttemptId: "attempt-1" },
   projectRoot: "/workspace/project",
   missionId: "mission-1",
+  historyVersion,
+  generationId,
+  historyMetadata: {
+    mode: "active",
+    history_version: historyVersion,
+    generation_id: generationId,
+    pending_recovery: false,
+    migration_required: false,
+    control_receipts: [],
+    control_receipts_truncated: false,
+  },
   recordHomeRepositoryId: "repo-home",
   workspaceRepositories: [],
   comparisons: [],
@@ -69,8 +82,55 @@ describe("renderGitDiffPackage", () => {
     expect(rendered.content).toContain("+added");
     expect(rendered.content).toContain("task-activity-output");
     expect(rendered.content).toContain("This package is derived inspection material.");
+    expect(rendered.content).toContain("It does not prove readiness, named checks passed");
+    expect(rendered.content).toContain("Package generation creates no attempt, rerun, check, approval, or lifecycle transition.");
     expect(rendered.content).toContain("A current consumer assesses historical and retained inputs under its own contract");
+    expect(rendered.content).toContain(`- History version: ${historyVersion}`);
+    expect(rendered.content).toContain(`- History generation: ${generationId}`);
     expect(rendered.fingerprint).toBe(`sha256:${createHash("sha256").update(fingerprintInput, "utf8").digest("hex")}`);
+  });
+
+  it("binds identical source records to the selected generation in the fingerprint", () => {
+    const nextGeneration = "40000000-0000-4000-8000-000000000002";
+    const next = renderGitDiffPackage({
+      ...source,
+      generationId: nextGeneration,
+      historyMetadata: { ...source.historyMetadata, generation_id: nextGeneration },
+    }, [comparison()]);
+    const original = renderGitDiffPackage(source, [comparison()]);
+
+    const nextHistoryVersion = "60000000-0000-4000-8000-000000000002";
+    const nextHistory = renderGitDiffPackage({
+      ...source,
+      historyVersion: nextHistoryVersion,
+      historyMetadata: { ...source.historyMetadata, history_version: nextHistoryVersion },
+    }, [comparison()]);
+    expect(next.fingerprint).not.toBe(original.fingerprint);
+    expect(nextHistory.fingerprint).not.toBe(original.fingerprint);
+    expect(next.content).toContain(nextGeneration);
+    expect(nextHistory.content).toContain(nextHistoryVersion);
+    expect(next.content).toContain(historyVersion);
+  });
+
+  it("labels healthy legacy inspection as migration-required", () => {
+    const rendered = renderGitDiffPackage({
+      ...source,
+      historyVersion: null,
+      generationId: null,
+      historyMetadata: {
+        ...source.historyMetadata,
+        mode: "legacy",
+        history_version: null,
+        generation_id: null,
+        pending_recovery: false,
+        migration_required: true,
+      },
+    }, [comparison()]);
+
+    expect(rendered.content).toContain("- History mode: legacy");
+    expect(rendered.content).toContain("- History version: unavailable");
+    expect(rendered.content).toContain("- Migration required: yes");
+    expect(rendered.content).toContain("\"migration_required\": true");
   });
 
   it("keeps binary object identifiers and access arguments in the package", () => {

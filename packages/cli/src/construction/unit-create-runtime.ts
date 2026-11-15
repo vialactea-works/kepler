@@ -2,6 +2,7 @@ import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import { parseStrictJson } from "../json/strict-json.js";
 import { scanJournalBytes } from "../history/journal.js";
+import type { HistoryAccess } from "../history/access.js";
 import {
   CONSTRUCTION_PHASE,
   validateConstructionEvent,
@@ -80,15 +81,8 @@ const ensureDirectory = async (path: string, root: string): Promise<void> => {
   if (!(await inspectDirectoryPath(path, root))) throw new Error(`Directory could not be prepared safely: ${path}`);
 };
 
-const readJournal = async (path: string, root: string): Promise<Uint8Array> => {
-  const metadata = await Fs.lstat(path);
-  if (!metadata.isFile() || metadata.isSymbolicLink()) throw new Error(`Journal is not a regular file: ${path}`);
-  const resolved = await Fs.realpath(path);
-  if (!isWithin(root, resolved)) throw new Error(`Journal escapes the selected record home: ${path}`);
-  return new Uint8Array(await Fs.readFile(resolved));
-};
-
 const collectJournalIdentities = async (
+  reader: Pick<HistoryAccess, "read">,
   recordHomes: readonly string[],
   selectedRecordHome: string,
   targetMissionId: MissionId,
@@ -132,18 +126,13 @@ const collectJournalIdentities = async (
         });
       }
 
-      const historyRoot = Path.join(missionRoot, "history");
-      const phaseEntries = await listEntries(historyRoot, root);
-      for (const phaseEntry of phaseEntries.filter((entry) => entry.isDirectory())) {
-        const phase = phaseEntry.name;
-        const phaseRoot = Path.join(historyRoot, phase);
-        const journals = (await listEntries(phaseRoot, root)).filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"));
-        for (const file of journals) {
-          const journalId = file.name.slice(0, -6);
-          const bytes = await readJournal(Path.join(phaseRoot, file.name), root);
-          const scan = scanJournalBytes(bytes);
+      const view = await reader.read(root, missionId);
+      for (const phase of new Set(view.sources.map((source) => source.phase))) {
+        for (const source of view.sources.filter((source) => source.phase === phase)) {
+          const journalId = source.journalId;
+          const scan = scanJournalBytes(source.bytes);
           if (scan.problems.length > 0) {
-            throw new Error(`History contains an incomplete or damaged journal: ${Path.join(phaseRoot, file.name)}`);
+            throw new Error(`History contains an incomplete or damaged selected journal: ${source.sourceId}`);
           }
           for (const line of scan.lines) {
             if (line.raw === undefined) throw new Error(`History contains an unreadable journal record: ${journalId}`);
@@ -233,8 +222,8 @@ const collectJournalIdentities = async (
   };
 };
 
-export const createNodeUnitCreateRecords = (): UnitCreateRecords => ({
-  inspect: async (recordHomes, selectedRecordHome, missionId) => collectJournalIdentities(recordHomes, selectedRecordHome, missionId),
+export const createNodeUnitCreateRecords = (reader: Pick<HistoryAccess, "read">): UnitCreateRecords => ({
+  inspect: async (recordHomes, selectedRecordHome, missionId) => collectJournalIdentities(reader, recordHomes, selectedRecordHome, missionId),
   createDirectory: async (recordHome, missionId, unitId): Promise<UnitCreateDirectoryResult> => {
     const root = await Fs.realpath(recordHome);
     const missionRoot = Path.join(root, ".kepler", "missions", missionId);

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-This document gives version 3 skill names and responsibilities. The requester accepted the Functional Design and Quality Requirements responsibilities under FD13 and NF12. The requester accepted Planning, Implementation, Review, and Deliver responsibilities under IP12, IE07, UR08, and DL09. The requester accepted Code Generation, Code Validation, and Code Integration responsibilities under IE08, IE09, and IE28. The current source candidate packages fourteen versioned skill trees, including optional project readiness (`kepler-init`), pre-stage `kepler-mission-startup`, and cross-stage `kepler-resume`, and eight agent-profile files (four Pi and four Claude Code). Project readiness does not create a mission or hand off to startup. These procedures do not alter the accepted stage or Activity responsibilities below. An installed release may have a different inventory; inspect its selected manifest. The published `v3.0.0` tag's setup requires `KEPLER_HOME` and initializes the release-bound home; resource files do not certify host loading or agent behavior.
+This document gives version 3 skill names and responsibilities. The requester accepted the Functional Design and Quality Requirements responsibilities under FD13 and NF12. The requester accepted Planning, Implementation, Review, and Deliver responsibilities under IP12, IE07, UR08, and DL09. The requester accepted Code Generation, Code Validation, and Code Integration responsibilities under IE08, IE09, and IE28. The source candidate packages fifteen skill trees and eight agent-profile files. Four profiles use Pi format. Four use Claude Code format. The package includes project readiness (`kepler-init`), pre-stage startup (`kepler-mission-startup`), cross-stage resume (`kepler-resume`), and lifecycle migration (`kepler-lifecycle-migration`). Project readiness does not create a mission or hand off to startup. These procedures do not alter the accepted stage or Activity responsibilities below. An installed release may have a different inventory; inspect its selected manifest. The published `v3.0.0` tag's setup requires `KEPLER_HOME` and initializes the release-bound home; resource files do not certify host loading or agent behavior.
 
 Stage and Activity contracts set their own scopes, completion conditions, and authority. Skills give procedures under those contracts. Skill names and packaging do not set stage or Activity boundaries. Kepler setup does not register host resources. Users and hosts choose resource discovery, loading, and execution. See the [user skill reference](../../skills.md) and the [installation guide](../../installation.md) for ownership and verification status.
 
@@ -23,6 +23,7 @@ Stage and Activity contracts set their own scopes, completion conditions, and au
 | [kepler-grilling](#kepler-grilling) | Help with focused requester discussion. |
 | [kepler-domain-modelling](#kepler-domain-modelling) | Develop domain language, models, and rules. |
 | [kepler-research](#kepler-research) | Investigate uncertain facts and record sourced findings. |
+| [kepler-lifecycle-migration](#kepler-lifecycle-migration) | Apply dated release-migration guides within their support and approval boundaries. |
 
 ### Name changes
 
@@ -210,3 +211,13 @@ Find answers to uncertain facts in source code and primary references. Return fi
 Use the caller's stage-specific supporting-file path. Functional Design uses `details/functional-design/`. Quality Requirements uses `details/quality-requirements/`. The accepted Implementation Planning contract uses `details/implementation-planning/`. The accepted Implementation, Unit of Work Review, and Deliver contracts use `details/implementation/`, `details/unit-of-work-review/`, and `details/deliver/`, respectively.
 
 Link supporting detail from the relevant required section in the root Unit of Work documents.
+
+## kepler-lifecycle-migration
+
+Select a dated guide for an explicit Kepler operation, contract, or file-format migration.
+Keep guides under `referenses/migrations/<YYYY-MM-DD>-<migration-name>.md` inside the complete skill directory.
+Verify the selected source, target, release, capabilities, and ownership before proposing changes.
+Bind the guide hash, source inventory, preservation, operations, and expected results in an approved manifest.
+Use supported operations and verify the result. Do not edit journals or infer lifecycle authority from a guide.
+The first history-generation guide is planned until its runtime migration exists. This resource does not approve the recovery proposal.
+It is an optional supporting procedure, not a stage or a new agent role.

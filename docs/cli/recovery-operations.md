@@ -1,5 +1,7 @@
 # Recovery operations for agents and operators
 
+Use [Mission-history recovery commands](history-recovery.md) for generation selection, deprecated phase layouts, or approved history reset and reconstruction. The operations below keep their ordinary interruption scope. History recovery requires separate exact decisions; it does not authorize installation, release, or live mission changes by itself.
+
 Developers should use the [prompt-first recovery guide](../recovery.md). The commands below illustrate agent/operator operations, not developer steps.
 
 Use this guide when mission preparation, a worker, Integration, or setup stops before you can confirm the result. Kepler records workflow history separately from agent sessions. A timeout does not prove that a worker stopped or a write failed.
@@ -58,7 +60,7 @@ With `jq`, extract those inputs from the original stage-start response saved as 
 
 ```bash
 jq '{inputs:.data.inputs}' stage-start.json > stage-resume.json
-kepler workflow construction stage resume --unit "$UNIT" --stage implementation --attempt "$IMPL" \
+kepler workflow construction stage resume --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage implementation --attempt "$IMPL" \
   --request "$(cat stage-resume.json)" --project "$PROJECT"
 ```
 

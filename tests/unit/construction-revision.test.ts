@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as Path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CONSTRUCTION_ACTIVITIES, CONSTRUCTION_STAGES } from "../../packages/cli/src/construction/events.js";
+import { CONSTRUCTION_ACTIVITIES, CONSTRUCTION_STAGES, validateConstructionEvent } from "../../packages/cli/src/construction/events.js";
 import {
   deriveRevisionCascade,
   Revision,
@@ -12,6 +12,8 @@ import type { AuditContextResolver } from "../../packages/cli/src/audit/context.
 import type { ConstructionHistoryFact, ConstructionUnitProjection } from "../../packages/cli/src/construction/projection.js";
 import type { EventJournal } from "../../packages/cli/src/history/journal.js";
 import type { ScopeSelectors } from "../../packages/cli/src/cli/scope-selectors.js";
+
+type EventId = ConstructionHistoryFact["event"]["id"];
 
 const request = {
   orchestrator_decision: "Return implementation to Code Generation",
@@ -283,7 +285,8 @@ describe("revision cascade derivation", () => {
     ]);
   });
 
-  it("appends one causal authorization with derived scopes and resumes without duplicate acceptance", async () => {
+  it.each(["running", "waiting", "paused", "completed", "resumed"] as const)("orders %s affected attempts and resumes without duplicate acceptance", async (qualityState) => {
+    const effectiveQualityState = qualityState === "resumed" ? "running" : qualityState;
     const missionId = "10000000-0000-4000-8000-000000000001";
     const unitId = "10000000-0000-4000-8000-000000000002";
     const selectedAttemptId = "10000000-0000-4000-8000-000000000003";
@@ -316,6 +319,74 @@ describe("revision cascade derivation", () => {
       byteOffset: 0,
       event: baseEvent,
     };
+    const qualityStart: ConstructionHistoryFact = {
+      ...fact,
+      event: {
+        ...baseEvent,
+        id: "10000000-0000-4000-8000-000000000008" as EventId,
+        caused_by: [baseEvent.id],
+        data: { ...baseEvent.data, stage: "quality-requirements", stage_attempt_id: qualityAttemptId },
+      },
+    };
+    const qualityFacts = [qualityStart];
+    const addQualityState = (
+      id: EventId,
+      type: ConstructionHistoryFact["event"]["type"],
+      data: Readonly<Record<string, unknown>>,
+    ): void => {
+      const previous = qualityFacts.at(-1)!;
+      const next: ConstructionHistoryFact = {
+        ...qualityStart,
+        line: previous.line + 1,
+        event: { ...qualityStart.event, id, type, caused_by: [previous.event.id], data },
+      };
+      expect(validateConstructionEvent(next.event)).toMatchObject({ status: "valid" });
+      qualityFacts.push(next);
+    };
+    const qualityScope = { mission_id: missionId, unit_id: unitId, stage: "quality-requirements", stage_attempt_id: qualityAttemptId };
+    if (qualityState === "paused" || qualityState === "resumed") {
+      addQualityState("10000000-0000-4000-8000-00000000000b" as EventId, "construction.stage-pause-requested", {
+        ...qualityScope, reason: "Stop the exact worker before reconciliation",
+      });
+      addQualityState("10000000-0000-4000-8000-00000000000c" as EventId, "construction.stage-paused", {
+        ...qualityScope, reason: "The worker ended and its effects were reconciled",
+      });
+    }
+    if (qualityState === "resumed") {
+      addQualityState("10000000-0000-4000-8000-000000000009" as EventId, "construction.stage-resumed", qualityStart.event.data);
+    } else if (qualityState === "waiting") {
+      addQualityState("10000000-0000-4000-8000-000000000009" as EventId, "construction.stage-waiting", {
+        ...qualityScope, reason: "The required requester decision is pending",
+      });
+    } else if (qualityState === "completed") {
+      addQualityState("10000000-0000-4000-8000-000000000009" as EventId, "construction.stage-attempt-completed", {
+        ...qualityScope, evidence_ids: [], checkpoints: [],
+      });
+    }
+    const qualityLatest = qualityFacts.at(-1)!;
+    const implementationStart: ConstructionHistoryFact = {
+      ...fact,
+      event: {
+        ...baseEvent,
+        id: "10000000-0000-4000-8000-00000000000a" as EventId,
+        data: { ...baseEvent.data, stage: "implementation", stage_attempt_id: implementationAttemptId },
+      },
+    };
+    const implementationLatest: ConstructionHistoryFact = {
+      ...implementationStart,
+      line: implementationStart.line + 1,
+      event: {
+        ...implementationStart.event,
+        id: "10000000-0000-4000-8000-00000000000d" as EventId,
+        type: "construction.stage-attempt-completed",
+        caused_by: [implementationStart.event.id],
+        data: { mission_id: missionId, unit_id: unitId, stage: "implementation", stage_attempt_id: implementationAttemptId,
+          evidence_ids: [], checkpoints: [] },
+      },
+    };
+    for (const item of [fact, ...qualityFacts, implementationStart, implementationLatest]) {
+      expect(validateConstructionEvent(item.event)).toMatchObject({ status: "valid" });
+    }
     const stages = CONSTRUCTION_STAGES.map((stage) => {
       if (stage === "functional-design") {
         return {
@@ -323,11 +394,18 @@ describe("revision cascade derivation", () => {
           attempts: [{ attemptId: selectedAttemptId, state: "running", facts: [fact] }],
         };
       }
-      if (stage === "quality-requirements") return stageProjection(stage, qualityAttemptId, "completed");
-      if (stage === "implementation") return stageProjection(stage, implementationAttemptId, "completed");
+      if (stage === "quality-requirements") return {
+        ...stageProjection(stage, qualityAttemptId, effectiveQualityState),
+        attempts: [{ attemptId: qualityAttemptId, state: effectiveQualityState, facts: qualityFacts }],
+      };
+      if (stage === "implementation") return {
+        ...stageProjection(stage, implementationAttemptId, "completed"),
+        attempts: [{ attemptId: implementationAttemptId, state: "completed", facts: [implementationLatest] }],
+      };
       return stageProjection(stage);
     });
-    const eventRecords: Array<{ readonly event: ConstructionHistoryFact["event"] }> = [{ event: baseEvent }];
+    const eventRecords: Array<{ readonly event: ConstructionHistoryFact["event"] }> =
+      [fact, ...qualityFacts, implementationStart, implementationLatest].map(({ event }) => ({ event }));
     const loaded = {
       kind: "loaded",
       root: "/tmp/kepler-revision-unit",
@@ -387,6 +465,9 @@ describe("revision cascade derivation", () => {
       "20000000-0000-4000-8000-000000000020",
       "20000000-0000-4000-8000-000000000021",
       "20000000-0000-4000-8000-000000000022",
+      "20000000-0000-4000-8000-000000000023",
+      "20000000-0000-4000-8000-000000000024",
+      "20000000-0000-4000-8000-000000000025",
     ];
     const runtime = {
       workspace: {
@@ -466,6 +547,13 @@ describe("revision cascade derivation", () => {
     expect(overlapping).toMatchObject({ kind: "failed", data: { code: "revision_barrier_pending" } });
     expect(appended).toHaveLength(2);
 
+    const qualityAttempt = stages.find((stage) => stage.stage === "quality-requirements")!.attempts[0]!;
+    qualityAttempt.facts = [];
+    const missingHistory = await restartedService.execute(selectors, request);
+    expect(missingHistory).toMatchObject({ kind: "failed", data: { code: "revision_transition_history_missing" } });
+    expect(appended).toHaveLength(2);
+    qualityAttempt.facts = qualityFacts;
+
     const interrupted = await restartedService.execute(selectors, request);
     expect(interrupted).toMatchObject({ kind: "failed", data: { code: "revision_transition_append_uncertain" } });
     expect(appended.map((event) => event.type)).toEqual([
@@ -495,6 +583,9 @@ describe("revision cascade derivation", () => {
     const reopens = appended.filter((event) => event.type === "construction.stage-reopened");
     expect(ends).toHaveLength(3);
     expect(reopens).toHaveLength(3);
+    expect(ends.find((event) => event.data.stage === "functional-design")?.caused_by).toContain(fact.event.id);
+    expect(ends.find((event) => event.data.stage === "quality-requirements")?.caused_by).toContain(qualityLatest.event.id);
+    expect(ends.find((event) => event.data.stage === "implementation")?.caused_by).toContain(implementationLatest.event.id);
     for (let index = 0; index < ends.length; index += 1) {
       expect(ends[index]?.caused_by).toContain(appended[1]?.id);
       expect(reopens[index]?.caused_by).toContain(ends[index]?.id);
@@ -584,6 +675,7 @@ describe("revision cascade derivation", () => {
       "11000000-0000-4000-8000-000000000014",
       "11000000-0000-4000-8000-000000000015",
       "11000000-0000-4000-8000-000000000016",
+      "11000000-0000-4000-8000-000000000017",
     ];
     const journal = {
       append: async (event: ConstructionHistoryFact["event"]) => {
@@ -630,6 +722,12 @@ describe("revision cascade derivation", () => {
 
     const authorized = await service.execute(selectors, request);
     expect(authorized).toMatchObject({ kind: "success", data: { status: "barrier_pending" } });
+    const validationAttempt = activities.find((activity) => activity.activity === "code-validation")!.attempts[0]!;
+    validationAttempt.facts = [];
+    const missingHistory = await service.execute(selectors, request);
+    expect(missingHistory).toMatchObject({ kind: "failed", data: { code: "revision_transition_history_missing" } });
+    expect(appended).toHaveLength(2);
+    validationAttempt.facts = [validationFact];
     const resumed = await service.execute(selectors, request);
     expect(resumed).toMatchObject({ kind: "success", data: { status: "barrier_complete", resumed_authorization: true } });
     expect(appended.map((event) => event.type)).toEqual([
@@ -640,6 +738,7 @@ describe("revision cascade derivation", () => {
       "construction.activity-reopened",
     ]);
     expect(appended[2]?.data).toMatchObject({ task_id: taskId, activity: "code-validation", activity_attempt_id: validationAttemptId });
+    expect(appended[2]?.caused_by).toEqual([appended[1]?.id, validationStart.id]);
     expect(appended[3]?.caused_by).toContain(appended[2]?.id);
     expect(appended[4]?.data).toMatchObject({ task_id: taskId, activity: "code-integration", stage_attempt_id: implementationAttemptId });
     expect(appended[4]?.data.activity_attempt_id).toBeUndefined();

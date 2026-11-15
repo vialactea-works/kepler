@@ -25,13 +25,13 @@ kepler workflow construction activity show --unit <unit-id> --task <task-id> --a
 Start only the eligible Validation occurrence under the same current Implementation attempt:
 
 ```text
-kepler workflow construction activity start --unit <unit-id> --task <task-id> --activity code-validation --implementation-attempt <implementation-attempt-id> [--project <path>]
+kepler workflow construction activity start --history-version <control-event-id> --unit <unit-id> --task <task-id> --activity code-validation --implementation-attempt <implementation-attempt-id> [--project <path>]
 ```
 
 Retain its returned Activity-attempt ID. Generation and Validation require separate worker contexts. Confirm the reviewer did not author the candidate. An optional package is made from the original source attempt and admission baseline, with no consumer-attempt selector:
 
 ```text
-kepler git diff-package validation --unit <unit-id> --task <task-id> --implementation-attempt <implementation-attempt-id> --generation-attempt <generation-attempt-id> [--project <path>] [--out <path>]
+kepler git diff-package validation --unit <unit-id> --task <task-id> --implementation-attempt <implementation-attempt-id> --generation-attempt <generation-attempt-id> [--project <path>] [--history-version <control-event-id>] [--out <path>]
 ```
 
 Review actual material and its bindings, not only this package or the author's summary. The package neither proves checks nor replaces current Validation evidence.
@@ -47,11 +47,11 @@ Review actual material and its bindings, not only this package or the author's s
    Record command, actual result, scope, covered material, environment/conditions, executor, and retained output. A build counts as typechecking only if it performs typechecking. A failed, skipped, incomplete, or unavailable check is not success; report the blocker without claiming Validation completion. Apply project-specific required checks without adding a general check policy.
 3. Give independent feedback on correctness, failure behavior, boundary behavior, test coverage, applicable quality obligations, security, and unintended effects. Do not author or edit implementation, tests, configuration, or documentation. Identify each blocker with exact location, violated task/upstream obligation, evidence, and a proposed correction boundary. Separate code defect from missing proof, uncertainty, or upstream intent conflict. A preference does not change the task contract.
 4. Review that the Generation self-review and TDD evidence address the task's acceptance and current material. Check results against located files/commands rather than accepting claims. Do not treat an optional diff package as a check result. If independent feedback itself needs correction while the candidate stays unchanged, fix the assessment and keep the current Validation attempt. If the candidate or relevant inputs change, report to the orchestrator; it authorizes a return and determines which later Activities must run again.
-5. Self-review the assessment for correctness and coverage: every acceptance criterion, relevant functional and quality obligation, required check, observed result, blocking finding, and uncertainty is addressed. Record actual check results, independent review findings, self-review, conditions and source/material bindings through `kepler audit record evidence --unit <unit-id> --task <task-id> --activity code-validation --attempt <validation-attempt-id> [--project <path>]` with one accepted typed JSON object on stdin. Bind the evidence to the current Validation attempt and actual reviewed material using `inputs` entries with opaque `reference`/`purpose`; do not infer paths or normalize references. Evidence recording does not run checks or authorize Integration.
+5. Self-review the assessment for correctness and coverage: every acceptance criterion, relevant functional and quality obligation, required check, observed result, blocking finding, and uncertainty is addressed. Record actual check results, independent review findings, self-review, conditions and source/material bindings through `kepler audit record evidence --history-version <control-event-id> --unit <unit-id> --task <task-id> --activity code-validation --attempt <validation-attempt-id> [--project <path>]` with one accepted typed JSON object on stdin. Bind the evidence to the current Validation attempt and actual reviewed material using `inputs` entries with opaque `reference`/`purpose`; do not infer paths or normalize references. Evidence recording does not run checks or authorize Integration.
 6. Complete Validation only if typecheck, build and full application suite pass on the reviewed material, independent non-author feedback and assessment self-review are complete, and no blocking findings remain:
 
    ```text
-   kepler workflow construction activity complete --unit <unit-id> --task <task-id> --activity code-validation --implementation-attempt <implementation-attempt-id> --attempt <validation-attempt-id> --evidence '<JSON evidence IDs>' [--project <path>]
+   kepler workflow construction activity complete --history-version <control-event-id> --unit <unit-id> --task <task-id> --activity code-validation --implementation-attempt <implementation-attempt-id> --attempt <validation-attempt-id> --evidence '<JSON evidence IDs>' [--project <path>]
    ```
 
    Use the accepted typed `evidence_ids` request. Keep failed results as failed evidence; never report a passed outcome or complete on process exit alone.

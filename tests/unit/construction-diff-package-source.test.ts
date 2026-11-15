@@ -591,6 +591,15 @@ const makeLoaded = (options: FixtureOptions = {}): Extract<AuditHistoryReadResul
     root: "/record-home",
     missionId: ids.mission,
     history,
+    historyMetadata: {
+      mode: "active",
+      history_version: ids.validation,
+      generation_id: ids.generation,
+      pending_recovery: false,
+      migration_required: false,
+      control_receipts: [],
+      control_receipts_truncated: false,
+    },
     projection: { missionId: ids.mission, blocked: false, historyIssues: [], projectionIssues: [], units: [unit] },
     unit,
   };
@@ -617,6 +626,68 @@ describe("ConstructionDiffPackageSources", () => {
     expect(result.source.comparisons.every((comparison) => "commit" in comparison.base && comparison.base.commit === checkpoint("a"))).toBe(true);
     expect(result.source.comparisons.every((comparison) => comparison.target.commit === checkpoint("b"))).toBe(true);
     expect(result.source.taskDefinitions.map((event) => String(event.id))).toContain("90000000-0000-4000-8000-000000000005");
+    expect(result.source).toMatchObject({
+      historyVersion: ids.validation,
+      generationId: ids.generation,
+      historyMetadata: { mode: "active", history_version: ids.validation, generation_id: ids.generation },
+    });
+  });
+
+  it("rejects a stale requested version before resolving any source events", async () => {
+    const loaded = makeLoaded();
+    let reads = 0;
+    const sources = new ConstructionDiffPackageSources({ readUnit: async () => { reads += 1; return loaded; } });
+    const result = await sources.resolve({
+      kind: "validation",
+      unitId,
+      taskId: ids.task,
+      implementationAttemptId: ids.oldImplementation,
+      generationAttemptId: ids.generation,
+      historyVersion: ids.integration,
+    });
+
+    expect(result).toMatchObject({ kind: "failed", code: "diff_package_history_version_stale" });
+    expect(reads).toBe(1);
+  });
+
+  it("fences recovering history and keeps healthy legacy inspection explicitly migration-required", async () => {
+    const loaded = makeLoaded({ includeIntegration: true, includeUnitReview: true });
+    const recovering: typeof loaded = {
+      ...loaded,
+      historyMetadata: { ...loaded.historyMetadata, mode: "recovering", pending_recovery: true },
+    };
+    const fenced = await new ConstructionDiffPackageSources({ readUnit: async () => recovering }).resolve({
+      kind: "validation",
+      unitId,
+      taskId: ids.task,
+      implementationAttemptId: ids.oldImplementation,
+      generationAttemptId: ids.generation,
+    });
+    expect(fenced).toMatchObject({ kind: "failed", code: "diff_package_history_recovery_pending" });
+
+    const legacy: typeof loaded = {
+      ...loaded,
+      historyMetadata: {
+        ...loaded.historyMetadata,
+        mode: "legacy",
+        history_version: null,
+        generation_id: null,
+        pending_recovery: false,
+        migration_required: true,
+      },
+    };
+    const inspected = await new ConstructionDiffPackageSources({ readUnit: async () => legacy }).resolve({
+      kind: "unit-review",
+      unitId,
+      implementationAttemptId: ids.implementation,
+    });
+    expect(inspected.kind).toBe("resolved");
+    if (inspected.kind !== "resolved") return;
+    expect(inspected.source).toMatchObject({
+      historyVersion: null,
+      generationId: null,
+      historyMetadata: { mode: "legacy", migration_required: true },
+    });
   });
 
   it("keeps every Integration preparation, uses each recorded lock input, and preserves generation and validation evidence", async () => {

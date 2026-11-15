@@ -6,6 +6,7 @@ const task = "30000000-0000-4000-8000-000000000001";
 const implementationAttempt = "40000000-0000-4000-8000-000000000001";
 const generationAttempt = "50000000-0000-4000-8000-000000000001";
 const integrationAttempt = "50000000-0000-4000-8000-000000000002";
+const historyVersion = "60000000-0000-4000-8000-000000000001";
 
 const shared = {
   unit: [unit],
@@ -18,6 +19,7 @@ describe("diff-package option parsing", () => {
       ...shared,
       task: [task],
       generationAttempt: [generationAttempt],
+      historyVersion: [historyVersion],
       project: ["/workspace/project"],
       out: [".kepler/packages/validation.md"],
     })).toEqual({
@@ -29,6 +31,7 @@ describe("diff-package option parsing", () => {
           taskId: task,
           implementationAttemptId: implementationAttempt,
           generationAttemptId: generationAttempt,
+          historyVersion,
         },
         project: "/workspace/project",
         out: ".kepler/packages/validation.md",
@@ -62,6 +65,10 @@ describe("diff-package option parsing", () => {
         scope: { kind: "unit-review", unitId: unit, implementationAttemptId: implementationAttempt },
       },
     });
+    expect(parseDiffPackageOptions("unit-review", { ...shared, historyVersion: [historyVersion] })).toMatchObject({
+      kind: "parsed",
+      request: { scope: { kind: "unit-review", historyVersion } },
+    });
   });
 
   it("rejects missing, duplicate, empty, and malformed source selectors", () => {
@@ -89,6 +96,24 @@ describe("diff-package option parsing", () => {
       generationAttempt: [generationAttempt],
       out: ["result.md", "other.md"],
     })).toMatchObject({ kind: "failed", code: "duplicate_selector" });
+    expect(parseDiffPackageOptions("validation", {
+      ...shared,
+      task: [task],
+      generationAttempt: [generationAttempt],
+      out: ["result.md"],
+    })).toMatchObject({ kind: "failed", code: "history_version_required" });
+    expect(parseDiffPackageOptions("unit-review", {
+      ...shared,
+      historyVersion: [historyVersion, generationAttempt],
+    })).toMatchObject({ kind: "failed", code: "duplicate_selector" });
+    expect(parseDiffPackageOptions("unit-review", {
+      ...shared,
+      historyVersion: [""],
+    })).toMatchObject({ kind: "failed", code: "invalid_selector" });
+    expect(parseDiffPackageOptions("unit-review", {
+      ...shared,
+      historyVersion: ["not-a-uuid"],
+    })).toMatchObject({ kind: "failed", code: "invalid_identity" });
   });
 
   it("rejects selectors outside each fixed signature", () => {
@@ -106,6 +131,10 @@ describe("diff-package option parsing", () => {
       ...shared,
       task: [task],
       generationAttempt: [generationAttempt],
+    })).toMatchObject({ kind: "failed", code: "invalid_selector" });
+    expect(parseDiffPackageOptions("unit-review", {
+      ...shared,
+      history_version: [historyVersion],
     })).toMatchObject({ kind: "failed", code: "invalid_selector" });
   });
 });

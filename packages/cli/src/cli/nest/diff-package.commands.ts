@@ -5,6 +5,9 @@ import {
   parseDiffPackageOptions,
   type DiffPackageCommandRequest,
 } from "../diff-package-options.js";
+import { HistoryError } from "../../history/control.js";
+import type { MissionMutations } from "../mission-mutations.js";
+import type { GitDiffPackageService } from "../../workbench/diff-package.js";
 import { ResultReporter } from "./result-reporter.js";
 
 export const GIT_DIFF_PACKAGE_OPERATION = Symbol("GIT_DIFF_PACKAGE_OPERATION");
@@ -22,6 +25,54 @@ export type DiffPackageOperationResult =
 export interface GitDiffPackageOperation {
   execute(request: DiffPackageCommandRequest): Promise<DiffPackageOperationResult>;
 }
+
+const operationFailure = (
+  code: string,
+  message: string,
+  details: Readonly<Record<string, unknown>> = {},
+  recovery = "Preserve the selected history and repository state, then resolve the reported diff-package condition before retrying.",
+): DiffPackageOperationResult => ({ kind: "failed", code, message, details, recovery });
+
+export const createHistoryBoundDiffPackageOperation = (
+  service: Pick<GitDiffPackageService, "execute">,
+  mutations: Pick<MissionMutations, "execute">,
+): GitDiffPackageOperation => ({
+  execute: async (request) => {
+    if (request.out === undefined) return service.execute(request);
+    if (request.scope.historyVersion === undefined) {
+      return operationFailure("history_version_required", "Writing a diff package requires an explicit selected history version.", { unit_id: request.scope.unitId }, "Supply the exact currently selected --history-version or omit --out for read-only inspection.");
+    }
+    try {
+      const admitted = await mutations.execute(
+        { unit: request.scope.unitId, historyVersion: request.scope.historyVersion },
+        request.project,
+        () => service.execute(request),
+      );
+      return admitted.value;
+    } catch (error) {
+      if (error instanceof HistoryError) {
+        const releaseUncertain = error.code === "history_writer_release_failed";
+        return operationFailure(
+          error.code,
+          error.message,
+          {
+            ...error.details,
+            ...(releaseUncertain ? { output_path: request.out, effects_uncertain: true } : {}),
+          },
+          releaseUncertain
+            ? "The package may have been written before the history writer claim failed to release. Inspect the requested output and writer state before retrying."
+            : "Correct the selected history version or state before retrying; no diff-package output was authorized.",
+        );
+      }
+      return operationFailure(
+        "diff_package_operation_failed",
+        error instanceof Error ? error.message : String(error),
+        { output_path: request.out, effects_uncertain: true },
+        "Inspect the requested output and selected history before retrying because the admitted operation ended unexpectedly.",
+      );
+    }
+  },
+});
 
 const reportFailure = (
   reporter: ResultReporter,
@@ -85,6 +136,9 @@ export class GitDiffPackageValidationCommand extends DiffPackageOperationCommand
   @Option({ flags: "--out <path>" })
   parseOut(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
 
+  @Option({ flags: "--history-version <control-event-id>" })
+  parseHistoryVersion(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
   async run(passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
     await this.execute(passedParams, options);
   }
@@ -114,6 +168,9 @@ export class GitDiffPackageIntegrationCommand extends DiffPackageOperationComman
   @Option({ flags: "--out <path>" })
   parseOut(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
 
+  @Option({ flags: "--history-version <control-event-id>" })
+  parseHistoryVersion(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
   async run(passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
     await this.execute(passedParams, options);
   }
@@ -136,6 +193,9 @@ export class GitDiffPackageUnitReviewCommand extends DiffPackageOperationCommand
 
   @Option({ flags: "--out <path>" })
   parseOut(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
+
+  @Option({ flags: "--history-version <control-event-id>" })
+  parseHistoryVersion(value: string, previous: string[] = []): string[] { return appendSelectorValue(value, previous); }
 
   async run(passedParams: string[], options?: Readonly<Record<string, unknown>>): Promise<void> {
     await this.execute(passedParams, options);

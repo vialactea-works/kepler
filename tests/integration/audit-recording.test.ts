@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { AuditContextResolver, createNodeAuditContextFileSystem, createNodeAuditJournalFactory } from "../../packages/cli/src/audit/context.js";
-import { AuditRecording } from "../../packages/cli/src/audit/recording.js";
+import { AuditContextResolver, createNodeAuditContextRuntime } from "../../packages/cli/src/audit/context.js";
+import { AuditRecording, type AuditRecordKind } from "../../packages/cli/src/audit/recording.js";
 import { TaskAdmission, type TaskAdmissionRuntime } from "../../packages/cli/src/construction/task-admission.js";
 import type { ConstructionQueries } from "../../packages/cli/src/construction/scoped-queries.js";
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/cli/src/construction/events.js";
 import { createEventJournal } from "../../packages/cli/src/history/journal.js";
 import { ProjectResolver } from "../../packages/cli/src/cli/project-selection.js";
+import type { ScopeSelectors } from "../../packages/cli/src/cli/scope-selectors.js";
+import { selectFixtureHistory } from "../support/history-consumers.js";
+import { historyTestEvent } from "../support/history-generation.js";
 
 const temporaryRoots: string[] = [];
 const missionId = "10000000-0000-4000-8000-000000000001";
@@ -23,15 +27,61 @@ const eventIds = [
   "50000000-0000-4000-8000-000000000005",
   "60000000-0000-4000-8000-000000000006",
 ];
+const selectedHistories = new Map<string, Awaited<ReturnType<typeof selectFixtureHistory>>>();
+const selectedHistory = (root: string) => {
+  const selected = selectedHistories.get(root);
+  if (!selected) throw new Error("The audit-recording fixture has no selected history.");
+  return selected;
+};
+const selectedJournal = (root: string, journalId: string) => selectedHistory(root).journals.create(root, missionId, journalId);
+const selectedHistoryDirectory = (root: string) => Path.join(root, ".kepler", "missions", missionId, "history", "generations", selectedHistory(root).generationId, CONSTRUCTION_PHASE);
+const withHistoryVersion = (root: string, selectors: ScopeSelectors): ScopeSelectors => ({
+  ...selectors,
+  historyVersion: selectors.historyVersion ?? selectedHistory(root).historyVersion,
+});
+const recordAudit = (root: string, recorder: AuditRecording, kind: AuditRecordKind, selectors: ScopeSelectors, request: unknown) =>
+  recorder.execute(kind, withHistoryVersion(root, selectors), request);
 
 const createProject = async (): Promise<string> => {
   const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-audit-recording-"));
   temporaryRoots.push(root);
   await Fs.mkdir(Path.join(root, ".kepler"));
   await Fs.writeFile(Path.join(root, ".kepler", "marker"), "v3\n");
-  const history = Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
-  await Fs.mkdir(history, { recursive: true });
+  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
+  execFileSync("git", ["config", "user.name", "Kepler Integration"], { cwd: root });
+  execFileSync("git", ["config", "user.email", "integration@example.invalid"], { cwd: root });
+  await Fs.writeFile(Path.join(root, "README.md"), "# Audit recording fixture\n");
+  execFileSync("git", ["add", "README.md"], { cwd: root });
+  execFileSync("git", ["commit", "-q", "-m", "Prepare audit recording fixture"], { cwd: root });
+  const startingCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  const missionCreated = historyTestEvent("construction.mission-created", {
+    mission_id: missionId,
+    title: "Record audit fixture history",
+    request: "Record audit events for the selected fixture unit.",
+    workflow: "standard",
+    record_home: { repository_id: "repo-main" },
+    contexts: [],
+    repositories: [{
+      repository_id: "repo-main",
+      context: { kind: "existing" },
+      branch: { kind: "current" },
+      integration_target: "refs/heads/main",
+      starting_checkpoint: { kind: "commit", commit: startingCommit },
+    }],
+  }, initialJournalId);
+  const workspacesPrepared = historyTestEvent("construction.mission-workspaces-prepared", {
+    mission_id: missionId,
+    repositories: [{
+      repository_id: "repo-main",
+      context: { kind: "existing" },
+      branch: "main",
+      integration_target: "refs/heads/main",
+      starting_checkpoint: { kind: "commit", commit: startingCommit },
+    }],
+  }, initialJournalId, [missionCreated.id]);
   const journal = createEventJournal({ recordHome: root, missionId, journalId: initialJournalId, phase: CONSTRUCTION_PHASE });
+  await journal.append(missionCreated);
+  await journal.append(workspacesPrepared);
   await journal.append({
     id: eventIds[0],
     phase: CONSTRUCTION_PHASE,
@@ -41,7 +91,7 @@ const createProject = async (): Promise<string> => {
     journal_id: initialJournalId,
     recorded_at: "2026-10-21T12:00:00Z",
     producer: { name: "kepler", version: "0.10.3" },
-    caused_by: [],
+    caused_by: [missionCreated.id],
     data: {
       mission_id: missionId,
       unit_id: unitId,
@@ -59,7 +109,7 @@ const createProject = async (): Promise<string> => {
     journal_id: initialJournalId,
     recorded_at: "2026-10-21T12:01:00Z",
     producer: { name: "kepler", version: "0.10.3" },
-    caused_by: [],
+    caused_by: [eventIds[0]],
     data: {
       mission_id: missionId,
       unit_id: unitId,
@@ -83,8 +133,8 @@ const createProject = async (): Promise<string> => {
     data: {
       mission_id: missionId,
       unit_id: unitId,
-      review_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
-      integration_targets: [{ repository_id: "repo-main", target: "main" }],
+      review_baseline: [{ repository_id: "repo-main", commit: startingCommit }],
+      integration_targets: [{ repository_id: "repo-main", target: "refs/heads/main" }],
     },
   });
   await journal.append({
@@ -96,7 +146,7 @@ const createProject = async (): Promise<string> => {
     journal_id: initialJournalId,
     recorded_at: "2026-10-21T12:01:30Z",
     producer: { name: "kepler", version: "0.10.3" },
-    caused_by: [eventIds[0]],
+    caused_by: ["e0000000-0000-4000-8000-00000000000e"],
     data: {
       mission_id: missionId,
       unit_id: unitId,
@@ -126,7 +176,7 @@ const createProject = async (): Promise<string> => {
       graph_ref: { graph_id: "c0000000-0000-4000-8000-00000000000c", content_version: "graph-1" },
       task_definition_ref: { graph_id: "c0000000-0000-4000-8000-00000000000c", task_id: taskId, content_version: "task-1" },
       task_contract: { outputs: ["task-output"], acceptance_criteria: ["Task output is valid"], dependency_task_ids: [], implementation_prerequisites: [] },
-      admission_baseline: [{ repository_id: "repo-main", commit: "checkpoint-start" }],
+      admission_baseline: [{ repository_id: "repo-main", commit: startingCommit }],
       predecessor_provenance: [],
       prerequisite_evidence: [],
     },
@@ -153,6 +203,7 @@ const createProject = async (): Promise<string> => {
       checkpoints: [],
     },
   });
+  selectedHistories.set(root, await selectFixtureHistory(root, missionId));
   return root;
 };
 
@@ -162,12 +213,8 @@ const createAuditContexts = (root: string) => {
     fileSystem: { realpath: (path) => Fs.realpath(path), directoryExists: async (path) => (await Fs.stat(path)).isDirectory() },
     git: { isBareRepository: async () => ({ status: 0, stdout: "false\n", stderr: "" }), repositoryRoot: async () => ({ status: 0, stdout: `${root}\n`, stderr: "" }), configValue: async () => ({ status: 0, stdout: "", stderr: "" }) },
   });
-  return new AuditContextResolver({
-    projects,
-    fileSystem: createNodeAuditContextFileSystem(),
-    journals: createNodeAuditJournalFactory(),
-    identities: { next: randomUUID },
-  });
+  const selected = selectedHistory(root);
+  return new AuditContextResolver(createNodeAuditContextRuntime(projects, selected.access, selected.auditJournals));
 };
 
 const createRecorder = (root: string) => {
@@ -180,13 +227,16 @@ const createRecorder = (root: string) => {
 };
 
 afterEach(async () => {
-  for (const root of temporaryRoots.splice(0)) await Fs.rm(root, { recursive: true, force: true });
+  for (const root of temporaryRoots.splice(0)) {
+    selectedHistories.delete(root);
+    await Fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 describe("audit recording with real journals", () => {
   it("appends a typed failed evidence result with explicit attempt and material bindings", async () => {
     const root = await createProject();
-    const result = await createRecorder(root).execute("evidence", {
+    const result = await recordAudit(root, createRecorder(root), "evidence", {
       unit: unitId,
       stage: "functional-design",
       attempt: stageAttemptId,
@@ -201,7 +251,7 @@ describe("audit recording with real journals", () => {
 
     expect(result).toMatchObject({ kind: "success", data: { id: expect.any(String), journal_id: expect.any(String), evidence_id: expect.any(String) } });
     const auditJournalId = String(result.data.journal_id);
-    const journal = createEventJournal({ recordHome: root, missionId, journalId: auditJournalId, phase: CONSTRUCTION_PHASE });
+    const journal = selectedJournal(root, auditJournalId);
     const scan = await journal.read();
     expect(scan.problems).toEqual([]);
     expect(scan.lines).toHaveLength(1);
@@ -218,7 +268,7 @@ describe("audit recording with real journals", () => {
 
   it("rejects admission when raw prerequisite proof lacks its current parent cause without appending", async () => {
     const root = await createProject();
-    const journal = createEventJournal({ recordHome: root, missionId, journalId: initialJournalId, phase: CONSTRUCTION_PHASE });
+    const journal = selectedJournal(root, initialJournalId);
     const evidenceId = randomUUID();
     await journal.append({
       id: randomUUID(),
@@ -247,7 +297,7 @@ describe("audit recording with real journals", () => {
         conditions: [],
       },
     });
-    const journalPath = Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE, `${initialJournalId}.jsonl`);
+    const journalPath = selectedJournal(root, initialJournalId).path;
     const beforeAdmission = await Fs.readFile(journalPath);
     const result = await new TaskAdmission(
       createAuditContexts(root),
@@ -262,7 +312,7 @@ describe("audit recording with real journals", () => {
           identity: { machine_id: "test-machine", process_id: "test-process", process_incarnation_id: "test-incarnation" },
         },
       } as unknown as TaskAdmissionRuntime,
-    ).execute({ unit: unitId, task: taskId, implementationAttempt: implementationAttemptId }, {
+    ).execute(withHistoryVersion(root, { unit: unitId, task: taskId, implementationAttempt: implementationAttemptId }), {
       prerequisite_evidence_ids: [evidenceId],
     });
 
@@ -290,17 +340,17 @@ describe("audit recording with real journals", () => {
       executor: "Reviewer",
       result: { status: "passed", summary: "The prior result was recorded." },
     };
-    const operation = await recorder.execute("evidence", selectors, evidenceRequest);
+    const operation = await recordAudit(root, recorder, "evidence", selectors, evidenceRequest);
     expect(operation).toMatchObject({ kind: "success", data: { id: expect.any(String) } });
     if (operation.kind !== "success") return;
-    const verification = await recorder.execute("evidence", selectors, {
+    const verification = await recordAudit(root, recorder, "evidence", selectors, {
       ...evidenceRequest,
       check: "Outcome verification",
       related_event_ids: [String(operation.data.id)],
     });
     expect(verification).toMatchObject({ kind: "success", data: { id: expect.any(String) } });
     if (verification.kind !== "success") return;
-    const journal = createEventJournal({ recordHome: root, missionId, journalId: String(verification.data.journal_id), phase: CONSTRUCTION_PHASE });
+    const journal = selectedJournal(root, String(verification.data.journal_id));
     const scan = await journal.read();
     expect(scan.problems).toEqual([]);
     expect(scan.lines[0]?.event?.caused_by).toContain(operation.data.id);
@@ -310,7 +360,7 @@ describe("audit recording with real journals", () => {
     const root = await createProject();
     const deliverAttemptId = "f1000000-0000-4000-8000-000000000001";
     const deliverStartId = "f2000000-0000-4000-8000-000000000002";
-    const journal = createEventJournal({ recordHome: root, missionId, journalId: initialJournalId, phase: CONSTRUCTION_PHASE });
+    const journal = selectedJournal(root, initialJournalId);
     await journal.append({
       id: deliverStartId,
       phase: CONSTRUCTION_PHASE,
@@ -332,7 +382,7 @@ describe("audit recording with real journals", () => {
       },
     });
 
-    const result = await createRecorder(root).execute("interaction", {
+    const result = await recordAudit(root, createRecorder(root), "interaction", {
       unit: unitId,
       stage: "deliver",
       attempt: deliverAttemptId,
@@ -349,7 +399,7 @@ describe("audit recording with real journals", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    const recordedJournal = createEventJournal({ recordHome: root, missionId, journalId: String(result.data.journal_id), phase: CONSTRUCTION_PHASE });
+    const recordedJournal = selectedJournal(root, String(result.data.journal_id));
     const scan = await recordedJournal.read();
     const event = scan.lines[0]?.event;
     expect(event).toMatchObject({
@@ -362,7 +412,7 @@ describe("audit recording with real journals", () => {
   it("records task and Activity events through their phase-owned selectors without requiring --stage", async () => {
     const root = await createProject();
     const recorder = createRecorder(root);
-    const taskEvidence = await recorder.execute("evidence", {
+    const taskEvidence = await recordAudit(root, recorder, "evidence", {
       unit: unitId,
       task: taskId,
       implementationAttempt: implementationAttemptId,
@@ -374,7 +424,7 @@ describe("audit recording with real journals", () => {
       executor: "Reviewer",
       result: { status: "passed", summary: "Task output is valid" },
     });
-    const activityApproval = await recorder.execute("approval", {
+    const activityApproval = await recordAudit(root, recorder, "approval", {
       unit: unitId,
       task: taskId,
       activity: "code-generation",
@@ -388,8 +438,8 @@ describe("audit recording with real journals", () => {
       decision_reference: "opaque:activity-decision",
     });
 
-    const beforeInvalidScopes = await Fs.readdir(Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE));
-    const missingTaskAttempt = await recorder.execute("evidence", { unit: unitId, task: taskId }, {
+    const beforeInvalidScopes = await Fs.readdir(selectedHistoryDirectory(root));
+    const missingTaskAttempt = await recordAudit(root, recorder, "evidence", { unit: unitId, task: taskId }, {
       inputs: [],
       artifact_bindings: [],
       checkpoints: [],
@@ -397,7 +447,7 @@ describe("audit recording with real journals", () => {
       executor: "Reviewer",
       result: { status: "passed", summary: "Passed" },
     });
-    const missingActivityAttempt = await recorder.execute("approval", {
+    const missingActivityAttempt = await recordAudit(root, recorder, "approval", {
       unit: unitId,
       task: taskId,
       activity: "code-generation",
@@ -414,12 +464,12 @@ describe("audit recording with real journals", () => {
     expect(activityApproval).toMatchObject({ kind: "success", data: { id: expect.any(String) } });
     expect(missingTaskAttempt.kind).toBe("failed");
     expect(missingActivityAttempt.kind).toBe("failed");
-    expect(await Fs.readdir(Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE))).toEqual(beforeInvalidScopes);
+    expect(await Fs.readdir(selectedHistoryDirectory(root))).toEqual(beforeInvalidScopes);
   });
 
   it("rejects a nonexistent attempt without creating a journal", async () => {
     const root = await createProject();
-    const result = await createRecorder(root).execute("approval", {
+    const result = await recordAudit(root, createRecorder(root), "approval", {
       unit: unitId,
       stage: "functional-design",
       attempt: "70000000-0000-4000-8000-000000000007",
@@ -432,7 +482,7 @@ describe("audit recording with real journals", () => {
     });
 
     expect(result.kind).toBe("failed");
-    const files = await Fs.readdir(Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE));
+    const files = await Fs.readdir(selectedHistoryDirectory(root));
     expect(files).toEqual([`${initialJournalId}.jsonl`]);
   });
 });

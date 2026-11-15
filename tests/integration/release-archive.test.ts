@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs";
 import * as Os from "node:os";
 import * as Path from "node:path";
@@ -6,7 +7,9 @@ import {
   extractTargetArchive,
   validateTargetPackageRoot,
 } from "../../packages/cli/src/cli/release-archive.js";
-import { createReleaseArchiveFixture } from "../helpers/release-archive-fixture.js";
+import { createResourceManifest } from "../../packages/cli/src/cli/release-resources.js";
+import { archiveFixtureVersion, createReleaseArchiveFixture } from "../helpers/release-archive-fixture.js";
+import { createSetupBundleFixture } from "../helpers/setup-bundle-fixture.js";
 
 const temporaryRoots: string[] = [];
 
@@ -52,6 +55,41 @@ describe("target archive filesystem integration", () => {
       type: "module",
       bin: { kepler: "./bin/kepler" },
     });
+  });
+
+  it("preserves long resource paths and full-width UTF-8 fields through system tar extraction", () => {
+    const root = temporaryRoot();
+    const base = createSetupBundleFixture({ release: archiveFixtureVersion });
+    const paths = [
+      "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md",
+      `guidelines/${"é".repeat(68)}x/${"é".repeat(50)}`,
+    ];
+    const contents = new Uint8Array([0x00, 0xff, 0x0a, 0xc3, 0xa9]);
+    const files = [...base.files, ...paths.map((path) => ({ path, contents }))];
+    const archive = createReleaseArchiveFixture({ resources: {
+      files,
+      manifest: `${JSON.stringify(createResourceManifest(archiveFixtureVersion, files))}\n`,
+    } });
+    const archivePath = Path.join(root, "candidate.tar.gz");
+    const destination = Path.join(root, "system-tar");
+    Fs.writeFileSync(archivePath, archive);
+    const previousUmask = process.umask(0o022);
+    try {
+      Fs.mkdirSync(destination, { mode: 0o755 });
+      execFileSync("tar", ["-xzpf", archivePath, "-C", destination], {
+        env: { ...process.env, TAR_OPTIONS: "" },
+        stdio: "pipe",
+      });
+    } finally {
+      process.umask(previousUmask);
+    }
+    const validated = validateTargetPackageRoot(destination);
+    for (const path of paths) {
+      expect(new Uint8Array(Fs.readFileSync(Path.join(destination, "bundle", path)))).toEqual(contents);
+      const file = validated.files.find((file) => file.path === `bundle/${path}`);
+      expect(file).toBeDefined();
+      expect(new Uint8Array(file!.contents)).toEqual(contents);
+    }
   });
 
   it("enforces canonical file and directory modes under a restrictive umask before publication", () => {

@@ -104,7 +104,9 @@ describe("mission workspace preparation lease handling", () => {
   it("releases exactly once after an attachment probe throws and preserves prepared Git facts", async () => {
     const { runtime, releaseAttempts } = createRuntime({ pathProbeError: true });
     const result = await createMissionWorkspacePreparation(runtime).prepare(recordHome, missionId, [repository], {
-      missionJournalPath: Path.join(recordHome, ".kepler", "missions", missionId, "history", "construction", "journal.jsonl"),
+      missionId,
+      missionJournalPath: Path.join(recordHome, ".kepler", "missions", missionId, "history", "generations", "44444444-4444-4444-8444-444444444444", "construction", "55555555-5555-4555-8555-555555555555.jsonl"),
+      missionHistoryPaths: [],
     });
 
     expect(result).toMatchObject({
@@ -129,7 +131,9 @@ describe("mission workspace preparation lease handling", () => {
   it("preserves an attachment failure when lease release also throws", async () => {
     const { runtime, releaseAttempts } = createRuntime({ attachmentWriteError: true, releaseError: true });
     const result = await createMissionWorkspacePreparation(runtime).prepare(recordHome, missionId, [repository], {
-      missionJournalPath: Path.join(recordHome, ".kepler", "missions", missionId, "history", "construction", "journal.jsonl"),
+      missionId,
+      missionJournalPath: Path.join(recordHome, ".kepler", "missions", missionId, "history", "generations", "44444444-4444-4444-8444-444444444444", "construction", "55555555-5555-4555-8555-555555555555.jsonl"),
+      missionHistoryPaths: [],
     });
 
     expect(result).toMatchObject({

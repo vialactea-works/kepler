@@ -2,6 +2,8 @@ import * as Fs from "node:fs/promises";
 import * as Path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createE2EHarness, type E2EHarness } from "./harness.js";
+import { fixtureHistorySelection } from "./driver.js";
+import { parseLiveHistoryBinding } from "../../packages/cli/src/history/access.js";
 import { createDiffPackageHistory } from "./fixtures/histories/diff-package.js";
 
 const harnesses: E2EHarness[] = [];
@@ -38,16 +40,17 @@ const addProjectMarker = async (root: string): Promise<void> => {
   await Fs.writeFile(Path.join(root, ".kepler", "marker"), "v3\n");
 };
 
-const snapshot = async (root: string): Promise<string> => {
+const snapshot = async (root: string, ignoredDirectory?: string): Promise<string> => {
   const entries: string[] = [];
   const visit = async (directory: string): Promise<void> => {
     const children = await Fs.readdir(directory, { withFileTypes: true });
     for (const child of children.sort((left, right) => left.name.localeCompare(right.name))) {
       const path = Path.join(directory, child.name);
       const relative = Path.relative(root, path);
+      if (relative === ignoredDirectory) continue;
       const stat = await Fs.lstat(path);
       if (child.isDirectory()) {
-        entries.push(`${relative}:directory:${stat.mtimeMs}`);
+        entries.push(`${relative}:directory:${ignoredDirectory?.startsWith(`${relative}${Path.sep}`) ? "coordination-parent" : stat.mtimeMs}`);
         await visit(path);
       } else if (child.isSymbolicLink()) {
         entries.push(`${relative}:link:${await Fs.readlink(path)}`);
@@ -88,7 +91,7 @@ describe("compiled CLI E2E", () => {
         "HEAD",
       );
       expect(head).toMatch(/^[0-9a-f]{40}$/);
-      const result = e2e.cli.run([
+      const result = e2e.cli.runFreshMutation([
         "git",
         "author",
         "--project",
@@ -114,7 +117,7 @@ describe("compiled CLI E2E", () => {
     const invalidHomeContents = "not a directory\n";
     await Fs.writeFile(invalidHome, invalidHomeContents);
     const before = await snapshot(e2e.resources.rootDirectory);
-    const result = e2e.cli.run(["setup"], {
+    const result = e2e.cli.runFreshMutation(["setup"], {
       env: {
         HOME: invalidHome,
         XDG_CONFIG_HOME: Path.join(e2e.resources.rootDirectory, "config"),
@@ -139,7 +142,7 @@ describe("compiled CLI E2E", () => {
     const file = Path.join(e2e.resources.rootDirectory, "legacy-note.md");
     await Fs.writeFile(file, "# Note\n");
 
-    const success = e2e.cli.run(["workbench", "lint", "--file", file]);
+    const success = e2e.cli.runFreshMutation(["workbench", "lint", "--file", file]);
     const successfulEnvelope = envelope(success.stdout);
     expect(success.exitCode).toBe(0);
     expect(success.stderr).toBe("");
@@ -148,7 +151,7 @@ describe("compiled CLI E2E", () => {
     expect(successfulEnvelope.data.output).toContain("SKIPPED");
     expect(successfulEnvelope.data.output).toContain("lint: success");
 
-    const failure = e2e.cli.run(["workbench", "lint"]);
+    const failure = e2e.cli.runFreshMutation(["workbench", "lint"]);
     const failedEnvelope = envelope(failure.stdout);
     expect(failure.exitCode).toBe(1);
     expect(failedEnvelope.status).toBe("failed");
@@ -170,22 +173,22 @@ describe("compiled CLI E2E", () => {
 
   it("publishes root capabilities from parser definitions and handles parser failures as structured results", async () => {
     const e2e = await createHarness();
-    const help = e2e.cli.run(["--help"]);
+    const help = e2e.cli.runFreshMutation(["--help"]);
     expect(help.exitCode).toBe(0);
     expect(help.stderr).toBe("");
-    for (const command of ["setup", "uuid", "workbench", "git", "lint", "audit", "workflow"]) {
+    for (const command of ["setup", "uuid", "workbench", "recovery", "git", "lint", "audit", "workflow"]) {
       expect(help.stdout).toContain(command);
     }
-    const constructionHelp = e2e.cli.run(["workflow", "construction", "--help"]);
+    const constructionHelp = e2e.cli.runFreshMutation(["workflow", "construction", "--help"]);
     expect(constructionHelp.exitCode).toBe(0);
     expect(constructionHelp.stdout).toContain("stage");
     expect(constructionHelp.stdout).toContain("task");
     expect(constructionHelp.stdout).toContain("activity");
     expect(constructionHelp.stdout).toContain("lint");
-    const taskHelp = e2e.cli.run(["workflow", "construction", "task", "--help"]);
+    const taskHelp = e2e.cli.runFreshMutation(["workflow", "construction", "task", "--help"]);
     expect(taskHelp.exitCode).toBe(0);
     for (const operation of ["list", "show", "ready"]) expect(taskHelp.stdout).toContain(operation);
-    const taskScopeFailure = e2e.cli.run(["workflow", "construction", "task", "ready", "--task", "33333333-3333-4333-8333-333333333333"]);
+    const taskScopeFailure = e2e.cli.runFreshMutation(["workflow", "construction", "task", "ready", "--task", "33333333-3333-4333-8333-333333333333"]);
     expect(taskScopeFailure.exitCode).toBe(1);
     expect(envelope(taskScopeFailure.stdout)).toMatchObject({
       status: "failed",
@@ -194,11 +197,11 @@ describe("compiled CLI E2E", () => {
     const lintE2e = await createHarness("native");
     const repository = lintE2e.resources.repositoryDirectory;
     await addProjectMarker(repository);
-    const lintFailure = lintE2e.cli.run(["workflow", "construction", "lint", "--unit", "missing-unit", "--project", repository]);
+    const lintFailure = lintE2e.cli.runFreshMutation(["workflow", "construction", "lint", "--unit", "missing-unit", "--project", repository]);
     expect(lintFailure.exitCode).toBe(1);
     expect(envelope(lintFailure.stdout)).toMatchObject({ status: "failed", data: { code: "unit_not_found" } });
 
-    const failure = e2e.cli.run(["unknown-command"]);
+    const failure = e2e.cli.runFreshMutation(["unknown-command"]);
     const parsed = envelope(failure.stdout);
     expect(failure.exitCode).toBe(1);
     expect(parsed.status).toBe("failed");
@@ -210,7 +213,7 @@ describe("compiled CLI E2E", () => {
     });
     expect(failure.stderr).toContain("unknown command");
 
-    const removedOption = e2e.cli.run(["setup", "--force"]);
+    const removedOption = e2e.cli.runFreshMutation(["setup", "--force"]);
     const removedOptionEnvelope = envelope(removedOption.stdout);
     expect(removedOption.exitCode).toBe(1);
     expect(removedOptionEnvelope).toMatchObject({
@@ -230,9 +233,9 @@ describe("compiled CLI E2E", () => {
     await Fs.mkdir(Path.join(repository, ".kepler", "units-of-work", "unbound-unit"), { recursive: true });
     const before = await snapshot(repository);
 
-    const listed = e2e.cli.run(["workflow", "construction", "unit", "list", "--project", repository]);
-    const shown = e2e.cli.run(["workflow", "construction", "unit", "show", "--unit", "unbound-unit", "--project", repository]);
-    const missing = e2e.cli.run(["workflow", "construction", "unit", "show", "--unit", "unknown-unit", "--project", repository]);
+    const listed = e2e.cli.runFreshMutation(["workflow", "construction", "unit", "list", "--project", repository]);
+    const shown = e2e.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", "unbound-unit", "--project", repository]);
+    const missing = e2e.cli.runFreshMutation(["workflow", "construction", "unit", "show", "--unit", "unknown-unit", "--project", repository]);
     const after = await snapshot(repository);
 
     expect(listed.exitCode).toBe(0);
@@ -274,7 +277,7 @@ describe("compiled CLI E2E", () => {
         integrationTarget: "refs/heads/main",
       }],
     };
-    const create = e2e.cli.run([
+    const create = e2e.cli.runFreshMutation([
       "mission", "create", "--project", repository, "--request", JSON.stringify(request),
     ]);
     expect(create.exitCode).toBe(1);
@@ -285,7 +288,7 @@ describe("compiled CLI E2E", () => {
     const missionId = failureDetails.mission_id;
     expect(typeof missionId).toBe("string");
     if (typeof missionId !== "string") return;
-    const historyRoot = Path.join(repository, ".kepler", "missions", missionId, "history", "construction");
+    const historyRoot = fixtureHistorySelection(repository, missionId).directory;
     const journalName = (await Fs.readdir(historyRoot))[0]!;
     const journalPath = Path.join(historyRoot, journalName);
     const createdOnly = (await Fs.readFile(journalPath, "utf8")).trimEnd().split("\n");
@@ -293,7 +296,7 @@ describe("compiled CLI E2E", () => {
     const createdEventId = (JSON.parse(createdOnly[0]!) as { id: string }).id;
 
     e2e.resources.runGit(repository, "worktree", "remove", heldWorktree);
-    const prepared = e2e.cli.run(["mission", "prepare", "--mission", missionId, "--project", repository]);
+    const prepared = e2e.cli.runFreshMutation(["mission", "prepare", "--mission", missionId, "--project", repository]);
     expect(prepared.exitCode).toBe(0);
     expect(prepared.stderr).toBe("");
     expect(envelope(prepared.stdout).data).toMatchObject({
@@ -301,10 +304,10 @@ describe("compiled CLI E2E", () => {
       record_home: repository,
       execution_started: false,
     });
-    const repeated = e2e.cli.run(["mission", "prepare", "--mission", missionId, "--project", repository]);
+    const repeated = e2e.cli.runFreshMutation(["mission", "prepare", "--mission", missionId, "--project", repository]);
     expect(repeated.exitCode).toBe(0);
     expect(envelope(repeated.stdout).data).toMatchObject({ mission_id: missionId, execution_started: false });
-    const unit = e2e.cli.run([
+    const unit = e2e.cli.runFreshMutation([
       "workflow", "construction", "unit", "create", "recovered-mission-unit", "--mission", missionId, "--project", repository,
     ]);
     expect(unit.exitCode).toBe(0);
@@ -327,7 +330,7 @@ describe("compiled CLI E2E", () => {
     e2e.resources.runGit(repository, "add", "README.md");
     e2e.resources.runGit(repository, "commit", "-q", "-m", "Progress after mission preparation");
     const progressedHead = e2e.resources.runGit(repository, "rev-parse", "HEAD");
-    const historicalPrepare = e2e.cli.run(["mission", "prepare", "--mission", missionId, "--project", repository]);
+    const historicalPrepare = e2e.cli.runFreshMutation(["mission", "prepare", "--mission", missionId, "--project", repository]);
     expect(historicalPrepare.exitCode).toBe(0);
     const historicalData = envelope(historicalPrepare.stdout).data;
     expect(historicalData).toMatchObject({ mission_id: missionId, historical: true, execution_started: false });
@@ -375,7 +378,7 @@ describe("compiled CLI E2E", () => {
         integrationTarget: "refs/heads/main",
       }],
     };
-    const mission = e2e.cli.run([
+    const mission = e2e.cli.runFreshMutation([
       "mission",
       "create",
       "--project",
@@ -387,8 +390,17 @@ describe("compiled CLI E2E", () => {
     const missionData = envelope(mission.stdout).data;
     const missionId = missionData.mission_id as string;
     expect(missionData).toMatchObject({ workflow: "standard", execution_started: false });
+    const selected = fixtureHistorySelection(repository, missionId);
+    const unboundCreate = ["workflow", "construction", "unit", "create", "not-authorized", "--mission", missionId, "--project", repository];
+    const beforeVersionChecks = await snapshot(repository);
+    for (const [version, code] of [[undefined, "history_version_required"], ["90000000-0000-4000-8000-000000000009", "history_version_mismatch"]] as const) {
+      const rejected = e2e.cli.run([...unboundCreate, ...(version === undefined ? [] : ["--history-version", version])]);
+      expect(rejected.exitCode, rejected.stdout).toBe(1);
+      expect(envelope(rejected.stdout)).toMatchObject({ status: "failed", data: { code } });
+      expect(await snapshot(repository)).toBe(beforeVersionChecks);
+    }
 
-    const created = e2e.cli.run([
+    const created = e2e.cli.runFreshMutation([
       "workflow", "construction", "unit", "create", "compiled-unit",
       "--mission", missionId,
       "--effort", "comprehensive",
@@ -402,6 +414,8 @@ describe("compiled CLI E2E", () => {
       status: "success",
       data: {
         mission_id: missionId,
+        history_version: selected.historyVersion,
+        generation_id: selected.generationId,
         unit_id: expect.stringMatching(/^\d{4}-\d{2}-\d{2}-compiled-unit$/),
         workflow: "standard",
         effort: { default: "comprehensive", stage_overrides: { implementation: "minimal" } },
@@ -414,7 +428,7 @@ describe("compiled CLI E2E", () => {
     expect(await exists(Path.join(unitPath, "unit-of-work.md"))).toBe(false);
     expect(await exists(Path.join(unitPath, "tasks-dag.json"))).toBe(false);
 
-    const duplicateMission = e2e.cli.run([
+    const duplicateMission = e2e.cli.runFreshMutation([
       "workflow", "construction", "unit", "create", "another-unit",
       "--mission", missionId,
       "--project", repository,
@@ -422,8 +436,13 @@ describe("compiled CLI E2E", () => {
     expect(duplicateMission.exitCode).toBe(1);
     expect(envelope(duplicateMission.stdout)).toMatchObject({ status: "failed", data: { code: "mission_unit_exists" } });
 
-    const beforeInvalid = await snapshot(repository);
-    const duplicateOverride = e2e.cli.run([
+    const admissionDirectories = [`.git/kepler/missions/${missionId}/coordination`, `.git/kepler/missions/${missionId}/coordination/history-writers`];
+    const rejectedState = async () => (await snapshot(repository)).split("\n").map((line) => {
+      const directory = admissionDirectories.find((path) => line.startsWith(`${path}:directory:`));
+      return directory === undefined ? line : `${directory}:directory:writer-admission`;
+    }).join("\n");
+    const beforeInvalid = await rejectedState();
+    const duplicateOverride = e2e.cli.runFreshMutation([
       "workflow", "construction", "unit", "create", "invalid-unit",
       "--mission", missionId,
       "--stage-effort", "implementation=minimal",
@@ -432,9 +451,9 @@ describe("compiled CLI E2E", () => {
     ]);
     expect(duplicateOverride.exitCode).toBe(1);
     expect(envelope(duplicateOverride.stdout)).toMatchObject({ status: "failed", data: { code: "invalid_unit_request" } });
-    expect(await snapshot(repository)).toBe(beforeInvalid);
+    expect(await rejectedState()).toBe(beforeInvalid);
 
-    const shown = e2e.cli.run([
+    const shown = e2e.cli.runFreshMutation([
       "workflow", "construction", "unit", "show", "--unit", unitId, "--project", repository,
     ]);
     expect(shown.exitCode).toBe(0);
@@ -455,7 +474,7 @@ describe("compiled CLI E2E", () => {
 
   it("returns one UUIDv4 in the compiled CLI result", async () => {
     const e2e = await createHarness();
-    const result = e2e.cli.run(["uuid"]);
+    const result = e2e.cli.runFreshMutation(["uuid"]);
     const parsed = envelope(result.stdout);
 
     expect(result.exitCode).toBe(0);
@@ -487,7 +506,7 @@ describe("compiled CLI E2E", () => {
     const repositoryBefore = await snapshot(repository);
     const linkedBefore = await snapshot(linked);
 
-    const mainResult = e2e.cli.run(
+    const mainResult = e2e.cli.runFreshMutation(
       ["git", "author", "--project", "../repository"],
       {
         cwd: caller,
@@ -499,7 +518,7 @@ describe("compiled CLI E2E", () => {
         },
       },
     );
-    const linkedResult = e2e.cli.run(
+    const linkedResult = e2e.cli.runFreshMutation(
       ["git", "author", "--project", "../linked-worktree"],
       { cwd: caller },
     );
@@ -535,10 +554,10 @@ describe("compiled CLI E2E", () => {
     const unmarkedBefore = await snapshot(unmarked);
     const bareBefore = await snapshot(bare);
 
-    const nestedResult = e2e.cli.run(["git", "author", "--project", nested]);
-    const unmarkedResult = e2e.cli.run(["git", "author", "--project", unmarked]);
-    const bareResult = e2e.cli.run(["git", "author", "--project", bare]);
-    const duplicateResult = e2e.cli.run(
+    const nestedResult = e2e.cli.runFreshMutation(["git", "author", "--project", nested]);
+    const unmarkedResult = e2e.cli.runFreshMutation(["git", "author", "--project", unmarked]);
+    const bareResult = e2e.cli.runFreshMutation(["git", "author", "--project", bare]);
+    const duplicateResult = e2e.cli.runFreshMutation(
       ["git", "author", "--project", repository, "--project", bare],
       { cwd: caller },
     );
@@ -579,8 +598,8 @@ describe("compiled CLI E2E", () => {
     await Fs.writeFile(Path.join(docs, "unselected.md"), "not frontmatter\n");
     const before = await snapshot(repository);
 
-    const valid = e2e.cli.run(["lint", "docs/reference.md", "--project", repository]);
-    const invalid = e2e.cli.run(["lint", "docs/invalid.md", "--project", repository]);
+    const valid = e2e.cli.runFreshMutation(["lint", "docs/reference.md", "--project", repository]);
+    const invalid = e2e.cli.runFreshMutation(["lint", "docs/invalid.md", "--project", repository]);
 
     expect(valid.exitCode).toBe(0);
     expect(valid.stderr).toBe("");
@@ -609,10 +628,20 @@ describe("compiled CLI E2E", () => {
     await addProjectMarker(repository);
     await Fs.appendFile(Path.join(repository, ".git", "info", "exclude"), "\n/.kepler/\n/validation-package.md\n/integration-package.md\n/unit-review-package.md\n/overwrite-package.md\n/missing-object-package.md\n/environment-package.md\n");
     const fixture = await createDiffPackageHistory(e2e.resources);
+    const coordinationDirectory = `kepler/missions/${fixture.missionId}/coordination`;
+    const gitState = () => snapshot(Path.join(repository, ".git"), coordinationDirectory);
     const statusBefore = e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all");
-    const gitBefore = await snapshot(Path.join(repository, ".git"));
+    const gitBefore = await gitState();
+    const bindingPath = Path.join(repository, ".git", coordinationDirectory, "history-selection.json");
+    const initialBinding = parseLiveHistoryBinding(new Uint8Array(await Fs.readFile(bindingPath)));
+    expect(initialBinding.settled_sources).toBeDefined();
+    const { settled_sources: _settledSources, ...stableBinding } = initialBinding;
+    const assertCoordination = async () => {
+      expect(parseLiveHistoryBinding(new Uint8Array(await Fs.readFile(bindingPath)))).toEqual(stableBinding);
+      expect(await Fs.readdir(Path.join(repository, ".git", coordinationDirectory, "history-writers"))).toEqual([]);
+    };
     const constructionBefore = await snapshot(Path.join(repository, ".kepler"));
-    const command = (kind: "validation" | "integration" | "unit-review", out: string) => [
+    const command = (kind: "validation" | "integration" | "unit-review", out: string, historyVersion: string | null = fixture.historyVersion) => [
       "git", "diff-package", kind,
       "--unit", fixture.unitId,
       ...(kind === "unit-review" ? [] : ["--task", fixture.taskId]),
@@ -620,21 +649,37 @@ describe("compiled CLI E2E", () => {
       ...(kind === "validation" ? ["--generation-attempt", fixture.generationAttemptId] : []),
       ...(kind === "integration" ? ["--integration-attempt", fixture.integrationAttemptId] : []),
       "--project", repository,
+      ...(historyVersion === null ? [] : ["--history-version", historyVersion]),
       "--out", out,
     ];
+    const beforeRejected = await snapshot(repository);
+    for (const version of [null, "70000000-0000-4000-8000-000000000007"]) {
+      const rejected = e2e.cli.run(command("validation", "missing-object-package.md", version));
+      expect(rejected.exitCode).toBe(1);
+      expect(envelope(rejected.stdout)).toMatchObject({ status: "failed", data: { code: version === null ? "history_version_required" : "history_version_mismatch" } });
+      expect(await snapshot(repository)).toBe(beforeRejected);
+    }
+    expect(await exists(Path.join(repository, "missing-object-package.md"))).toBe(false);
+    const authorized = command("validation", "missing-object-package.md");
+    const withoutVersion = authorized.filter((_value, index) => index !== authorized.indexOf("--history-version") && index !== authorized.indexOf("--history-version") + 1);
+    const inspected = e2e.cli.run(withoutVersion.slice(0, -2));
+    expect(envelope(inspected.stdout)).toMatchObject({ status: "success", data: { history_version: fixture.historyVersion, generation_id: fixture.generationId, history_metadata: { mode: "active" } } });
+    expect(await snapshot(repository)).toBe(beforeRejected);
 
     for (const [kind, out] of [
       ["validation", "validation-package.md"],
       ["integration", "integration-package.md"],
       ["unit-review", "unit-review-package.md"],
     ] as const) {
-      const result = e2e.cli.run(command(kind, out));
+      const result = e2e.cli.runFreshMutation(command(kind, out));
       expect(result, result.stdout).toMatchObject({ exitCode: 0, stderr: "" });
       expect(envelope(result.stdout)).toMatchObject({
         status: "success",
         data: {
           scope: kind,
           unit_id: fixture.unitId,
+          history_version: fixture.historyVersion,
+          generation_id: fixture.generationId,
           implementation_attempt_id: fixture.implementationAttemptId,
           output: Path.join(repository, out),
           fingerprint: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
@@ -650,13 +695,14 @@ describe("compiled CLI E2E", () => {
         expect(packageText).toContain(fixture.generationAttemptId);
         expect(packageText).toContain(fixture.generationEvidenceId);
       }
-      const gitAfter = await snapshot(Path.join(repository, ".git"));
+      const gitAfter = await gitState();
       expect(gitAfter).toBe(gitBefore);
+      await assertCoordination();
       expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
       expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
     }
 
-    const poisonedGitEnvironment = e2e.cli.run(command("validation", "environment-package.md"), {
+    const poisonedGitEnvironment = e2e.cli.runFreshMutation(command("validation", "environment-package.md"), {
       env: {
         GIT_DIR: Path.join(repository, ".git", "invalid-git-dir"),
         GIT_WORK_TREE: Path.join(repository, "invalid-work-tree"),
@@ -666,21 +712,23 @@ describe("compiled CLI E2E", () => {
     });
     expect(poisonedGitEnvironment.exitCode, poisonedGitEnvironment.stdout).toBe(0);
     expect(envelope(poisonedGitEnvironment.stdout)).toMatchObject({ status: "success", data: { scope: "validation" } });
-    expect(await snapshot(Path.join(repository, ".git"))).toBe(gitBefore);
+    expect(await gitState()).toBe(gitBefore);
+    await assertCoordination();
     expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
     expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
 
-    const missingSelector = e2e.cli.run([
+    const missingSelector = e2e.cli.runFreshMutation([
       "git", "diff-package", "validation", "--unit", fixture.unitId, "--task", fixture.taskId,
       "--implementation-attempt", fixture.implementationAttemptId, "--project", repository,
     ]);
     expect(missingSelector.exitCode).toBe(1);
     expect(envelope(missingSelector.stdout)).toMatchObject({ status: "failed", data: { code: "required_selector_missing" } });
 
-    const mismatch = e2e.cli.run([
+    const mismatch = e2e.cli.runFreshMutation([
       "git", "diff-package", "validation", "--unit", fixture.unitId, "--task", fixture.taskId,
       "--implementation-attempt", fixture.implementationAttemptId,
       "--generation-attempt", "70000000-0000-4000-8000-000000000007",
+      "--history-version", fixture.historyVersion,
       "--project", repository, "--out", "missing-object-package.md",
     ]);
     expect(mismatch.exitCode).toBe(1);
@@ -688,7 +736,7 @@ describe("compiled CLI E2E", () => {
 
     const overwritePath = Path.join(repository, "overwrite-package.md");
     await Fs.writeFile(overwritePath, "preserve this existing file\n", "utf8");
-    const overwrite = e2e.cli.run(command("validation", "overwrite-package.md"));
+    const overwrite = e2e.cli.runFreshMutation(command("validation", "overwrite-package.md"));
     expect(overwrite.exitCode).toBe(1);
     expect(envelope(overwrite.stdout)).toMatchObject({ status: "failed", data: { code: "diff_package_output_exists" } });
     expect(await Fs.readFile(overwritePath, "utf8")).toBe("preserve this existing file\n");
@@ -702,7 +750,7 @@ describe("compiled CLI E2E", () => {
     const objectStat = await Fs.stat(objectPath);
     try {
       await Fs.unlink(objectPath);
-      const missingObject = e2e.cli.run(command("validation", "missing-object-package.md"));
+      const missingObject = e2e.cli.runFreshMutation(command("validation", "missing-object-package.md"));
       expect(missingObject.exitCode).toBe(1);
       expect(envelope(missingObject.stdout)).toMatchObject({ status: "failed", data: { code: "diff_package_git_object_missing" } });
       expect(await exists(Path.join(repository, "missing-object-package.md"))).toBe(false);
@@ -713,7 +761,8 @@ describe("compiled CLI E2E", () => {
       await Fs.utimes(objectsDirectory, objectsStat.atimeMs / 1_000, objectsStat.mtimeMs / 1_000);
     }
 
-    expect(await snapshot(Path.join(repository, ".git"))).toBe(gitBefore);
+    expect(await gitState()).toBe(gitBefore);
+    await assertCoordination();
     expect(await snapshot(Path.join(repository, ".kepler"))).toBe(constructionBefore);
     expect(e2e.resources.runGit(repository, "--no-optional-locks", "status", "--porcelain", "--untracked-files=all")).toBe(statusBefore);
   }, 120_000);
@@ -726,7 +775,7 @@ describe("compiled CLI E2E", () => {
     e2e.resources.runGit(repository, "config", "--unset", "user.email");
     const before = await snapshot(repository);
 
-    const result = e2e.cli.run(["git", "author"]);
+    const result = e2e.cli.runFreshMutation(["git", "author"]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("");
@@ -748,7 +797,7 @@ describe("compiled CLI E2E", () => {
     e2e.resources.runGit(repository, "config", "user.email", "docker-e2e@example.invalid");
     const beforeResolved = await snapshot(repository);
 
-    const resolved = e2e.cli.run(["git", "author"]);
+    const resolved = e2e.cli.runFreshMutation(["git", "author"]);
 
     expect(resolved.exitCode).toBe(0);
     expect(resolved.stderr).toBe("");
@@ -760,7 +809,7 @@ describe("compiled CLI E2E", () => {
 
     e2e.resources.runGit(repository, "config", "--unset", "user.name");
     const beforeMissing = await snapshot(repository);
-    const missing = e2e.cli.run(["git", "author"]);
+    const missing = e2e.cli.runFreshMutation(["git", "author"]);
 
     expect(missing.exitCode).toBe(1);
     expect(missing.stderr).toBe("");

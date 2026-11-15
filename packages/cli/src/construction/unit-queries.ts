@@ -1,6 +1,7 @@
 import * as Path from "node:path";
-import { collectHistory, type HistoryCollection, type HistoryJournalSource } from "../history/collection.js";
+import type { HistoryCollection } from "../history/collection.js";
 import { projectConstruction, type ConstructionProjection, type ConstructionUnitProjection } from "./projection.js";
+import { historyReaderMetadata, knownHistoryUnitIds, unavailableHistoryMetadata, type HistoryReaderMetadata, type SelectedHistoryReader } from "../history/reader.js";
 import { CONSTRUCTION_STAGES, type ConstructionStage } from "./events.js";
 import type { ProjectResolver, ProjectSelectionResult } from "../cli/project-selection.js";
 
@@ -22,6 +23,7 @@ export interface UnitQueryFailure {
   readonly message: string;
   readonly details: Readonly<Record<string, unknown>>;
   readonly recovery: string;
+  readonly history_metadata?: HistoryReaderMetadata;
 }
 
 export interface UnitQueryProgress {
@@ -58,15 +60,18 @@ export interface UnitQueryUnit {
   readonly tasks: readonly { readonly task_id: string; readonly state: string }[];
   readonly blockers: readonly { readonly scope: "unit" | "stage" | "task"; readonly id: string; readonly state: string }[];
   readonly unknowns: readonly string[];
+  readonly history_metadata?: HistoryReaderMetadata;
 }
 
 export type UnitQuerySummary = Pick<
   UnitQueryUnit,
-  "unit_id" | "directory" | "membership" | "workflow" | "progress" | "blocked" | "blockers" | "unknowns"
+  "unit_id" | "directory" | "membership" | "workflow" | "progress" | "blocked" | "blockers" | "unknowns" | "history_metadata"
 >;
 
+export type UnitQueryMissionHistoryMetadata = HistoryReaderMetadata & { readonly mission_id: string };
+
 export type UnitListResult =
-  | { readonly kind: "listed"; readonly recordHome: string; readonly units: readonly UnitQuerySummary[] }
+  | { readonly kind: "listed"; readonly recordHome: string; readonly history_metadata: readonly UnitQueryMissionHistoryMetadata[]; readonly units: readonly UnitQuerySummary[] }
   | UnitQueryFailure;
 
 export type UnitShowResult =
@@ -79,6 +84,7 @@ export type UnitQueryContextResult =
     readonly recordHome: string;
     readonly missionId: string;
     readonly history: HistoryCollection;
+    readonly historyMetadata?: HistoryReaderMetadata;
     readonly projection: ConstructionProjection;
     readonly unit?: ConstructionUnitProjection;
   }
@@ -95,6 +101,7 @@ interface RawCreationFact {
 interface UnitMissionContext {
   readonly missionId: string;
   readonly history: HistoryCollection;
+  readonly historyMetadata: HistoryReaderMetadata;
   readonly projection: ConstructionProjection;
 }
 
@@ -102,6 +109,7 @@ interface UnitInventoryEntry {
   readonly unitId: string;
   readonly paths: { readonly path: string; readonly kind: UnitQueryDirectoryEntry["kind"] }[];
   readonly creationFacts: RawCreationFact[];
+  readonly knownMemberships: string[];
   readonly projections: { readonly missionId: string; readonly unit: ConstructionUnitProjection }[];
   readonly missionContexts: UnitMissionContext[];
 }
@@ -111,12 +119,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const safeUnitId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-const failed = (code: string, message: string, details: Readonly<Record<string, unknown>> = {}): UnitQueryFailure => ({
+const failed = (code: string, message: string, details: Readonly<Record<string, unknown>> = {}, history_metadata?: HistoryReaderMetadata): UnitQueryFailure => ({
   kind: "failed",
   code,
   message,
   details,
   recovery: "Preserve the record-home state and resolve the reported query scope before retrying.",
+  ...(history_metadata ? { history_metadata } : {}),
 });
 
 const issueCodes = (unit: ConstructionUnitProjection): string[] => [
@@ -127,13 +136,13 @@ const issueCodes = (unit: ConstructionUnitProjection): string[] => [
 const unitView = (entry: UnitInventoryEntry): UnitQueryUnit => {
   const facts = entry.creationFacts;
   const recordedMembership = facts.filter((fact) => fact.claimedMissionId === fact.sourceMissionId);
-  const candidateMissions = [...new Set(recordedMembership.map((fact) => fact.sourceMissionId))]
+  const candidateMissions = [...new Set([...recordedMembership.map((fact) => fact.sourceMissionId), ...entry.knownMemberships])]
     .sort((left, right) => left.localeCompare(right));
   let membership: UnitQueryUnit["membership"];
-  if (facts.length === 1 && candidateMissions.length === 1 && recordedMembership.length === 1) {
+  if (candidateMissions.length === 1 && ((facts.length === 1 && recordedMembership.length === 1) || (facts.length === 0 && entry.knownMemberships.length === 1))) {
     const missionId = candidateMissions[0];
     membership = missionId ? { status: "bound", mission_id: missionId, candidates: candidateMissions } : { status: "conflicting", candidates: [] };
-  } else if (facts.length === 0) membership = { status: "missing", candidates: [] };
+  } else if (facts.length === 0 && entry.knownMemberships.length === 0) membership = { status: "missing", candidates: [] };
   else membership = { status: "conflicting", candidates: candidateMissions };
   const selectedFact = facts.length === 1 ? facts[0] : undefined;
   const boundMission = membership.status === "bound"
@@ -175,6 +184,9 @@ const unitView = (entry: UnitInventoryEntry): UnitQueryUnit => {
   if (projected?.blocked && blockers.length === 0) blockers.push({ scope: "unit", id: entry.unitId, state: "blocked" });
   const unknowns = new Set<string>();
   if (membership.status !== "bound") unknowns.add(`membership-${membership.status}`);
+  if (boundMission?.historyMetadata.mode === "recovering") unknowns.add("history-recovering");
+  if (boundMission?.historyMetadata.pending_recovery) unknowns.add("history-pending-recovery");
+  if (boundMission?.historyMetadata.migration_required) unknowns.add("history-migration-required");
   if (workflow.status === "unknown") unknowns.add("workflow-binding-unknown");
   if (workflow.status === "mismatched") unknowns.add("workflow-binding-mismatched");
   if (selectedFact && !selectedFact.valid) unknowns.add("unit-creation-fact-invalid");
@@ -213,6 +225,7 @@ const unitView = (entry: UnitInventoryEntry): UnitQueryUnit => {
     tasks,
     blockers,
     unknowns: [...unknowns].sort((left, right) => left.localeCompare(right)),
+    ...(boundMission ? { history_metadata: boundMission.historyMetadata } : entry.missionContexts.length === 1 ? { history_metadata: entry.missionContexts[0]!.historyMetadata } : {}),
   };
   if (!projected?.effort) return result;
   return {
@@ -232,6 +245,7 @@ export class UnitQueries {
   constructor(
     private readonly projects: Pick<ProjectResolver, "resolve">,
     private readonly fileSystem: UnitQueryFileSystem,
+    private readonly historyReader: SelectedHistoryReader,
   ) {}
 
   async list(project?: string): Promise<UnitListResult> {
@@ -242,6 +256,7 @@ export class UnitQueries {
     return {
       kind: "listed",
       recordHome: selected.root,
+      history_metadata: inventory.historyMetadata,
       units: inventory.units.map(unitView).map((unit) => ({
         unit_id: unit.unit_id,
         directory: unit.directory,
@@ -251,6 +266,7 @@ export class UnitQueries {
         blocked: unit.blocked,
         blockers: unit.blockers,
         unknowns: unit.unknowns,
+        ...(unit.history_metadata ? { history_metadata: unit.history_metadata } : {}),
       })),
     };
   }
@@ -269,7 +285,7 @@ export class UnitQueries {
     if (view.membership.status !== "bound") {
       return failed(view.membership.status === "missing" ? "unit_membership_missing" : "unit_membership_conflict",
         "Construction scope requires one unambiguous recorded mission membership.",
-        { unit_id: unitId, membership: view.membership });
+        { unit_id: unitId, membership: view.membership }, view.history_metadata);
     }
     if (entry.missionContexts.some((context) => context.missionId !== view.membership.mission_id)) {
       return failed("unit_history_membership_conflict", "The unit has history in more than its uniquely bound mission.", {
@@ -285,6 +301,7 @@ export class UnitQueries {
       recordHome: selected.root,
       missionId: context.missionId,
       history: context.history,
+      historyMetadata: context.historyMetadata,
       projection: context.projection,
       unit: context.projection.units.find((candidate) => candidate.unitId === unitId),
     };
@@ -318,15 +335,17 @@ export class UnitQueries {
     }
   }
 
-  private async readInventory(recordHome: string): Promise<{ readonly kind: "loaded"; readonly units: readonly UnitInventoryEntry[] } | UnitQueryFailure> {
+  private async readInventory(recordHome: string): Promise<{ readonly kind: "loaded"; readonly units: readonly UnitInventoryEntry[]; readonly historyMetadata: readonly UnitQueryMissionHistoryMetadata[] } | UnitQueryFailure> {
+    let currentMissionId: string | undefined;
     try {
       const missionRoot = Path.join(recordHome, ".kepler", "missions");
       const missionEntries = await this.fileSystem.entries(missionRoot, recordHome);
       const entries = new Map<string, UnitInventoryEntry>();
+      const historyMetadata: UnitQueryMissionHistoryMetadata[] = [];
       const ensure = (unitId: string): UnitInventoryEntry => {
         const existing = entries.get(unitId);
         if (existing) return existing;
-        const created = { unitId, paths: [], creationFacts: [], projections: [], missionContexts: [] };
+        const created = { unitId, paths: [], creationFacts: [], knownMemberships: [], projections: [], missionContexts: [] };
         entries.set(unitId, created);
         return created;
       };
@@ -336,6 +355,7 @@ export class UnitQueries {
       }
       for (const missionEntry of missionEntries.filter((entry: UnitQueryDirectoryEntry) => entry.kind === "directory")) {
         const missionId = missionEntry.name;
+        currentMissionId = missionId;
         const missionBase = Path.join(missionRoot, missionId);
         const unitsRoot = Path.join(missionBase, "construction", "units-of-work");
         for (const entry of await this.fileSystem.entries(unitsRoot, recordHome)) {
@@ -344,28 +364,21 @@ export class UnitQueries {
             kind: entry.kind,
           });
         }
-        const historyRoot = Path.join(missionBase, "history");
-        const sources: HistoryJournalSource[] = [];
-        for (const phase of await this.fileSystem.directories(historyRoot, recordHome)) {
-          const phaseRoot = Path.join(historyRoot, phase);
-          for (const journalId of await this.fileSystem.journals(phaseRoot, recordHome)) {
-            const sourceId = `${missionId}/${phase}/${journalId}`;
-            sources.push({
-              sourceId,
-              missionId,
-              phase,
-              journalId,
-              bytes: await this.fileSystem.read(Path.join(phaseRoot, `${journalId}.jsonl`), recordHome),
-            });
-          }
-        }
-        const history = collectHistory(missionId, sources, { completeness: "complete" });
+        const selectedHistory = await this.historyReader.read(recordHome, missionId);
+        const selectedMetadata = historyReaderMetadata(selectedHistory);
+        historyMetadata.push({ mission_id: missionId, ...selectedMetadata });
+        const history = selectedHistory.history;
         const projection = projectConstruction(history);
         const attachContext = (entry: UnitInventoryEntry): void => {
           if (!entry.missionContexts.some((context) => context.missionId === missionId)) {
-            entry.missionContexts.push({ missionId, history, projection });
+            entry.missionContexts.push({ missionId, history, historyMetadata: selectedMetadata, projection });
           }
         };
+        for (const unitId of knownHistoryUnitIds(selectedHistory)) {
+          const entry = ensure(unitId);
+          if (!entry.knownMemberships.includes(missionId)) entry.knownMemberships.push(missionId);
+          attachContext(entry);
+        }
         for (const record of history.events) {
           const rawUnitId = record.scope.unitId ?? (typeof record.event?.data.unit_id === "string" ? record.event.data.unit_id : undefined);
           if (rawUnitId) attachContext(ensure(rawUnitId));
@@ -388,12 +401,17 @@ export class UnitQueries {
           attachContext(entry);
         }
       }
-      return { kind: "loaded", units: [...entries.values()].sort((left, right) => left.unitId.localeCompare(right.unitId)) };
+      return {
+        kind: "loaded",
+        units: [...entries.values()].sort((left, right) => left.unitId.localeCompare(right.unitId)),
+        historyMetadata: historyMetadata.sort((left, right) => left.mission_id.localeCompare(right.mission_id)),
+      };
     } catch (error) {
       return failed("unit_query_read_failed", "Kepler could not read the selected record home's unit paths and history safely.", {
         record_home: recordHome,
+        ...(currentMissionId ? { mission_id: currentMissionId } : {}),
         message: error instanceof Error ? error.message : String(error),
-      });
+      }, unavailableHistoryMetadata());
     }
   }
 }

@@ -7,6 +7,7 @@ import { discoverTaskPrerequisiteEvidence } from "./task-prerequisite-evidence.j
 import type { ConstructionActivityProjection, ConstructionTaskProjection, ConstructionUnitProjection } from "./projection.js";
 import type { GraphReference, TaskDefinitionReference } from "./events.js";
 import type { UnitQueryContextResult, UnitQueryFailure, UnitQueryFileSystem, UnitQueries } from "./unit-queries.js";
+import type { HistoryReaderMetadata } from "../history/reader.js";
 
 export interface ConstructionEventReference {
   readonly event_id: string;
@@ -23,6 +24,7 @@ export type StageShowResult =
     readonly mission_id: string;
     readonly unit_id: string;
     readonly stage: ConstructionStage;
+    readonly history_metadata?: HistoryReaderMetadata;
     readonly state: string;
     readonly current_attempt_id?: string;
     readonly effort: string | null;
@@ -44,6 +46,7 @@ export type TaskListResult =
     readonly record_home: string;
     readonly mission_id: string;
     readonly unit_id: string;
+    readonly history_metadata?: HistoryReaderMetadata;
     readonly tasks: readonly {
       readonly task_id: string;
       readonly title: string;
@@ -71,6 +74,7 @@ export type TaskShowResult =
     readonly progress: { readonly completed_activities: number; readonly total_activities: number; readonly complete: boolean };
     readonly blockers: readonly string[];
     readonly unknowns: readonly string[];
+    readonly history_metadata?: HistoryReaderMetadata;
   }
   | ConstructionScopedQueryFailure;
 
@@ -94,6 +98,7 @@ export type TaskReadyResult =
     readonly unknown_prerequisites: readonly Record<string, unknown>[];
     readonly blockers: readonly string[];
     readonly unknowns: readonly string[];
+    readonly history_metadata?: HistoryReaderMetadata;
   }
   | ConstructionScopedQueryFailure;
 
@@ -118,6 +123,7 @@ export type ActivityShowResult =
     readonly approvals: readonly Record<string, unknown>[];
     readonly blockers: readonly string[];
     readonly unknowns: readonly string[];
+    readonly history_metadata?: HistoryReaderMetadata;
   }
   | ConstructionScopedQueryFailure;
 
@@ -165,7 +171,9 @@ const failed = (
   code: string,
   message: string,
   details: Readonly<Record<string, unknown>> = {},
+  history_metadata?: HistoryReaderMetadata,
 ): ConstructionScopedQueryFailure => ({
+  ...(history_metadata ? { history_metadata } : {}),
   kind: "failed",
   code,
   message,
@@ -245,7 +253,7 @@ const integratedFacts = (task: ConstructionTaskProjection | undefined): { readon
 
 export class ConstructionQueries {
   constructor(
-    private readonly units: UnitQueries,
+    private readonly units: Pick<UnitQueries, "readContext">,
     private readonly fileSystem: UnitQueryFileSystem,
   ) {}
 
@@ -269,6 +277,7 @@ export class ConstructionQueries {
       record_home: context.recordHome,
       mission_id: context.missionId,
       unit_id: unitId,
+      ...(context.historyMetadata ? { history_metadata: context.historyMetadata } : {}),
       stage: stage as ConstructionStage,
       state: selectedStage?.state ?? "unknown",
       ...(selectedStage?.currentAttemptId ? { current_attempt_id: selectedStage.currentAttemptId } : {}),
@@ -289,8 +298,9 @@ export class ConstructionQueries {
       record_home: loaded.context.recordHome,
       mission_id: loaded.context.missionId,
       unit_id: unitId,
+      ...(loaded.context.historyMetadata ? { history_metadata: loaded.context.historyMetadata } : {}),
       tasks: loaded.graph.tasks.map((definition) => {
-        const details = this.readiness(loaded.graph, loaded.context.unit, definition);
+        const details = this.readiness(loaded.graph, loaded.context.unit, definition, loaded.context.historyMetadata);
         const current = taskProjection(loaded.context.unit, definition.id);
         return {
           task_id: definition.id,
@@ -308,9 +318,9 @@ export class ConstructionQueries {
     const loaded = await this.loadGraph(unitId, project);
     if (loaded.kind === "failed") return loaded;
     const definition = loaded.graph.tasks.find((task) => task.id === taskId);
-    if (!definition) return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId });
+    if (!definition) return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId }, loaded.context.historyMetadata);
     const current = taskProjection(loaded.context.unit, taskId);
-    const details = this.readiness(loaded.graph, loaded.context.unit, definition);
+    const details = this.readiness(loaded.graph, loaded.context.unit, definition, loaded.context.historyMetadata);
     const activities = current?.activities.map((activity) => ({
       activity: activity.activity,
       state: activity.state,
@@ -333,6 +343,7 @@ export class ConstructionQueries {
       record_home: loaded.context.recordHome,
       mission_id: loaded.context.missionId,
       unit_id: unitId,
+      ...(loaded.context.historyMetadata ? { history_metadata: loaded.context.historyMetadata } : {}),
       definition,
       state: current?.state ?? details.readiness,
       current_scope: { implementation_attempt_id: current?.stageAttemptId ?? null },
@@ -359,7 +370,7 @@ export class ConstructionQueries {
     const loaded = await this.loadGraph(unitId, project);
     if (loaded.kind === "failed") return loaded;
     const task = loaded.graph.tasks.find((item) => item.id === taskId);
-    if (!task) return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId });
+    if (!task) return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId }, loaded.context.historyMetadata);
     return {
       kind: "execution-context",
       graph: loaded.graph,
@@ -382,14 +393,15 @@ export class ConstructionQueries {
     const loaded = await this.loadGraph(unitId, project);
     if (loaded.kind === "failed") return loaded;
     const definition = loaded.graph.tasks.find((task) => task.id === taskId);
-    if (!definition) return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId });
+    if (!definition) return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId }, loaded.context.historyMetadata);
     const current = taskProjection(loaded.context.unit, taskId);
-    const details = this.readiness(loaded.graph, loaded.context.unit, definition);
+    const details = this.readiness(loaded.graph, loaded.context.unit, definition, loaded.context.historyMetadata);
     return {
       kind: "task-readiness",
       record_home: loaded.context.recordHome,
       mission_id: loaded.context.missionId,
       unit_id: unitId,
+      ...(loaded.context.historyMetadata ? { history_metadata: loaded.context.historyMetadata } : {}),
       task_id: taskId,
       task_state: current?.state ?? details.taskState,
       readiness: details.readiness,
@@ -415,18 +427,18 @@ export class ConstructionQueries {
     if (loaded.kind === "failed") return loaded;
     const context = loaded.context;
     if (!loaded.graph.tasks.some((task) => task.id === taskId)) {
-      return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId });
+      return failed("task_not_found", "The selected task ID is not present in the unit's authored task graph.", { unit_id: unitId, task_id: taskId }, loaded.context.historyMetadata);
     }
     const parent = context.unit?.stages.find((stage) => stage.stage === "implementation")?.attempts
       .find((attempt) => attempt.attemptId === implementationAttemptId);
     if (!parent) return failed("scope_mismatch", "The Implementation attempt does not belong to the selected unit.", {
       unit_id: unitId,
       implementation_attempt_id: implementationAttemptId,
-    });
+    }, context.historyMetadata);
     const task = taskProjection(context.unit, taskId);
-    if (!task) return failed("task_not_found", "The selected task has no Construction execution projection.", { unit_id: unitId, task_id: taskId });
+    if (!task) return failed("task_not_found", "The selected task has no Construction execution projection.", { unit_id: unitId, task_id: taskId }, context.historyMetadata);
     const activity = activityProjection(task, activityName as ConstructionActivity);
-    if (!activity) return failed("activity_not_found", "The selected Activity occurrence is not present in the task projection.", { task_id: taskId, activity: activityName });
+    if (!activity) return failed("activity_not_found", "The selected Activity occurrence is not present in the task projection.", { task_id: taskId, activity: activityName }, context.historyMetadata);
     const attempts = activity.attempts.filter((attempt) => attempt.stageAttemptId === implementationAttemptId);
     const activeAttempts = attempts.filter((attempt) => ["running", "waiting", "pausing", "paused"].includes(attempt.state));
     const current = activeAttempts.length === 1 ? activeAttempts[0] : undefined;
@@ -448,6 +460,7 @@ export class ConstructionQueries {
       record_home: context.recordHome,
       mission_id: context.missionId,
       unit_id: unitId,
+      ...(context.historyMetadata ? { history_metadata: context.historyMetadata } : {}),
       task_id: taskId,
       activity: activityName as ConstructionActivity,
       implementation_attempt_id: implementationAttemptId,
@@ -476,9 +489,9 @@ export class ConstructionQueries {
       const graphSource = new TextDecoder().decode(await this.fileSystem.read(graphPath, context.recordHome));
       const planSource = new TextDecoder().decode(await this.fileSystem.read(planPath, context.recordHome));
       const plan = markdownArtifactReader.parse(planPath, planSource);
-      if (plan.kind === "invalid") return failed("task_plan_invalid", "The unit plan metadata cannot establish the task graph context.", { diagnostics: plan.diagnostics });
+      if (plan.kind === "invalid") return failed("task_plan_invalid", "The unit plan metadata cannot establish the task graph context.", { diagnostics: plan.diagnostics }, context.historyMetadata);
       if (!isRecord(plan.artifact.metadata) || typeof plan.artifact.metadata.id !== "string" || typeof plan.artifact.metadata.unit_id !== "string") {
-        return failed("task_plan_identity_invalid", "The unit plan must identify its artifact and owning unit before task queries can read the graph.", { plan_path: planPath });
+        return failed("task_plan_identity_invalid", "The unit plan must identify its artifact and owning unit before task queries can read the graph.", { plan_path: planPath }, context.historyMetadata);
       }
       const executionIdentities = [...new Set(context.history.events.flatMap((record) => record.event ? [record.event.id] : []))];
       const parsed = readTaskGraph(graphSource, {
@@ -487,7 +500,7 @@ export class ConstructionQueries {
         planArtifactId: plan.artifact.metadata.id,
         executionIdentities,
       });
-      if (parsed.kind === "invalid") return failed("task_graph_invalid", "The canonical unit task graph is invalid for its recorded scope.", { path: graphPath, diagnostics: parsed.diagnostics });
+      if (parsed.kind === "invalid") return failed("task_graph_invalid", "The canonical unit task graph is invalid for its recorded scope.", { path: graphPath, diagnostics: parsed.diagnostics }, context.historyMetadata);
       return {
         kind: "loaded", graph: parsed.graph, graphSource, planSource,
         planArtifactId: plan.artifact.metadata.id, context,
@@ -496,11 +509,11 @@ export class ConstructionQueries {
       return failed("task_graph_unavailable", "Kepler could not read the canonical mission-owned task graph and plan safely.", {
         graph_path: graphPath,
         message: error instanceof Error ? error.message : String(error),
-      });
+      }, context.historyMetadata);
     }
   }
 
-  private readiness(graph: TaskGraph, unit: ConstructionUnitProjection | undefined, definition: TaskGraphTask): ReadinessDetails {
+  private readiness(graph: TaskGraph, unit: ConstructionUnitProjection | undefined, definition: TaskGraphTask, historyMetadata?: HistoryReaderMetadata): ReadinessDetails {
     const projected = taskProjection(unit, definition.id);
     const blockers: string[] = [];
     const unknowns = projectionUnknowns(unit);
@@ -553,6 +566,17 @@ export class ConstructionQueries {
     } else {
       readiness = blockers.length > 0 ? "blocked" : "ready";
       taskState = readiness;
+    }
+    const historyBlocker = historyMetadata?.pending_recovery ? "history-recovery-pending"
+      : historyMetadata?.mode === "recovering" ? "history-recovering"
+        : historyMetadata?.migration_required ? "history-migration-required"
+          : historyMetadata && historyMetadata.mode !== "active" ? "history-selection-unavailable" : undefined;
+    if (historyBlocker) {
+      blockers.push(historyBlocker);
+      if (readiness === "ready") {
+        readiness = "blocked";
+        taskState = "blocked";
+      }
     }
     return {
       taskState,

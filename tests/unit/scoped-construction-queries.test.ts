@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ConstructionQueries } from "../../packages/cli/src/construction/scoped-queries.js";
 import type { ConstructionHistoryFact } from "../../packages/cli/src/construction/projection.js";
+import type { HistoryReaderMetadata } from "../../packages/cli/src/history/reader.js";
 import type { UnitQueryFileSystem } from "../../packages/cli/src/construction/unit-queries.js";
 import { UnitQueries } from "../../packages/cli/src/construction/unit-queries.js";
 import { taskGraphExample } from "../fixtures/task-graph.js";
@@ -102,6 +103,7 @@ const createReadinessQueries = (options: {
   readonly taskState?: "admitted" | "complete";
   readonly blocked?: boolean;
   readonly noPrerequisites?: boolean;
+  readonly historyMetadata?: HistoryReaderMetadata;
 } = {}): ConstructionQueries => {
   const root = "/virtual-record-home";
   const queryGraph = options.noPrerequisites
@@ -131,6 +133,7 @@ const createReadinessQueries = (options: {
     recordHome: root,
     missionId: "60000000-0000-4000-8000-000000000001",
     history: { events: [] },
+    ...(options.historyMetadata ? { historyMetadata: options.historyMetadata } : {}),
     projection: {},
     unit,
   };
@@ -182,6 +185,32 @@ describe("ConstructionQueries", () => {
     });
     expect(listed).toMatchObject({ kind: "tasks-listed", tasks: [{ task_id: task.id, state: "ready", blockers: [] }] });
     expect(shown).toMatchObject({ kind: "task-shown", state: "ready", blockers: [] });
+  });
+
+  it.each([
+    {
+      name: "recovering history",
+      metadata: { mode: "recovering", history_version: "10000000-0000-4000-8000-000000000001", generation_id: "20000000-0000-4000-8000-000000000002", pending_recovery: false, migration_required: false, control_receipts: [], control_receipts_truncated: false },
+    },
+    {
+      name: "pending recovery",
+      metadata: { mode: "active", history_version: "10000000-0000-4000-8000-000000000001", generation_id: "20000000-0000-4000-8000-000000000002", pending_recovery: true, migration_required: false, control_receipts: [], control_receipts_truncated: false },
+    },
+    {
+      name: "read-only legacy",
+      metadata: { mode: "legacy", history_version: null, generation_id: null, pending_recovery: false, migration_required: true, control_receipts: [], control_receipts_truncated: false },
+    },
+  ] satisfies ReadonlyArray<{ readonly name: string; readonly metadata: HistoryReaderMetadata }>)("does not claim ready for $name history", async ({ metadata }) => {
+    const evidenceId = "70000000-0000-4000-8000-000000000006";
+    const queries = createReadinessQueries({
+      currentAttempt: implementationAttemptId,
+      evidence: [evidenceFact(evidenceId, prerequisite.condition)],
+      historyMetadata: metadata,
+    });
+    const result = await queries.taskReady("unit", task.id);
+
+    expect(result).toMatchObject({ kind: "task-readiness", history_metadata: metadata });
+    expect(result.kind === "task-readiness" && result.readiness).not.toBe("ready");
   });
 
   it("keeps uncovered optional and verification prerequisites unknown without gating admission readiness", async () => {

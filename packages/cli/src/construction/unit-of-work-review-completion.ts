@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import { hasRequesterParticipant } from "../audit/participants.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
-import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { CONSTRUCTION_PHASE, CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, isImplementationCompletionAssessedData, isUnitOfWorkReviewCompletionRecord, validateConstructionEvent, type ArtifactBinding, type MissionId, type StageAttemptId, type UnitId, type UnitOfWorkReviewCompletionRecord } from "./events.js";
 import { sameArtifactBindings } from "./functional-design-completion.js";
 import type { ConstructionMaterialReader } from "./material-reader.js";
@@ -23,7 +23,7 @@ export interface UnitOfWorkReviewCompletionRuntime {
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
-  readonly journals: { readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal };
+  readonly journals: ConstructionJournals;
 }
 
 export type UnitOfWorkReviewCompletionResult =
@@ -260,7 +260,7 @@ export class UnitOfWorkReviewStageCompletion {
     const journalId = this.runtime.identities.next();
     const existingIds = new Set(loaded.history.events.flatMap((record) => record.event ? [String(record.event.id), String(record.event.journal_id)] : []));
     if (!uuidV4(eventId) || !uuidV4(journalId) || eventId === journalId || existingIds.has(eventId) || existingIds.has(journalId)) return fail("stage_completion_identity_failed", "Kepler could not allocate distinct unused event and journal identities.");
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") return fail("stage_completion_journal_identity_conflict", "The allocated stage journal identity already has a filesystem entry.", { journal_id: journalId });
     const candidate = {
       id: eventId, phase: CONSTRUCTION_PHASE, type: "construction.stage-attempt-completed", envelope_version: 1,
@@ -306,7 +306,8 @@ export class UnitOfWorkReviewStageCompletion {
 export const createNodeUnitOfWorkReviewCompletionRuntime = (
   producer: { readonly name: string; readonly version: string },
   materialReader: ConstructionMaterialReader,
+  journals: ConstructionJournals,
 ): UnitOfWorkReviewCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
-  return { workspace, materialReader, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer, journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) } };
+  return { workspace, materialReader, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer, journals };
 };

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
-import type { EventJournal } from "../history/journal.js";
 import { readImplementationPlanningCompletionRecord } from "./implementation-planning-completion.js";
 import { type ConstructionHistoryFact, type ConstructionTaskProjection, type ConstructionUnitProjection } from "./projection.js";
 import { ConstructionQueries, type TaskExecutionContext } from "./scoped-queries.js";
@@ -39,11 +39,7 @@ export const admittedTaskContract = (task: TaskExecutionContext["task"], planSou
   planned_integration_commands: plannedIntegrationCommands(task, planSource),
 });
 
-export interface TaskAdmissionRuntime extends StageStartRuntime {
-  readonly journals: {
-    readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal;
-  };
-}
+export type TaskAdmissionRuntime = StageStartRuntime;
 
 export type TaskAdmissionResult =
   | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
@@ -498,7 +494,7 @@ export class TaskAdmission {
     if (ids.some((id) => !uuidV4(id)) || new Set(ids).size !== ids.length || ids.some((id) => existing.has(id))) {
       return failure("task_admission_identity_conflict", "The task admission event identities are invalid, reused, or already present.");
     }
-    const journalRoot = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE);
+    const journalRoot = Path.dirname(constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, admissionJournalId));
     const appendEvents: ConstructionEventRecord[] = [];
     if (!priorBaseline) {
       const baselineEvent = {
@@ -646,5 +642,8 @@ export class TaskAdmission {
   }
 }
 
-export const createNodeTaskAdmissionRuntime = (producer: { readonly name: string; readonly version: string }): TaskAdmissionRuntime =>
-  createNodeStageStartRuntime(producer);
+export const createNodeTaskAdmissionRuntime = (
+  producer: { readonly name: string; readonly version: string },
+  journals: ConstructionJournals,
+): TaskAdmissionRuntime =>
+  createNodeStageStartRuntime(producer, journals);

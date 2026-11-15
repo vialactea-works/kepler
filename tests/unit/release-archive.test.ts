@@ -16,6 +16,7 @@ import {
   type RuntimeBuildIdentity,
 } from "../../packages/cli/src/cli/build-identity.js";
 import { sha256Digest } from "../../packages/cli/src/cli/content-digest.js";
+import { createResourceManifest } from "../../packages/cli/src/cli/release-resources.js";
 import { createSetupBundleFixture } from "../helpers/setup-bundle-fixture.js";
 import {
   archiveFixtureSource,
@@ -41,8 +42,20 @@ function makeArchiveSet(input: {
   }));
 }
 
+function archiveWithResourcePath(path: string) {
+  const base = createSetupBundleFixture({ release: archiveFixtureVersion });
+  const contents = new TextEncoder().encode("Exact resource bytes: é\n");
+  const files = [...base.files, { path, contents }];
+  const resources = {
+    files,
+    manifest: `${JSON.stringify(createResourceManifest(archiveFixtureVersion, files))}\n`,
+  };
+  return { archive: createReleaseArchiveFixture({ resources }), contents };
+}
+
 function tar(entries: readonly {
   readonly path: string;
+  readonly prefix?: string;
   readonly contents?: Uint8Array;
   readonly type?: string;
 }[]): Uint8Array {
@@ -60,6 +73,7 @@ function tar(entries: readonly {
     header[156] = (entry.type ?? "0").charCodeAt(0);
     header.write("ustar\0", 257, 6, "ascii");
     header.write("00", 263, 2, "ascii");
+    header.write(entry.prefix ?? "", 345, 155, "utf8");
     const checksum = header.reduce((sum, byte) => sum + byte, 0);
     writeOctal(header, 148, 8, checksum);
     blocks.push(header, contents);
@@ -143,6 +157,33 @@ describe("complete target release archives", () => {
     expect(verified.manifest.files["bin/kepler"]?.executable).toBe(true);
   });
 
+  it.each([
+    {
+      name: "the required migration guide",
+      path: "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md",
+    },
+    { name: "a 100-byte path", path: `guidelines/${"a".repeat(82)}` },
+    { name: "a 101-byte path", path: `guidelines/${"a".repeat(83)}` },
+    { name: "a 155-byte prefix and 100-byte name", path: `guidelines/${"p".repeat(137)}/${"n".repeat(100)}` },
+    { name: "UTF-8 fields at both byte limits", path: `guidelines/${"é".repeat(68)}x/${"é".repeat(50)}` },
+    { name: "an earlier valid slash when the final prefix is too long", path: `guidelines/${"p".repeat(127)}/${"d".repeat(20)}/${"n".repeat(60)}` },
+  ])("preserves exact bytes and deterministic archives for $name", ({ path }) => {
+    const { archive, contents } = archiveWithResourcePath(path);
+    expect(archiveWithResourcePath(path).archive).toEqual(archive);
+    const validated = validateTargetArchive(archive);
+    expect(validated.files.find((file) => file.path === `bundle/${path}`)?.contents).toEqual(contents);
+  });
+
+  it.each([
+    { name: "a 101-byte basename", path: `guidelines/${"n".repeat(101)}` },
+    { name: "a UTF-8 basename above 100 bytes", path: `guidelines/${"é".repeat(51)}` },
+    { name: "a 156-byte prefix and 100-byte name", path: `guidelines/${"p".repeat(138)}/${"n".repeat(100)}` },
+    { name: "a UTF-8 prefix above 155 bytes", path: `guidelines/${"é".repeat(69)}/${"n".repeat(100)}` },
+    { name: "an unsplittable directory segment", path: `guidelines/${"p".repeat(138)}/short` },
+  ])("rejects $name without truncation", ({ path }) => {
+    expect(() => archiveWithResourcePath(path)).toThrow(/USTAR name limit/i);
+  });
+
   it("treats expected and manifest identity only as assertions against embedded executable metadata", () => {
     const resources = createSetupBundleFixture({ release: archiveFixtureVersion });
     const resourceManifest = JSON.parse(resources.manifest) as { resource_digest: `sha256:${string}` };
@@ -201,6 +242,11 @@ describe("complete target release archives", () => {
     const archive = createReleaseArchiveFixture();
     expect(() => validateTargetArchive(new Uint8Array([1, 2, 3]))).toThrow(/gzip|archive/i);
     expect(() => validateTargetArchive(tar([{ path: "../outside" }]))).toThrow(/unsafe|normalized/i);
+    expect(() => validateTargetArchive(tar([{ path: "outside", prefix: ".." }]))).toThrow(/unsafe|normalized/i);
+    expect(() => validateTargetArchive(tar([
+      { path: "file", prefix: "shared" },
+      { path: "shared/file" },
+    ]))).toThrow(/duplicate/i);
     expect(() => validateTargetArchive(tar([{ path: "link", type: "2" }]))).toThrow(/link|regular file/i);
     expect(() => validateTargetArchive(tar([{ path: "hardlink", type: "1" }]))).toThrow(/link|regular file/i);
     expect(() => validateTargetArchive(tar([

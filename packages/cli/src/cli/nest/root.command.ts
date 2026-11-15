@@ -10,6 +10,7 @@ import {
 } from "./capability.commands.js";
 import { SetupCommand } from "./setup.command.js";
 import { WorkbenchCommand } from "./workbench.command.js";
+import { RecoveryCommand } from "./recovery.command.js";
 
 @RootCommand({
   name: "kepler",
@@ -18,6 +19,7 @@ import { WorkbenchCommand } from "./workbench.command.js";
     SetupCommand,
     UuidCommand,
     WorkbenchCommand,
+    RecoveryCommand,
     GitCommand,
     MetadataLintCommand,
     AuditCommand,

@@ -7,10 +7,23 @@ import { createNodeGitDiffPackageRuntime, GitDiffPackageAdapter } from "../../pa
 
 const temporaryRoots: string[] = [];
 
+const historyVersion = "30000000-0000-4000-8000-000000000001";
+const generationId = "40000000-0000-4000-8000-000000000001";
 const source = (projectRoot: string): DiffPackageResolvedSource => ({
   scope: { kind: "unit-review", unitId: "unit-output-test", implementationAttemptId: "attempt-output-test" },
   projectRoot,
   missionId: "mission-output-test",
+  historyVersion,
+  generationId,
+  historyMetadata: {
+    mode: "active",
+    history_version: historyVersion,
+    generation_id: generationId,
+    pending_recovery: false,
+    migration_required: false,
+    control_receipts: [],
+    control_receipts_truncated: false,
+  },
   recordHomeRepositoryId: "repo-main",
   workspaceRepositories: [],
   comparisons: [],
