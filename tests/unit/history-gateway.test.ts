@@ -1,10 +1,68 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { collectHistory } from "../../packages/cli/src/history/collection.js";
-import { createHistoryControl, HistoryError, historyDigest, type HistoryRebuildManifest } from "../../packages/cli/src/history/control.js";
-import { historyState, mergeGenerationSources, selectMissionHistory } from "../../packages/cli/src/history/gateway.js";
-import { journalPath } from "../../packages/cli/src/history/journal.js";
+import { createHistoryControl, HistoryError, historyDigest, type HistoryRebuildManifest, type HistoryResetManifest } from "../../packages/cli/src/history/control.js";
+import { historyState, mergeGenerationSources, selectMissionHistory, type HistoryGatewayInput } from "../../packages/cli/src/history/gateway.js";
+import { journalPath, scanJournalBytes } from "../../packages/cli/src/history/journal.js";
 import { historyGenerationFixture, historyTestBytes, historyTestEvent, historyTestReconciliation } from "../support/history-generation.js";
+
+const rebuiltGatewayInput = (
+  f: ReturnType<typeof historyGenerationFixture>,
+  resetManifest: HistoryResetManifest,
+  prefixEvents: readonly ReturnType<typeof historyTestEvent>[],
+  currentEvents: readonly ReturnType<typeof historyTestEvent>[],
+): HistoryGatewayInput => {
+  const prefixBytes = historyTestBytes(prefixEvents);
+  const currentBytes = historyTestBytes(currentEvents);
+  const prefixScan = scanJournalBytes(prefixBytes);
+  const reset = createHistoryControl({
+    id: randomUUID(), journalId: randomUUID(), recordedAt: "2026-11-13T00:01:00Z",
+    producer: { name: "kepler", version: "3.1.0" }, manifest: resetManifest, decisionReference: "decision:reset", causes: [],
+  });
+  const candidateJournals = [{
+    phase: "construction" as const, journal_id: f.journalId, byte_length: prefixBytes.length,
+    content_version: historyDigest(prefixBytes), reference: `candidate:${f.generationId}/construction/${f.journalId}`,
+  }];
+  const actions = prefixScan.lines.map((line, index) => {
+    const event = prefixEvents[index]!;
+    const byteLength = line.byteLength + (line.terminated ? 1 : 0);
+    return {
+      id: randomUUID(), action: "retain" as const,
+      source: { source_id: "archive-source", byte_offset: line.byteOffset, byte_length: byteLength },
+      event: null, reason: "Retain the selected candidate prefix", authority: null, proof: null, loss_reference: null, data_bindings: [],
+      output: { event_id: event.id, journal_id: f.journalId, byte_offset: line.byteOffset, byte_length: byteLength },
+    };
+  });
+  const manifest: HistoryRebuildManifest = {
+    format: "kepler.mission-history-rebuild", version: 1, mission_id: f.missionId, generation_id: f.generationId,
+    reset_event_id: reset.id, archive_id: resetManifest.archive_id, archive_inventory_hash: historyDigest("archive"),
+    actions, dependency_order: [], candidate_journals: candidateJournals,
+    required_material: { artifact_bindings: [], checkpoints: [], evidence: [] },
+    expected_state: historyState(collectHistory(f.missionId, [{
+      sourceId: "candidate-prefix", generationId: f.generationId, missionId: f.missionId, phase: "construction", journalId: f.journalId, bytes: prefixBytes,
+    }], { completeness: "complete", generationId: f.generationId })),
+    continuation: { operation: "inspect current unit", unresolved_work: [], required_approvals: [] },
+    requester: "Requester", reconciliation: historyTestReconciliation,
+  };
+  const rebuilt = createHistoryControl({
+    id: randomUUID(), journalId: randomUUID(), recordedAt: "2026-11-13T00:02:00Z",
+    producer: { name: "kepler", version: "3.1.0" }, manifest, decisionReference: "decision:rebuild", causes: [reset.id],
+  });
+  const activation = historyTestBytes([rebuilt]);
+  const guard = historyTestEvent("construction.history-generation-required", {
+    mission_id: f.missionId, generation_id: f.generationId, control_event_id: reset.id,
+  }, randomUUID(), [reset.id]);
+  return {
+    missionId: f.missionId, activation,
+    controlJournals: [
+      { journalId: rebuilt.journal_id, bytes: activation },
+      { journalId: reset.journal_id, bytes: historyTestBytes([reset]) },
+    ],
+    guardJournals: [{ journalId: guard.journal_id, bytes: historyTestBytes([guard]) }],
+    generationSources: [{ ...f.source, bytes: currentBytes }], legacySources: [],
+    generationEvidence: true, complete: true, pendingRecovery: false,
+  };
+};
 
 const code = (operation: () => unknown): string => {
   try { operation(); } catch (error) {
@@ -68,6 +126,37 @@ describe("generation-aware history gateway", () => {
     const changed = new Uint8Array(f.source.bytes);
     changed[20] = changed[20] === 65 ? 66 : 65;
     expect(code(() => selectMissionHistory({ ...f.input, generationSources: [{ ...f.source, bytes: changed }] }))).toBe("history_original_prefix_changed");
+  });
+
+  it("checks rebuilt membership on the approved prefix and permits later appends and unit creation", () => {
+    const f = historyGenerationFixture();
+    const resetManifest: HistoryResetManifest = {
+      ...f.resetManifest,
+      mission_binding: { ...f.resetManifest.mission_binding, unit_ids: [] },
+    };
+    const laterUnitId = "2026-11-14-later-unit";
+    const laterUnit = historyTestEvent("construction.unit-created", {
+      ...f.unit.data, unit_id: laterUnitId, directory: `construction/units-of-work/${laterUnitId}`,
+    }, f.journalId, [f.prepared.id]);
+    const interaction = historyTestEvent("construction.interaction-recorded", {
+      mission_id: f.missionId, unit_id: laterUnitId, participants: ["requester"], content: "Continue after publication", references: [],
+    }, f.journalId, [laterUnit.id]);
+    const view = selectMissionHistory(rebuiltGatewayInput(
+      f, resetManifest, [f.creation, f.prepared], [f.creation, f.prepared, laterUnit, interaction],
+    ));
+    expect(view.history.events).toHaveLength(4);
+    expect(view.history.events.map((item) => item.constructionEvent?.data.unit_id).filter(Boolean)).toContain(laterUnitId);
+    expect(view.history.issues).toEqual([]);
+  });
+
+  it("rejects rebuilt candidate prefixes that substitute a reset-bound unit", () => {
+    const f = historyGenerationFixture();
+    const replacementId = "2026-11-14-replacement";
+    const replacement = historyTestEvent("construction.unit-created", {
+      ...f.unit.data, unit_id: replacementId, directory: `construction/units-of-work/${replacementId}`,
+    }, f.journalId, [f.prepared.id]);
+    const input = rebuiltGatewayInput(f, f.resetManifest, [f.creation, f.prepared, replacement], [f.creation, f.prepared, replacement]);
+    expect(code(() => selectMissionHistory(input))).toBe("history_rebuilt_binding_mismatch");
   });
 
   it("merges only byte-preserving journal extensions and rejects contradictory copies", () => {

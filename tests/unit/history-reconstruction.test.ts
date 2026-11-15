@@ -305,6 +305,49 @@ describe("pure history reconstruction compiler", () => {
     expect(result.verification.material.reference).toBe("material:checked");
   });
 
+  it("rejects a replacement unit that would remove a reset-bound identity", async () => {
+    const f = fixture();
+    const sourceUnit = f.plan.actions[2]!;
+    const prepared = f.plan.actions[1]!;
+    const replacementUnitId = "2026-11-14-replacement";
+    const replacement: ReconstructionPlanAction = {
+      id: randomUUID(), action: "add", source: null,
+      event: {
+        phase: "construction", type: "construction.unit-created", event_version: 1,
+        data: { ...f.base.unit.data, unit_id: replacementUnitId, directory: `construction/units-of-work/${replacementUnitId}` },
+        causes: [{ event_id: null, action_id: prepared.id }],
+      },
+      reason: "Replace a reset-bound unit", authority: { decision_reference: "decision:replacement", artifact_bindings: [] },
+      proof: null, loss_reference: null, data_bindings: [],
+    };
+    const actions = [
+      ...f.plan.actions.filter((action) => action.id !== sourceUnit.id),
+      { ...sourceUnit, action: "exclude" as const }, replacement,
+    ].sort((left, right) =>
+      (left.source?.source_id ?? left.loss_reference ?? "").localeCompare(right.source?.source_id ?? right.loss_reference ?? "") ||
+      (left.source?.byte_offset ?? -1) - (right.source?.byte_offset ?? -1) || left.id.localeCompare(right.id));
+    const plan = { ...f.plan, actions, dependency_order: [replacement.id] };
+    await reconstructionError(run(f, plan), "history_reconstruction_binding_mismatch");
+  });
+
+  it("rejects clean-restart request changes outside the original binding aliases", async () => {
+    const f = fixture();
+    const repository = {
+      repository_id: "record-home", context: { kind: "existing" as const }, branch: { kind: "current" as const },
+      integration_target: "refs/heads/main", starting_checkpoint: { kind: "no-commit" as const },
+    };
+    const excluded = f.plan.actions.map((action) => ({ ...action, action: "exclude" as const, reason: "The requester selected a clean restart" }));
+    const plan: ReconstructionPlan = {
+      ...f.plan, mode: "clean-restart", actions: excluded, clean_restart: {
+        confirmation: { confirmed: true, requester: "Requester", decision_reference: "decision:clean-restart" },
+        mission: { title: "Changed mission", request: "An unrelated request", contexts: [{ reference: "request:invented", purpose: "Unrelated scope" }], repositories: [repository] },
+        prepared_repositories: [{ repository_id: "record-home", context: repository.context, branch: "main", integration_target: repository.integration_target, starting_checkpoint: repository.starting_checkpoint }],
+        units: [{ unit_id: f.base.unitId, directory: `construction/units-of-work/${f.base.unitId}`, initial_effort: { default: "standard", stage_overrides: {}, selected_by: "Requester" } }],
+      },
+    };
+    await reconstructionError(run(f, plan), "history_reconstruction_binding_mismatch");
+  });
+
   it("creates a clean restart only from typed requester-confirmed bootstrap context", async () => {
     const f = fixture();
     const excluded = f.plan.actions.map((action) => ({ ...action, action: "exclude" as const, reason: "The requester selected a clean restart" }));

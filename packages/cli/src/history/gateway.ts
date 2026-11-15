@@ -4,6 +4,7 @@ import { parseStrictJson } from "../json/strict-json.js";
 import { collectHistory, type HistoryCollection, type HistoryJournalSource } from "./collection.js";
 import { HistoryError, historyDigest, historyMode, parseHistoryControl, parseHistoryGuard, type HistoryControl } from "./control.js";
 import { canonicalJson, scanJournalBytes } from "./journal.js";
+import { missionBindingMatchesCreation, validateCandidateMissionBinding } from "./reconstruction-binding.js";
 
 export interface HistoryControlJournal {
   readonly journalId: string;
@@ -151,13 +152,19 @@ export const selectMissionHistory = (input: HistoryGatewayInput): MissionHistory
     }
     const published = collectHistory(input.missionId, prefixes, { completeness: "complete", generationId: control.data.generation_id });
     if (canonicalJson(historyState(published)) !== canonicalJson(manifest.expected_state)) throw new HistoryError("history_expected_state_mismatch", "The published journal prefixes do not establish the approved initial state.");
+    if (control.type === "mission.history-rebuilt") {
+      const root = selection.rootControl;
+      const resetManifest = root?.data.manifest;
+      if (!root || root.type !== "mission.history-reset" || resetManifest?.format !== "kepler.mission-history-reset") {
+        throw new HistoryError("history_rebuilt_binding_mismatch", "A rebuilt selection requires its selected reset binding.");
+      }
+      validateCandidateMissionBinding(resetManifest.mission_binding, published, "history_rebuilt_binding_mismatch");
+    }
     if (control.type === "mission.history-initialized" && manifest.format === "kepler.mission-history-initialization") {
       const creation = published.events.find((item) => item.event?.id === control.caused_by[0] && item.status === "valid")?.constructionEvent;
       if (!creation || creation.type !== "construction.mission-created" || creation.data.mission_id !== input.missionId) throw new HistoryError("history_initial_creation_missing", "The initial selection requires its valid published mission-creation event.");
       const binding = manifest.mission_binding;
-      const home = creation.data.record_home;
-      const contexts = creation.data.contexts;
-      if (!record(home) || !Array.isArray(contexts) || home.repository_id !== binding.record_home_repository_id || creation.data.workflow !== binding.workflow || !(creation.data.request === binding.request_reference || `event:${creation.id}` === binding.request_reference || contexts.some((item: unknown) => record(item) && item.reference === binding.request_reference))) throw new HistoryError("history_initial_binding_mismatch", "The published creation fact does not establish the initial mission binding.");
+      if (!missionBindingMatchesCreation(binding, creation)) throw new HistoryError("history_initial_binding_mismatch", "The published creation fact does not establish the initial mission binding.");
       const unknownUnits = published.events.flatMap((item) => {
         const id = item.constructionEvent?.type === "construction.unit-created" ? item.constructionEvent.data.unit_id : undefined;
         return typeof id === "string" && !binding.unit_ids.includes(id) ? [id] : [];
