@@ -1,6 +1,6 @@
 import { Ajv, type AnySchemaObject } from "ajv";
 import { markdownArtifactReader } from "@vialactea-works/kepler-core";
-import { validateConstructionEvent, type ConstructionEventRecord, type RepositoryCheckpoint } from "../construction/events.js";
+import { validateConstructionEvent, type ArtifactBinding, type ConstructionEventData, type ConstructionEventRecord, type ConstructionEventType, type GraphReference, type RepositoryCheckpoint } from "../construction/events.js";
 import { projectConstruction } from "../construction/projection.js";
 import { readTaskGraph } from "../construction/task-graph.js";
 import { parseStrictJson } from "../json/strict-json.js";
@@ -103,6 +103,157 @@ export const verifyReconstructionGraphMaterial = (input: {
   return { status: "valid", reference: input.material.reference };
 };
 
+const eventData = <T extends ConstructionEventType>(event: ConstructionEventRecord, type: T): ConstructionEventData<T> => {
+  if (event.type !== type) throw new HistoryError("history_proof_invalid", "Checkpoint extraction requires the matching validated Construction event type.");
+  return event.data as unknown as ConstructionEventData<T>;
+};
+const appendCheckpoints = (target: RepositoryCheckpoint[], checkpoints: readonly RepositoryCheckpoint[] | undefined): void => { if (checkpoints) target.push(...checkpoints); };
+const appendBindings = (target: RepositoryCheckpoint[], bindings: readonly { readonly checkpoint?: RepositoryCheckpoint }[] | undefined): void => { for (const binding of bindings ?? []) if (binding.checkpoint) target.push(binding.checkpoint); };
+const appendGraphCheckpoint = (target: RepositoryCheckpoint[], reference: { readonly checkpoint?: RepositoryCheckpoint } | undefined): void => { if (reference?.checkpoint) target.push(reference.checkpoint); };
+const appendStartingCheckpoints = (target: RepositoryCheckpoint[], repositories: readonly { readonly repository_id: string; readonly starting_checkpoint: { readonly kind: string; readonly commit?: string } }[]): void => { for (const repository of repositories) if (repository.starting_checkpoint.kind === "commit") target.push({ repository_id: repository.repository_id, commit: repository.starting_checkpoint.commit! }); };
+
+export const reconstructionOwnerArtifactBindings = (event: ConstructionEventRecord): readonly ArtifactBinding[] => {
+  switch (event.type) {
+    case "construction.evidence-recorded":
+    case "construction.approval-recorded":
+      return eventData(event, event.type).artifact_bindings;
+    case "construction.stage-attempt-completed": {
+      const data = eventData(event, "construction.stage-attempt-completed");
+      return [
+        ...(data.functional_design_assessment?.artifact_bindings ?? []),
+        ...(data.quality_requirements_assessment?.artifact_bindings ?? []),
+        ...(data.quality_requirements_assessment?.functional_design_bindings ?? []),
+        ...(data.implementation_planning_assessment?.artifact_bindings ?? []),
+        ...(data.implementation_planning_assessment?.reviewed_material_bindings ?? []),
+        ...(data.implementation_planning_assessment?.assessments.handoff.input_bindings ?? []),
+        ...(data.unit_of_work_review_assessment?.reviewed_material_bindings ?? []),
+        ...(data.deliver_assessment?.artifact_bindings ?? []),
+      ];
+    }
+    case "construction.implementation-completion-assessed":
+      return eventData(event, "construction.implementation-completion-assessed").reviewed_material_bindings;
+    default:
+      return [];
+  }
+};
+
+export const reconstructionOwnerGraphReferences = (event: ConstructionEventRecord): readonly GraphReference[] => {
+  switch (event.type) {
+    case "construction.task-admitted":
+      return [eventData(event, "construction.task-admitted").graph_ref];
+    case "construction.implementation-completion-assessed":
+      return [eventData(event, "construction.implementation-completion-assessed").graph_ref];
+    case "construction.stage-attempt-completed": {
+      const planning = eventData(event, "construction.stage-attempt-completed").implementation_planning_assessment;
+      return planning ? [planning.graph_ref, planning.assessments.handoff.graph_ref] : [];
+    }
+    default:
+      return [];
+  }
+};
+
+export const reconstructionOwnerCheckpoints = (event: ConstructionEventRecord): readonly RepositoryCheckpoint[] => {
+  const checkpoints: RepositoryCheckpoint[] = [];
+  switch (event.type) {
+    case "construction.mission-created":
+      appendStartingCheckpoints(checkpoints, eventData(event, "construction.mission-created").repositories);
+      break;
+    case "construction.mission-workspaces-prepared":
+      appendStartingCheckpoints(checkpoints, eventData(event, "construction.mission-workspaces-prepared").repositories);
+      break;
+    case "construction.unit-baseline-selected":
+      appendCheckpoints(checkpoints, eventData(event, "construction.unit-baseline-selected").review_baseline);
+      break;
+    case "construction.stage-attempt-started":
+    case "construction.stage-resumed":
+      appendCheckpoints(checkpoints, eventData(event, event.type).checkpoints);
+      break;
+    case "construction.stage-attempt-completed": {
+      const data = eventData(event, "construction.stage-attempt-completed");
+      appendCheckpoints(checkpoints, data.checkpoints);
+      const functionalDesign = data.functional_design_assessment;
+      if (functionalDesign) appendBindings(checkpoints, functionalDesign.artifact_bindings);
+      const qualityRequirements = data.quality_requirements_assessment;
+      if (qualityRequirements) appendBindings(checkpoints, qualityRequirements.artifact_bindings);
+      const implementationPlanning = data.implementation_planning_assessment;
+      if (implementationPlanning) appendBindings(checkpoints, implementationPlanning.artifact_bindings);
+      const review = data.unit_of_work_review_assessment;
+      if (review) {
+        appendCheckpoints(checkpoints, review.final_checkpoints);
+        appendBindings(checkpoints, review.reviewed_material_bindings);
+      }
+      const deliver = data.deliver_assessment;
+      if (deliver) {
+        appendBindings(checkpoints, deliver.artifact_bindings);
+        appendCheckpoints(checkpoints, deliver.reviewed_checkpoints);
+        for (const operation of deliver.operation_results) appendCheckpoints(checkpoints, operation.source_checkpoints);
+      }
+      break;
+    }
+    case "construction.task-admitted": {
+      const data = eventData(event, "construction.task-admitted");
+      appendGraphCheckpoint(checkpoints, data.graph_ref);
+      appendGraphCheckpoint(checkpoints, data.task_definition_ref);
+      appendCheckpoints(checkpoints, data.admission_baseline);
+      for (const predecessor of data.predecessor_provenance) appendCheckpoints(checkpoints, predecessor.checkpoints);
+      break;
+    }
+    case "construction.activity-attempt-started":
+    case "construction.activity-resumed":
+    case "construction.activity-attempt-completed":
+      appendCheckpoints(checkpoints, eventData(event, event.type).checkpoints);
+      break;
+    case "construction.evidence-recorded":
+    case "construction.approval-recorded": {
+      const data = eventData(event, event.type);
+      appendBindings(checkpoints, data.artifact_bindings);
+      appendCheckpoints(checkpoints, data.checkpoints);
+      break;
+    }
+    case "construction.integration-prepared": {
+      const data = eventData(event, "construction.integration-prepared");
+      for (const input of data.captured_inputs) if ("commit" in input) checkpoints.push({ repository_id: input.repository_id, commit: input.commit });
+      appendCheckpoints(checkpoints, data.candidate_checkpoints);
+      break;
+    }
+    case "construction.integration-accepted":
+      appendCheckpoints(checkpoints, eventData(event, "construction.integration-accepted").candidate_checkpoints);
+      break;
+    case "construction.retained-scope-assessed":
+      for (const assessment of eventData(event, "construction.retained-scope-assessed").assessments) appendCheckpoints(checkpoints, assessment.checkpoints);
+      break;
+    case "construction.implementation-completion-assessed": {
+      const data = eventData(event, "construction.implementation-completion-assessed");
+      appendCheckpoints(checkpoints, data.final_checkpoints);
+      appendGraphCheckpoint(checkpoints, data.graph_ref);
+      appendBindings(checkpoints, data.reviewed_material_bindings);
+      break;
+    }
+    case "construction.unit-created":
+    case "construction.stage-waiting":
+    case "construction.stage-pause-requested":
+    case "construction.stage-paused":
+    case "construction.stage-attempt-ended-by-revision":
+    case "construction.stage-reopened":
+    case "construction.task-scope-ended-by-revision":
+    case "construction.task-scope-reopened":
+    case "construction.task-completed":
+    case "construction.activity-waiting":
+    case "construction.activity-pause-requested":
+    case "construction.activity-paused":
+    case "construction.activity-attempt-ended-by-revision":
+    case "construction.activity-reopened":
+    case "construction.interaction-recorded":
+    case "construction.revision-authorized":
+      break;
+    default: {
+      const exhaustive: never = event.type;
+      return exhaustive;
+    }
+  }
+  return checkpoints;
+};
+
 const proofRequired = (event: ConstructionEventRecord): boolean => ["construction.evidence-recorded", "construction.stage-attempt-completed", "construction.activity-attempt-completed", "construction.task-completed", "construction.integration-accepted", "construction.implementation-completion-assessed"].includes(event.type);
 
 export class ReconstructionEvidence {
@@ -158,38 +309,47 @@ export class ReconstructionEvidence {
       for (const checkpoint of required.checkpoints) if (!(await this.runtime.checkpoint(clone(checkpoint), null, this.copyHistory(history, plan.generation_id))).exists) return invalid("A required commit is unavailable in its actual prepared repository.");
       const evidence: ResolvedHistoryMaterial[] = [];
       for (const material of required.evidence) evidence.push(await this.read(material.reference, archive, material.content_version, this.copyHistory(history, plan.generation_id)));
+      const executionIdentities = history.events.flatMap((record) => record.event ? [record.event.id] : []);
       for (const collected of history.events) {
         const event = collected.constructionEvent;
         if (!event) return invalid("A candidate fact has no valid current owner schema.");
-        const data = event.data as unknown as Record<string, unknown>;
-        if (record(data.graph_ref)) {
-          const graphReference = data.graph_ref;
-          const unitId = String(data.unit_id);
-          const graph = evidence.find((material) => material.content_version === graphReference.content_version && material.source_path === `.kepler/missions/${plan.mission_id}/construction/units-of-work/${unitId}/tasks-dag.json`);
+        for (const checkpoint of reconstructionOwnerCheckpoints(event)) if (!required.checkpoints.some((value) => value.repository_id === checkpoint.repository_id && value.commit === checkpoint.commit)) return invalid("A candidate fact references a repository checkpoint omitted from required material.");
+        const graphReferences = reconstructionOwnerGraphReferences(event);
+        const unitId = event.type === "construction.task-admitted" ? eventData(event, event.type).unit_id
+          : event.type === "construction.implementation-completion-assessed" ? eventData(event, event.type).unit_id
+            : event.type === "construction.stage-attempt-completed" ? eventData(event, event.type).unit_id
+              : undefined;
+        if (graphReferences.length && !unitId) return invalid("A candidate graph binding has no owning unit.");
+        for (const graphReference of graphReferences) {
+          if (!unitId) return invalid("A candidate graph binding has no owning unit.");
+          const graphPath = `.kepler/missions/${plan.mission_id}/construction/units-of-work/${unitId}/tasks-dag.json`;
+          const graph = evidence.find((material) => material.content_version === graphReference.content_version && material.source_path === graphPath);
           const authored = artifacts.filter((artifact) => artifact.type === "implementation-plan" && artifact.unitId === unitId && artifact.material.source_path.endsWith("/plan.md"));
           if (!graph || new Set(authored.map((artifact) => artifact.id)).size !== 1) return invalid("A candidate graph binding lacks its actual canonical task graph and checked authored plan.");
-          const checked = verifyReconstructionGraphMaterial({ missionId: plan.mission_id, unitId, material: graph, graphReference: graphReference as { readonly graph_id: string; readonly content_version: string }, planArtifactId: authored[0]!.id, executionIdentities: history.events.flatMap((record) => record.event ? [record.event.id] : []), ...(record(data.task_definition_ref) ? { taskDefinition: data.task_definition_ref as { readonly graph_id: string; readonly task_id: string; readonly content_version: string } } : {}) });
+          const taskDefinition = event.type === "construction.task-admitted" ? eventData(event, event.type).task_definition_ref : undefined;
+          const checked = verifyReconstructionGraphMaterial({ missionId: plan.mission_id, unitId, material: graph, graphReference, planArtifactId: authored[0]!.id, executionIdentities, ...(taskDefinition ? { taskDefinition } : {}) });
           if (checked.status !== "valid") return checked;
-          if (record(graphReference.checkpoint)) {
-            const checkpoint = graphReference.checkpoint as unknown as RepositoryCheckpoint;
-            if (!required.checkpoints.some((value) => value.repository_id === checkpoint.repository_id && value.commit === checkpoint.commit)) return invalid("The graph checkpoint is absent from required material.");
-            const actual = await this.runtime.checkpoint(clone(checkpoint), graph.source_path, this.copyHistory(history, plan.generation_id));
+          if (graphReference.checkpoint) {
+            const actual = await this.runtime.checkpoint(clone(graphReference.checkpoint), graph.source_path, this.copyHistory(history, plan.generation_id));
             if (!actual.exists || !actual.bytes || historyDigest(actual.bytes) !== graph.content_version) return invalid("Actual committed task-graph bytes differ from the recorded graph binding.");
           }
+          if (taskDefinition?.checkpoint) {
+            const actual = await this.runtime.checkpoint(clone(taskDefinition.checkpoint), graph.source_path, this.copyHistory(history, plan.generation_id));
+            if (!actual.exists || !actual.bytes) return invalid("The actual task-definition checkpoint is unavailable in its prepared repository.");
+            const checkpointMaterial: ResolvedHistoryMaterial = { reference: graph.reference, content_version: historyDigest(actual.bytes), bytes: new Uint8Array(actual.bytes), source_path: graph.source_path };
+            const checkpointGraph = verifyReconstructionGraphMaterial({ missionId: plan.mission_id, unitId, material: checkpointMaterial, graphReference: { graph_id: graphReference.graph_id, content_version: checkpointMaterial.content_version }, planArtifactId: authored[0]!.id, executionIdentities, taskDefinition });
+            if (checkpointGraph.status !== "valid") return checkpointGraph;
+          }
         }
-        if (Array.isArray(data.artifact_bindings)) for (const raw of data.artifact_bindings) {
-          if (!record(raw) || typeof raw.artifact_id !== "string") return invalid("A candidate artifact binding is malformed.");
-          const matching = artifacts.filter((artifact) => artifact.id === raw.artifact_id && (typeof raw.content_version !== "string" || artifact.material.content_version === raw.content_version));
+        for (const binding of reconstructionOwnerArtifactBindings(event)) {
+          const matching = artifacts.filter((artifact) => artifact.id === binding.artifact_id && (binding.content_version === undefined || artifact.material.content_version === binding.content_version));
           if (!matching.length) return invalid("A candidate fact uses artifact material omitted from the checked required set.");
-          if (record(raw.checkpoint)) {
-            const checkpoint = raw.checkpoint as unknown as RepositoryCheckpoint;
-            if (!required.checkpoints.some((value) => value.repository_id === checkpoint.repository_id && value.commit === checkpoint.commit)) return invalid("A bound artifact checkpoint is absent from required material.");
+          if (binding.checkpoint) {
             let exact = false;
-            for (const artifact of matching) { const actual = await this.runtime.checkpoint(clone(checkpoint), artifact.material.source_path, this.copyHistory(history, plan.generation_id)); if (actual.exists && actual.bytes && historyDigest(actual.bytes) === artifact.material.content_version) exact = true; }
+            for (const artifact of matching) { const actual = await this.runtime.checkpoint(clone(binding.checkpoint), artifact.material.source_path, this.copyHistory(history, plan.generation_id)); if (actual.exists && actual.bytes && historyDigest(actual.bytes) === artifact.material.content_version) exact = true; }
             if (!exact) return invalid("The actual committed artifact bytes differ from their retained binding.");
           }
         }
-        for (const field of ["checkpoints", "candidate_checkpoints"] as const) if (Array.isArray(data[field])) for (const raw of data[field]) if (!record(raw) || !required.checkpoints.some((value) => value.repository_id === raw.repository_id && value.commit === raw.commit)) return invalid("A candidate fact references an unchecked repository checkpoint.");
       }
       return { status: "valid", reference: `verified-reconstruction-material:${historyDigest(canonicalJson(required)).slice(7)}` };
     } catch (error) { return invalid(error instanceof Error ? error.message : String(error)); }
