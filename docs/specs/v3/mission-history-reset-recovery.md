@@ -8,6 +8,7 @@ Approved revision: `c3027935a54b0536216b3dedae97696f3204e7fa`.
 Approved file SHA-256: `5caa137ab3522f4bd0afdd66e15260e6d4ec408cfb4acd097f8b48992cf087ee`.
 The requester explicitly approved this contract and authorized its necessary CLI features in the implementation request.
 These bindings identify the exact approved text before status and superseded-draft navigation cleanup.
+The requester approved the additional client-compatibility and original-request amendments under [SH128](authoring_progress.md#completed-shared-decisions) on 2026-11-14. See [Accepted amendments](#13-accepted-amendments) for their exact text, precedence, and implementation-only authority.
 
 This contract amends the linked mission and shared runtime rules at the stated history-selection boundaries.
 The requester authorized deletion of the earlier revision-order recovery draft. Its original bytes remain in Git history.
@@ -584,3 +585,11 @@ New work, new artifact approvals, external operations, implementation, release, 
 The implementation request authorizes the necessary CLI features and removal of the superseded draft.
 It does not approve an actual migration or reset manifest, software installation, release, or deployment.
 Preserve live mission records until their exact operation and manifest have separate approval.
+
+## 13. Accepted amendments
+
+On 2026-11-14, the requester selected **Approve exact proposal** for both amendments and their implementation-only scope. The [exact approved candidate](approvals/2026-11-14-history-recovery-amendments.md) has SHA-256 `23ad0a617bb9c4ca57c195e2a83243fc57396d03a93025f547848e845b5075b9` and 22419 bytes. The requester decision is Pi session `01a1d19d-42b3-71b4-99c7-c45ee0d31fd8`, message `d60584fa`, JSONL line 2889. SH128 records this acceptance.
+
+Its **Amendment A**, **Amendment B**, and **Required verification before completion** sections are normative. They take precedence over conflicting compatibility or original-request interpretations in this baseline, including Sections 10 and 11. The archived candidate retains its original Proposed label as historical metadata; this section and SH128 record its subsequent acceptance without changing its approved bytes.
+
+The approval permits the two contract amendments, specified evidence contracts and validators, related capability and rollout documentation, and proportionate tests. It does not approve an actual client inventory, original-request assertion, operation manifest, live recovery, activation, release, source-version change, installation, merge, deployment, or modification of the original Sagittarius mission. Existing preservation and operation-approval boundaries remain in force. Acceptance does not establish implemented or released behavior.
