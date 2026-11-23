@@ -15,8 +15,8 @@ The agent should report the exact unit, attempt and evidence, known and unknown 
 Use `kepler-lifecycle-migration` when an upgrade requires a documented file or contract migration.
 It selects a dated guide, checks runtime support, and presents an exact manifest for your approval.
 A planned guide permits inspection and planning only. It does not authorize manual journal conversion.
-The first [history-layout guide](../bundle/skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md) is planned.
-The development source implements generation-aware recovery commands. This does not establish release availability. The migration command rejects a planned guide; inspect the selected binary and matching resources before any operation. See [Mission-history recovery commands](cli/history-recovery.md).
+The first [history-layout guide](../bundle/skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md) is released for Kepler 3.2.0 and later compatible releases.
+Use the matching binary and resources, inspect the actual records, and obtain exact operation approval. The guide's status does not publish software or authorize a migration by itself. See [Mission-history recovery commands](cli/history-recovery.md).
 Normal interruption recovery remains separate from format migration and from a decision to reconstruct damaged history.
 
 ## Generation recovery safety

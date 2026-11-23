@@ -30,7 +30,7 @@ For ordinary mutations, retain the exact validated `history_version` and pass `-
 
 For a copied history or unsettled current inventory, use `kepler mission prepare --mission <mission-id> --project <record-home> --history-version <control-event-id>`. Use repeatable `--transfer-origin` only for exact unavailable bound origins backed by complete settled proof. This validates actual workspace ownership and required material; it does not relocate a prepared workspace or replay startup effects. Preserve blocked owner or material conditions.
 
-A damaged-history reset or reconstruction is a separate requester-owned operation. Report the raw evidence and required decisions, then use only the compatible CLI's exact preview, approved manifest, retained proof, and retry contracts. This navigator does not infer recovery authority from the original work request. Keep planned lifecycle migration separate.
+A damaged-history reset or reconstruction is a separate requester-owned operation. Report the raw evidence and required decisions, then use only the compatible CLI's exact preview, approved manifest, retained proof, and retry contracts. This navigator does not infer recovery authority from the original work request. Keep lifecycle migration separate from damaged-history recovery.
 
 ## Resume safely when requested
 

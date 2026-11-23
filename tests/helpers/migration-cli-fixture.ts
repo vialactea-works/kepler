@@ -3,9 +3,10 @@ import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
 import * as Path from "node:path";
 import { buildReleaseBinary } from "../../scripts/build-release-binary.js";
-import { listRegularFiles, planResourceGeneration } from "../../scripts/resource-generation.js";
+import { listRegularFiles } from "../../scripts/resource-generation.js";
 import { createTargetPackage, validateTargetPackageRoot, type ReleaseTarget } from "../../packages/cli/src/cli/release-archive.js";
 import { CLI_RELEASE } from "../../packages/cli/src/cli/version.js";
+import { readReleasedHistoryMigrationGuide } from "../../packages/cli/src/cli/history-migration-guide.js";
 import type { RuntimeBuildIdentity } from "../../packages/cli/src/cli/build-identity.js";
 
 const projectRoot = Path.resolve(import.meta.dirname, "../..");
@@ -41,16 +42,6 @@ export async function createMigrationCliFixture(): Promise<MigrationCliFixture> 
     await Fs.unlink(archivePath);
     initializeSourceRepository(sourceRoot);
 
-    const fixtureGuidePath = Path.join(sourceRoot, ...guidePath.split("/"));
-    const plannedGuide = await Fs.readFile(fixtureGuidePath, "utf8");
-    const releasedGuide = plannedGuide.replace(
-      "status: planned\navailable_in: null",
-      `status: released\navailable_in: ${CLI_RELEASE}`,
-    );
-    if (releasedGuide === plannedGuide) throw new Error("The disposable source export does not contain the planned migration guide metadata");
-    await Fs.writeFile(fixtureGuidePath, releasedGuide);
-    await applyResourceGeneration(sourceRoot);
-
     const target = currentTarget();
     const build = buildReleaseBinary({
       repositoryRoot: sourceRoot,
@@ -67,6 +58,7 @@ export async function createMigrationCliFixture(): Promise<MigrationCliFixture> 
       manifest: new TextDecoder("utf-8", { fatal: true }).decode(resourceManifest),
       files: [...bundleFiles].map(([path, contents]) => ({ path, contents })),
     };
+    const releasedGuide = readReleasedHistoryMigrationGuide(`resource:${guidePath}`, resources, CLI_RELEASE);
     const packaged = createTargetPackage({
       executable: new Uint8Array(await Fs.readFile(build.outputPath)),
       resources,
@@ -89,10 +81,9 @@ export async function createMigrationCliFixture(): Promise<MigrationCliFixture> 
     });
     const packageGuidePath = Path.join(packageRoot, "bundle", ...guidePath.split("/"));
     const guideBytes = new Uint8Array(await Fs.readFile(packageGuidePath));
-    const originalGuide = await Fs.readFile(sourceGuidePath, "utf8");
-    if (!originalGuide.includes("status: planned\navailable_in: null")) throw new Error("The repository migration guide must remain planned with no supporting release");
-    if (!releasedGuide.startsWith("---\n") || !releasedGuide.includes(`status: released\navailable_in: ${CLI_RELEASE}`)) throw new Error("The disposable migration guide is not a released test resource");
-    if (!Buffer.from(guideBytes).equals(Buffer.from(releasedGuide))) throw new Error("The package guide differs from its disposable released test source");
+    const originalGuide = await Fs.readFile(sourceGuidePath);
+    if (!Buffer.from(guideBytes).equals(originalGuide)) throw new Error("The package guide differs from the repository migration guide");
+    if (!Buffer.from(guideBytes).equals(Buffer.from(releasedGuide))) throw new Error("The package guide differs from its verified released resource");
     if (build.identity.source.kind !== "development") throw new Error("Migration CLI fixture must use a compiled development identity");
 
     return {
@@ -142,16 +133,6 @@ function initializeSourceRepository(root: string): void {
   run(["config", "commit.gpgsign", "false"]);
   run(["add", "--all"]);
   run(["commit", "--quiet", "--no-gpg-sign", "-m", "Create private migration CLI source export"]);
-}
-
-async function applyResourceGeneration(root: string): Promise<void> {
-  const plan = planResourceGeneration(root, CLI_RELEASE);
-  for (const deletion of plan.deletions) await Fs.rm(Path.join(root, deletion.path), { force: true });
-  for (const change of plan.changes) {
-    const target = Path.join(root, change.path);
-    await Fs.mkdir(Path.dirname(target), { recursive: true });
-    await Fs.writeFile(target, change.contents);
-  }
 }
 
 function currentTarget(): ReleaseTarget {

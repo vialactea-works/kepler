@@ -17,7 +17,7 @@ Pass the captured version as `--history-version <control-event-id>` to every mis
 
 Use `kepler mission prepare --mission <mission-id> --project <record-home> --history-version <control-event-id>` to join or settle that exact history. It checks actual workspace ownership and required material without replaying old startup effects. Before a history collector moves, settle the complete current inventory with no active writers. For explicit missing-origin transfer, add one `--transfer-origin <exact-prior-origin-id>` per unavailable bound origin. Do not infer IDs, import an initial prefix as complete current history, or rewrite workspace attachments. Missing actual workspaces or evidence block the join.
 
-A legacy layout is read-only. Hand deprecated formats to `kepler-lifecycle-migration`; its planned guide does not permit migration. Raw `recovery inspect` and `recovery status` do not require a valid projection. Reset, reconstruction, and publication need their own exact requester decisions, retained proof, and supported CLI. Do not use ordinary resume authority or hand-edited records to perform them.
+A legacy layout is read-only. Hand deprecated formats to `kepler-lifecycle-migration`. Use its released guide with the matched CLI and resources, actual client checks, and exact manifest approval. Migration is separate from ordinary resume. Raw `recovery inspect` and `recovery status` do not require a valid projection. Reset, reconstruction, and publication need their own exact requester decisions, retained proof, and supported CLI. Do not use ordinary resume authority or hand-edited records to perform them.
 
 ## Record only real facts
 

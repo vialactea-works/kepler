@@ -1,6 +1,6 @@
 # Mission-history recovery commands
 
-This reference describes the development source contract. It does not announce a release or authorize an operation on a mission. Check the selected CLI and matching resources before use. The dated generation-migration guide remains **planned**, with no supporting release selected. The CLI rejects that guide for migration.
+This reference describes the development source contract. It does not announce a release or authorize an operation on a mission. Check the selected CLI and matching resources before use. The dated generation-migration guide is **released from 3.2.0**. Its status does not replace the matched-package checks or exact operation approval.
 
 Use these commands when generation selection, damaged history, or a deprecated phase layout prevents normal work. Use [ordinary recovery operations](recovery-operations.md) for an interrupted startup, stage, Activity, Integration, or delivery operation that retains valid history.
 
@@ -88,7 +88,7 @@ The only recognized guide reference is:
 resource:skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md
 ```
 
-The executing binary must have a matched resource package. The guide must have a supported source/target transition, `status: released`, and an available version no later than the executing release. An editable copy, a version string, or the current planned guide cannot authorize migration. Production binaries do not accept a package-root override.
+The executing binary must have a matched resource package. The guide must have a supported source/target transition, `status: released`, and an available version no later than the executing release. An editable copy, a version string, or guide release status alone cannot authorize migration. Production binaries do not accept a package-root override.
 
 A healthy migration preserves exact envelopes, causes, original journal order, and derived workflow state. It does not correct or discard facts. Semantic corrections require reset and reconstruction decisions. After verified preservation and selection, retire only unchanged approved direct-phase sources. Unknown, changed, or uncertain retirement inputs keep the operation incomplete and fenced.
 

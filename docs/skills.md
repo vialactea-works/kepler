@@ -58,8 +58,8 @@ These procedures do not add stages or grant authority. The planning skill's [tas
 
 Ask `kepler-lifecycle-migration` to inspect deprecated files or contract formats after an upgrade.
 It selects a dated guide from `referenses/migrations/` inside its complete skill directory.
-The first [history-generation guide](../bundle/skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md) is planned.
-The current source has no executable generation migration. The skill must stop before migration writes until runtime support exists.
+The first [history-generation guide](../bundle/skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md) is released from Kepler 3.2.0.
+Use its exact inspection, preview, approved apply, and retry procedure with the matched CLI and resource package. Actual client compatibility and exact manifest approval remain required.
 A newer skill, guide, or release announcement does not approve changes to your records.
 
 ## Pi profiles

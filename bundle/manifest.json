@@ -34,10 +34,10 @@
     "skills/kepler-grilling/NOTICE": "sha256:7af7889fb3cc4b435ba61637f254e47798ccd35ca937c6ef6dba88cc0b5dfe1c",
     "skills/kepler-grilling/SKILL.md": "sha256:1b75fed8480a06e8165b52f8c04d5e824006842859844965a47c9cdc6ad26410",
     "skills/kepler-init/SKILL.md": "sha256:62cc81b1b6282d0f7228b2237f4717bd89a27c7e8b84be60474fc56471213ed1",
-    "skills/kepler-lifecycle-migration/SKILL.md": "sha256:dd76e60e5c8a3ffeed2a933a05ed1be6e6549e8556a87a93a41d4b69f904540e",
-    "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md": "sha256:a6196b3a69921c3c0166bd990935d5640f2b5b7691411229d9d965a4c551a8ff",
+    "skills/kepler-lifecycle-migration/SKILL.md": "sha256:5719ebc9fcb50cc64f0129b95bd5f697981b3b60cc798226d0c14b6d7bab4334",
+    "skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md": "sha256:2d56aad5787dc966979e7f3c336662ddb1b8908e9d62803a43364fd54c6169c3",
     "skills/kepler-mission-startup/SKILL.md": "sha256:9f4a17b08ee36e56de3ad9e825334d6bdff9577b66d51e197b7e8ecbaa27fe33",
-    "skills/kepler-mission-startup/references/agent-operations.md": "sha256:bfabb865fd54d7c6176d4726bc5afc5cc0989fe5b999f0a22a278ca47d4ab1c4",
+    "skills/kepler-mission-startup/references/agent-operations.md": "sha256:4e0414abce3c8acf38cc12616576ce21e279cdfe8662ec81d18253482ea14586",
     "skills/kepler-mission-startup/references/standard-cli-walkthrough.md": "sha256:0cf7321a3c75f982e0a711ff629e71c1224846957b5c68c275703c1580d3a718",
     "skills/kepler-orchestrate/SKILL.md": "sha256:37c3274726e523a4313c61b53a5bb0d31632eeae38bad759120f74dc6029b963",
     "skills/kepler-plan/SKILL.md": "sha256:1480191a9981c241862cfe1f7c5c844ca61b1eb07bef7fb34b3e0a1f3503f1cd",
@@ -45,7 +45,7 @@
     "skills/kepler-quality/SKILL.md": "sha256:9c8efe4fdf25b953762d0ac2885f0be77d54ac5eee33da4be958af8767277bd1",
     "skills/kepler-research/NOTICE": "sha256:71168255d925d0deb29bacc2f5e6f456b121b31aa9dd493ef660bee4675880cb",
     "skills/kepler-research/SKILL.md": "sha256:732671beaab4c75bc225a4e2fc9760a3b21c857c92436ad59ae04e38a09fa4f0",
-    "skills/kepler-resume/SKILL.md": "sha256:addd8836ece5a6917013ff3362ef15d445fc05b70929d5129c9fe3217b6bf8d6",
+    "skills/kepler-resume/SKILL.md": "sha256:5c372d890b5b52fac3fae519a4385b34ba26fb18c0782ef6682fac835cf25a97",
     "skills/kepler-review/SKILL.md": "sha256:25aa756d7269409c95e8484a5c09a2b0812fa9585aacb7e561c66f5c39a32019",
     "templates/README.md": "sha256:8b50f5559320bafa83c596d5b54b2bd32afbef97e0614f8232db168c5dbb38d1",
     "templates/critique.md": "sha256:1cd7886f18cb6879699e87dc8f3f855714091b9d42ac520e6ce670b86d3d36fe",
@@ -70,7 +70,7 @@
     "templates/wayfinder/route.md": "sha256:8f945be3ff59c4f6aa7cae5fde801b0ab9c22bb3dd7f9a06a00c5bab8d6e1ac8",
     "templates/wayfinder/ticket.md": "sha256:141684e5e967ddd267dc4d90bc452f3bdb3da147502fcb212a4d5abad44071dd"
   },
-  "resource_digest": "sha256:76ae2e274b48a10ba483887b2d412a0387d1df0995c319d438754767f0b5157e",
+  "resource_digest": "sha256:57861c830715ebc20ac2c8e46c596a9419a1da5874f275dcb65420c612809659",
   "skills": [
     {
       "id": "kepler-init",
@@ -139,12 +139,12 @@
     },
     {
       "id": "kepler-resume",
-      "digest": "sha256:addd8836ece5a6917013ff3362ef15d445fc05b70929d5129c9fe3217b6bf8d6",
+      "digest": "sha256:5c372d890b5b52fac3fae519a4385b34ba26fb18c0782ef6682fac835cf25a97",
       "required": false
     },
     {
       "id": "kepler-lifecycle-migration",
-      "digest": "sha256:dd76e60e5c8a3ffeed2a933a05ed1be6e6549e8556a87a93a41d4b69f904540e",
+      "digest": "sha256:5719ebc9fcb50cc64f0129b95bd5f697981b3b60cc798226d0c14b6d7bab4334",
       "required": false
     }
   ],

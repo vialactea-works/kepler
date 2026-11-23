@@ -19,7 +19,7 @@ This skill does not add a workflow stage or grant migration permission.
 
 | Migration | Status | Scope |
 | --- | --- | --- |
-| [2026-11-13: mission history generations](referenses/migrations/2026-11-13-mission-history-generations.md) | Planned | Direct phase journals to generation-based mission history. |
+| [2026-11-13: mission history generations](referenses/migrations/2026-11-13-mission-history-generations.md) | Released from 3.2.0 | Direct phase journals to generation-based mission history. |
 
 Read only the guides that apply. Chain migrations in their documented dependency order.
 An installed skill or newer CLI version does not prove that a particular migration is supported.

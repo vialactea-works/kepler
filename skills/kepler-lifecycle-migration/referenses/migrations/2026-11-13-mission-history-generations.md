@@ -1,7 +1,7 @@
 ---
 migration_id: 2026-11-13-mission-history-generations
-status: planned
-available_in: null
+status: released
+available_in: 3.2.0
 source_layout: mission-phase-journals
 target_layout: mission-history-generations
 ---
@@ -12,16 +12,16 @@ target_layout: mission-history-generations
 
 ## Status and applicability
 
-**Planned. No supporting release is selected for this guide.**
-The development source implements generation recovery and a release-gated migration command. That source does not make this guide operational.
-This guide permits inspection and a migration proposal. It does not permit manual conversion. The general recovery contract is accepted; each actual operation still needs its exact separate decision.
+**Released for Kepler 3.2.0 and later compatible releases.**
+Use the selected CLI with its matching resource package. This status identifies migration support; it does not announce a published software release, install a client, or approve an operation on a mission.
+The guide does not permit manual conversion. Each actual operation still needs its exact separate decision.
 
 Apply this guide to version 3 missions with journals directly under `history/<phase>/`.
 It does not apply to earlier change-based records, host configuration, or unrelated data.
 Do not infer a source format from the directory name alone. Inspect the selected CLI and actual records.
 
-Before release, this guide must identify its supporting version, exact commands, request fields, and verified retry behavior.
-Keep `status: planned` until those prerequisites exist. Do not replace them with guessed commands.
+Kepler 3.2.0 provides the inspection, preview, approved apply, and retry operations below.
+Check the actual build and commands before use. A version label alone does not prove client compatibility.
 
 ## Contract change
 
@@ -63,15 +63,15 @@ The migration must preserve event identities, content, causes, and original jour
 5. Identify every available source, known loss, conflicting copy, and required piece of evidence. Compatibility inventory does not turn an unjoined copy into a missing history source.
 6. Obtain approval for the exact migration manifest, including local preservation and retirement of deprecated paths.
 
-While this guide remains planned, stop after inspection and planning. Do not execute the remaining target procedure.
+Stop before apply until the requester approves the exact manifest. Guide release status does not supply that approval.
 
-## Target procedure for the supporting release
+## Procedure for Kepler 3.2.0
 
 ### 1. Inspect and preview
 
-Confirm that the selected release provides `kepler recovery inspect` and `kepler recovery migrate` with exact mission and project selectors. Run `kepler recovery inspect --mission <mission-id> --project <record-home>` to inspect available raw files. Do not apply this planned guide.
+Confirm that the selected release provides `kepler recovery inspect` and `kepler recovery migrate` with exact mission and project selectors. Set `MISSION` to the full mission UUID and `PROJECT` to its exact record home. Run `kepler recovery inspect --mission "$MISSION" --project "$PROJECT"` to inspect available raw files.
 
-In the supporting release, `migrate` reads one strict JSON request on stdin. Preview uses `{ "phase": "preview", "manifest": <complete manifest> }`. Apply uses `"phase": "apply"` with `approved_manifest_hash`, the exact `requester`, and a retained `decision_reference`. The manifest binds the resource reference `resource:skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md` and its actual guide hash. The CLI must verify the matched resource package, released status, and supporting version before migration.
+In Kepler 3.2.0, `migrate` reads one strict JSON request on stdin. Preview uses `{ "phase": "preview", "manifest": <complete manifest> }`. Apply uses `"phase": "apply"` with `approved_manifest_hash`, the exact `requester`, and a retained `decision_reference`. The manifest binds the resource reference `resource:skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md` and its actual guide hash. The CLI must verify the matched resource package, released status, and supporting version before migration.
 
 Prepare a manifest that binds this guide's hash, source inventory, target generation, archive, and expected workflow state.
 Include the proposed control records, compatible-client gate, generation-protocol guard, source retirement, and all known limitations.
@@ -82,11 +82,27 @@ The requester must see which files will move and which current facts will remain
 A healthy format migration must preserve the derived workflow state. It must not infer new approvals or completed work.
 If the source requires semantic corrections, stop this format migration and request a separately approved recovery plan.
 
+Save the complete preview envelope in `migration-preview.json`, then run:
+
+```bash
+kepler recovery migrate --mission "$MISSION" --project "$PROJECT" < migration-preview.json
+```
+
+Present the returned manifest hash, complete manifest, limitations, and proposed effects to the requester. After exact approval, save the apply envelope with the same manifest, approved hash, requester, and retained decision reference in `migration-approved-apply.json`.
+
 ### 2. Preserve the originals
 
 The supported operation creates a private local archive under the record repository's actual Git common directory.
 Preserve source bytes, uncommitted records, damaged material, required evidence, control inputs, and pending instructions.
-Read the copies and verify their lengths and hashes before publishing any replacement history.
+The operation reads the copies and verifies their lengths and hashes before publishing any replacement history.
+
+After the client-state and input rechecks, run the exact approved request:
+
+```bash
+kepler recovery migrate --mission "$MISSION" --project "$PROJECT" < migration-approved-apply.json
+```
+
+This single operation owns preservation, generation validation, selection, and source retirement in steps 2 through 5. Do not perform those steps with manual file changes.
 
 A digest list or a Git commit alone does not preserve uncommitted or damaged bytes.
 Keep source paths and identities in the archive index. Record known missing material instead of inventing it.
