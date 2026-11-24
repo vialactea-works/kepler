@@ -12,6 +12,7 @@ import type { EventEnvelope, EventEnvelopeIssue } from "@vialactea-works/kepler-
 
 export interface HistoryJournalSource {
   readonly sourceId: string;
+  readonly generationId?: string;
   readonly missionId: string;
   readonly phase: string;
   readonly journalId: string;
@@ -20,6 +21,7 @@ export interface HistoryJournalSource {
 
 export interface HistoryCollectionOptions {
   readonly completeness: "complete" | "incomplete";
+  readonly generationId?: string;
 }
 
 export interface HistoryScope {
@@ -124,11 +126,11 @@ const isNonEmptyString = (value: unknown): value is string =>
 const bytesEqual = (left: Uint8Array, right: Uint8Array): boolean =>
   left.length === right.length && left.every((byte, index) => byte === right[index]);
 
-const journalIdentity = (missionId: string, phase: string, journalId: string): string =>
-  JSON.stringify([missionId, phase, journalId]);
+const journalIdentity = (missionId: string, phase: string, journalId: string, generationId?: string): string =>
+  JSON.stringify([missionId, generationId ?? null, phase, journalId]);
 
 const sourceIdentity = (source: HistoryJournalSource): string =>
-  JSON.stringify([source.sourceId, source.missionId, source.phase, source.journalId]);
+  JSON.stringify([source.sourceId, source.missionId, source.generationId ?? null, source.phase, source.journalId]);
 
 const scopeForEvent = (event: EventEnvelope, missionId: string): HistoryScope => {
   const data = event.data;
@@ -291,11 +293,12 @@ export const collectHistory = (
     const hasBytes = source.bytes instanceof Uint8Array;
     const sourceBytes = hasBytes ? new Uint8Array(source.bytes) : new Uint8Array();
     const scan = scanJournalBytes(sourceBytes);
-    const journalKey = journalIdentity(source.missionId, source.phase, source.journalId);
+    const journalKey = journalIdentity(source.missionId, source.phase, source.journalId, source.generationId);
     const sourceKey = sourceIdentity(source);
     const metadataValid = isNonEmptyString(source.sourceId) && uuidV4.test(source.missionId) &&
       isNonEmptyString(source.phase) && isNonEmptyString(source.journalId) && hasBytes &&
-      source.missionId === missionId;
+      source.missionId === missionId && source.generationId === options.generationId &&
+      (source.generationId === undefined || uuidV4.test(source.generationId));
     const journal: MutableHistoryJournal = {
       source,
       sourceBytes,

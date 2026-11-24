@@ -9,6 +9,16 @@ Use this file with the owning skill for the selected stage. The [packaged Standa
 3. Inspect prior status and recorded events before any mutable operation. Reconstruct lost inputs from the exact original start event; keep the same unended attempt when safe. A successful command exit means the command was accepted, not that a check ran, a worker started, or the outcome happened.
 4. Check Git and artifact bytes before and after each relevant operation. Preserve existing work; use the repository's configured signing. Never edit `.kepler/` histories, projections, or attachments to repair a guard failure.
 
+## Bind mission history
+
+Before unit creation, read `kepler recovery inspect --mission <mission-id> --project <record-home>`. For an existing unit, its query result also reports `history_metadata`. Require a validated active selection with no pending recovery. Keep the exact `history_version` and `generation_id` with the request, worker handoff, and derived material.
+
+Pass the captured version as `--history-version <control-event-id>` to every mission mutation: unit creation/effort, audit recording, stage/task/Activity transitions, pause/resume, revision, Integration, and diff-package project output. Do not obtain a fresh version implicitly for an old request. Normal journal appends keep the selected version; recovery can change it. A stale worker must stop and reconcile rather than attach its result to the new selection.
+
+Use `kepler mission prepare --mission <mission-id> --project <record-home> --history-version <control-event-id>` to join or settle that exact history. It checks actual workspace ownership and required material without replaying old startup effects. Before a history collector moves, settle the complete current inventory with no active writers. For explicit missing-origin transfer, add one `--transfer-origin <exact-prior-origin-id>` per unavailable bound origin. Do not infer IDs, import an initial prefix as complete current history, or rewrite workspace attachments. Missing actual workspaces or evidence block the join.
+
+A legacy layout is read-only. Hand deprecated formats to `kepler-lifecycle-migration`. Use its released guide with the matched CLI and resources, actual client checks, and exact manifest approval. Migration is separate from ordinary resume. Raw `recovery inspect` and `recovery status` do not require a valid projection. Reset, reconstruction, and publication need their own exact requester decisions, retained proof, and supported CLI. Do not use ordinary resume authority or hand-edited records to perform them.
+
 ## Record only real facts
 
 - Mission creation takes a camelCase request (`title`, `request`, `workflow: "standard"`, `recordHomeRepositoryId`, `contexts`, `repositories`); its response uses snake_case. `unit create` uses the actual returned mission ID and creates no stage. See the complete startup request in the walkthrough's “Create the mission and unit” section. On uncertain startup, reconcile and use `mission prepare`, never repeat `mission create` blindly.

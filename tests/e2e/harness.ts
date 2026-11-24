@@ -16,23 +16,42 @@ export interface E2EHarnessOptions {
   readonly connector?: ApplicationConnector;
 }
 
+export const createE2EHarnessFromResources = (
+  resources: E2EResources,
+  options: E2EHarnessOptions = {},
+): E2EHarness => {
+  const connector =
+    options.connector ?? createApplicationConnector(options.application ?? "docker");
+  const cli = new KeplerCliDriver(connector, resources);
+  return {
+    resources,
+    cli,
+    cleanup: () => resources.cleanup(),
+  };
+};
+
 export const createE2EHarness = async (
   options: E2EHarnessOptions = {},
 ): Promise<E2EHarness> => {
   const resources = await new TemporaryE2EResourceConnector().create();
   try {
-    const connector =
-      options.connector ?? createApplicationConnector(options.application ?? "docker");
-    const cli = new KeplerCliDriver(connector, resources);
-    return {
-      resources,
-      cli,
-      cleanup: () => resources.cleanup(),
-    };
+    return createE2EHarnessFromResources(resources, options);
   } catch (error) {
     await resources.cleanup();
     throw error;
   }
+};
+
+export const resumeE2EHarness = async (
+  rootDirectory: string,
+  ownerNonce: string,
+  options: E2EHarnessOptions = {},
+): Promise<E2EHarness> => {
+  const resources = await new TemporaryE2EResourceConnector().resume(
+    rootDirectory,
+    ownerNonce,
+  );
+  return createE2EHarnessFromResources(resources, options);
 };
 
 export const withE2EHarness = async <T>(

@@ -13,6 +13,17 @@ import { renderGitDiffPackage } from "../../packages/cli/src/workbench/diff-pack
 const temporaryRoots: string[] = [];
 const repositories: { readonly path: string; readonly id: string; readonly base: string; readonly branch: string }[] = [];
 const missionId = randomUUID();
+const historyVersionId = randomUUID();
+const generationId = randomUUID();
+const historyMetadata = {
+  mode: "active" as const,
+  history_version: historyVersionId,
+  generation_id: generationId,
+  pending_recovery: false,
+  migration_required: false,
+  control_receipts: [],
+  control_receipts_truncated: false,
+};
 const unitId = "2026-10-23-git-diff-package";
 const taskId = "30000000-0000-4000-8000-000000000001";
 const implementationAttemptId = "40000000-0000-4000-8000-000000000001";
@@ -261,6 +272,9 @@ describe("GitDiffPackageAdapter", () => {
       scope: { kind: "unit-review", unitId, implementationAttemptId },
       projectRoot: await Fs.realpath(primary.path),
       missionId,
+      historyVersion: historyVersionId,
+      generationId,
+      historyMetadata,
       recordHomeRepositoryId: primary.id,
       workspaceRepositories: workspaceBindings.map(({ repository, base }) => ({
         repository_id: repository.id,
@@ -388,6 +402,9 @@ describe("GitDiffPackageAdapter", () => {
       scope: { kind: "unit-review", unitId, implementationAttemptId },
       projectRoot: await Fs.realpath(superproject.path),
       missionId,
+      historyVersion: historyVersionId,
+      generationId,
+      historyMetadata,
       recordHomeRepositoryId: superproject.id,
       workspaceRepositories: [
         {
@@ -531,6 +548,9 @@ describe("GitDiffPackageAdapter", () => {
       scope: { kind: "unit-review", unitId, implementationAttemptId },
       projectRoot: await Fs.realpath(repository.path),
       missionId,
+      historyVersion: historyVersionId,
+      generationId,
+      historyMetadata,
       recordHomeRepositoryId: repository.id,
       workspaceRepositories: [],
       comparisons: [],
@@ -584,6 +604,9 @@ describe("GitDiffPackageAdapter", () => {
       scope: { kind: "unit-review", unitId, implementationAttemptId },
       projectRoot: await Fs.realpath(repository.path),
       missionId,
+      historyVersion: historyVersionId,
+      generationId,
+      historyMetadata,
       recordHomeRepositoryId: repository.id,
       workspaceRepositories: [{
         repository_id: repository.id,

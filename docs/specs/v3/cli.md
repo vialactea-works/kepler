@@ -274,9 +274,12 @@ Save the resolved startup instructions before creation append or Git changes und
 
 ```text
 kepler mission prepare --mission <mission-id> [--project <path>]
+  [--history-version <control-event-id>] [--transfer-origin <exact-prior-origin-id>...]
 ```
 
-Select the original record-home working-tree root under the shared project-selection rules. This command takes no replacement mission request and does not allocate a new mission identity or start a stage.
+Select the record-home working-tree root under the shared project-selection rules. This command takes no replacement mission request and does not allocate a new mission identity or start a stage.
+
+Under [SH127](authoring_progress.md#completed-shared-decisions), an explicit `--history-version` selects a validated current-history join instead of saved-startup replay. Verify actual prepared-workspace ownership and necessary material before confirming the binding. Repeated `--transfer-origin` values require that version and exact complete settled proof for every unavailable bound origin. Reject unaccepted facts and unknown ownership. Do not relocate prepared workspace attachments. Return selected generation/version and binding metadata without dispatch. Apply the following startup-retry rules when no history version is supplied.
 
 Read and validate the complete mission history before using local recovery material. A valid recorded preparation returns `success`, `data.historical: true`, and the recorded repository bindings. Omit local `workspace_id` and `workspace_path` fields from this historical result. It needs no local startup intent or attachment and makes no workspace changes. It does not establish current execution readiness or recreate missing attachments.
 
@@ -309,14 +312,14 @@ Command-specific error-code values remain implementation choices under SH60.
 **Accepted capability and signatures.** Use exactly these three commands:
 
 ```text
-kepler git diff-package validation --unit <unit-id> --task <task-id> --implementation-attempt <attempt-id> --generation-attempt <attempt-id> [--project <path>] [--out <path>]
-kepler git diff-package integration --unit <unit-id> --task <task-id> --implementation-attempt <attempt-id> --integration-attempt <attempt-id> [--project <path>] [--out <path>]
-kepler git diff-package unit-review --unit <unit-id> --implementation-attempt <attempt-id> [--project <path>] [--out <path>]
+kepler git diff-package validation --unit <unit-id> --task <task-id> --implementation-attempt <attempt-id> --generation-attempt <attempt-id> [--history-version <control-event-id>] [--project <path>] [--out <path>]
+kepler git diff-package integration --unit <unit-id> --task <task-id> --implementation-attempt <attempt-id> --integration-attempt <attempt-id> [--history-version <control-event-id>] [--project <path>] [--out <path>]
+kepler git diff-package unit-review --unit <unit-id> --implementation-attempt <attempt-id> [--history-version <control-event-id>] [--project <path>] [--out <path>]
 ```
 
 `--implementation-attempt` selects the source Implementation context, not a consumer attempt. Validate unit, task, and source-attempt ownership. Each task ID is a UUIDv4 string. Do not infer a unit, task, attempt, or candidate. Do not accept arbitrary range overrides. A new Validation or Review attempt is not necessary for package generation.
 
-Resolve repository-qualified checkpoint sets from the recorded workspace and source facts. Keep these signatures and selectors unchanged. Add no repository, batch, mission, or format option.
+Resolve repository-qualified checkpoint sets from the recorded workspace and source facts. Apply the explicit history-version guard accepted in [SH127](authoring_progress.md#completed-shared-decisions). Require the exact selected version for project output through `--out`; an optional version can also pin temporary inspection. Reject stale, recovering, pending, or unjoined mutation sources. Preserve the remaining source selectors. Add no repository, batch, mission, or format option.
 
 Apply the accepted [project selection rules](#project-selection) for `--project` and its default. Necessary records and Git objects must be available. Do not create units.
 
@@ -324,7 +327,7 @@ Apply the accepted [project selection rules](#project-selection) for `--project`
 
 Return the shared [result envelope](#machine-readable-output). Its `data` identifies the scope, resolved source and material bindings, and output location. Include the complete package-content fingerprint and show whether the diff is empty.
 
-On failure, return a structured error and nonzero status without a package-success claim. Package creation does not modify tracked application content or Git metadata, journals, projections, or lifecycle state. It does not create attempts or commits, dispatch work, run checks, record approval, or accept a candidate. See [diff-package](diff-package.md) for scope, package content, attribution, and retention requirements.
+On failure, return a structured error and nonzero status without a package-success claim. Package creation does not modify tracked application content, Git refs, objects, index, selected journals, projections, or lifecycle state. Project output uses private history writer coordination; an admitted attempt can invalidate settled-source transfer proof even when it fails. Refresh that proof through a validated join before an origin transfer. It does not create attempts or commits, dispatch work, run checks, record approval, or accept a candidate. See [diff-package](diff-package.md) for scope, package content, attribution, and retention requirements.
 
 ### `kepler lint`
 

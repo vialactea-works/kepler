@@ -746,10 +746,13 @@ function writeTar(files: readonly TargetPackageFile[]): Uint8Array {
   const blocks: Buffer[] = [];
   for (const file of [...files].sort((left, right) => compareStrings(left.path, right.path))) {
     if (!isNormalizedRelativePath(file.path)) throw new ReleaseArchiveError(`Cannot archive unsafe path: ${file.path}`);
-    const name = Buffer.from(file.path, "utf8");
+    const path = Buffer.from(file.path, "utf8");
+    const separator = path.byteLength > 100 ? path.lastIndexOf("/", 155) : -1;
+    const name = path.subarray(separator + 1);
     if (name.byteLength > 100) throw new ReleaseArchiveError(`Target archive path exceeds USTAR name limit: ${file.path}`);
     const header = Buffer.alloc(tarBlockSize);
     name.copy(header, 0);
+    if (separator !== -1) path.copy(header, 345, 0, separator);
     writeTarOctal(header, 100, 8, file.executable ? 0o755 : 0o644);
     writeTarOctal(header, 108, 8, 0);
     writeTarOctal(header, 116, 8, 0);

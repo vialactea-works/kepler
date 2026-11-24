@@ -1,4 +1,5 @@
 import * as Path from "node:path";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
@@ -778,7 +779,7 @@ export class ConstructionPauseResume {
       type: input.type,
       issues: validation.status === "invalid" ? validation.issues : [validation.reason],
     });
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") return failure(
       "pause_resume_journal_identity_conflict",
       "The selected Construction journal identity already has a filesystem entry.",
@@ -799,8 +800,9 @@ export class ConstructionPauseResume {
 
 export const createNodeConstructionPauseResumeRuntime = (
   producer: { readonly name: string; readonly version: string },
+  journals: ConstructionJournals,
 ): ConstructionPauseResumeRuntime => {
-  const runtime = createNodeStageStartRuntime(producer);
+  const runtime = createNodeStageStartRuntime(producer, journals);
   return {
     ...runtime,
     inspectIntegrationLock: (commonDir, missionId, unitId) =>

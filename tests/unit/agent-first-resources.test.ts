@@ -10,7 +10,7 @@ const requiredSkills = [
   "kepler-mission-startup", "kepler-design", "kepler-quality", "kepler-plan",
   "kepler-orchestrate", "kepler-code", "kepler-code-feedback", "kepler-review", "kepler-finish-work",
 ];
-const supportingSkills = ["kepler-init", "kepler-grilling", "kepler-domain-modelling", "kepler-research", "kepler-resume"];
+const supportingSkills = ["kepler-init", "kepler-grilling", "kepler-domain-modelling", "kepler-research", "kepler-resume", "kepler-lifecycle-migration"];
 
 const packageSnapshot = () => {
   const plan = planResourceGeneration(root, VERSION);

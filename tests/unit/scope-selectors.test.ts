@@ -10,6 +10,7 @@ const unitId = "2026-10-21-example";
 const taskId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const implementationAttemptId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const attemptId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const historyVersion = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const activityOwnership = {
   name: "code-generation" as const,
@@ -65,6 +66,23 @@ describe("scope selector parsing", () => {
         attempt: attemptId,
       },
     });
+  });
+
+  it("accepts and preserves one exact history version", () => {
+    expect(parseScopeSelectors({ historyVersion: [historyVersion] }, { required: ["historyVersion"] })).toEqual({
+      kind: "parsed",
+      selectors: { historyVersion },
+    });
+  });
+
+  it.each([
+    { name: "rejects duplicate history versions", options: { historyVersion: [historyVersion, historyVersion] }, code: "duplicate_selector" },
+    { name: "rejects an empty history version", options: { historyVersion: [""] }, code: "invalid_selector" },
+    { name: "rejects a missing repeated-parser value", options: { historyVersion: [] }, code: "invalid_selector" },
+    { name: "rejects a malformed history version", options: { historyVersion: ["not-a-uuid"] }, code: "invalid_identity" },
+    { name: "rejects a non-lowercase UUIDv4 history version", options: { historyVersion: [historyVersion.toUpperCase()] }, code: "invalid_identity" },
+  ] satisfies ReadonlyArray<{ readonly name: string; readonly options: Readonly<Record<string, unknown>>; readonly code: string }>)("$name", ({ options, code }) => {
+    expect(parseScopeSelectors(options)).toMatchObject({ kind: "failed", code });
   });
 
   it("accepts a unit-review source Implementation attempt without a task", () => {

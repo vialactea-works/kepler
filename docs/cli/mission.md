@@ -93,6 +93,7 @@ Mission preparation can select multiple repositories. Current Code Integration s
 
 ```text
 kepler mission prepare --mission <mission-id> [--project <path>]
+  [--history-version <control-event-id>] [--transfer-origin <exact-prior-origin-id>...]
 ```
 
 `--mission` is required exactly once and must be a full lowercase UUIDv4. Use the original record home. `-h, --help` prints help. No request object, alternative workspace choices, or force option is accepted.
@@ -101,11 +102,27 @@ kepler mission prepare --mission <mission-id> [--project <path>]
 kepler mission prepare --mission "$MISSION" --project "$PROJECT"
 ```
 
-The operation continues missing work from saved startup instructions. It checks original selections, checkpoints, resources, and event identities under scoped coordination. It preserves existing resources and refuses conflicting facts.
+Without `--history-version`, the operation continues missing work from saved startup instructions. It checks original selections, checkpoints, resources, and event identities under scoped coordination. It preserves existing resources and refuses conflicting facts.
 
 If preparation was already recorded, success includes `historical: true`. That historical result omits local workspace IDs and paths. It does not inspect current readiness or repair missing attachments. Fresh preparation omits the `historical` field; it does not emit `historical: false` in the public projection.
 
 Preparation does not start a stage, restore workers, reset Git, remove another owner's lock, or infer choices from current refs. Missing intent, changed checkpoints, uncertain history, or conflicting local state fail with exit 1. If lock release also fails, retain the primary failure and reported partial effects. See [startup recovery](../recovery.md#continue-mission-preparation).
+
+### Join or settle selected history
+
+Pass one exact `--history-version` to select the history-join path instead of replaying saved startup effects:
+
+```bash
+kepler mission prepare --mission "$MISSION" --project "$PROJECT" --history-version "$HISTORY_VERSION"
+```
+
+The CLI validates the complete current history, actual prepared-workspace ownership, required evidence bytes, and repository-qualified commits. Success reports `data.history` with the selected `history_version`, `generation_id`, and `coordination: bound`. It does not start a worker or alter recorded workspace choices. Rebuilt history need not retain an old archive locally when all required material resolves through other supported references.
+
+A successful join with no active writers settles a complete current-journal inventory. Any later admitted mutation can invalidate that inventory, even when the operation fails. Settle again before moving or losing a history source. A copied initial publication prefix does not prove that it contains later progress.
+
+For a moved or missing bound history collector, pass `--transfer-origin <exact-prior-origin-id>` once for each unavailable bound origin. Read exact IDs from recovery inspection; do not construct them from a guessed path. Transfer requires an explicit current version, complete settled proof, all required current bytes, and successful owner checks. The CLI rejects duplicate, truncated, changed, unknown, or unaccepted input and unsafe existing origins. It replaces only the explicit prior memberships.
+
+History transfer does not relocate prepared workspaces or rewrite attachment ownership. An unavailable actual prepared workspace or required proof blocks the join. Preserve it and use separately authorized owner recovery rather than changing attachments by hand. A join failure can follow binding publication or cleanup uncertainty; inspect current state before retrying.
 
 ## Next operations and sources
 

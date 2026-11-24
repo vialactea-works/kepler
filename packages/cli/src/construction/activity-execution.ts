@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import type { EventId } from "@vialactea-works/kepler-core";
 import * as Path from "node:path";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
-import type { EventJournal } from "../history/journal.js";
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE, validateConstructionEvent, type ConstructionActivity, type ConstructionEventRecord, type EvidenceId, type MaterialInput, type RepositoryCheckpoint } from "./events.js";
 import type { ConstructionHistoryFact, ConstructionTaskProjection } from "./projection.js";
 import { ConstructionQueries, type TaskExecutionContext } from "./scoped-queries.js";
@@ -14,11 +14,7 @@ import { runWithConstructionRevisionFence } from "./unit-control.js";
 import { recordTaskCompletionUnderControl } from "./task-completion.js";
 import { retainedActivityFor } from "./retained-activity.js";
 
-export interface ActivityExecutionRuntime extends StageStartRuntime {
-  readonly journals: {
-    readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal;
-  };
-}
+export type ActivityExecutionRuntime = StageStartRuntime;
 
 export interface ActivityCompletionRequest {
   readonly evidence_ids: readonly string[];
@@ -597,7 +593,7 @@ export class ActivityExecution {
   }
 
   private async append(root: string, missionId: string, event: ConstructionEventRecord): Promise<ActivityExecutionResult> {
-    const journalPath = Path.join(root, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE, `${event.journal_id}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, root, missionId, event.journal_id);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") {
       return failure("activity_journal_identity_conflict", "The selected Activity journal identity already has a filesystem entry.", { journal_id: event.journal_id });
     }
@@ -721,7 +717,7 @@ export class ActivityExecution {
           }, "Preserve the existing completion and reconcile its exact bindings before retrying.");
         }
         if (!completionEvent) {
-          const completionPath = Path.join(latest.root, ".kepler", "missions", latest.missionId, "history", CONSTRUCTION_PHASE, `${completionJournalId}.jsonl`);
+          const completionPath = constructionJournalPath(this.runtime.journals, latest.root, latest.missionId, completionJournalId);
           if (await this.runtime.workspace.fileSystem.pathKind(completionPath) !== "missing") return failure("activity_journal_identity_conflict", "The selected Activity completion journal identity already has a filesystem entry.", { journal_id: completionJournalId });
           const appended = await this.append(latest.root, latest.missionId, completionValidation.event);
           if (appended.kind === "failed") return appended;
@@ -798,5 +794,8 @@ export class ActivityExecution {
 
 }
 
-export const createNodeActivityExecutionRuntime = (producer: { readonly name: string; readonly version: string }): ActivityExecutionRuntime =>
-  createNodeStageStartRuntime(producer);
+export const createNodeActivityExecutionRuntime = (
+  producer: { readonly name: string; readonly version: string },
+  journals: ConstructionJournals,
+): ActivityExecutionRuntime =>
+  createNodeStageStartRuntime(producer, journals);

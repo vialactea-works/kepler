@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { constructionJournalPath } from "./journals.js";
 import * as Path from "node:path";
 import {
   EVENT_ENVELOPE_VERSION,
@@ -91,6 +92,7 @@ export interface UnitCreateRecords {
 }
 
 export interface UnitCreateJournalFactory {
+  readonly generationId?: string;
   readonly create: (recordHome: string, missionId: MissionId, journalId: JournalId) => EventJournal;
 }
 
@@ -249,9 +251,6 @@ export const validateUnitCreateRequest = (value: unknown): UnitCreateRequestVali
     },
   };
 };
-
-const expectedJournalPath = (recordHome: string, missionId: string, journalId: string): string =>
-  Path.resolve(recordHome, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
 
 const expectedDirectory = (unitId: string): string => `construction/units-of-work/${unitId}`;
 
@@ -611,7 +610,7 @@ export class UnitCreate {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    const expectedPath = expectedJournalPath(selectedRoot, request.missionId, journalId);
+    const expectedPath = Path.resolve(constructionJournalPath(this.runtime.journals, selectedRoot, request.missionId, journalId));
     if (!Path.isAbsolute(journal.path) || Path.resolve(journal.path) !== expectedPath) {
       return failure("unit_journal_path_invalid", "Unit history must use its selected record-home journal path.", {
         journal_path: journal.path,

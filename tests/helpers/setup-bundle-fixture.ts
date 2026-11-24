@@ -15,6 +15,7 @@ const skillIds = [
   "kepler-domain-modelling",
   "kepler-research",
   "kepler-resume",
+  "kepler-lifecycle-migration",
 ];
 const constructionTemplatePaths = [
   "templates/v3/construction/unit-of-work.md",

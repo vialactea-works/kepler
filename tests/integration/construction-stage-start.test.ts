@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { selectFixtureHistory } from "../support/history-consumers.js";
 import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
@@ -64,14 +65,6 @@ const createFixture = async (withCommit = true, withSecondaryRepository = false)
     projects: { resolve: (project) => projects.resolve(project) },
     workspaces: createMissionWorkspacePreparation(workspace),
     recovery: createNodeMissionStartupRecoveryRuntime(workspace),
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        journalId,
-        phase: CONSTRUCTION_PHASE,
-      }),
-    },
     identities: { next: randomUUID },
     now: () => "2026-10-22T10:00:00.000Z",
     producer: { name: "kepler-test", version: "0.10.3" },
@@ -97,32 +90,26 @@ const createFixture = async (withCommit = true, withSecondaryRepository = false)
     ],
   });
   if (mission.kind !== "prepared") throw new Error(`Mission startup failed: ${JSON.stringify(mission)}`);
+  const selected = await selectFixtureHistory(root, mission.missionId, workspace);
   const unit = await new UnitCreate({
     projects: { resolve: (project) => projects.resolve(project) },
     workspace,
-    records: createNodeUnitCreateRecords(),
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        journalId,
-        phase: CONSTRUCTION_PHASE,
-      }),
-    },
+    records: createNodeUnitCreateRecords(selected.access),
+    journals: selected.journals,
     identities: { next: randomUUID },
     today: () => "2026-10-22",
     now: () => "2026-10-22T10:01:00.000Z",
     producer: { name: "kepler-test", version: "0.10.3" },
   }).execute({ mission: mission.missionId, slug: "stage-start-fixture" });
   if (unit.kind !== "created") throw new Error(`Unit creation failed: ${JSON.stringify(unit)}`);
-  const contexts = new AuditContextResolver(createNodeAuditContextRuntime(projects));
+  const contexts = new AuditContextResolver(createNodeAuditContextRuntime(projects, selected.access, selected.auditJournals));
   return {
     root,
     ...(secondaryRoot ? { secondaryRoot } : {}),
     missionId: mission.missionId,
     unitId: unit.unitId,
     contexts,
-    start: new StageStart(contexts, createNodeStageStartRuntime({ name: "kepler-test", version: "0.10.3" })),
+    start: new StageStart(contexts, createNodeStageStartRuntime({ name: "kepler-test", version: "0.10.3" }, selected.journals)),
     cleanup: async () => Fs.rm(root, { recursive: true, force: true }),
   };
 };

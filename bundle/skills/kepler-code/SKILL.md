@@ -18,7 +18,7 @@ Require the explicit unit ID, task UUID and current task definition, active unit
 Read the task with `kepler workflow construction task show --unit <unit-id> --task <task-id> [--project <path>]`; inspect Activity state with `kepler workflow construction activity show --unit <unit-id> --task <task-id> --activity code-generation --implementation-attempt <implementation-attempt-id> [--project <path>]`. Do not infer task identity from its title or select the latest unit/task implicitly. On an authorized first execution, start the Activity with:
 
 ```text
-kepler workflow construction activity start --unit <unit-id> --task <task-id> --activity code-generation --implementation-attempt <implementation-attempt-id> [--project <path>]
+kepler workflow construction activity start --history-version <control-event-id> --unit <unit-id> --task <task-id> --activity code-generation --implementation-attempt <implementation-attempt-id> [--project <path>]
 ```
 
 Keep the returned distinct Activity attempt ID. If already active, resume only that same unended attempt after verifying prior workers stopped and current bindings/material remain valid. Waits, new sessions, failed commands, local corrections, pauses and resumes do not mint another attempt. A task is not itself an attempt.
@@ -35,11 +35,11 @@ When this skill is loaded from the distributed complete Kepler package, consult 
    - **Green:** make the smallest passing change and rerun the same check; record actual result before refactoring.
    - **Refactor:** make behavior-preserving cleanup and rerun relevant behavior/regression checks. If behavior changes, restart at Red. Do not invent tests for a purely mechanical change, but explain the verification that proves its intended result.
 5. Run the planned typecheck and tests related to modifications against the identified output. Review the resulting implementation, tests and required docs against each acceptance criterion, applicable quality obligation, failure case and scope limit. Correct local defects in the same Generation attempt and repeat the relevant TDD cycle. Report unresolved or upstream findings; do not change authority to make the checks pass.
-6. Prepare repository output checkpoints through normal task work. For repository material, commit the output before recording evidence that binds to it. Record actual typecheck, modification-related test, self-review and output checkpoint facts with `kepler audit record evidence --unit <unit-id> --task <task-id> --activity code-generation --attempt <generation-attempt-id> [--project <path>]`, using one typed JSON object on stdin. Include `inputs` with opaque `reference` and `purpose`, executor, actual result, conditions and supporting output. Do not parse/normalize references or record a failed check as passing. Evidence recording does not execute checks.
+6. Prepare repository output checkpoints through normal task work. For repository material, commit the output before recording evidence that binds to it. Record actual typecheck, modification-related test, self-review and output checkpoint facts with `kepler audit record evidence --history-version <control-event-id> --unit <unit-id> --task <task-id> --activity code-generation --attempt <generation-attempt-id> [--project <path>]`, using one typed JSON object on stdin. Include `inputs` with opaque `reference` and `purpose`, executor, actual result, conditions and supporting output. Do not parse/normalize references or record a failed check as passing. Evidence recording does not execute checks.
 7. Complete only the current Generation attempt after its evidence matches output material:
 
    ```text
-   kepler workflow construction activity complete --unit <unit-id> --task <task-id> --activity code-generation --implementation-attempt <implementation-attempt-id> --attempt <generation-attempt-id> --evidence '<JSON evidence IDs>' [--project <path>]
+   kepler workflow construction activity complete --history-version <control-event-id> --unit <unit-id> --task <task-id> --activity code-generation --implementation-attempt <implementation-attempt-id> --attempt <generation-attempt-id> --evidence '<JSON evidence IDs>' [--project <path>]
    ```
 
    The typed request is the CLI's `evidence_ids` object. Successful Activity completion makes output eligible for Validation; it does not complete the task, Implementation, or unit.

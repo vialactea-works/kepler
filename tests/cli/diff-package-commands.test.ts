@@ -21,6 +21,7 @@ const task = "30000000-0000-4000-8000-000000000001";
 const implementationAttempt = "40000000-0000-4000-8000-000000000001";
 const generationAttempt = "50000000-0000-4000-8000-000000000001";
 const integrationAttempt = "50000000-0000-4000-8000-000000000002";
+const historyVersion = "60000000-0000-4000-8000-000000000001";
 
 async function runCli(arguments_: string[]) {
   const calls: DiffPackageCommandRequest[] = [];
@@ -94,9 +95,9 @@ describe("git diff-package command signatures", () => {
       {
         arguments: ["git", "diff-package", "validation", "--unit", unit, "--task", task,
           "--implementation-attempt", implementationAttempt, "--generation-attempt", generationAttempt,
-          "--project", "/workspace/project", "--out", ".kepler/packages/validation.md"],
+          "--history-version", historyVersion, "--project", "/workspace/project", "--out", ".kepler/packages/validation.md"],
         expected: {
-          scope: { kind: "validation", unitId: unit, taskId: task, implementationAttemptId: implementationAttempt, generationAttemptId: generationAttempt },
+          scope: { kind: "validation", unitId: unit, taskId: task, implementationAttemptId: implementationAttempt, generationAttemptId: generationAttempt, historyVersion },
           project: "/workspace/project",
           out: ".kepler/packages/validation.md",
         },
@@ -122,6 +123,16 @@ describe("git diff-package command signatures", () => {
       expect(result.calls).toEqual([testCase.expected]);
       expect(result.stdout).toMatchObject({ status: "success" });
     }
+  });
+
+  it("rejects --out without a history version before invoking the operation", async () => {
+    const result = await runCli([
+      "git", "diff-package", "unit-review", "--unit", unit,
+      "--implementation-attempt", implementationAttempt, "--out", "package.md",
+    ]);
+
+    expect(result.calls).toEqual([]);
+    expect(result.stdout).toMatchObject({ status: "failed", data: { code: "history_version_required" } });
   });
 
   it("rejects missing and repeated required selectors before invoking the operation", async () => {
@@ -154,6 +165,21 @@ describe("git diff-package command signatures", () => {
       expect(result.calls).toEqual([]);
       expect(result.stdout).toMatchObject({ status: "failed", data: { code: "invalid_arguments" } });
     }
+  });
+
+  it("accepts a read-only history-version flag and rejects duplicate or malformed values", async () => {
+    const base = ["git", "diff-package", "unit-review", "--unit", unit, "--implementation-attempt", implementationAttempt];
+    const valid = await runCli([...base, "--history-version", historyVersion]);
+    const duplicate = await runCli([...base, "--history-version", historyVersion, "--history-version", generationAttempt]);
+    const malformed = await runCli([...base, "--history-version", "not-a-uuid"]);
+
+    expect(valid.calls).toEqual([{
+      scope: { kind: "unit-review", unitId: unit, implementationAttemptId: implementationAttempt, historyVersion },
+    }]);
+    expect(duplicate.calls).toEqual([]);
+    expect(duplicate.stdout).toMatchObject({ status: "failed", data: { code: "duplicate_selector" } });
+    expect(malformed.calls).toEqual([]);
+    expect(malformed.stdout).toMatchObject({ status: "failed", data: { code: "invalid_identity" } });
   });
 
   it("rejects mission, repository, batch, format, and range options", async () => {

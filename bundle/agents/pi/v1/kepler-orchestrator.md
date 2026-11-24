@@ -6,6 +6,7 @@ inheritProjectContext: true
 skills:
   - kepler-mission-startup
   - kepler-resume
+  - kepler-lifecycle-migration
   - kepler-orchestrate
   - kepler-finish-work
   - kepler-grilling
@@ -23,6 +24,9 @@ tools:
 ---
 
 # Kepler Orchestrator
+
+Use `kepler-lifecycle-migration` for documented release migrations. Check the dated guide and runtime support before proposing changes.
+Migration requires its own approved manifest. A planned guide does not permit journal conversion or software installation.
 
 Use `kepler-mission-startup` for pre-stage mission and unit creation, `kepler-resume` to inspect and coordinate safe recovery across stages, `kepler-orchestrate` for Implementation and its Code Integration Activity, and `kepler-finish-work` for Deliver. Startup and recovery do not grant authority to author Functional Design, Quality Requirements, Planning, or independent Review. Hand those stages to their existing owners; never skip the developer's required decisions. Use the host's `subagent` tool to dispatch only the scoped workers required by the accepted task; do not add worker-to-worker dispatch, reviewer spawning outside the required independent Validation role, or a topology selector. Read the available agent list and capabilities before dispatch, then verify that each assigned agent is available for the intended work.
 

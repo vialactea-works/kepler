@@ -1,7 +1,7 @@
 import * as Path from "node:path";
+import { constructionJournalPath } from "./journals.js";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditHistoryReadResult } from "../audit/context.js";
-import type { EventJournal } from "../history/journal.js";
 import {
   CONSTRUCTION_EVENT_VERSION,
   CONSTRUCTION_PHASE,
@@ -12,11 +12,7 @@ import {
 import type { ConstructionHistoryFact, ConstructionTaskProjection } from "./projection.js";
 import type { StageStartRuntime } from "./stage-start.js";
 
-export interface TaskCompletionRuntime extends StageStartRuntime {
-  readonly journals: {
-    readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal;
-  };
-}
+export type TaskCompletionRuntime = StageStartRuntime;
 
 export type TaskCompletionResult =
   | { readonly kind: "success"; readonly data: Readonly<Record<string, unknown>> }
@@ -149,7 +145,7 @@ export const recordTaskCompletionUnderControl = async (
     activity_completion_event_id: activityCompletionId,
     issues: validation.status === "invalid" ? validation.issues : [validation.reason],
   });
-  const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${taskCompletionJournalId}.jsonl`);
+  const journalPath = constructionJournalPath(runtime.journals, loaded.root, loaded.missionId, taskCompletionJournalId);
   if (await runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") return failure("task_completion_journal_identity_conflict", "The selected task completion journal identity already has a filesystem entry.", {
     journal_id: taskCompletionJournalId, activity_completion_event_id: activityCompletionId,
   });

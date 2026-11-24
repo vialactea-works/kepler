@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import * as Path from "node:path";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
@@ -1323,7 +1324,7 @@ export class IntegrationExecution {
   }
 
   private async append(loaded: Extract<AuditHistoryReadResult, { readonly kind: "loaded" }>, event: ConstructionEventRecord): Promise<IntegrationExecutionResult> {
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${event.journal_id}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, event.journal_id);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") return fail("integration_journal_identity_conflict", "The selected Integration journal identity already has a filesystem entry.", { journal_id: event.journal_id });
     const journal = this.runtime.journals.create(loaded.root, loaded.missionId, event.journal_id);
     if (Path.resolve(journal.path) !== Path.resolve(journalPath)) return fail("integration_journal_path_invalid", "Integration history must use the selected mission's Construction journal path.", { journal_path: journal.path, expected_path: journalPath });
@@ -1611,5 +1612,8 @@ const sameAcceptedEvidence = (
     acceptance.data.authority_event_ids[0] === selfReview?.event.id;
 };
 
-export const createNodeIntegrationExecutionRuntime = (producer: { readonly name: string; readonly version: string }): IntegrationExecutionRuntime =>
-  createNodeStageStartRuntime(producer) as IntegrationExecutionRuntime;
+export const createNodeIntegrationExecutionRuntime = (
+  producer: { readonly name: string; readonly version: string },
+  journals: ConstructionJournals,
+): IntegrationExecutionRuntime =>
+  createNodeStageStartRuntime(producer, journals) as IntegrationExecutionRuntime;

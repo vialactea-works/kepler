@@ -13,8 +13,12 @@ import {
 } from "../../packages/cli/src/construction/mission-workspace.js";
 import { createNodeMissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace-runtime.js";
 import type { MissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace.js";
-import { createNodeMissionStartupRecoveryRuntime, type MissionStartupIntentFileSystem } from "../../packages/cli/src/construction/mission-startup-recovery-runtime.js";
-import { createEventJournal } from "../../packages/cli/src/history/journal.js";
+import { createNodeMissionStartupRecoveryRuntime, type MissionStartupGenerationJournalFactory, type MissionStartupIntentFileSystem } from "../../packages/cli/src/construction/mission-startup-recovery-runtime.js";
+import { createNodeHistoryAccess } from "../../packages/cli/src/history/access-runtime.js";
+import { parseLiveHistoryBinding } from "../../packages/cli/src/history/access.js";
+import { HistoryMutations } from "../../packages/cli/src/history/mutations.js";
+import { createEventJournal, type EventJournal } from "../../packages/cli/src/history/journal.js";
+import { historyTestEvent } from "../support/history-generation.js";
 import { ProjectResolver } from "../../packages/cli/src/cli/project-selection.js";
 import { createProjectSelectionRuntime } from "../../packages/cli/src/cli/project-selection-runtime.js";
 
@@ -153,25 +157,28 @@ const holdWorkspaceClaim = async (
   };
 };
 
+const createStartupJournalFactory = (
+  decorate: (journal: EventJournal) => EventJournal = (journal) => journal,
+): MissionStartupGenerationJournalFactory => ({ recordHome, missionId, journalId, generationId }) => decorate(createEventJournal({
+  recordHome,
+  missionId,
+  phase: CONSTRUCTION_PHASE,
+  journalId,
+  generationId,
+}));
+
 const createStartupWithRuntime = (
   cwd: string,
   workspaceRuntime: MissionWorkspaceRuntime,
   nextIdentity: () => string = randomUUID,
   intentFileSystem?: MissionStartupIntentFileSystem,
+  journalFactory?: MissionStartupGenerationJournalFactory,
 ): MissionStartup => {
   const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => cwd }));
   return new MissionStartup({
     projects: { resolve: (project) => projects.resolve(project) },
     workspaces: createMissionWorkspacePreparation(workspaceRuntime),
-    recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, intentFileSystem),
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        phase: CONSTRUCTION_PHASE,
-        journalId,
-      }),
-    },
+    recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, intentFileSystem, journalFactory ?? createStartupJournalFactory()),
     identities: { next: nextIdentity },
     now: () => "2026-10-21T14:00:00.000Z",
     producer: { name: "kepler-cli", version: "0.10.3" },
@@ -204,8 +211,18 @@ const makeRequest = (
   }],
 });
 
+const historyGeneration = async (recordHome: string, missionId: string): Promise<string> => {
+  const activationPath = Path.join(recordHome, ".kepler", "missions", missionId, "history", "control", "active.json");
+  const activation = JSON.parse(await Fs.readFile(activationPath, "utf8")) as { data?: { generation_id?: unknown } };
+  if (typeof activation.data?.generation_id !== "string") throw new Error("History activation has no generation identity");
+  return activation.data.generation_id;
+};
+
+const historyPhaseDirectory = async (recordHome: string, missionId: string): Promise<string> =>
+  Path.join(recordHome, ".kepler", "missions", missionId, "history", "generations", await historyGeneration(recordHome, missionId), CONSTRUCTION_PHASE);
+
 const readEvents = async (recordHome: string, missionId: string): Promise<Record<string, unknown>[]> => {
-  const historyPath = Path.join(recordHome, ".kepler", "missions", missionId, "history", "construction");
+  const historyPath = await historyPhaseDirectory(recordHome, missionId);
   const files = await Fs.readdir(historyPath);
   const source = await Fs.readFile(Path.join(historyPath, files[0]!), "utf8");
   return source.trimEnd().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
@@ -243,14 +260,6 @@ const createStartupWithOnePreparationFailure = (
     projects: { resolve: (project) => projects.resolve(project) },
     workspaces,
     recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        phase: CONSTRUCTION_PHASE,
-        journalId,
-      }),
-    },
     identities: { next: randomUUID },
     now: () => "2026-10-21T14:00:00.000Z",
     producer: { name: "kepler-cli", version: "0.10.3" },
@@ -283,9 +292,10 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const environment = await createEnvironment("existing");
     const repository = await createRepository(environment, "record-and-code");
     const startingCommit = git(repository, environment, "rev-parse", "HEAD");
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
 
     const result = await withGitEnvironment(environment, () =>
-      createStartup(repository).execute(undefined, makeRequest("application", repository)),
+      createStartupWithRuntime(repository, workspaceRuntime).execute(undefined, makeRequest("application", repository)),
     );
 
     expect(result.kind).toBe("prepared");
@@ -340,6 +350,205 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       starting_checkpoint: { kind: "commit", commit: startingCommit },
     });
     expect(git(repository, environment, "branch", "--show-current")).toBe("main");
+    const history = await createNodeHistoryAccess(workspaceRuntime).read(repository, result.missionId);
+    expect(history).toMatchObject({ mode: "active", coordination: "bound", pendingRecovery: false, generationId: expect.any(String) });
+    const historyRoot = Path.join(repository, ".kepler", "missions", result.missionId, "history");
+    const activationPath = Path.join(historyRoot, "control", "active.json");
+    const activation = JSON.parse(await Fs.readFile(activationPath, "utf8")) as { journal_id: string; data?: { generation_id?: unknown } };
+    expect(activation.data?.generation_id).toBe(history.generationId);
+    expect(await Fs.readFile(activationPath)).toEqual(await Fs.readFile(Path.join(historyRoot, "control", "events", `${activation.journal_id}.jsonl`)));
+    expect(await Fs.access(Path.join(historyRoot, CONSTRUCTION_PHASE)).then(() => true, () => false)).toBe(false);
+    expect(await Fs.access(await historyPhaseDirectory(repository, result.missionId)).then(() => true, () => false)).toBe(true);
+  });
+
+  it("joins and settles one explicit history version, refreshes after a later append, and admits writers", async () => {
+    const environment = await createEnvironment("history-handoff-refresh");
+    const repository = await createRepository(environment, "record-home");
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const startup = createStartupWithRuntime(repository, workspaceRuntime);
+    const created = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository)));
+    expect(created).toMatchObject({ kind: "prepared" });
+    if (created.kind !== "prepared") return;
+    const access = createNodeHistoryAccess(workspaceRuntime);
+    const current = await withGitEnvironment(environment, () => access.read(repository, created.missionId));
+    const historyVersion = current.historyVersion;
+    if (!historyVersion) throw new Error("Expected an active mission history version");
+
+    const joined = await withGitEnvironment(environment, () => startup.prepare(repository, created.missionId, { historyVersion }));
+    expect(joined).toMatchObject({ kind: "prepared", history: { mode: "active", historyVersion, generationId: current.generationId, coordination: "bound" } });
+    const context = await access.storage.context(repository);
+    const bindingPath = Path.join(context.commonDirectory, "kepler", "missions", created.missionId, "coordination", "history-selection.json");
+    const initialBinding = parseLiveHistoryBinding(await Fs.readFile(bindingPath));
+    expect(initialBinding.settled_sources).toEqual(expect.arrayContaining([expect.objectContaining({ origin_id: expect.any(String), journals: [expect.objectContaining({ phase: "construction", journal_id: expect.any(String), byte_length: expect.any(Number), content_version: expect.any(String) })] })]));
+    const writer = await withGitEnvironment(environment, () => access.beginMutation({ recordHome: repository, missionId: created.missionId, historyVersion }));
+    await withGitEnvironment(environment, () => writer.release());
+
+    const historyEvents = await readEvents(repository, created.missionId);
+    const journalId = String(historyEvents[0]?.journal_id);
+    const preparedEvent = historyEvents.find((event) => event.type === "construction.mission-workspaces-prepared");
+    if (!preparedEvent || typeof preparedEvent.id !== "string") throw new Error("Expected a prepared-workspace event");
+    const appended = historyTestEvent("construction.interaction-recorded", {
+      mission_id: created.missionId,
+      unit_id: randomUUID(),
+      participants: ["requester"],
+      content: "History advanced after publication",
+      references: [],
+    }, journalId, [preparedEvent.id]);
+    const mutations = new HistoryMutations(access);
+    await withGitEnvironment(environment, () => mutations.execute({ recordHome: repository, missionId: created.missionId, historyVersion }, async () => {
+      await mutations.journals.create(repository, created.missionId, journalId).append(appended);
+    }));
+    expect(parseLiveHistoryBinding(await Fs.readFile(bindingPath)).settled_sources).toBeUndefined();
+
+    const refreshed = await withGitEnvironment(environment, () => startup.prepare(repository, created.missionId, { historyVersion }));
+    expect(refreshed).toMatchObject({ kind: "prepared", history: { historyVersion, coordination: "bound" } });
+    const refreshedBinding = parseLiveHistoryBinding(await Fs.readFile(bindingPath));
+    const generation = await historyGeneration(repository, created.missionId);
+    const journalPath = Path.join(repository, ".kepler", "missions", created.missionId, "history", "generations", generation, CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalBytes = await Fs.readFile(journalPath);
+    expect(refreshedBinding.settled_sources?.flatMap((source) => source.journals).find((journal) => journal.journal_id === journalId)).toMatchObject({ byte_length: journalBytes.length });
+    expect((await withGitEnvironment(environment, () => access.read(repository, created.missionId))).history.events.some((event) => event.event?.id === appended.id)).toBe(true);
+  });
+
+  it("rejects unaccepted facts and writers in a copied origin, then joins its complete current history", async () => {
+    const environment = await createEnvironment("history-handoff-copy");
+    const repository = await createRepository(environment, "record-home");
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const startup = createStartupWithRuntime(repository, workspaceRuntime);
+    const created = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository)));
+    expect(created).toMatchObject({ kind: "prepared" });
+    if (created.kind !== "prepared") return;
+    const history = await withGitEnvironment(environment, () => createNodeHistoryAccess(workspaceRuntime).read(repository, created.missionId));
+    const historyVersion = history.historyVersion;
+    if (!historyVersion) throw new Error("Expected an active mission history version");
+    const peer = Path.join(environment.parent, "peer-copy");
+    git(repository, environment, "worktree", "add", "-q", "-b", "history-handoff-peer", peer);
+    const sourceHistory = Path.join(repository, ".kepler", "missions", created.missionId, "history");
+    const peerMissionDirectory = Path.join(peer, ".kepler", "missions", created.missionId);
+    const peerHistory = Path.join(peerMissionDirectory, "history");
+    await Fs.mkdir(peerMissionDirectory, { recursive: true });
+    await Fs.cp(sourceHistory, peerHistory, { recursive: true });
+    const access = createNodeHistoryAccess(workspaceRuntime);
+    const peerView = await withGitEnvironment(environment, () => access.read(peer, created.missionId));
+    expect(peerView.coordination).toBe("unjoined");
+    await expect(withGitEnvironment(environment, () => access.beginMutation({ recordHome: peer, missionId: created.missionId, historyVersion }))).rejects.toMatchObject({ code: "history_binding_required" });
+
+    const events = await readEvents(repository, created.missionId);
+    const journalId = String(events[0]?.journal_id);
+    const preparedEvent = events.find((event) => event.type === "construction.mission-workspaces-prepared");
+    if (!preparedEvent || typeof preparedEvent.id !== "string") throw new Error("Expected a prepared-workspace event");
+    const unaccepted = historyTestEvent("construction.interaction-recorded", {
+      mission_id: created.missionId,
+      unit_id: randomUUID(),
+      participants: ["requester"],
+      content: "Unaccepted copied fact",
+      references: [],
+    }, journalId, [preparedEvent.id]);
+    const generation = await historyGeneration(peer, created.missionId);
+    await createEventJournal({ recordHome: peer, missionId: created.missionId, phase: CONSTRUCTION_PHASE, journalId, generationId: generation }).append(unaccepted);
+    const rejected = await withGitEnvironment(environment, () => startup.prepare(peer, created.missionId, { historyVersion }));
+    expect(rejected).toMatchObject({ kind: "failed", code: "history_handoff_unaccepted_facts" });
+
+    await Fs.rm(peerHistory, { recursive: true, force: true });
+    await Fs.cp(sourceHistory, peerHistory, { recursive: true });
+    const joined = await withGitEnvironment(environment, () => startup.prepare(peer, created.missionId, { historyVersion }));
+    expect(joined).toMatchObject({ kind: "prepared", recordHome: peer, history: { mode: "active", historyVersion, coordination: "bound" } });
+    const writer = await withGitEnvironment(environment, () => access.beginMutation({ recordHome: peer, missionId: created.missionId, historyVersion }));
+    await withGitEnvironment(environment, () => writer.release());
+  });
+
+  it("transfers a moved history collector only after complete source verification and retains prepared workspace ownership", async () => {
+    const environment = await createEnvironment("history-handoff-transfer");
+    const anchor = await createRepository(environment, "anchor");
+    const recordHome = Path.join(environment.parent, "record-home-original");
+    const movedRecordHome = Path.join(environment.parent, "record-home-moved");
+    const codeRepository = await createRepository(environment, "application");
+    git(anchor, environment, "worktree", "add", "-q", "-b", "record-home", recordHome);
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const startup = createStartupWithRuntime(recordHome, workspaceRuntime);
+    const created = await withGitEnvironment(environment, () => startup.execute(recordHome, makeRequest("application", codeRepository)));
+    expect(created).toMatchObject({ kind: "prepared" });
+    if (created.kind !== "prepared" || !created.repositories[0]?.localWorkspaceKey) return;
+    const access = createNodeHistoryAccess(workspaceRuntime);
+    const initial = await withGitEnvironment(environment, () => access.read(recordHome, created.missionId));
+    const historyVersion = initial.historyVersion;
+    if (!historyVersion) throw new Error("Expected an active mission history version");
+    const settled = await withGitEnvironment(environment, () => startup.prepare(recordHome, created.missionId, { historyVersion }));
+    expect(settled).toMatchObject({ kind: "prepared" });
+    const oldContext = await access.storage.context(recordHome);
+    const priorOrigin = oldContext.origins.find((origin) => origin.root === recordHome)?.id;
+    if (!priorOrigin) throw new Error("Expected the original history collector origin");
+    const attachmentPath = Path.join(oldContext.commonDirectory, "kepler", "missions", created.missionId, "workspaces", `${created.repositories[0].localWorkspaceKey}.json`);
+    const attachmentBefore = await Fs.readFile(attachmentPath);
+
+    git(anchor, environment, "worktree", "move", "--force", recordHome, movedRecordHome);
+    const phaseDirectory = await historyPhaseDirectory(movedRecordHome, created.missionId);
+    const journalName = (await Fs.readdir(phaseDirectory)).find((name) => name.endsWith(".jsonl"));
+    if (!journalName) throw new Error("Expected the current generation journal");
+    const journalPath = Path.join(phaseDirectory, journalName);
+    const originalBytes = await Fs.readFile(journalPath);
+    await Fs.writeFile(journalPath, originalBytes.subarray(0, originalBytes.length - 1));
+    const truncated = await withGitEnvironment(environment, () => startup.prepare(movedRecordHome, created.missionId, { historyVersion, transferOriginIds: [priorOrigin] }));
+    expect(truncated.kind).toBe("failed");
+    expect(parseLiveHistoryBinding(await Fs.readFile(Path.join(oldContext.commonDirectory, "kepler", "missions", created.missionId, "coordination", "history-selection.json"))).origins).toContain(priorOrigin);
+    await Fs.writeFile(journalPath, originalBytes);
+
+    const transferred = await withGitEnvironment(environment, () => startup.prepare(movedRecordHome, created.missionId, { historyVersion, transferOriginIds: [priorOrigin] }));
+    expect(transferred).toMatchObject({ kind: "prepared", recordHome: movedRecordHome, history: { mode: "active", historyVersion, coordination: "bound" } });
+    const movedContext = await access.storage.context(movedRecordHome);
+    const movedOrigin = movedContext.origins.find((origin) => origin.root === movedRecordHome)?.id;
+    expect(movedOrigin).toBeDefined();
+    const binding = parseLiveHistoryBinding(await Fs.readFile(Path.join(movedContext.commonDirectory, "kepler", "missions", created.missionId, "coordination", "history-selection.json")));
+    expect(binding.origins).toEqual([movedOrigin]);
+    expect(binding.origins).not.toContain(priorOrigin);
+    expect(await Fs.readFile(attachmentPath)).toEqual(attachmentBefore);
+    expect(await Fs.realpath(codeRepository)).toBe(codeRepository);
+  });
+
+  it("does not settle a history when its actual prepared workspace owner is unavailable", async () => {
+    const environment = await createEnvironment("history-handoff-owner-missing");
+    const repository = await createRepository(environment, "record-home");
+    const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
+    const startup = createStartupWithRuntime(repository, workspaceRuntime);
+    const created = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository)));
+    expect(created).toMatchObject({ kind: "prepared" });
+    if (created.kind !== "prepared" || !created.repositories[0]?.localWorkspaceKey) return;
+    const access = createNodeHistoryAccess(workspaceRuntime);
+    const history = await withGitEnvironment(environment, () => access.read(repository, created.missionId));
+    const historyVersion = history.historyVersion;
+    if (!historyVersion) throw new Error("Expected an active mission history version");
+    const context = await access.storage.context(repository);
+    const attachmentPath = Path.join(context.commonDirectory, "kepler", "missions", created.missionId, "workspaces", `${created.repositories[0].localWorkspaceKey}.json`);
+    const bindingPath = Path.join(context.commonDirectory, "kepler", "missions", created.missionId, "coordination", "history-selection.json");
+    const bindingBefore = await Fs.readFile(bindingPath);
+    await Fs.rm(attachmentPath);
+
+    const rejected = await withGitEnvironment(environment, () => startup.prepare(repository, created.missionId, { historyVersion }));
+
+    expect(rejected).toMatchObject({ kind: "failed", code: "stage_workspace_attachment_missing" });
+    expect(await Fs.readFile(bindingPath)).toEqual(bindingBefore);
+  });
+
+  it("reports retained pending recovery instead of historical preparation without changing its sources", async () => {
+    const environment = await createEnvironment("prepared-history-recovery-pending");
+    const repository = await createRepository(environment, "record-home");
+    const startup = createStartup(environment.parent);
+    const created = await withGitEnvironment(environment, () => startup.execute(repository, makeRequest("record-home", repository)));
+    expect(created.kind).toBe("prepared");
+    if (created.kind !== "prepared") return;
+    const common = await commonDirectory(repository, environment);
+    const pendingRoot = Path.join(common, "kepler", "missions", created.missionId, "recovery", "pending");
+    await Fs.mkdir(pendingRoot, { recursive: true });
+    const pendingPath = Path.join(pendingRoot, `${"a".repeat(64)}.json`);
+    const pending = "Retained unknown operation instructions must remain fenced.\n";
+    await Fs.writeFile(pendingPath, pending);
+    const history = await readEvents(repository, created.missionId);
+    const selected = await Fs.readFile(Path.join(repository, ".kepler", "missions", created.missionId, "history", "control", "active.json"));
+    const result = await withGitEnvironment(environment, () => startup.prepare(repository, created.missionId));
+    expect(result).toMatchObject({ kind: "failed", code: "history_recovery_pending", details: { pending_recovery: true } });
+    expect(await readEvents(repository, created.missionId)).toEqual(history);
+    expect(await Fs.readFile(pendingPath, "utf8")).toBe(pending);
+    expect(await Fs.readFile(Path.join(repository, ".kepler", "missions", created.missionId, "history", "control", "active.json"))).toEqual(selected);
   });
 
   it("returns historical prepared facts when intent and attachment are absent after HEAD advances", async () => {
@@ -401,8 +610,9 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     expect(result).toMatchObject({ kind: "prepared", repositories: [{ branch: branchName }] });
     if (result.kind !== "prepared") return;
     expect(git(repository, environment, "branch", "--show-current")).toBe(branchName);
+    const historyPath = Path.relative(repository, await historyPhaseDirectory(repository, result.missionId)).split(Path.sep).join("/");
     expect(git(repository, environment, "status", "--porcelain=v1", "--untracked-files=all"))
-      .toContain(`.kepler/missions/${result.missionId}/history/construction/`);
+      .toContain(`${historyPath}/`);
     expect((await readEvents(repository, result.missionId)).map((event) => event.type)).toEqual([
       "construction.mission-created",
       "construction.mission-workspaces-prepared",
@@ -424,7 +634,13 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const missionId = "11111111-1111-4111-8111-111111111111";
     const journalId = "22222222-2222-4222-8222-222222222222";
     const createdEventId = "33333333-3333-4333-8333-333333333333";
-    const identities = [missionId, journalId, createdEventId, "44444444-4444-4444-8444-444444444444"];
+    const identities = [missionId, journalId, createdEventId,
+      "44444444-4444-4444-8444-444444444444",
+      "55555555-5555-4555-8555-555555555555",
+      "66666666-6666-4666-8666-666666666666",
+      "77777777-7777-4777-8777-777777777777",
+      "88888888-8888-4888-8888-888888888888",
+      "99999999-9999-4999-8999-999999999999"];
     const ignoredRecords = Path.join(".kepler", "missions");
     await Fs.writeFile(Path.join(repository, ".gitignore"), `${ignoredRecords}/\n`);
     git(repository, environment, "add", ".gitignore");
@@ -433,7 +649,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const conflictingBranch = "feature/ignored-journal";
     git(repository, environment, "branch", conflictingBranch);
     git(repository, environment, "switch", conflictingBranch);
-    const journalPath = Path.join(repository, ignoredRecords, missionId, "history", "construction", `${journalId}.jsonl`);
+    const journalPath = Path.join(repository, ignoredRecords, missionId, "history", "generations", identities[4]!, "construction", `${journalId}.jsonl`);
     await Fs.mkdir(Path.dirname(journalPath), { recursive: true });
     await Fs.writeFile(journalPath, "tracked branch version\n");
     git(repository, environment, "add", "-f", "--", Path.relative(repository, journalPath));
@@ -486,14 +702,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
       recovery: createNodeMissionStartupRecoveryRuntime(runtime),
-      journals: {
-        create: (recordHomePath, missionId, journalId) => createEventJournal({
-          recordHome: recordHomePath,
-          missionId,
-          phase: CONSTRUCTION_PHASE,
-          journalId,
-        }),
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -723,8 +931,8 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       cwd: environment.parent,
       coordination: {
         acquire: async (request) => {
-          acquisitions += 1;
-          if (acquisitions === 2) await Fs.writeFile(destination, "pre-existing racer content\n");
+          if (request.location.kind === "code-workspace") acquisitions += 1;
+          if (request.location.kind === "code-workspace" && acquisitions === 1) await Fs.writeFile(destination, "pre-existing racer content\n");
           return actualRuntime.coordination.acquire(request);
         },
         release: (request, token) => actualRuntime.coordination.release(request, token),
@@ -735,14 +943,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
       recovery: createNodeMissionStartupRecoveryRuntime(runtime),
-      journals: {
-        create: (recordHomePath, missionId, journalId) => createEventJournal({
-          recordHome: recordHomePath,
-          missionId,
-          phase: CONSTRUCTION_PHASE,
-          journalId,
-        }),
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -797,7 +997,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       await Fs.rename(intentPath, savedPath);
       await Fs.symlink(savedPath, intentPath);
     }
-    const journalPath = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const journalPath = await historyPhaseDirectory(repository, missionId);
     const journalName = (await Fs.readdir(journalPath))[0]!;
     const journalFile = Path.join(journalPath, journalName);
     const beforeHistory = await Fs.readFile(journalFile);
@@ -852,7 +1052,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     }
     const tamperedIntent = `${JSON.stringify(intent, null, 2)}\n`;
     await Fs.writeFile(intentPath, tamperedIntent);
-    const historyDirectory = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const historyDirectory = await historyPhaseDirectory(repository, missionId);
     const historyPath = Path.join(historyDirectory, (await Fs.readdir(historyDirectory))[0]!);
     const beforeHistory = await Fs.readFile(historyPath);
     const beforeStatus = git(repository, environment, "status", "--porcelain=v1", "--untracked-files=all");
@@ -914,7 +1114,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     savedRepository.localWorkspaceKey = aliasWorkspaceKey;
     const tamperedIntent = `${JSON.stringify(intent, null, 2)}\n`;
     await Fs.writeFile(intentPath, tamperedIntent);
-    const historyDirectory = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const historyDirectory = await historyPhaseDirectory(repository, missionId);
     const historyPath = Path.join(historyDirectory, (await Fs.readdir(historyDirectory))[0]!);
     const beforeHistory = await Fs.readFile(historyPath);
     const beforeStatus = git(repository, environment, "status", "--porcelain=v1", "--untracked-files=all");
@@ -977,8 +1177,9 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const common = await commonDirectory(repository, environment);
     intentPath = Path.join(common, "kepler", "missions", missionId, "workspaces", "startup", "intent.json");
     const beforeIntent = await Fs.readFile(intentPath);
-    const beforeHistory = await Fs.readFile(Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE,
-      (await Fs.readdir(Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE)))[0]!));
+    const historyDirectory = await historyPhaseDirectory(repository, missionId);
+    const historyPath = Path.join(historyDirectory, (await Fs.readdir(historyDirectory))[0]!);
+    const beforeHistory = await Fs.readFile(historyPath);
     const workspaceKey = missionWorkspaceKey(common, await Fs.realpath(repository));
     const workspaceLockPath = Path.join(common, "kepler", "workspaces", workspaceKey);
     expect(await Fs.access(workspaceLockPath).then(() => true, () => false)).toBe(false);
@@ -989,8 +1190,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     expect(rejected).toMatchObject({ kind: "failed", code: "mission_recovery_intent_read_failed" });
     expect(await Fs.lstat(intentPath).then((stat) => stat.isSymbolicLink())).toBe(true);
     expect(await Fs.readFile(savedPath)).toEqual(beforeIntent);
-    expect(await Fs.readFile(Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE,
-      (await Fs.readdir(Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE)))[0]!))).toEqual(beforeHistory);
+    expect(await Fs.readFile(historyPath)).toEqual(beforeHistory);
     expect(await Fs.access(workspaceLockPath).then(() => true, () => false)).toBe(false);
     expect(git(repository, environment, "branch", "--show-current")).toBe("main");
     expect((await readEvents(repository, missionId)).map((event) => event.type)).toEqual(["construction.mission-created"]);
@@ -998,7 +1198,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
 
   it("blocks incomplete, unsupported, conflicting, and downstream-only history without rewriting it", async () => {
     const { environment, repository, startup, missionId } = await createBranchLockedMission("history-safety");
-    const historyDirectory = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
+    const historyDirectory = await historyPhaseDirectory(repository, missionId);
     const journalName = (await Fs.readdir(historyDirectory))[0]!;
     const journalPath = Path.join(historyDirectory, journalName);
     const originalBytes = await Fs.readFile(journalPath, "utf8");
@@ -1077,14 +1277,6 @@ describe("mission startup with real Git, worktrees, and journals", () => {
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(runtime),
       recovery: createNodeMissionStartupRecoveryRuntime(runtime),
-      journals: {
-        create: (recordHomePath, missionId, journalId) => createEventJournal({
-          recordHome: recordHomePath,
-          missionId,
-          phase: CONSTRUCTION_PHASE,
-          journalId,
-        }),
-      },
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1134,27 +1326,22 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
     const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
     let failCreatedAppend = true;
+    const startupJournalFactory = createStartupJournalFactory((journal) => ({
+      path: journal.path,
+      read: journal.read,
+      append: async (event) => {
+        if (failCreatedAppend && typeof event === "object" && event !== null &&
+            "type" in event && event.type === "construction.mission-created") {
+          failCreatedAppend = false;
+          throw new Error("injected creation append failure before write");
+        }
+        return journal.append(event);
+      },
+    }));
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
-      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              if (failCreatedAppend && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-created") {
-                failCreatedAppend = false;
-                throw new Error("injected creation append failure before write");
-              }
-              return journal.append(event);
-            },
-          };
-        },
-      },
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1188,32 +1375,27 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
     let removeCreationTerminator = true;
     let unterminatedJournalPath: string | undefined;
+    const startupJournalFactory = createStartupJournalFactory((journal) => ({
+      path: journal.path,
+      read: journal.read,
+      append: async (event) => {
+        if (removeCreationTerminator && typeof event === "object" && event !== null &&
+            "type" in event && event.type === "construction.mission-created") {
+          await journal.append(event);
+          removeCreationTerminator = false;
+          unterminatedJournalPath = journal.path;
+          const bytes = await Fs.readFile(journal.path);
+          expect(bytes.at(-1)).toBe(10);
+          await Fs.writeFile(journal.path, bytes.subarray(0, bytes.length - 1));
+          throw new Error("interrupted after complete creation bytes but before final LF");
+        }
+        return journal.append(event);
+      },
+    }));
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
-      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              if (removeCreationTerminator && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-created") {
-                await journal.append(event);
-                removeCreationTerminator = false;
-                unterminatedJournalPath = journal.path;
-                const bytes = await Fs.readFile(journal.path);
-                expect(bytes.at(-1)).toBe(10);
-                await Fs.writeFile(journal.path, bytes.subarray(0, bytes.length - 1));
-                throw new Error("interrupted after complete creation bytes but before final LF");
-              }
-              return journal.append(event);
-            },
-          };
-        },
-      },
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1245,32 +1427,27 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
     let removePreparedTerminator = true;
     let unterminatedJournalPath: string | undefined;
+    const startupJournalFactory = createStartupJournalFactory((journal) => ({
+      path: journal.path,
+      read: journal.read,
+      append: async (event) => {
+        const appended = await journal.append(event);
+        if (removePreparedTerminator && typeof event === "object" && event !== null &&
+            "type" in event && event.type === "construction.mission-workspaces-prepared") {
+          removePreparedTerminator = false;
+          unterminatedJournalPath = journal.path;
+          const bytes = await Fs.readFile(journal.path);
+          expect(bytes.at(-1)).toBe(10);
+          await Fs.writeFile(journal.path, bytes.subarray(0, bytes.length - 1));
+          throw new Error("interrupted after complete prepared bytes but before final LF");
+        }
+        return appended;
+      },
+    }));
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
-      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              const appended = await journal.append(event);
-              if (removePreparedTerminator && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
-                removePreparedTerminator = false;
-                unterminatedJournalPath = journal.path;
-                const bytes = await Fs.readFile(journal.path);
-                expect(bytes.at(-1)).toBe(10);
-                await Fs.writeFile(journal.path, bytes.subarray(0, bytes.length - 1));
-                throw new Error("interrupted after complete prepared bytes but before final LF");
-              }
-              return appended;
-            },
-          };
-        },
-      },
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1303,6 +1480,7 @@ describe("mission startup with real Git, worktrees, and journals", () => {
 
     const recovered = await withGitEnvironment(environment, () => startup.prepare(repository, missionId));
 
+    expect(recovered.kind, JSON.stringify(recovered)).toBe("prepared");
     expect(recovered).toMatchObject({ kind: "prepared", missionId, recordHome: repository, historical: true });
     if (recovered.kind !== "prepared") return;
     expect(recovered.repositories[0]).not.toHaveProperty("localWorkspaceKey");
@@ -1319,27 +1497,22 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
     const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
     let failPreparedAppend = true;
+    const startupJournalFactory = createStartupJournalFactory((journal) => ({
+      path: journal.path,
+      read: journal.read,
+      append: async (event) => {
+        if (failPreparedAppend && typeof event === "object" && event !== null &&
+            "type" in event && event.type === "construction.mission-workspaces-prepared") {
+          failPreparedAppend = false;
+          throw new Error("injected prepared append failure");
+        }
+        return journal.append(event);
+      },
+    }));
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
-      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              if (failPreparedAppend && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
-                failPreparedAppend = false;
-                throw new Error("injected prepared append failure");
-              }
-              return journal.append(event);
-            },
-          };
-        },
-      },
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1378,28 +1551,23 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
     const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
     let failAfterPreparedWrite = true;
+    const startupJournalFactory = createStartupJournalFactory((journal) => ({
+      path: journal.path,
+      read: journal.read,
+      append: async (event) => {
+        const appended = await journal.append(event);
+        if (failAfterPreparedWrite && typeof event === "object" && event !== null &&
+            "type" in event && event.type === "construction.mission-workspaces-prepared") {
+          failAfterPreparedWrite = false;
+          throw new Error("injected response loss after prepared append");
+        }
+        return appended;
+      },
+    }));
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
-      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              const appended = await journal.append(event);
-              if (failAfterPreparedWrite && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
-                failAfterPreparedWrite = false;
-                throw new Error("injected response loss after prepared append");
-              }
-              return appended;
-            },
-          };
-        },
-      },
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },
@@ -1445,27 +1613,22 @@ describe("mission startup with real Git, worktrees, and journals", () => {
     const projects = new ProjectResolver(createProjectSelectionRuntime({ cwd: () => environment.parent }));
     const workspaceRuntime = createNodeMissionWorkspaceRuntime({ cwd: environment.parent });
     let failPreparedAppend = true;
+    const startupJournalFactory = createStartupJournalFactory((journal) => ({
+      path: journal.path,
+      read: journal.read,
+      append: async (event) => {
+        if (failPreparedAppend && typeof event === "object" && event !== null &&
+            "type" in event && event.type === "construction.mission-workspaces-prepared") {
+          failPreparedAppend = false;
+          throw new Error("injected prepared append failure");
+        }
+        return journal.append(event);
+      },
+    }));
     const startup = new MissionStartup({
       projects: { resolve: (project) => projects.resolve(project) },
       workspaces: createMissionWorkspacePreparation(workspaceRuntime),
-      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime),
-      journals: {
-        create: (recordHome, missionId, journalId) => {
-          const journal = createEventJournal({ recordHome, missionId, phase: CONSTRUCTION_PHASE, journalId });
-          return {
-            path: journal.path,
-            read: journal.read,
-            append: async (event) => {
-              if (failPreparedAppend && typeof event === "object" && event !== null &&
-                  "type" in event && event.type === "construction.mission-workspaces-prepared") {
-                failPreparedAppend = false;
-                throw new Error("injected prepared append failure");
-              }
-              return journal.append(event);
-            },
-          };
-        },
-      },
+      recovery: createNodeMissionStartupRecoveryRuntime(workspaceRuntime, undefined, startupJournalFactory),
       identities: { next: randomUUID },
       now: () => "2026-10-21T14:00:00.000Z",
       producer: { name: "kepler-cli", version: "0.10.3" },

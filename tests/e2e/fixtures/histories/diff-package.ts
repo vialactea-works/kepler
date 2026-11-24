@@ -4,6 +4,7 @@ import * as Path from "node:path";
 import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE, validateConstructionEvent } from "../../../../packages/cli/src/construction/events.js";
 import { missionWorkspaceKey } from "../../../../packages/cli/src/construction/mission-workspace.js";
 import type { E2EResources } from "../../resources.js";
+import { selectFixtureHistory } from "../../../support/history-consumers.js";
 
 export interface DiffPackageFixture {
   readonly missionId: string;
@@ -16,6 +17,8 @@ export interface DiffPackageFixture {
   readonly validationEvidenceId: string;
   readonly generationCompletionEventId: string;
   readonly historyPath: string;
+  readonly historyVersion: string;
+  readonly generationId: string;
   readonly base: string;
   readonly generation: string;
   readonly candidate: string;
@@ -106,7 +109,7 @@ export const createDiffPackageHistory = async (
   const unitCreated = event(journalId, "construction.unit-created", {
     mission_id: missionId,
     unit_id: unitId,
-    directory: `.kepler/units-of-work/${unitId}`,
+    directory: `construction/units-of-work/${unitId}`,
     workflow: "standard",
     initial_effort: { default: "standard", stage_overrides: {}, selected_by: "requester" },
   }, [missionCreated.id]);
@@ -440,10 +443,10 @@ export const createDiffPackageHistory = async (
     if (validation.status !== "valid") throw new Error(`Invalid diff-package E2E event ${entry.type}: ${JSON.stringify(validation)}`);
   }
   const historyDirectory = Path.join(repository, ".kepler", "missions", missionId, "history", CONSTRUCTION_PHASE);
-  await Fs.mkdir(Path.join(repository, ".kepler", "units-of-work", unitId), { recursive: true });
+  await Fs.mkdir(Path.join(repository, ".kepler", "missions", missionId, "construction", "units-of-work", unitId), { recursive: true });
   await Fs.mkdir(historyDirectory, { recursive: true });
-  const historyPath = Path.join(historyDirectory, `${journalId}.jsonl`);
-  await Fs.writeFile(historyPath, `${events.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
+  const legacyHistoryPath = Path.join(historyDirectory, `${journalId}.jsonl`);
+  await Fs.writeFile(legacyHistoryPath, `${events.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
   const attachmentDirectory = Path.join(commonDirectory, "kepler", "missions", missionId, "workspaces");
   await Fs.mkdir(attachmentDirectory, { recursive: true });
   await Fs.writeFile(Path.join(attachmentDirectory, `${workspaceId}.json`), `${JSON.stringify({
@@ -460,6 +463,7 @@ export const createDiffPackageHistory = async (
     integration_target: "refs/heads/main",
     starting_checkpoint: { kind: "commit", commit: base },
   })}\n`, "utf8");
+  const selected = await selectFixtureHistory(repository, missionId);
   return {
     missionId,
     unitId,
@@ -470,7 +474,9 @@ export const createDiffPackageHistory = async (
     generationEvidenceId,
     validationEvidenceId,
     generationCompletionEventId: generationCompleted.id,
-    historyPath,
+    historyPath: Path.join(repository, ".kepler", "missions", missionId, "history", "generations", selected.generationId, CONSTRUCTION_PHASE, `${journalId}.jsonl`),
+    historyVersion: selected.historyVersion,
+    generationId: selected.generationId,
     base,
     generation,
     candidate,

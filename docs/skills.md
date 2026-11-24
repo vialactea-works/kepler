@@ -8,7 +8,7 @@ Kepler setup seeds packaged resources into the selected `KEPLER_HOME`. It does n
 
 Keep each complete skill directory, including reference files and notices. Use resources from the home that matches the selected CLI. See [Installation](installation.md#resources-and-host-ownership).
 
-The source `skills/` directory contains the same fourteen skill trees as the generated package (nine required Standard entry/stage/Activity resources and five optional supporting resources). A file in a home does not prove that a host loaded it. Do not assume the selected installed release contains the same inventory as this source candidate; inspect its matching manifest.
+The source `skills/` directory contains the same fifteen skill trees as the generated package (nine required Standard entry/stage/Activity resources and six optional supporting resources). A file in a home does not prove that a host loaded it. Do not assume the selected installed release contains the same inventory as this source candidate; inspect its matching manifest.
 
 ## Developer skill route
 
@@ -50,8 +50,17 @@ Standard uses six stages. Code Generation, Code Validation, and Code Integration
 | [`kepler-domain-modelling`](../bundle/skills/kepler-domain-modelling/SKILL.md) | Establish domain terms, model boundaries, and ownership. |
 | [`kepler-research`](../bundle/skills/kepler-research/SKILL.md) | Check uncertain facts against primary sources and record findings. |
 | [`kepler-resume`](../bundle/skills/kepler-resume/SKILL.md) | Inspect current state or reconcile interrupted startup/stage/task/delivery work and return to the owning skill. |
+| [`kepler-lifecycle-migration`](../bundle/skills/kepler-lifecycle-migration/SKILL.md) | Select dated release guides, prepare an approved manifest, and apply only supported lifecycle migrations. |
 
 These procedures do not add stages or grant authority. The planning skill's [task graph reference](../bundle/skills/kepler-plan/references/task-graph.md) describes the packaged format. Construction lint checks supported structural and semantic rules. It does not prove that the graph covers every requirement.
+
+## Lifecycle migrations
+
+Ask `kepler-lifecycle-migration` to inspect deprecated files or contract formats after an upgrade.
+It selects a dated guide from `referenses/migrations/` inside its complete skill directory.
+The first [history-generation guide](../bundle/skills/kepler-lifecycle-migration/referenses/migrations/2026-11-13-mission-history-generations.md) is released from Kepler 3.2.0.
+Use its exact inspection, preview, approved apply, and retry procedure with the matched CLI and resource package. Actual client compatibility and exact manifest approval remain required.
+A newer skill, guide, or release announcement does not approve changes to your records.
 
 ## Pi profiles
 

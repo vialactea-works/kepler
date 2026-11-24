@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { legacyFixtureJournals } from "../support/history-consumers.js";
 import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
@@ -482,7 +483,7 @@ const setup = async (includeSecondPreparedRepository = false, includeExtraValida
     failNextIntegrationRelease?: () => boolean,
     afterUnitControlAcquire?: () => Promise<void>,
   ) => {
-    const base = createNodeIntegrationExecutionRuntime({ name: "kepler-test", version: "0.10.3" });
+    const base = createNodeIntegrationExecutionRuntime({ name: "kepler-test", version: "0.10.3" }, legacyFixtureJournals);
     let triggered = false;
     let targetReadTriggered = false;
     let unitControlAcquireTriggered = false;

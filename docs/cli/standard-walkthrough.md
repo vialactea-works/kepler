@@ -138,7 +138,7 @@ record() {
     '{inputs:$inputs[0],artifact_bindings:$bindings[0],checkpoints:$checkpoints[0],check:$check,executor:$executor,
       result:{status:"passed",summary:($check+" passed for the checked exercise material.")},
       output_refs:[("assessment:"+$check)],conditions:[]} + $extra' > "$LAB/requests/$name.json"
-  kepler audit record evidence "$@" --project "$PROJECT" < "$LAB/requests/$name.json" > "$LAB/$name.json"
+  kepler audit record evidence --history-version "$HISTORY_VERSION" "$@" --project "$PROJECT" < "$LAB/requests/$name.json" > "$LAB/$name.json"
   jq -e '.status=="success"' "$LAB/$name.json" > /dev/null
 }
 approve() {
@@ -147,7 +147,7 @@ approve() {
   jq -n --slurpfile b "$BINDINGS" --slurpfile c "$LAB/checkpoints.json" --slurpfile i "$LAB/inputs.json" \
     '{requester:"Requester",inputs:$i[0],artifact_bindings:$b[0],checkpoints:$c[0],
       decision_reference:"tutorial:explicit-approval-of-current-material"}' > "$LAB/requests/$name.json"
-  kepler audit record approval "$@" --project "$PROJECT" < "$LAB/requests/$name.json" > "$LAB/$name.json"
+  kepler audit record approval --history-version "$HISTORY_VERSION" "$@" --project "$PROJECT" < "$LAB/requests/$name.json" > "$LAB/$name.json"
   jq -e '.status=="success"' "$LAB/$name.json" > /dev/null
 }
 ```
@@ -166,7 +166,10 @@ jq -n --arg path "$PROJECT" '{title:"Owner access policy",
     branch:{kind:"current"},integrationTarget:"refs/heads/main"}]}' > "$LAB/mission-request.json"
 kepler mission create --project "$PROJECT" --request "$(cat "$LAB/mission-request.json")" > "$LAB/mission.json"
 MISSION=$(field mission '.data.mission_id')
-kepler workflow construction unit create owner-access --mission "$MISSION" --effort standard \
+kepler recovery inspect --mission "$MISSION" --project "$PROJECT" > "$LAB/history.json"
+HISTORY_VERSION=$(field history '.data.history_version')
+jq -e '.data.selection_status=="validated" and .data.mode=="active" and .data.pending_sources==[]' "$LAB/history.json" > /dev/null
+kepler workflow construction unit create --history-version "$HISTORY_VERSION" owner-access --mission "$MISSION" --effort standard \
   --project "$PROJECT" > "$LAB/unit.json"
 UNIT=$(field unit '.data.unit_id')
 UNIT_DIR=".kepler/missions/$MISSION/$(field unit '.data.directory')"
@@ -187,7 +190,7 @@ If startup stops before preparation completes, keep its mission ID and use `kepl
 Start the stage and write its material:
 
 ```bash
-kepler workflow construction stage start --unit "$UNIT" --stage functional-design \
+kepler workflow construction stage start --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage functional-design \
   --request '{"inputs":[{"reference":"request:owner-access","purpose":"Requested access policy"}]}' \
   --project "$PROJECT" > "$LAB/fd-start.json"
 FD=$(field fd-start '.data.attempt_id')
@@ -253,7 +256,7 @@ jq -n --arg approval "$(field fd-approval '.data.id')" \
       unresolved_material_choices:[],unsupported_assumptions:[],quality_concerns:[],technical_questions:[]},
     handoff:{status:"ready",evidence_id:$handoff,summary:"Design ready for quality review.",recipient:"quality-requirements",unit_directory:$dir,
       artifacts:["unit-of-work.md","design.md"],project_references:[],known_constraints:["Authentication is outside this example."],quality_concerns:[],technical_questions:[]}}}' > "$LAB/fd-complete.json"
-kepler workflow construction stage complete "${stage_scope[@]}" --request "$(cat "$LAB/fd-complete.json")" --project "$PROJECT"
+kepler workflow construction stage complete --history-version "$HISTORY_VERSION" "${stage_scope[@]}" --request "$(cat "$LAB/fd-complete.json")" --project "$PROJECT"
 kepler workflow construction stage show --unit "$UNIT" --stage functional-design --project "$PROJECT"
 ```
 
@@ -265,7 +268,7 @@ The stage reports `completed`. Approval uses an event ID. Assessments use eviden
 
 ```bash
 jq -n --slurpfile i "$LAB/inputs.json" '{inputs:$i[0]}' > "$LAB/stage-inputs.json"
-kepler workflow construction stage start --unit "$UNIT" --stage quality-requirements \
+kepler workflow construction stage start --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage quality-requirements \
   --request "$(cat "$LAB/stage-inputs.json")" --project "$PROJECT" > "$LAB/q-start.json"
 QUALITY=$(field q-start '.data.attempt_id')
 artifact quality.md non-functional-requirements "$(new_id)" <<'EOF'
@@ -314,7 +317,7 @@ jq -n --arg approval "$(field q-approval '.data.id')" --arg artifact "$(field q-
     external_review:{requested:false},
     handoff:{status:"ready",summary:"Quality ready for planning.",recipient:"implementation-planning",unit_directory:$dir,
       artifacts:["unit-of-work.md","design.md","quality.md"],requirement_references:["quality.md#security"],constraints:["No runtime dependency."],assumptions:[],planning_questions:[]}}}' > "$LAB/q-complete.json"
-kepler workflow construction stage complete "${stage_scope[@]}" --request "$(cat "$LAB/q-complete.json")" --project "$PROJECT"
+kepler workflow construction stage complete --history-version "$HISTORY_VERSION" "${stage_scope[@]}" --request "$(cat "$LAB/q-complete.json")" --project "$PROJECT"
 ```
 
 Completion retains the accepted design bindings and current quality bindings. Optional external review is explicitly unrequested here. The next stage selects a technical approach.
@@ -328,7 +331,7 @@ jq -s 'add|sort_by(.artifact_id)' "$LAB/fd-bindings.json" "$LAB/q-bindings.json"
 BINDINGS="$LAB/input-bindings.json"
 inputs
 jq -n --slurpfile i "$LAB/inputs.json" '{inputs:$i[0]}' > "$LAB/stage-inputs.json"
-kepler workflow construction stage start --unit "$UNIT" --stage implementation-planning \
+kepler workflow construction stage start --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage implementation-planning \
   --request "$(cat "$LAB/stage-inputs.json")" --project "$PROJECT" > "$LAB/p-start.json"
 PLANNING=$(field p-start '.data.attempt_id')
 TASK=$(new_id)
@@ -403,7 +406,7 @@ jq -n --arg artifact "$(field p-artifact '.data.evidence_id')" --arg graphCheck 
       input_bindings:$b[0],graph_ref:{graph_id:$graph,content_version:$version},task_ids:[$task],
       verification_obligations:[$g[0].tasks[]|.id as $id|.verification[]|"task:\($id) \(.scope): \(.method); expected: \(.expected_result)"],
       prerequisite_conditions:[],coordination_constraints:["Run one task at a time."],approval_required:false}}}' > "$LAB/p-complete.json"
-kepler workflow construction stage complete "${stage_scope[@]}" --request "$(cat "$LAB/p-complete.json")" --project "$PROJECT"
+kepler workflow construction stage complete --history-version "$HISTORY_VERSION" "${stage_scope[@]}" --request "$(cat "$LAB/p-complete.json")" --project "$PROJECT"
 ```
 
 The example has no additional planning approval rule. Real requester instructions or project authority can require one. Do not use `required: false` to bypass that requirement.
@@ -419,11 +422,11 @@ BINDINGS="$LAB/reviewed-bindings.json"
 inputs
 jq --arg graph "$GRAPH" --arg version "$GRAPH_VERSION" \
   '{inputs:([{reference:("task-graph:"+$graph+"@"+$version),purpose:"Accepted graph"}]+.)}' "$LAB/inputs.json" > "$LAB/implementation-inputs.json"
-kepler workflow construction stage start --unit "$UNIT" --stage implementation \
+kepler workflow construction stage start --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage implementation \
   --request "$(cat "$LAB/implementation-inputs.json")" --project "$PROJECT" > "$LAB/i-start.json"
 IMPL=$(field i-start '.data.attempt_id')
 kepler workflow construction task ready --unit "$UNIT" --task "$TASK" --project "$PROJECT"
-kepler workflow construction task admit --unit "$UNIT" --task "$TASK" --implementation-attempt "$IMPL" \
+kepler workflow construction task admit --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" --implementation-attempt "$IMPL" \
   --prerequisites '{"prerequisite_evidence_ids":[]}' --project "$PROJECT"
 ```
 
@@ -434,7 +437,7 @@ Readiness is a query, not edit permission. Admission records the task scope and 
 Assign this section to the coder. Start its exact Activity:
 
 ```bash
-kepler workflow construction activity start --unit "$UNIT" --task "$TASK" --activity code-generation \
+kepler workflow construction activity start --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" --activity code-generation \
   --implementation-attempt "$IMPL" --project "$PROJECT" > "$LAB/g-start.json"
 GENERATION=$(field g-start '.data.activity_attempt_id')
 mkdir -p src tests
@@ -470,7 +473,7 @@ Inspect the implementation, boundary cases, tests, and accepted scope. After the
 record g-self code-generation-self-review agent:coder "${activity_scope[@]}"
 jq -n --arg a "$(field g-type '.data.evidence_id')" --arg b "$(field g-tests '.data.evidence_id')" \
   --arg c "$(field g-self '.data.evidence_id')" '{evidence_ids:[$a,$b,$c]}' > "$LAB/g-evidence.json"
-kepler workflow construction activity complete "${activity_scope[@]}" --evidence "$(cat "$LAB/g-evidence.json")" --project "$PROJECT"
+kepler workflow construction activity complete --history-version "$HISTORY_VERSION" "${activity_scope[@]}" --evidence "$(cat "$LAB/g-evidence.json")" --project "$PROJECT"
 ```
 
 The Activity records the output checkpoint. It does not replace the next independent check.
@@ -480,7 +483,7 @@ The Activity records the output checkpoint. It does not replace the next indepen
 Assign this section to a non-author reviewer in a separate context. The reviewer must inspect the actual output and accepted inputs. A different executor string alone does not satisfy that responsibility.
 
 ```bash
-kepler workflow construction activity start --unit "$UNIT" --task "$TASK" --activity code-validation \
+kepler workflow construction activity start --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" --activity code-validation \
   --implementation-attempt "$IMPL" --project "$PROJECT" > "$LAB/v-start.json"
 VALIDATION=$(field v-start '.data.activity_attempt_id')
 kepler git diff-package validation --unit "$UNIT" --task "$TASK" --implementation-attempt "$IMPL" \
@@ -505,7 +508,7 @@ record v-self code-validation-self-review agent:reviewer "${activity_scope[@]}"
 jq -n --arg a "$(field v-type '.data.evidence_id')" --arg b "$(field v-build '.data.evidence_id')" \
   --arg c "$(field v-tests '.data.evidence_id')" --arg d "$(field v-review '.data.evidence_id')" \
   --arg e "$(field v-self '.data.evidence_id')" '{evidence_ids:[$a,$b,$c,$d,$e]}' > "$LAB/v-evidence.json"
-kepler workflow construction activity complete "${activity_scope[@]}" --evidence "$(cat "$LAB/v-evidence.json")" --project "$PROJECT"
+kepler workflow construction activity complete --history-version "$HISTORY_VERSION" "${activity_scope[@]}" --evidence "$(cat "$LAB/v-evidence.json")" --project "$PROJECT"
 ```
 
 If findings require changed code, stop and use the owning revision/recovery procedure. Do not record a passing review for unfinished work.
@@ -515,15 +518,15 @@ If findings require changed code, stop and use the owning revision/recovery proc
 The orchestrator owns this section. Keep the lock until safe acceptance or an eligible incomplete-work release.
 
 ```bash
-kepler workflow construction activity start --unit "$UNIT" --task "$TASK" --activity code-integration \
+kepler workflow construction activity start --history-version "$HISTORY_VERSION" --unit "$UNIT" --task "$TASK" --activity code-integration \
   --implementation-attempt "$IMPL" --project "$PROJECT" > "$LAB/in-start.json"
 INTEGRATION=$(field in-start '.data.activity_attempt_id')
 integration_scope=(--unit "$UNIT" --task "$TASK" --activity code-integration --implementation-attempt "$IMPL" --attempt "$INTEGRATION")
-kepler workflow construction integration lock "${integration_scope[@]}" --project "$PROJECT" > "$LAB/lock.json"
+kepler workflow construction integration lock --history-version "$HISTORY_VERSION" "${integration_scope[@]}" --project "$PROJECT" > "$LAB/lock.json"
 LOCK_TOKEN=$(field lock '.data.lock_token')
 jq -n --slurpfile l "$LAB/lock.json" --slurpfile a "$LAB/in-start.json" \
   '{captured_inputs:$l[0].data.captured_inputs,candidate_checkpoints:$a[0].data.checkpoints}' > "$LAB/candidate.json"
-kepler workflow construction integration prepare "${integration_scope[@]}" --lock-token "$LOCK_TOKEN" \
+kepler workflow construction integration prepare --history-version "$HISTORY_VERSION" "${integration_scope[@]}" --lock-token "$LOCK_TOKEN" \
   --request "$(cat "$LAB/candidate.json")" --project "$PROJECT" > "$LAB/prepared.json"
 PREPARED_EVENT=$(field prepared '.data.prepared_event_id')
 ```
@@ -557,17 +560,17 @@ for kind in typecheck build full-test-suite self-review; do
     '{prepared_event_id:$prepared,check:$check,executor:"agent:integrator",result:{status:"passed",summary:"The actual candidate check passed."},
       output_refs:["src/access.ts","tests/access.test.ts"],conditions:$conditions}
       + (if $command==null then {} else {check_command:$command} end)' > "$LAB/requests/in-$kind.json"
-  kepler workflow construction integration evidence "${integration_scope[@]}" --lock-token "$LOCK_TOKEN" \
+  kepler workflow construction integration evidence --history-version "$HISTORY_VERSION" "${integration_scope[@]}" --lock-token "$LOCK_TOKEN" \
     --request "$(cat "$LAB/requests/in-$kind.json")" --project "$PROJECT" > "$LAB/in-$kind.json"
 done
 kepler git diff-package integration --unit "$UNIT" --task "$TASK" --implementation-attempt "$IMPL" \
   --integration-attempt "$INTEGRATION" --project "$PROJECT" > "$LAB/integration-package.json"
-kepler workflow construction integration accept "${integration_scope[@]}" --lock-token "$LOCK_TOKEN" \
+kepler workflow construction integration accept --history-version "$HISTORY_VERSION" "${integration_scope[@]}" --lock-token "$LOCK_TOKEN" \
   --prepared-event-id "$PREPARED_EVENT" --project "$PROJECT"
 jq -n --arg a "$(field in-typecheck '.data.evidence_id')" --arg b "$(field in-build '.data.evidence_id')" \
   --arg c "$(field in-full-test-suite '.data.evidence_id')" --arg d "$(field in-self-review '.data.evidence_id')" \
   '{evidence_ids:[$a,$b,$c,$d]}' > "$LAB/in-evidence.json"
-kepler workflow construction activity complete "${integration_scope[@]}" --evidence "$(cat "$LAB/in-evidence.json")" --project "$PROJECT"
+kepler workflow construction activity complete --history-version "$HISTORY_VERSION" "${integration_scope[@]}" --evidence "$(cat "$LAB/in-evidence.json")" --project "$PROJECT"
 ```
 
 Acceptance releases the lock. Activity completion then records task completion. Current Integration supports one repository, even though mission startup can select more.
@@ -590,7 +593,7 @@ jq -n --arg self "$(field i-self '.data.evidence_id')" --arg handoff "$(field i-
     retained_scope_assessment_event_ids:[],additional_review:{requested:false},blocking_findings:[],
     handoff_assessment:{status:"ready",reason:"The task and combined checks passed.",recipient:"unit-of-work-review",
       artifacts:["unit-of-work.md","design.md","quality.md","plan.md","tasks-dag.json"]}}' > "$LAB/i-complete.json"
-kepler workflow construction stage complete "${stage_scope[@]}" --request "$(cat "$LAB/i-complete.json")" --project "$PROJECT" > "$LAB/i-completion.json"
+kepler workflow construction stage complete --history-version "$HISTORY_VERSION" "${stage_scope[@]}" --request "$(cat "$LAB/i-complete.json")" --project "$PROJECT" > "$LAB/i-completion.json"
 IMPLEMENTATION_COMPLETION=$(field i-completion '.data.id')
 cp "$LAB/checkpoints.json" "$LAB/reviewed-checkpoints.json"
 kepler workflow construction task show --unit "$UNIT" --task "$TASK" --project "$PROJECT"
@@ -607,7 +610,7 @@ Use a non-author reviewer. Review the whole unit, not only changed lines. Inspec
 ```bash
 inputs
 jq -n --slurpfile i "$LAB/inputs.json" '{inputs:$i[0]}' > "$LAB/stage-inputs.json"
-kepler workflow construction stage start --unit "$UNIT" --stage unit-of-work-review \
+kepler workflow construction stage start --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage unit-of-work-review \
   --request "$(cat "$LAB/stage-inputs.json")" --project "$PROJECT" > "$LAB/r-start.json"
 REVIEW=$(field r-start '.data.attempt_id')
 kepler git diff-package unit-review --unit "$UNIT" --implementation-attempt "$IMPL" --project "$PROJECT" > "$LAB/unit-review-package.json"
@@ -621,7 +624,7 @@ jq -n --arg implementation "$IMPLEMENTATION_COMPLETION" --slurpfile b "$BINDINGS
     reviewer:"agent:reviewer",implementation_authors:["agent:coder"],implementation_evidence_assessment_id:$assessment,
     review_evidence_id:$review,self_review_evidence_id:$self,findings:{blocking:[],limitations:[]},additional_review:{requested:false},acceptance_required:false,
     handoff:{status:"ready",recipient:"deliver",summary:"The complete reviewed unit is ready for handoff."}}' > "$LAB/r-complete.json"
-kepler workflow construction stage complete "${stage_scope[@]}" --request "$(cat "$LAB/r-complete.json")" --project "$PROJECT" > "$LAB/r-completion.json"
+kepler workflow construction stage complete --history-version "$HISTORY_VERSION" "${stage_scope[@]}" --request "$(cat "$LAB/r-complete.json")" --project "$PROJECT" > "$LAB/r-completion.json"
 REVIEW_COMPLETION=$(field r-completion '.data.id')
 ```
 
@@ -661,7 +664,7 @@ BINDINGS="$LAB/delivery-bindings.json"
 inputs
 checkpoints
 jq -n --slurpfile i "$LAB/inputs.json" '{inputs:$i[0]}' > "$LAB/stage-inputs.json"
-kepler workflow construction stage start --unit "$UNIT" --stage deliver --request "$(cat "$LAB/stage-inputs.json")" \
+kepler workflow construction stage start --history-version "$HISTORY_VERSION" --unit "$UNIT" --stage deliver --request "$(cat "$LAB/stage-inputs.json")" \
   --project "$PROJECT" > "$LAB/d-start.json"
 DELIVER=$(field d-start '.data.attempt_id')
 stage_scope=(--unit "$UNIT" --stage deliver --attempt "$DELIVER")
@@ -670,7 +673,7 @@ cat > "$LAB/outcome.json" <<'EOF'
  "references":["tutorial:repository-handoff"],"delivery_outcome":{"outcome":"repository-handoff",
  "requested_outcome":"Return the reviewed checkpoint and checked source to the tutorial requester.","destination":"repository:main","recipient":"Requester"}}
 EOF
-kepler audit record interaction "${stage_scope[@]}" --project "$PROJECT" < "$LAB/outcome.json" > "$LAB/outcome-event.json"
+kepler audit record interaction --history-version "$HISTORY_VERSION" "${stage_scope[@]}" --project "$PROJECT" < "$LAB/outcome.json" > "$LAB/outcome-event.json"
 OUTCOME_EVENT=$(field outcome-event '.data.id')
 ```
 
@@ -698,7 +701,7 @@ jq -n --arg review "$REVIEW_COMPLETION" --arg request "$OUTCOME_EVENT" --slurpfi
     artifact_bindings:$b[0],reviewed_checkpoints:$c[0],preparation_evidence_id:$preparation,self_review_evidence_id:$self,
     operation_results:[],verification_evidence_ids:[$verify],handoff_evidence_id:$handoff,additional_review:{requested:false},approval_required:false,
     handoff:{status:"ready",summary:"The reviewed checkpoint and checked results are available to the requester."}}' > "$LAB/d-complete.json"
-kepler workflow construction stage complete "${stage_scope[@]}" --request "$(cat "$LAB/d-complete.json")" --project "$PROJECT"
+kepler workflow construction stage complete --history-version "$HISTORY_VERSION" "${stage_scope[@]}" --request "$(cat "$LAB/d-complete.json")" --project "$PROJECT"
 ```
 
 Pass event IDs through `related_event_ids`. Evidence IDs are not causal event IDs. A handoff without the required preparation, self-review, and verification causes fails.

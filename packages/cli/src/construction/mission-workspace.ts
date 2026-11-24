@@ -542,6 +542,34 @@ const sameCheckpoint = (left: MissionStartingCheckpoint, right: MissionStartingC
     right.kind === "commit" && left.commit === right.commit
   ));
 
+const isStartupHistoryStatusPath = (statusPath: string, missionId: string): boolean => {
+  if (!uuidV4.test(missionId)) return false;
+  const segments = statusPath.split("/");
+  if (segments[0] !== ".kepler" || segments[1] !== "missions" || segments[2] !== missionId || segments[3] !== "history") return false;
+  const journalFile = (value: string | undefined): boolean => value !== undefined && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.jsonl$/.test(value);
+  return segments.length === 8 && segments[4] === "generations" && segments[5] !== undefined && uuidV4.test(segments[5]) &&
+      segments[6] === "construction" && journalFile(segments[7]) ||
+    segments.length === 7 && segments[4] === "control" && segments[5] === "events" && journalFile(segments[6]) ||
+    segments.length === 6 && segments[4] === "control" && (segments[5] === "active.json" || journalFile(segments[5]));
+};
+
+const startupHistoryUntrackedPaths = (
+  recordHome: string,
+  context: MissionWorkspacePreparationContext,
+  initialDirtyPaths: readonly string[],
+): Set<string> => {
+  const initial = new Set(initialDirtyPaths);
+  const allowed = new Set<string>();
+  for (const path of [context.missionJournalPath, ...context.missionHistoryPaths]) {
+    if (!Path.isAbsolute(path) || Path.resolve(path) !== path) continue;
+    const relative = Path.relative(recordHome, path);
+    if (relative === "" || relative === ".." || relative.startsWith(`..${Path.sep}`) || Path.isAbsolute(relative)) continue;
+    const statusPath = relative.split(Path.sep).join("/");
+    if (!initial.has(statusPath) && isStartupHistoryStatusPath(statusPath, context.missionId)) allowed.add(statusPath);
+  }
+  return allowed;
+};
+
 const runBranchPreparation = async (
   runtime: MissionWorkspaceRuntime,
   inspected: InspectedMissionRepository,
@@ -558,17 +586,9 @@ const runBranchPreparation = async (
   };
   try {
     const preflightPath = inspected.workspaceKind === "new" ? inspected.sourcePath : inspected.workspacePath;
-    const allowedUntrackedPaths = new Set<string>();
-    if (inspected.workspaceKind !== "new" && inspected.workspacePath === recordHomePath) {
-      const journalRelativePath = Path.relative(recordHomePath, context.missionJournalPath);
-      const journalStatusPath = journalRelativePath.split(Path.sep).join("/");
-      const initialDirtyPaths = new Set(inspected.initialDirtyPaths ?? []);
-      if (journalRelativePath !== "" && journalRelativePath !== ".." &&
-        !journalRelativePath.startsWith(`..${Path.sep}`) && !Path.isAbsolute(journalRelativePath) &&
-        !initialDirtyPaths.has(journalStatusPath)) {
-        allowedUntrackedPaths.add(journalStatusPath);
-      }
-    }
+    const allowedUntrackedPaths = inspected.workspaceKind !== "new" && inspected.workspacePath === recordHomePath
+      ? startupHistoryUntrackedPaths(recordHomePath, context, inspected.initialDirtyPaths ?? [])
+      : new Set<string>();
     const current = await inspectGitRepository(runtime, preflightPath, allowedUntrackedPaths);
     if ("kind" in current) return withEffects(current);
     if (current.root !== preflightPath || current.gitDirectory !== inspected.gitDirectory ||
@@ -958,14 +978,9 @@ const reconcileSavedRepository = async (
       branch: inspected.resolvedBranch,
     }, "Preserve all Git metadata and resolve the worktree registration explicitly before retrying.");
   } else {
-    const allowedUntrackedPaths = new Set<string>();
-    if (inspected.workspacePath === recordHome) {
-      const journalRelativePath = Path.relative(recordHome, context.missionJournalPath);
-      const journalStatusPath = journalRelativePath.split(Path.sep).join("/");
-      if (journalRelativePath !== "" && journalRelativePath !== ".." &&
-          !journalRelativePath.startsWith(`..${Path.sep}`) && !Path.isAbsolute(journalRelativePath) &&
-          !inspected.initialDirtyPaths.includes(journalStatusPath)) allowedUntrackedPaths.add(journalStatusPath);
-    }
+    const allowedUntrackedPaths = inspected.workspacePath === recordHome
+      ? startupHistoryUntrackedPaths(recordHome, context, inspected.initialDirtyPaths)
+      : new Set<string>();
     selectedPath = await inspectGitRepository(runtime, inspected.workspacePath, allowedUntrackedPaths);
     if ("kind" in selectedPath) return selectedPath;
     if (selectedPath.root !== inspected.workspacePath || selectedPath.root !== inspected.repositoryPath ||

@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
-import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { CONSTRUCTION_PHASE, isActivityAttemptCompletedData, isRetainedScopeAssessment, validateConstructionEvent, type ArtifactBinding, type RepositoryCheckpoint, type RetainedScopeAssessment } from "./events.js";
 import { validateStageStartAuthority } from "./stage-authority.js";
 import { readFunctionalDesignCompletionRecord, sameArtifactBindings } from "./functional-design-completion.js";
@@ -23,9 +23,7 @@ export interface ImplementationRetainedScopeAssessmentRequest {
 }
 
 export interface ImplementationRetainedScopeAssessmentRuntime extends ImplementationStageCompletionRuntime {
-  readonly journals: {
-    readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal;
-  };
+  readonly journals: ConstructionJournals;
 }
 
 export type ImplementationRetainedScopeAssessmentResult =
@@ -296,7 +294,7 @@ export class ImplementationRetainedScopeAssessment {
     if (!uuidV4(eventId) || !uuidV4(journalId) || eventId === journalId || existingIds.has(eventId) || existingIds.has(journalId)) {
       return failure("retained_scope_identity_failed", "Retained-scope assessment event and journal identities must be distinct, valid, and unused.");
     }
-    const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+    const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
     if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") return failure("retained_scope_journal_identity_conflict", "A retained-scope assessment journal identity already has a filesystem entry.", { journal_id: journalId });
     const candidate = {
       id: eventId, phase: CONSTRUCTION_PHASE, type: "construction.retained-scope-assessed", envelope_version: 1, event_version: 1,
@@ -340,10 +338,11 @@ export class ImplementationRetainedScopeAssessment {
 export const createNodeImplementationRetainedScopeAssessmentRuntime = (
   producer: { readonly name: string; readonly version: string },
   materialReader: ConstructionMaterialReader,
+  journals: ConstructionJournals,
 ): ImplementationRetainedScopeAssessmentRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
     workspace, materialReader, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer,
-    journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) },
+    journals,
   };
 };

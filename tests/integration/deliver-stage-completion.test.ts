@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { legacyFixtureJournals } from "../support/history-consumers.js";
 import { execFileSync } from "node:child_process";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
@@ -414,6 +415,7 @@ const createDeliverFixture = async (options: { readonly handoffIncludesVerificat
   const runtime = createNodeDeliverStageCompletionRuntime(
     { name: "kepler-test", version: "0.10.3" },
     createNodeConstructionMaterialReader(createNodeRepositoryArtifactFileSystem()),
+    legacyFixtureJournals,
   );
   const handoffPreflight = new MissionHandoffPreflight({ git: runtime.workspace.git, fileSystem: runtime.workspace.fileSystem });
   const service = new DeliverStageCompletion(contexts, runtime, handoffPreflight);

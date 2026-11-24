@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
-import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { pendingRevisionBarrierFor } from "./revision-state.js";
 import { runWithConstructionUnitControl } from "./unit-control.js";
 import { parseAttachment, type LocalWorkspaceAttachment, type MissionWorkspaceRuntime } from "./mission-workspace.js";
@@ -37,9 +37,7 @@ export interface StageStartRuntime {
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
-  readonly journals: {
-    readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal;
-  };
+  readonly journals: ConstructionJournals;
 }
 
 export type StageStartResult =
@@ -93,7 +91,7 @@ const propagateReadFailure = (result: Extract<AuditHistoryReadResult, { kind: "f
   failure(result.code, result.message, result.details, result.recovery);
 
 const commonDirectory = async (
-  runtime: StageStartRuntime,
+  runtime: Pick<StageStartRuntime, "workspace">,
   repositoryRoot: string,
 ): Promise<string | undefined> => {
   const result = await runtime.workspace.git.run(repositoryRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
@@ -121,8 +119,8 @@ const sameStartingCheckpoint = (
   (actual.kind === "no-commit" || expected.commit === actual.commit);
 
 export const captureStageCheckpoints = async (
-  runtime: StageStartRuntime,
-  loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
+  runtime: Pick<StageStartRuntime, "workspace">,
+  loaded: Pick<Extract<AuditHistoryReadResult, { kind: "loaded" }>, "history" | "missionId">,
   commonDir: string,
 ): Promise<CapturedCheckpoints> => {
   const fail = (code: string, message: string, details: Readonly<Record<string, unknown>> = {}): CapturedCheckpoints => ({
@@ -311,8 +309,8 @@ export const captureStageCheckpoints = async (
   };
 };
 
-const currentAuthority = (
-  loaded: Extract<AuditHistoryReadResult, { kind: "loaded" }>,
+export const stageStartAuthority = (
+  loaded: Pick<Extract<AuditHistoryReadResult, { kind: "loaded" }>, "history" | "missionId" | "unit">,
   stage: ConstructionStage,
 ): { readonly kind: "valid"; readonly eventIds: readonly string[] } | {
   readonly kind: "failed";
@@ -475,7 +473,7 @@ export class StageStart {
     const stage = selectors.stage;
     const firstRead = await this.contexts.readUnit(selectors.unit, project);
     if (firstRead.kind === "failed") return propagateReadFailure(firstRead);
-    const firstAuthority = currentAuthority(firstRead, stage);
+    const firstAuthority = stageStartAuthority(firstRead, stage);
     if (firstAuthority.kind === "failed") return failure(firstAuthority.code, firstAuthority.message, firstAuthority.details);
     const commonDir = await commonDirectory(this.runtime, firstRead.root);
     if (!commonDir) return failure("stage_coordination_unavailable", "Git could not resolve the record home's common directory.", { repository_root: firstRead.root });
@@ -531,7 +529,7 @@ export class StageStart {
       history_issues: loaded.unit.historyIssues,
       projection_issues: loaded.unit.projectionIssues,
     });
-    const authority = currentAuthority(loaded, stage);
+    const authority = stageStartAuthority(loaded, stage);
     if (authority.kind === "failed") return failure(authority.code, authority.message, authority.details);
     const captured = await captureStageCheckpoints(this.runtime, loaded, commonDir);
     if (captured.kind === "failed") return failure(captured.code, captured.message, captured.details);
@@ -593,7 +591,7 @@ export class StageStart {
           authorization_event_id: barrier.authorizationEventId,
           affected_scopes: barrier.affectedScopes,
         }, "Stop and reconcile affected workers, apply the authorized cascade, then resume stage execution.");
-        const current = currentAuthority(latest, stage);
+        const current = stageStartAuthority(latest, stage);
         if (current.kind === "failed" || current.eventIds.join("\0") !== authority.eventIds.join("\0")) {
           return failure("stage_authority_changed", "Stage authority changed before the stage-start event could be appended.", {
             expected_authority_event_ids: authority.eventIds,
@@ -603,7 +601,7 @@ export class StageStart {
         if (!validIdentities(eventId, journalId, stageAttemptId, existingIdentities(latest))) {
           return failure("stage_start_identity_conflict", "The allocated stage-start identities are invalid, reused, or already present in current history.");
         }
-        const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+        const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
         if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") {
           return failure("stage_start_journal_identity_conflict", "The allocated stage journal identity already has a filesystem entry.", { journal_id: journalId });
         }
@@ -638,6 +636,7 @@ export class StageStart {
 
 export const createNodeStageStartRuntime = (
   producer: { readonly name: string; readonly version: string },
+  journals: ConstructionJournals,
 ): StageStartRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
@@ -645,13 +644,6 @@ export const createNodeStageStartRuntime = (
     identities: { next: randomUUID },
     now: () => new Date().toISOString(),
     producer,
-    journals: {
-      create: (recordHome, missionId, journalId) => createEventJournal({
-        recordHome,
-        missionId,
-        journalId,
-        phase: CONSTRUCTION_PHASE,
-      }),
-    },
+    journals,
   };
 };

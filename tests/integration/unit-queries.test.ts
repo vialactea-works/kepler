@@ -13,6 +13,10 @@ import { CONSTRUCTION_EVENT_VERSION, CONSTRUCTION_PHASE } from "../../packages/c
 import { createNodeUnitQueryFileSystem } from "../../packages/cli/src/construction/unit-queries-runtime.js";
 import { UnitQueries } from "../../packages/cli/src/construction/unit-queries.js";
 import { createEventJournal } from "../../packages/cli/src/history/journal.js";
+import { createNodeHistoryAccess } from "../../packages/cli/src/history/access-runtime.js";
+import { createNodeMissionWorkspaceRuntime } from "../../packages/cli/src/construction/mission-workspace-runtime.js";
+import { historyGenerationFixture, historyTestBytes } from "../support/history-generation.js";
+import { createLegacyHistoryFixtureReader } from "../support/selected-history-reader.js";
 
 const missionId = "10000000-0000-4000-8000-000000000001";
 const missionJournalId = "20000000-0000-4000-8000-000000000002";
@@ -62,6 +66,44 @@ afterEach(async () => {
 });
 
 describe("unit queries against real Construction history", () => {
+  it("collaborates with the selected-history reader over a disposable Git record home", async () => {
+    const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-unit-selected-history-"));
+    temporaryRoots.push(root);
+    expect(Bun.spawnSync(["git", "init", "--quiet"], { cwd: root }).exitCode).toBe(0);
+    const f = historyGenerationFixture();
+    const historyRoot = Path.join(root, ".kepler", "missions", f.missionId, "history");
+    const activePath = Path.join(historyRoot, "control", "active.json");
+    const controlPath = Path.join(historyRoot, "control", "events", `${f.control.journal_id}.jsonl`);
+    const guardPath = Path.join(historyRoot, "control", `${f.guard.journal_id}.jsonl`);
+    const selectedPath = Path.join(historyRoot, "generations", f.generationId, "construction", `${f.journalId}.jsonl`);
+    const excludedPath = Path.join(historyRoot, "generations", randomUUID(), "construction", `${f.journalId}.jsonl`);
+    await Promise.all([activePath, controlPath, guardPath, selectedPath, excludedPath].map((path) => Fs.mkdir(Path.dirname(path), { recursive: true })));
+    await Fs.writeFile(activePath, f.input.activation!);
+    await Fs.writeFile(controlPath, f.input.activation!);
+    await Fs.writeFile(guardPath, historyTestBytes([f.guard]));
+    await Fs.writeFile(selectedPath, f.source.bytes);
+    await Fs.writeFile(excludedPath, new Uint8Array([255]));
+    await Fs.mkdir(Path.join(root, ".kepler", "missions", f.missionId, "construction", "units-of-work", f.unitId), { recursive: true });
+
+    const queries = new UnitQueries(
+      { resolve: async () => ({ kind: "resolved", root }) },
+      createNodeUnitQueryFileSystem(),
+      createNodeHistoryAccess(createNodeMissionWorkspaceRuntime({ cwd: root })),
+    );
+    const before = await snapshot(root);
+    const result = await queries.show(f.unitId);
+    const after = await snapshot(root);
+
+    expect(result).toMatchObject({
+      kind: "shown",
+      unit: {
+        membership: { status: "bound", mission_id: f.missionId },
+        history_metadata: { mode: "active", generation_id: f.generationId, history_version: f.control.id },
+        progress: { reliable: true },
+      },
+    });
+    expect(after).toEqual(before);
+  });
   it("lists and shows bound and unbound units without changing record-home state", async () => {
     const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-unit-queries-"));
     temporaryRoots.push(root);
@@ -127,9 +169,11 @@ describe("unit queries against real Construction history", () => {
     await Fs.mkdir(Path.join(root, ".kepler", "missions", missionId, "construction", "units-of-work", unitId), { recursive: true });
     await Fs.mkdir(Path.join(root, ".kepler", "units-of-work", "unbound-unit"), { recursive: true });
 
+    const fileSystem = createNodeUnitQueryFileSystem();
     const queries = new UnitQueries(
       { resolve: async () => ({ kind: "resolved", root }) },
-      createNodeUnitQueryFileSystem(),
+      fileSystem,
+      createLegacyHistoryFixtureReader(fileSystem),
     );
     const before = await snapshot(root);
     const listed = await queries.list();
@@ -219,7 +263,8 @@ describe("unit queries against real Construction history", () => {
       }));
       await Fs.mkdir(Path.join(root, ".kepler", "missions", item.missionId, "construction", "units-of-work", item.unitId), { recursive: true });
     }
-    const queries = new UnitQueries({ resolve: async () => ({ kind: "resolved", root }) }, createNodeUnitQueryFileSystem());
+    const fileSystem = createNodeUnitQueryFileSystem();
+    const queries = new UnitQueries({ resolve: async () => ({ kind: "resolved", root }) }, fileSystem, createLegacyHistoryFixtureReader(fileSystem));
     const before = await snapshot(root);
     const listed = await queries.list();
     const unitBinding = await queries.show(cases[0].unitId);
@@ -242,14 +287,16 @@ describe("unit queries against real Construction history", () => {
     const root = await Fs.mkdtemp(Path.join(Os.tmpdir(), "kepler-unit-queries-empty-"));
     temporaryRoots.push(root);
     await Fs.mkdir(Path.join(root, ".kepler"), { recursive: true });
+    const fileSystem = createNodeUnitQueryFileSystem();
     const queries = new UnitQueries(
       { resolve: async () => ({ kind: "resolved", root }) },
-      createNodeUnitQueryFileSystem(),
+      fileSystem,
+      createLegacyHistoryFixtureReader(fileSystem),
     );
 
     expect(await queries.show(" ")).toMatchObject({ kind: "failed", code: "invalid_unit_selector" });
     expect(await queries.show("unknown-unit")).toMatchObject({ kind: "failed", code: "unit_not_found" });
-    expect(await queries.list()).toMatchObject({ kind: "listed", units: [] });
+    expect(await queries.list()).toMatchObject({ kind: "listed", history_metadata: [], units: [] });
     expect((await Fs.readdir(Path.join(root, ".kepler"))).sort()).toEqual([]);
   });
 });

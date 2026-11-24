@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createNodeHistoryAccess } from "../../packages/cli/src/history/access-runtime.js";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";
 import * as Path from "node:path";
@@ -125,8 +126,8 @@ const createRuntime = (
   workspace: workspace ?? createNodeMissionWorkspaceRuntime({
     cwd: root,
     git: {
-      run: async (_cwd, args) => args[0] === "rev-parse"
-        ? { status: 0, stdout: scope.commonDirectory ?? Path.join(root, ".git"), stderr: "" }
+      run: async (cwd, args) => args[0] === "rev-parse"
+        ? { status: 0, stdout: args[1] === "--is-bare-repository" ? "false" : args[1] === "--show-toplevel" ? cwd : scope.commonDirectory ?? Path.join(root, ".git"), stderr: "" }
         : {
           status: 0,
           stdout: (scope.worktrees ?? [root]).flatMap((worktree) => [
@@ -140,7 +141,7 @@ const createRuntime = (
       findReachableObjects: async () => ({ status: 0, objectIds: [], stderr: "" }),
     },
   }),
-  records: createNodeUnitCreateRecords(),
+  get records() { return createNodeUnitCreateRecords(createNodeHistoryAccess(this.workspace)); },
   journals: {
     create: (recordHome, selectedMissionId, journalId) => {
       const journal = createEventJournal({

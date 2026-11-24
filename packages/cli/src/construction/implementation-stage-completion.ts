@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constructionJournalPath, type ConstructionJournals } from "./journals.js";
 import * as Path from "node:path";
 import type { EventId } from "@vialactea-works/kepler-core";
 import type { AuditContextResolver, AuditHistoryReadResult } from "../audit/context.js";
 import { hasRequesterParticipant } from "../audit/participants.js";
 import type { ScopeSelectors } from "../cli/scope-selectors.js";
-import { createEventJournal, type EventJournal } from "../history/journal.js";
 import { CONSTRUCTION_ACTIVITIES, CONSTRUCTION_STAGE_COMPLETION_EVENT_VERSION, CONSTRUCTION_PHASE, isActivityAttemptCompletedData, isRetainedScopeAssessment, isRetainedScopeAssessedData, validateConstructionEvent, type ArtifactBinding, type ConstructionEventRecord, type EvidenceId, type ImplementationAdditionalReview, type ImplementationCompletionHandoff, type ImplementationRequestedReview, type RepositoryCheckpoint, type RetainedScopeAssessment, type TaskId } from "./events.js";
 import { readFunctionalDesignCompletionRecord, sameArtifactBindings } from "./functional-design-completion.js";
 import { readQualityRequirementsCompletionRecord } from "./quality-requirements-completion.js";
@@ -25,7 +25,7 @@ export interface ImplementationStageCompletionRuntime {
   readonly identities: { readonly next: () => string };
   readonly now: () => string;
   readonly producer: { readonly name: string; readonly version: string };
-  readonly journals: { readonly create: (recordHome: string, missionId: string, journalId: string) => EventJournal };
+  readonly journals: ConstructionJournals;
 }
 
 export type ImplementationStageCompletionResult =
@@ -593,7 +593,7 @@ export class ImplementationStageCompletion {
       if (!uuidV4(eventId) || !uuidV4(journalId) || eventId === journalId || existingIds.has(eventId) || existingIds.has(journalId) || candidates.some((candidate) => candidate.id === eventId || candidate.journal_id === journalId)) {
         return failure("stage_completion_identity_failed", "Implementation assessment event and journal identities must be distinct, valid, and unused.");
       }
-      const journalPath = Path.join(loaded.root, ".kepler", "missions", loaded.missionId, "history", CONSTRUCTION_PHASE, `${journalId}.jsonl`);
+      const journalPath = constructionJournalPath(this.runtime.journals, loaded.root, loaded.missionId, journalId);
       if (await this.runtime.workspace.fileSystem.pathKind(journalPath) !== "missing") return failure("stage_completion_journal_identity_conflict", "An Implementation assessment journal identity already has a filesystem entry.", { journal_id: journalId });
       const assessment = spec.type === "construction.stage-attempt-completed"
         ? candidates.find((candidate) => candidate.type === "construction.implementation-completion-assessed")
@@ -646,10 +646,11 @@ export class ImplementationStageCompletion {
 export const createNodeImplementationStageCompletionRuntime = (
   producer: { readonly name: string; readonly version: string },
   materialReader: ConstructionMaterialReader,
+  journals: ConstructionJournals,
 ): ImplementationStageCompletionRuntime => {
   const workspace = createNodeMissionWorkspaceRuntime();
   return {
     workspace, materialReader, identities: { next: randomUUID }, now: () => new Date().toISOString(), producer,
-    journals: { create: (recordHome, missionId, journalId) => createEventJournal({ recordHome, missionId, journalId, phase: CONSTRUCTION_PHASE }) },
+    journals,
   };
 };

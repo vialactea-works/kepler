@@ -32,6 +32,7 @@ const names = {
   implementationAttempt: "--implementation-attempt",
   generationAttempt: "--generation-attempt",
   integrationAttempt: "--integration-attempt",
+  historyVersion: "--history-version",
   project: "--project",
   out: "--out",
 } as const;
@@ -93,6 +94,7 @@ const allowedOptions = (
 ): ReadonlySet<string> => new Set([
   "unit",
   "implementationAttempt",
+  "historyVersion",
   "project",
   "out",
   ...(kind === "unit-review" ? [] : ["task"]),
@@ -129,6 +131,7 @@ export const parseDiffPackageOptions = (
       kind,
       unitId: parsedScope.selectors.unit as string,
       implementationAttemptId: parsedScope.selectors.implementationAttempt as string,
+      ...(parsedScope.selectors.historyVersion === undefined ? {} : { historyVersion: parsedScope.selectors.historyVersion }),
     };
   } else if (kind === "validation") {
     const generationAttempt = readOne(options, "generationAttempt", true);
@@ -145,6 +148,7 @@ export const parseDiffPackageOptions = (
       taskId: parsedScope.selectors.task as string,
       implementationAttemptId: parsedScope.selectors.implementationAttempt as string,
       generationAttemptId: generationAttempt,
+      ...(parsedScope.selectors.historyVersion === undefined ? {} : { historyVersion: parsedScope.selectors.historyVersion }),
     };
   } else {
     const integrationAttempt = readOne(options, "integrationAttempt", true);
@@ -161,6 +165,7 @@ export const parseDiffPackageOptions = (
       taskId: parsedScope.selectors.task as string,
       implementationAttemptId: parsedScope.selectors.implementationAttempt as string,
       integrationAttemptId: integrationAttempt,
+      ...(parsedScope.selectors.historyVersion === undefined ? {} : { historyVersion: parsedScope.selectors.historyVersion }),
     };
   }
 
@@ -168,6 +173,9 @@ export const parseDiffPackageOptions = (
   if (selectedProject.kind === "failed") return selectedProject;
   const out = readOne(options, "out", false);
   if (typeof out !== "string" && out !== undefined) return out;
+  if (out !== undefined && parsedScope.selectors.historyVersion === undefined) {
+    return failure("history_version_required", "--out requires an explicit --history-version for the selected mission history.", { required: ["historyVersion"] }, "Supply the exact currently selected history version or omit --out for read-only inspection.");
+  }
 
   return {
     kind: "parsed",
