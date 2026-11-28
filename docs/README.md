@@ -1,6 +1,6 @@
 # Kepler documentation
 
-Use this guide to learn, operate, or extend Kepler. These documents describe implemented behavior. The [specifications](specs/v3/README.md) define requirements and contracts. They remain separate artifacts.
+Use this guide to learn, operate, or extend Kepler. The operating guides describe implemented behavior. The [specifications](specs/v3/README.md) define requirements and contracts. They remain separate artifacts.
 
 ## Start here
 
@@ -48,3 +48,10 @@ Kepler records workflow operations. Your coding-agent host or team performs the 
 Read [Development](development.md) for workspace commands, tests, resource packages, and release checks. Start at [Contributing](../CONTRIBUTING.md) before changing the repository.
 
 The [release notes](releases/) describe version changes. The `v3.0.0` tag's setup code requires an absolute `KEPLER_HOME` and initializes a release-bound home; verify the exact installed binary before treating a source candidate or specification status note as release evidence. Historical release notes do not define the current interface. The [v3 specification index](specs/v3/README.md) provides supporting contract references. A specification or CI job declaration does not prove that a feature or target has passed execution checks.
+
+## Draft RFCs
+
+These proposals are open for discussion. They do not describe released features or authorize a live recovery.
+
+- [RFC 0001: Test whether a blocked mission can continue](rfcs/0001-mission-progression-testing.md)
+- [RFC 0002: Guide a blocked mission from diagnosis to verified recovery](rfcs/0002-guided-mission-recovery.md)
